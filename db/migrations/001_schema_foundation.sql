@@ -1,0 +1,275 @@
+-- Phase 1 schema foundation
+-- Applied once via migration history (TblSchemaMigration).
+
+CREATE TABLE TblSchemaMigration (
+  Version NVARCHAR(32) NOT NULL,
+  Name NVARCHAR(256) NOT NULL,
+  AppliedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblSchemaMigration_AppliedAtUtc DEFAULT SYSUTCDATETIME(),
+  CONSTRAINT PK_TblSchemaMigration PRIMARY KEY (Version)
+);
+
+CREATE TABLE TblUser (
+  UserID UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_TblUser_UserID DEFAULT NEWSEQUENTIALID(),
+  Email NVARCHAR(320) NOT NULL,
+  PasswordHash NVARCHAR(255) NOT NULL,
+  FullName NVARCHAR(200) NOT NULL,
+  Status NVARCHAR(32) NOT NULL,
+  CreatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblUser_CreatedAtUtc DEFAULT SYSUTCDATETIME(),
+  UpdatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblUser_UpdatedAtUtc DEFAULT SYSUTCDATETIME(),
+  CONSTRAINT PK_TblUser PRIMARY KEY (UserID),
+  CONSTRAINT UQ_TblUser_Email UNIQUE (Email),
+  CONSTRAINT CK_TblUser_Status CHECK (Status IN (N'ACTIVE', N'INACTIVE', N'SUSPENDED'))
+);
+
+CREATE TABLE TblBusiness (
+  BusinessID UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_TblBusiness_BusinessID DEFAULT NEWSEQUENTIALID(),
+  Name NVARCHAR(200) NOT NULL,
+  Slug NVARCHAR(100) NOT NULL,
+  Category NVARCHAR(100) NOT NULL,
+  CountryCode NVARCHAR(2) NOT NULL,
+  Locale NVARCHAR(20) NOT NULL,
+  Timezone NVARCHAR(64) NOT NULL,
+  Status NVARCHAR(32) NOT NULL,
+  OnboardingCompletedAtUtc DATETIME2 NULL,
+  CreatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblBusiness_CreatedAtUtc DEFAULT SYSUTCDATETIME(),
+  UpdatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblBusiness_UpdatedAtUtc DEFAULT SYSUTCDATETIME(),
+  CONSTRAINT PK_TblBusiness PRIMARY KEY (BusinessID),
+  CONSTRAINT UQ_TblBusiness_Slug UNIQUE (Slug),
+  CONSTRAINT CK_TblBusiness_Status CHECK (Status IN (N'ACTIVE', N'INACTIVE', N'SUSPENDED'))
+);
+
+CREATE TABLE TblBusinessMember (
+  BusinessMemberID UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_TblBusinessMember_BusinessMemberID DEFAULT NEWSEQUENTIALID(),
+  BusinessID UNIQUEIDENTIFIER NOT NULL,
+  UserID UNIQUEIDENTIFIER NOT NULL,
+  Role NVARCHAR(32) NOT NULL,
+  Status NVARCHAR(32) NOT NULL,
+  CreatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblBusinessMember_CreatedAtUtc DEFAULT SYSUTCDATETIME(),
+  CONSTRAINT PK_TblBusinessMember PRIMARY KEY (BusinessMemberID),
+  CONSTRAINT UQ_TblBusinessMember_Business_User UNIQUE (BusinessID, UserID),
+  CONSTRAINT CK_TblBusinessMember_Role CHECK (Role IN (N'OWNER', N'ADMIN', N'MEMBER')),
+  CONSTRAINT CK_TblBusinessMember_Status CHECK (Status IN (N'ACTIVE', N'INACTIVE')),
+  CONSTRAINT FK_TblBusinessMember_Business FOREIGN KEY (BusinessID)
+    REFERENCES TblBusiness (BusinessID) ON DELETE NO ACTION,
+  CONSTRAINT FK_TblBusinessMember_User FOREIGN KEY (UserID)
+    REFERENCES TblUser (UserID) ON DELETE NO ACTION
+);
+
+CREATE INDEX IX_TblBusinessMember_BusinessID ON TblBusinessMember (BusinessID);
+CREATE INDEX IX_TblBusinessMember_UserID ON TblBusinessMember (UserID);
+
+CREATE TABLE TblSession (
+  SessionID UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_TblSession_SessionID DEFAULT NEWSEQUENTIALID(),
+  UserID UNIQUEIDENTIFIER NOT NULL,
+  TokenHash NVARCHAR(128) NOT NULL,
+  ActiveBusinessID UNIQUEIDENTIFIER NULL,
+  ExpiresAtUtc DATETIME2 NOT NULL,
+  CreatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblSession_CreatedAtUtc DEFAULT SYSUTCDATETIME(),
+  RevokedAtUtc DATETIME2 NULL,
+  CONSTRAINT PK_TblSession PRIMARY KEY (SessionID),
+  CONSTRAINT UQ_TblSession_TokenHash UNIQUE (TokenHash),
+  CONSTRAINT FK_TblSession_User FOREIGN KEY (UserID)
+    REFERENCES TblUser (UserID) ON DELETE NO ACTION,
+  CONSTRAINT FK_TblSession_ActiveBusiness FOREIGN KEY (ActiveBusinessID)
+    REFERENCES TblBusiness (BusinessID) ON DELETE NO ACTION
+);
+
+CREATE INDEX IX_TblSession_UserID ON TblSession (UserID);
+
+CREATE TABLE TblLocation (
+  LocationID UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_TblLocation_LocationID DEFAULT NEWSEQUENTIALID(),
+  BusinessID UNIQUEIDENTIFIER NOT NULL,
+  Name NVARCHAR(200) NOT NULL,
+  Code NVARCHAR(64) NULL,
+  Timezone NVARCHAR(64) NULL,
+  AddressLine NVARCHAR(300) NULL,
+  City NVARCHAR(100) NULL,
+  Phone NVARCHAR(32) NULL,
+  IsActive BIT NOT NULL CONSTRAINT DF_TblLocation_IsActive DEFAULT (1),
+  CreatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblLocation_CreatedAtUtc DEFAULT SYSUTCDATETIME(),
+  UpdatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblLocation_UpdatedAtUtc DEFAULT SYSUTCDATETIME(),
+  CONSTRAINT PK_TblLocation PRIMARY KEY (LocationID),
+  CONSTRAINT FK_TblLocation_Business FOREIGN KEY (BusinessID)
+    REFERENCES TblBusiness (BusinessID) ON DELETE NO ACTION
+);
+
+CREATE INDEX IX_TblLocation_BusinessID ON TblLocation (BusinessID);
+
+CREATE TABLE TblAgent (
+  AgentID UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_TblAgent_AgentID DEFAULT NEWSEQUENTIALID(),
+  BusinessID UNIQUEIDENTIFIER NOT NULL,
+  Name NVARCHAR(200) NOT NULL,
+  RoleTitle NVARCHAR(200) NOT NULL,
+  Language NVARCHAR(32) NOT NULL,
+  Dialect NVARCHAR(64) NULL,
+  Tone NVARCHAR(64) NULL,
+  Instructions NVARCHAR(MAX) NULL,
+  IsActive BIT NOT NULL CONSTRAINT DF_TblAgent_IsActive DEFAULT (1),
+  CreatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblAgent_CreatedAtUtc DEFAULT SYSUTCDATETIME(),
+  UpdatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblAgent_UpdatedAtUtc DEFAULT SYSUTCDATETIME(),
+  CONSTRAINT PK_TblAgent PRIMARY KEY (AgentID),
+  CONSTRAINT FK_TblAgent_Business FOREIGN KEY (BusinessID)
+    REFERENCES TblBusiness (BusinessID) ON DELETE NO ACTION
+);
+
+CREATE INDEX IX_TblAgent_BusinessID ON TblAgent (BusinessID);
+
+CREATE TABLE TblKnowledgeBase (
+  KnowledgeBaseID UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_TblKnowledgeBase_KnowledgeBaseID DEFAULT NEWSEQUENTIALID(),
+  BusinessID UNIQUEIDENTIFIER NOT NULL,
+  Name NVARCHAR(200) NOT NULL,
+  IsActive BIT NOT NULL CONSTRAINT DF_TblKnowledgeBase_IsActive DEFAULT (1),
+  CreatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblKnowledgeBase_CreatedAtUtc DEFAULT SYSUTCDATETIME(),
+  UpdatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblKnowledgeBase_UpdatedAtUtc DEFAULT SYSUTCDATETIME(),
+  CONSTRAINT PK_TblKnowledgeBase PRIMARY KEY (KnowledgeBaseID),
+  CONSTRAINT FK_TblKnowledgeBase_Business FOREIGN KEY (BusinessID)
+    REFERENCES TblBusiness (BusinessID) ON DELETE NO ACTION
+);
+
+CREATE INDEX IX_TblKnowledgeBase_BusinessID ON TblKnowledgeBase (BusinessID);
+
+CREATE TABLE TblKnowledgeItem (
+  KnowledgeItemID UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_TblKnowledgeItem_KnowledgeItemID DEFAULT NEWSEQUENTIALID(),
+  KnowledgeBaseID UNIQUEIDENTIFIER NOT NULL,
+  BusinessID UNIQUEIDENTIFIER NOT NULL,
+  Category NVARCHAR(32) NOT NULL,
+  Title NVARCHAR(300) NOT NULL,
+  Content NVARCHAR(MAX) NOT NULL,
+  IsActive BIT NOT NULL CONSTRAINT DF_TblKnowledgeItem_IsActive DEFAULT (1),
+  CreatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblKnowledgeItem_CreatedAtUtc DEFAULT SYSUTCDATETIME(),
+  UpdatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblKnowledgeItem_UpdatedAtUtc DEFAULT SYSUTCDATETIME(),
+  CONSTRAINT PK_TblKnowledgeItem PRIMARY KEY (KnowledgeItemID),
+  CONSTRAINT CK_TblKnowledgeItem_Category CHECK (
+    Category IN (
+      N'ABOUT',
+      N'FAQ',
+      N'SERVICE',
+      N'POLICY',
+      N'LOCATION_INFO',
+      N'CUSTOM'
+    )
+  ),
+  CONSTRAINT FK_TblKnowledgeItem_KnowledgeBase FOREIGN KEY (KnowledgeBaseID)
+    REFERENCES TblKnowledgeBase (KnowledgeBaseID) ON DELETE NO ACTION,
+  CONSTRAINT FK_TblKnowledgeItem_Business FOREIGN KEY (BusinessID)
+    REFERENCES TblBusiness (BusinessID) ON DELETE NO ACTION
+);
+
+CREATE INDEX IX_TblKnowledgeItem_BusinessID ON TblKnowledgeItem (BusinessID);
+CREATE INDEX IX_TblKnowledgeItem_KnowledgeBaseID ON TblKnowledgeItem (KnowledgeBaseID);
+
+CREATE TABLE TblChannelConnection (
+  ChannelConnectionID UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_TblChannelConnection_ChannelConnectionID DEFAULT NEWSEQUENTIALID(),
+  BusinessID UNIQUEIDENTIFIER NOT NULL,
+  LocationID UNIQUEIDENTIFIER NULL,
+  Channel NVARCHAR(64) NOT NULL,
+  Provider NVARCHAR(64) NOT NULL,
+  ExternalAccountKey NVARCHAR(256) NULL,
+  DisplayName NVARCHAR(200) NULL,
+  MaskedPhone NVARCHAR(32) NULL,
+  Status NVARCHAR(32) NOT NULL,
+  IsActive BIT NOT NULL CONSTRAINT DF_TblChannelConnection_IsActive DEFAULT (1),
+  CreatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblChannelConnection_CreatedAtUtc DEFAULT SYSUTCDATETIME(),
+  UpdatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblChannelConnection_UpdatedAtUtc DEFAULT SYSUTCDATETIME(),
+  CONSTRAINT PK_TblChannelConnection PRIMARY KEY (ChannelConnectionID),
+  CONSTRAINT CK_TblChannelConnection_Status CHECK (
+    Status IN (N'PENDING', N'ACTIVE', N'INACTIVE', N'ERROR', N'DISCONNECTED')
+  ),
+  CONSTRAINT FK_TblChannelConnection_Business FOREIGN KEY (BusinessID)
+    REFERENCES TblBusiness (BusinessID) ON DELETE NO ACTION,
+  CONSTRAINT FK_TblChannelConnection_Location FOREIGN KEY (LocationID)
+    REFERENCES TblLocation (LocationID) ON DELETE NO ACTION
+);
+
+CREATE INDEX IX_TblChannelConnection_BusinessID ON TblChannelConnection (BusinessID);
+
+CREATE TABLE TblIntegration (
+  IntegrationID UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_TblIntegration_IntegrationID DEFAULT NEWSEQUENTIALID(),
+  BusinessID UNIQUEIDENTIFIER NOT NULL,
+  Type NVARCHAR(64) NOT NULL,
+  Status NVARCHAR(32) NOT NULL,
+  ExternalReference NVARCHAR(256) NULL,
+  -- ConfigJson: non-secret configuration only (never store credentials/tokens here)
+  ConfigJson NVARCHAR(MAX) NULL,
+  CreatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblIntegration_CreatedAtUtc DEFAULT SYSUTCDATETIME(),
+  UpdatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblIntegration_UpdatedAtUtc DEFAULT SYSUTCDATETIME(),
+  CONSTRAINT PK_TblIntegration PRIMARY KEY (IntegrationID),
+  CONSTRAINT UQ_TblIntegration_Business_Type UNIQUE (BusinessID, Type),
+  CONSTRAINT CK_TblIntegration_Status CHECK (
+    Status IN (N'PENDING', N'ACTIVE', N'INACTIVE', N'ERROR')
+  ),
+  CONSTRAINT FK_TblIntegration_Business FOREIGN KEY (BusinessID)
+    REFERENCES TblBusiness (BusinessID) ON DELETE NO ACTION
+);
+
+CREATE INDEX IX_TblIntegration_BusinessID ON TblIntegration (BusinessID);
+
+CREATE TABLE TblUsageEvent (
+  UsageEventID UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_TblUsageEvent_UsageEventID DEFAULT NEWSEQUENTIALID(),
+  BusinessID UNIQUEIDENTIFIER NOT NULL,
+  EventType NVARCHAR(64) NOT NULL,
+  Quantity INT NOT NULL,
+  OccurredAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblUsageEvent_OccurredAtUtc DEFAULT SYSUTCDATETIME(),
+  MetadataJson NVARCHAR(MAX) NULL,
+  CONSTRAINT PK_TblUsageEvent PRIMARY KEY (UsageEventID),
+  CONSTRAINT CK_TblUsageEvent_Quantity CHECK (Quantity >= 0),
+  CONSTRAINT FK_TblUsageEvent_Business FOREIGN KEY (BusinessID)
+    REFERENCES TblBusiness (BusinessID) ON DELETE NO ACTION
+);
+
+CREATE INDEX IX_TblUsageEvent_BusinessID ON TblUsageEvent (BusinessID);
+CREATE INDEX IX_TblUsageEvent_OccurredAtUtc ON TblUsageEvent (OccurredAtUtc);
+
+CREATE TABLE TblPlan (
+  PlanID UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_TblPlan_PlanID DEFAULT NEWSEQUENTIALID(),
+  Code NVARCHAR(64) NOT NULL,
+  DisplayName NVARCHAR(200) NOT NULL,
+  Status NVARCHAR(32) NOT NULL,
+  CreatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblPlan_CreatedAtUtc DEFAULT SYSUTCDATETIME(),
+  UpdatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblPlan_UpdatedAtUtc DEFAULT SYSUTCDATETIME(),
+  CONSTRAINT PK_TblPlan PRIMARY KEY (PlanID),
+  CONSTRAINT UQ_TblPlan_Code UNIQUE (Code),
+  CONSTRAINT CK_TblPlan_Status CHECK (Status IN (N'ACTIVE', N'INACTIVE'))
+);
+
+CREATE TABLE TblSubscription (
+  SubscriptionID UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_TblSubscription_SubscriptionID DEFAULT NEWSEQUENTIALID(),
+  BusinessID UNIQUEIDENTIFIER NOT NULL,
+  PlanID UNIQUEIDENTIFIER NOT NULL,
+  Status NVARCHAR(32) NOT NULL,
+  PeriodStartUtc DATETIME2 NULL,
+  PeriodEndUtc DATETIME2 NULL,
+  CreatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblSubscription_CreatedAtUtc DEFAULT SYSUTCDATETIME(),
+  UpdatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblSubscription_UpdatedAtUtc DEFAULT SYSUTCDATETIME(),
+  CONSTRAINT PK_TblSubscription PRIMARY KEY (SubscriptionID),
+  CONSTRAINT CK_TblSubscription_Status CHECK (
+    Status IN (N'TRIALING', N'ACTIVE', N'PAST_DUE', N'CANCELED', N'INACTIVE')
+  ),
+  CONSTRAINT FK_TblSubscription_Business FOREIGN KEY (BusinessID)
+    REFERENCES TblBusiness (BusinessID) ON DELETE NO ACTION,
+  CONSTRAINT FK_TblSubscription_Plan FOREIGN KEY (PlanID)
+    REFERENCES TblPlan (PlanID) ON DELETE NO ACTION
+);
+
+CREATE INDEX IX_TblSubscription_BusinessID ON TblSubscription (BusinessID);
+
+CREATE TABLE TblAuditEvent (
+  AuditEventID UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_TblAuditEvent_AuditEventID DEFAULT NEWSEQUENTIALID(),
+  BusinessID UNIQUEIDENTIFIER NULL,
+  ActorUserID UNIQUEIDENTIFIER NULL,
+  Action NVARCHAR(128) NOT NULL,
+  EntityType NVARCHAR(128) NOT NULL,
+  EntityID UNIQUEIDENTIFIER NULL,
+  OccurredAtUtc DATETIME2 NOT NULL CONSTRAINT DF_TblAuditEvent_OccurredAtUtc DEFAULT SYSUTCDATETIME(),
+  MetadataJson NVARCHAR(MAX) NULL,
+  CONSTRAINT PK_TblAuditEvent PRIMARY KEY (AuditEventID),
+  CONSTRAINT FK_TblAuditEvent_Business FOREIGN KEY (BusinessID)
+    REFERENCES TblBusiness (BusinessID) ON DELETE NO ACTION,
+  CONSTRAINT FK_TblAuditEvent_ActorUser FOREIGN KEY (ActorUserID)
+    REFERENCES TblUser (UserID) ON DELETE NO ACTION
+);
+
+CREATE INDEX IX_TblAuditEvent_BusinessID ON TblAuditEvent (BusinessID);
+CREATE INDEX IX_TblAuditEvent_ActorUserID ON TblAuditEvent (ActorUserID);
+CREATE INDEX IX_TblAuditEvent_OccurredAtUtc ON TblAuditEvent (OccurredAtUtc);
+CREATE INDEX IX_TblAuditEvent_Entity ON TblAuditEvent (EntityType, EntityID);
