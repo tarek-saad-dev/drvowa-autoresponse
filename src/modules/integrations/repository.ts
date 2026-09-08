@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { query, sql } from "@/lib/db";
+import { normalizeUuid } from "@/lib/ids/uuid";
 import type { Integration, IntegrationStatus } from "@/types/domain";
 
 export const INTEGRATION_TYPE_DRVO_ERP = "DRVO_ERP" as const;
@@ -18,8 +19,8 @@ type IntegrationRow = {
 
 function mapIntegration(row: IntegrationRow): Integration {
   return {
-    integrationId: row.IntegrationID,
-    businessId: row.BusinessID,
+    integrationId: normalizeUuid(row.IntegrationID),
+    businessId: normalizeUuid(row.BusinessID),
     type: row.Type,
     status: row.Status as IntegrationStatus,
     externalReference: row.ExternalReference,

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { KnowledgeCategory } from "@/constants/knowledge";
 import { query, sql } from "@/lib/db";
+import { normalizeUuid } from "@/lib/ids/uuid";
 import type { KnowledgeBase, KnowledgeItem } from "@/types/domain";
 
 type KnowledgeBaseRow = {
@@ -27,8 +28,8 @@ type KnowledgeItemRow = {
 
 function mapBase(row: KnowledgeBaseRow): KnowledgeBase {
   return {
-    knowledgeBaseId: row.KnowledgeBaseID,
-    businessId: row.BusinessID,
+    knowledgeBaseId: normalizeUuid(row.KnowledgeBaseID),
+    businessId: normalizeUuid(row.BusinessID),
     name: row.Name,
     isActive: Boolean(row.IsActive),
     createdAtUtc: row.CreatedAtUtc,
@@ -38,9 +39,9 @@ function mapBase(row: KnowledgeBaseRow): KnowledgeBase {
 
 function mapItem(row: KnowledgeItemRow): KnowledgeItem {
   return {
-    knowledgeItemId: row.KnowledgeItemID,
-    knowledgeBaseId: row.KnowledgeBaseID,
-    businessId: row.BusinessID,
+    knowledgeItemId: normalizeUuid(row.KnowledgeItemID),
+    knowledgeBaseId: normalizeUuid(row.KnowledgeBaseID),
+    businessId: normalizeUuid(row.BusinessID),
     category: row.Category as KnowledgeCategory,
     title: row.Title,
     content: row.Content,

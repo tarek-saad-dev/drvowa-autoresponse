@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { query, sql } from "@/lib/db";
+import { normalizeNullableUuid } from "@/lib/ids/uuid";
 import type { AuditEvent } from "@/types/domain";
 
 const FORBIDDEN_METADATA_KEYS = new Set([
@@ -102,11 +103,11 @@ export async function writeAuditEvent(params: {
 
   return {
     auditEventId,
-    businessId: params.businessId ?? null,
-    actorUserId: params.actorUserId ?? null,
+    businessId: normalizeNullableUuid(params.businessId ?? null),
+    actorUserId: normalizeNullableUuid(params.actorUserId ?? null),
     action: params.action,
     entityType: params.entityType,
-    entityId: params.entityId ?? null,
+    entityId: normalizeNullableUuid(params.entityId ?? null),
     occurredAtUtc,
     metadataJson,
   };

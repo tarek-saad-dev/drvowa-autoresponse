@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { query, sql } from "@/lib/db";
+import { normalizeUuid } from "@/lib/ids/uuid";
 import type { Location } from "@/types/domain";
 
 type LocationRow = {
@@ -19,8 +20,8 @@ type LocationRow = {
 
 function mapLocation(row: LocationRow): Location {
   return {
-    locationId: row.LocationID,
-    businessId: row.BusinessID,
+    locationId: normalizeUuid(row.LocationID),
+    businessId: normalizeUuid(row.BusinessID),
     name: row.Name,
     code: row.Code,
     timezone: row.Timezone,

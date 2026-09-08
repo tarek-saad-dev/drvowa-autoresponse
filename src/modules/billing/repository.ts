@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { query, sql } from "@/lib/db";
+import { normalizeUuid } from "@/lib/ids/uuid";
 import type { Plan, Subscription, SubscriptionStatus } from "@/types/domain";
 
 type PlanRow = {
@@ -25,7 +26,7 @@ type SubscriptionRow = {
 
 function mapPlan(row: PlanRow): Plan {
   return {
-    planId: row.PlanID,
+    planId: normalizeUuid(row.PlanID),
     code: row.Code,
     displayName: row.DisplayName,
     status: row.Status as Plan["status"],
@@ -36,9 +37,9 @@ function mapPlan(row: PlanRow): Plan {
 
 function mapSubscription(row: SubscriptionRow): Subscription {
   return {
-    subscriptionId: row.SubscriptionID,
-    businessId: row.BusinessID,
-    planId: row.PlanID,
+    subscriptionId: normalizeUuid(row.SubscriptionID),
+    businessId: normalizeUuid(row.BusinessID),
+    planId: normalizeUuid(row.PlanID),
     status: row.Status as SubscriptionStatus,
     periodStartUtc: row.PeriodStartUtc,
     periodEndUtc: row.PeriodEndUtc,

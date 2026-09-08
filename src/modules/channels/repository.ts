@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { query, sql } from "@/lib/db";
+import { normalizeNullableUuid, normalizeUuid } from "@/lib/ids/uuid";
 import type {
   ChannelConnection,
   ChannelConnectionStatus,
@@ -23,9 +24,9 @@ type ChannelRow = {
 
 function mapConnection(row: ChannelRow): ChannelConnection {
   return {
-    channelConnectionId: row.ChannelConnectionID,
-    businessId: row.BusinessID,
-    locationId: row.LocationID,
+    channelConnectionId: normalizeUuid(row.ChannelConnectionID),
+    businessId: normalizeUuid(row.BusinessID),
+    locationId: normalizeNullableUuid(row.LocationID),
     channel: row.Channel,
     provider: row.Provider,
     externalAccountKey: row.ExternalAccountKey,

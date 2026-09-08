@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { query, sql } from "@/lib/db";
+import { normalizeNullableUuid, normalizeUuid } from "@/lib/ids/uuid";
 import type { AuthSessionView, Session } from "@/types/domain";
 
 export const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14; // 14 days
@@ -23,10 +24,10 @@ type SessionUserRow = SessionRow & {
 
 function mapSession(row: SessionRow): Session {
   return {
-    sessionId: row.SessionID,
-    userId: row.UserID,
+    sessionId: normalizeUuid(row.SessionID),
+    userId: normalizeUuid(row.UserID),
     tokenHash: row.TokenHash,
-    activeBusinessId: row.ActiveBusinessID,
+    activeBusinessId: normalizeNullableUuid(row.ActiveBusinessID),
     expiresAtUtc: row.ExpiresAtUtc,
     createdAtUtc: row.CreatedAtUtc,
     revokedAtUtc: row.RevokedAtUtc,
@@ -125,11 +126,11 @@ export async function getSessionByToken(
   }
 
   return {
-    sessionId: row.SessionID,
-    userId: row.UserID,
+    sessionId: normalizeUuid(row.SessionID),
+    userId: normalizeUuid(row.UserID),
     email: row.Email,
     fullName: row.FullName,
-    activeBusinessId: row.ActiveBusinessID,
+    activeBusinessId: normalizeNullableUuid(row.ActiveBusinessID),
     expiresAtUtc: row.ExpiresAtUtc,
   };
 }

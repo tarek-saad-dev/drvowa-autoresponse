@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { query, sql } from "@/lib/db";
+import { normalizeUuid } from "@/lib/ids/uuid";
 import type { UsageEvent } from "@/types/domain";
 
 type UsageRow = {
@@ -14,8 +15,8 @@ type UsageRow = {
 
 function mapUsage(row: UsageRow): UsageEvent {
   return {
-    usageEventId: row.UsageEventID,
-    businessId: row.BusinessID,
+    usageEventId: normalizeUuid(row.UsageEventID),
+    businessId: normalizeUuid(row.BusinessID),
     eventType: row.EventType,
     quantity: row.Quantity,
     occurredAtUtc: row.OccurredAtUtc,

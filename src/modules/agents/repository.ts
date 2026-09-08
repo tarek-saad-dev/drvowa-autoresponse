@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { query, sql } from "@/lib/db";
+import { normalizeUuid } from "@/lib/ids/uuid";
 import type { Agent } from "@/types/domain";
 
 type AgentRow = {
@@ -19,8 +20,8 @@ type AgentRow = {
 
 function mapAgent(row: AgentRow): Agent {
   return {
-    agentId: row.AgentID,
-    businessId: row.BusinessID,
+    agentId: normalizeUuid(row.AgentID),
+    businessId: normalizeUuid(row.BusinessID),
     name: row.Name,
     roleTitle: row.RoleTitle,
     language: row.Language,

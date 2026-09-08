@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { query, sql } from "@/lib/db";
+import { normalizeUuid } from "@/lib/ids/uuid";
 import { AuthError } from "@/lib/tenancy/errors";
 import type { AuthSessionView, User } from "@/types/domain";
 
@@ -28,7 +29,7 @@ type UserAuthRow = {
 
 function mapUser(row: UserAuthRow): User {
   return {
-    userId: row.UserID,
+    userId: normalizeUuid(row.UserID),
     email: row.Email,
     fullName: row.FullName,
     status: row.Status as User["status"],

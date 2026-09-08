@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { BusinessRole } from "@/constants/roles";
 import { BUSINESS_ROLES } from "@/constants/roles";
 import { query, sql, type TransactionClient } from "@/lib/db";
+import { normalizeUuid } from "@/lib/ids/uuid";
 import type {
   Business,
   BusinessMember,
@@ -39,7 +40,7 @@ const poolDb: Db = { query };
 
 export function mapBusiness(row: BusinessRow): Business {
   return {
-    businessId: row.BusinessID,
+    businessId: normalizeUuid(row.BusinessID),
     name: row.Name,
     slug: row.Slug,
     category: row.Category,
@@ -55,9 +56,9 @@ export function mapBusiness(row: BusinessRow): Business {
 
 export function mapMember(row: MemberRow): BusinessMember {
   return {
-    businessMemberId: row.BusinessMemberID,
-    businessId: row.BusinessID,
-    userId: row.UserID,
+    businessMemberId: normalizeUuid(row.BusinessMemberID),
+    businessId: normalizeUuid(row.BusinessID),
+    userId: normalizeUuid(row.UserID),
     role: row.Role as BusinessRole,
     status: row.Status as MemberStatus,
     createdAtUtc: row.CreatedAtUtc,
