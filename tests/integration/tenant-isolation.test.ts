@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { closePool, getDbConfig } from "@/lib/db";
+import { closePool, getDbConfig, getPool } from "@/lib/db";
 import {
   AuthError,
   ForbiddenError,
@@ -35,6 +35,7 @@ import {
   getBusinessById,
   listBusinessesForUser,
 } from "@/modules/businesses/service";
+import { rethrowDbBootstrapFailure } from "../helpers/db-bootstrap";
 import { clearTestCookies } from "../helpers/cookies";
 
 function dbEnvConfigured(): boolean {
@@ -47,7 +48,7 @@ function dbEnvConfigured(): boolean {
 }
 
 const dbEnvOk = dbEnvConfigured();
-let dbSkipReason: string | null = dbEnvOk
+const dbSkipReason: string | null = dbEnvOk
   ? null
   : "DB_* env not configured — tenant isolation suite skipped (not a pass of isolation)";
 
@@ -81,11 +82,11 @@ describe("tenant isolation", () => {
 
     try {
       await getPool();
-    } catch {
-      dbSkipReason =
-        "Database connection failed — tenant isolation suite skipped (not a pass of isolation)";
-      console.warn(`[tenant-isolation] ${dbSkipReason}`);
-      return;
+    } catch (error) {
+      // DB_* is configured: connection/runtime failures must fail the suite.
+      // Programming errors (e.g. missing import → ReferenceError) must never
+      // be mislabeled as "database unavailable → skip".
+      rethrowDbBootstrapFailure(error);
     }
 
     clearTestCookies();
