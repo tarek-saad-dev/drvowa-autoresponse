@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans_Arabic } from "next/font/google";
+import type { ReactNode } from "react";
 
 import { appConfig } from "@/lib/config/app";
 
@@ -17,7 +18,11 @@ export const metadata: Metadata = {
   description: appConfig.description,
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+type RootLayoutProps = Readonly<{
+  children: ReactNode;
+}>;
+
+export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html
       lang="ar"
