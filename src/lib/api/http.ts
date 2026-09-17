@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 
+import { DbError } from "@/lib/db";
 import {
   AuthError,
   ForbiddenError,
@@ -52,6 +53,10 @@ export function handleApiError(error: unknown): NextResponse {
   if (error instanceof ZodError) {
     const message = error.issues[0]?.message ?? "Validation failed";
     return jsonError(message, 400);
+  }
+  if (error instanceof DbError) {
+    // Sanitized messages only (no secrets). Config/connectivity → 503.
+    return jsonError(error.message || "Database unavailable", 503);
   }
 
   return jsonError("Request failed", 500);
