@@ -86,8 +86,53 @@ export async function findPendingJobForConversation(params: {
   return row ? mapJob(row) : null;
 }
 
+async function coalesceOntoPendingJob(params: {
+  existing: AiReplyJob;
+  triggerMessageId: string;
+  notBeforeUtc: Date;
+  businessId: string;
+}, trx?: TransactionClient): Promise<{ job: AiReplyJob; coalesced: boolean }> {
+  await db(trx).execute(
+    `UPDATE TblAiReplyJob
+     SET TriggerMessageID = @triggerMessageId,
+         NotBeforeUtc = @notBeforeUtc,
+         UpdatedAtUtc = SYSUTCDATETIME()
+     WHERE BusinessID = @businessId
+       AND AiReplyJobID = @jobId
+       AND Status = N'PENDING'`,
+    [
+      {
+        name: "triggerMessageId",
+        type: sql.UniqueIdentifier,
+        value: params.triggerMessageId,
+      },
+      { name: "notBeforeUtc", type: sql.DateTime2, value: params.notBeforeUtc },
+      {
+        name: "businessId",
+        type: sql.UniqueIdentifier,
+        value: params.businessId,
+      },
+      {
+        name: "jobId",
+        type: sql.UniqueIdentifier,
+        value: params.existing.aiReplyJobId,
+      },
+    ],
+  );
+  return {
+    job: {
+      ...params.existing,
+      triggerMessageId: params.triggerMessageId,
+      notBeforeUtc: params.notBeforeUtc,
+      updatedAtUtc: new Date(),
+    },
+    coalesced: true,
+  };
+}
+
 /**
  * Create or coalesce a PENDING AI reply job (burst debounce).
+ * Race-safe under UQ_TblAiReplyJob_Business_Conversation_Pending.
  */
 export async function scheduleOrCoalesceJob(params: {
   businessId: string;
@@ -107,40 +152,15 @@ export async function scheduleOrCoalesceJob(params: {
   );
 
   if (existing) {
-    await db(trx).execute(
-      `UPDATE TblAiReplyJob
-       SET TriggerMessageID = @triggerMessageId,
-           NotBeforeUtc = @notBeforeUtc,
-           UpdatedAtUtc = SYSUTCDATETIME()
-       WHERE BusinessID = @businessId AND AiReplyJobID = @jobId AND Status = N'PENDING'`,
-      [
-        {
-          name: "triggerMessageId",
-          type: sql.UniqueIdentifier,
-          value: params.triggerMessageId,
-        },
-        { name: "notBeforeUtc", type: sql.DateTime2, value: notBefore },
-        {
-          name: "businessId",
-          type: sql.UniqueIdentifier,
-          value: params.businessId,
-        },
-        {
-          name: "jobId",
-          type: sql.UniqueIdentifier,
-          value: existing.aiReplyJobId,
-        },
-      ],
-    );
-    return {
-      job: {
-        ...existing,
+    return coalesceOntoPendingJob(
+      {
+        existing,
         triggerMessageId: params.triggerMessageId,
         notBeforeUtc: notBefore,
-        updatedAtUtc: new Date(),
+        businessId: params.businessId,
       },
-      coalesced: true,
-    };
+      trx,
+    );
   }
 
   const jobId = randomUUID();
@@ -189,18 +209,24 @@ export async function scheduleOrCoalesceJob(params: {
     );
   } catch (error) {
     if (!isUniqueViolationError(error)) throw error;
-    // Race: another inserter won — coalesce onto pending if present
-    const raced = await findPendingJobForConversation(
+    // Another request won the PENDING slot — coalesce onto the winner once.
+    const winner = await findPendingJobForConversation(
       {
         businessId: params.businessId,
         conversationId: params.conversationId,
       },
       trx,
     );
-    if (raced) {
-      return scheduleOrCoalesceJob(params, trx);
-    }
-    throw error;
+    if (!winner) throw error;
+    return coalesceOntoPendingJob(
+      {
+        existing: winner,
+        triggerMessageId: params.triggerMessageId,
+        notBeforeUtc: notBefore,
+        businessId: params.businessId,
+      },
+      trx,
+    );
   }
 
   return {

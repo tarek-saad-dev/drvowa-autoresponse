@@ -241,6 +241,142 @@ describe("Phase 3B AI jobs integration", () => {
     expect(pendingCount).toBeGreaterThanOrEqual(1);
   });
 
+  it("1.1 concurrent burst coalesces to one PENDING job", async ({ skip }) => {
+    requireDb(skip);
+    const debounceMs = 900;
+    await upsertWhatsAppAiSetting({
+      businessId,
+      agentId,
+      autoReplyEnabled: true,
+      debounceMs,
+    });
+
+    const externalContactKey = `201555${String(Date.now()).slice(-6)}@s.whatsapp.net`;
+    const burstContents = ["السلام عليكم", "عايز احجز", "بكره", "الساعة 5"];
+    const beforeConcurrent = Date.now();
+
+    const results = await Promise.all(
+      burstContents.map((content, index) =>
+        ingestWhatsAppInbound(
+          dto({
+            content,
+            providerMessageId: `race-${index}-${randomUUID()}`,
+            externalContactKey,
+          }),
+        ),
+      ),
+    );
+
+    expect(results.every((r) => r.outcome === "accepted")).toBe(true);
+    const accepted = results.filter(
+      (r): r is Extract<typeof r, { outcome: "accepted" }> =>
+        r.outcome === "accepted",
+    );
+    expect(accepted).toHaveLength(burstContents.length);
+
+    const conversationIds = new Set(accepted.map((r) => r.conversationId));
+    expect(conversationIds.size).toBe(1);
+    const conversationId = accepted[0]!.conversationId;
+    const messageIds = accepted.map((r) => r.messageId);
+
+    const messageCount = await query<{ Cnt: number }>(
+      `SELECT COUNT(1) AS Cnt FROM TblMessage
+       WHERE BusinessID = @businessId
+         AND ConversationID = @conversationId
+         AND Direction = N'INBOUND'
+         AND MessageID IN (${messageIds.map((_, i) => `@m${i}`).join(", ")})`,
+      [
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        {
+          name: "conversationId",
+          type: sql.UniqueIdentifier,
+          value: conversationId,
+        },
+        ...messageIds.map((id, i) => ({
+          name: `m${i}`,
+          type: sql.UniqueIdentifier,
+          value: id,
+        })),
+      ],
+    );
+    expect(Number(messageCount.recordset[0]?.Cnt)).toBe(burstContents.length);
+
+    const pendingRows = await query<{
+      AiReplyJobID: string;
+      TriggerMessageID: string;
+      NotBeforeUtc: Date;
+      Cnt: number;
+    }>(
+      `SELECT AiReplyJobID, TriggerMessageID, NotBeforeUtc,
+              COUNT(1) OVER () AS Cnt
+       FROM TblAiReplyJob
+       WHERE BusinessID = @businessId
+         AND ConversationID = @conversationId
+         AND Status = N'PENDING'`,
+      [
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        {
+          name: "conversationId",
+          type: sql.UniqueIdentifier,
+          value: conversationId,
+        },
+      ],
+    );
+    expect(pendingRows.recordset).toHaveLength(1);
+    expect(Number(pendingRows.recordset[0]?.Cnt)).toBe(1);
+
+    const pending = pendingRows.recordset[0]!;
+    const triggerId = String(pending.TriggerMessageID).toLowerCase();
+    expect(messageIds.map((id) => id.toLowerCase())).toContain(triggerId);
+
+    const notBeforeMs = new Date(pending.NotBeforeUtc).getTime();
+    expect(notBeforeMs).toBeGreaterThanOrEqual(beforeConcurrent + debounceMs - 200);
+    expect(notBeforeMs).toBeLessThanOrEqual(Date.now() + debounceMs + 500);
+
+    const notBeforeBeforeExtend = notBeforeMs;
+    await new Promise((r) => setTimeout(r, 40));
+
+    const followUp = await ingestWhatsAppInbound(
+      dto({
+        content: "تمام",
+        providerMessageId: `race-follow-${randomUUID()}`,
+        externalContactKey,
+      }),
+    );
+    expect(followUp.outcome).toBe("accepted");
+    if (followUp.outcome !== "accepted") return;
+
+    const afterFollow = await query<{
+      AiReplyJobID: string;
+      TriggerMessageID: string;
+      NotBeforeUtc: Date;
+    }>(
+      `SELECT AiReplyJobID, TriggerMessageID, NotBeforeUtc
+       FROM TblAiReplyJob
+       WHERE BusinessID = @businessId
+         AND ConversationID = @conversationId
+         AND Status = N'PENDING'`,
+      [
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        {
+          name: "conversationId",
+          type: sql.UniqueIdentifier,
+          value: conversationId,
+        },
+      ],
+    );
+    expect(afterFollow.recordset).toHaveLength(1);
+    expect(String(afterFollow.recordset[0]?.AiReplyJobID).toLowerCase()).toBe(
+      String(pending.AiReplyJobID).toLowerCase(),
+    );
+    expect(String(afterFollow.recordset[0]?.TriggerMessageID).toLowerCase()).toBe(
+      followUp.messageId.toLowerCase(),
+    );
+    expect(new Date(afterFollow.recordset[0]!.NotBeforeUtc).getTime()).toBeGreaterThan(
+      notBeforeBeforeExtend,
+    );
+  });
+
   it("6. duplicate inbound does not duplicate job", async ({ skip }) => {
     requireDb(skip);
     const pmid = `dup-ai-${randomUUID()}`;
