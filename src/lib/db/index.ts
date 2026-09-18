@@ -15,5 +15,6 @@ export {
   toDbError,
   sanitizeDbMessage,
   isMissingObjectError,
+  isUniqueViolationError,
 } from "./errors";
 export { checkDbReady } from "./health";

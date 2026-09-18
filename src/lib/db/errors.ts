@@ -46,6 +46,12 @@ export function toDbError(
     return error;
   }
 
+  if (isUniqueViolationError(error)) {
+    return new DbError("Unique constraint violation", {
+      code: "DB_UNIQUE_VIOLATION",
+    });
+  }
+
   if (error instanceof Error && error.message) {
     return new DbError(sanitizeDbMessage(error.message), {
       code: "DB_ERROR",
@@ -69,4 +75,31 @@ export function isMissingObjectError(error: unknown): boolean {
   const message =
     error instanceof Error ? error.message : String(error);
   return /Invalid object name/i.test(message);
+}
+
+/** SQL Server unique/PK violations: 2627 (constraint) or 2601 (duplicate key index). */
+export function isUniqueViolationError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  if (error instanceof DbError && error.code === "DB_UNIQUE_VIOLATION") {
+    return true;
+  }
+
+  const withNumber = error as { number?: number; cause?: unknown };
+  if (withNumber.number === 2627 || withNumber.number === 2601) {
+    return true;
+  }
+
+  if (withNumber.cause) {
+    return isUniqueViolationError(withNumber.cause);
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    /Violation of UNIQUE KEY constraint/i.test(message)
+    || /Cannot insert duplicate key/i.test(message)
+    || /duplicate key/i.test(message)
+  );
 }

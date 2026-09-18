@@ -1,6 +1,6 @@
 export const DASHBOARD_NAV = [
   { href: "/dashboard", label: "نظرة عامة", key: "Overview" },
-  { href: "/dashboard/inbox", label: "الوارد", key: "Inbox", deferred: true },
+  { href: "/dashboard/inbox", label: "الوارد", key: "Inbox" },
   {
     href: "/dashboard/contacts",
     label: "جهات الاتصال",

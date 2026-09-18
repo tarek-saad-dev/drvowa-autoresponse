@@ -125,6 +125,58 @@ export type ChannelConnection = {
   updatedAtUtc: Date;
 };
 
+export type ConversationStatus = "OPEN" | "CLOSED";
+export type MessageDirection = "INBOUND" | "OUTBOUND";
+export type MessageContentType = "TEXT" | "UNKNOWN";
+
+export type Contact = {
+  contactId: string;
+  businessId: string;
+  channelConnectionId: string;
+  externalContactKey: string;
+  displayName: string | null;
+  phoneNormalized: string | null;
+  createdAtUtc: Date;
+  updatedAtUtc: Date;
+};
+
+export type Conversation = {
+  conversationId: string;
+  businessId: string;
+  channelConnectionId: string;
+  contactId: string;
+  status: ConversationStatus;
+  lastMessageAtUtc: Date | null;
+  lastInboundAtUtc: Date | null;
+  lastOutboundAtUtc: Date | null;
+  createdAtUtc: Date;
+  updatedAtUtc: Date;
+};
+
+export type Message = {
+  messageId: string;
+  businessId: string;
+  conversationId: string;
+  channelConnectionId: string;
+  contactId: string;
+  direction: MessageDirection;
+  provider: string;
+  providerMessageId: string;
+  contentType: MessageContentType;
+  textContent: string | null;
+  providerTimestampUtc: Date | null;
+  receivedAtUtc: Date;
+  createdAtUtc: Date;
+};
+
+export type ConversationListItem = Conversation & {
+  contactExternalKey: string;
+  contactDisplayName: string | null;
+  contactPhoneNormalized: string | null;
+  lastMessagePreview: string | null;
+  lastMessageDirection: MessageDirection | null;
+};
+
 export type Integration = {
   integrationId: string;
   businessId: string;

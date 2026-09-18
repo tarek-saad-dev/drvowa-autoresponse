@@ -28,6 +28,8 @@ export async function createChannelConnectionShell(params: {
   locationId?: string | null;
   displayName?: string | null;
   externalAccountKey?: string | null;
+  status?: import("@/types/domain").ChannelConnectionStatus;
+  isActive?: boolean;
 }): Promise<ChannelConnection> {
   return repo.createChannelConnectionShell(params);
 }
