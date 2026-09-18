@@ -806,34 +806,67 @@ export async function getConversationForBusiness(params: {
   return row ? mapConversation(row) : null;
 }
 
+export type MessageListCursor = {
+  at: Date;
+  createdAtUtc: Date;
+  messageId: string;
+};
+
 export async function listMessagesForConversation(params: {
   businessId: string;
   conversationId: string;
   limit?: number;
-  before?: Date | null;
+  /** Keyset cursor: load the page of messages strictly older than this message. */
+  before?: MessageListCursor | null;
 }): Promise<Message[]> {
   const limit = Math.min(Math.max(params.limit ?? 100, 1), 200);
   const before = params.before ?? null;
 
   const result = await query<MessageRow>(
     before
-      ? `SELECT TOP (@limit)
-            MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
-            Direction, Provider, ProviderMessageID, ContentType, TextContent,
-            ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
-         FROM TblMessage
-         WHERE BusinessID = @businessId
-           AND ConversationID = @conversationId
-           AND ISNULL(ProviderTimestampUtc, CreatedAtUtc) < @before
-         ORDER BY ISNULL(ProviderTimestampUtc, CreatedAtUtc) ASC, CreatedAtUtc ASC`
-      : `SELECT TOP (@limit)
-            MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
-            Direction, Provider, ProviderMessageID, ContentType, TextContent,
-            ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
-         FROM TblMessage
-         WHERE BusinessID = @businessId
-           AND ConversationID = @conversationId
-         ORDER BY ISNULL(ProviderTimestampUtc, CreatedAtUtc) ASC, CreatedAtUtc ASC`,
+      ? `SELECT * FROM (
+           SELECT TOP (@limit)
+              MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
+              Direction, Provider, ProviderMessageID, ContentType, TextContent,
+              ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
+           FROM TblMessage
+           WHERE BusinessID = @businessId
+             AND ConversationID = @conversationId
+             AND (
+               ISNULL(ProviderTimestampUtc, CreatedAtUtc) < @beforeAt
+               OR (
+                 ISNULL(ProviderTimestampUtc, CreatedAtUtc) = @beforeAt
+                 AND (
+                   CreatedAtUtc < @beforeCreatedAt
+                   OR (
+                     CreatedAtUtc = @beforeCreatedAt
+                     AND MessageID < @beforeMessageId
+                   )
+                 )
+               )
+             )
+           ORDER BY ISNULL(ProviderTimestampUtc, CreatedAtUtc) DESC,
+                    CreatedAtUtc DESC,
+                    MessageID DESC
+         ) AS page
+         ORDER BY ISNULL(ProviderTimestampUtc, CreatedAtUtc) ASC,
+                  CreatedAtUtc ASC,
+                  MessageID ASC`
+      : `SELECT * FROM (
+           SELECT TOP (@limit)
+              MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
+              Direction, Provider, ProviderMessageID, ContentType, TextContent,
+              ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
+           FROM TblMessage
+           WHERE BusinessID = @businessId
+             AND ConversationID = @conversationId
+           ORDER BY ISNULL(ProviderTimestampUtc, CreatedAtUtc) DESC,
+                    CreatedAtUtc DESC,
+                    MessageID DESC
+         ) AS page
+         ORDER BY ISNULL(ProviderTimestampUtc, CreatedAtUtc) ASC,
+                  CreatedAtUtc ASC,
+                  MessageID ASC`,
     [
       {
         name: "businessId",
@@ -847,7 +880,19 @@ export async function listMessagesForConversation(params: {
       },
       { name: "limit", type: sql.Int, value: limit },
       ...(before
-        ? [{ name: "before", type: sql.DateTime2, value: before }]
+        ? [
+            { name: "beforeAt", type: sql.DateTime2, value: before.at },
+            {
+              name: "beforeCreatedAt",
+              type: sql.DateTime2,
+              value: before.createdAtUtc,
+            },
+            {
+              name: "beforeMessageId",
+              type: sql.UniqueIdentifier,
+              value: before.messageId,
+            },
+          ]
         : []),
     ],
   );

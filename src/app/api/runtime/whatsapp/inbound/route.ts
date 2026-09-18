@@ -1,12 +1,8 @@
 import {
-  assertInboundBodySize,
+  parseBoundedRuntimeJsonBody,
   requireRuntimeBearer,
 } from "@/lib/api/runtime-auth";
-import {
-  handleApiError,
-  jsonOk,
-  parseJsonBody,
-} from "@/lib/api/http";
+import { handleApiError, jsonOk } from "@/lib/api/http";
 import {
   inboundWhatsAppDtoSchema,
   ingestWhatsAppInbound,
@@ -19,9 +15,7 @@ import {
 export async function POST(request: Request) {
   try {
     requireRuntimeBearer(request.headers.get("authorization"));
-    assertInboundBodySize(request);
-
-    const body = await parseJsonBody(request);
+    const body = await parseBoundedRuntimeJsonBody(request);
     const dto = inboundWhatsAppDtoSchema.parse(body);
     const result = await ingestWhatsAppInbound(dto);
 

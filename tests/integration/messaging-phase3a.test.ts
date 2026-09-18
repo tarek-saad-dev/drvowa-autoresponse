@@ -323,7 +323,12 @@ describe("Phase 3A messaging ingest isolation", () => {
       content: "race",
     });
 
-    const before = await countMessagesForBusiness({ businessId: businessAId });
+    const beforeMsgs = await countMessagesForBusiness({ businessId: businessAId });
+    const beforeUsage = await countUsageEvents({
+      businessId: businessAId,
+      eventType: "WHATSAPP_INBOUND_MESSAGE",
+    });
+
     const results = await Promise.all([
       ingestWhatsAppInbound(payload),
       ingestWhatsAppInbound(payload),
@@ -333,13 +338,18 @@ describe("Phase 3A messaging ingest isolation", () => {
     const accepted = results.filter((r) => r.outcome === "accepted").length;
     const duplicates = results.filter((r) => r.outcome === "duplicate").length;
     expect(accepted + duplicates).toBe(3);
-    expect(accepted).toBeGreaterThanOrEqual(1);
-    expect(accepted).toBeLessThanOrEqual(1);
+    expect(accepted).toBe(1);
 
-    const after = await countMessagesForBusiness({ businessId: businessAId });
-    expect(after - before).toBe(1);
+    const afterMsgs = await countMessagesForBusiness({ businessId: businessAId });
+    expect(afterMsgs - beforeMsgs).toBe(1);
 
-    const usage = await query<{ Cnt: number }>(
+    const afterUsage = await countUsageEvents({
+      businessId: businessAId,
+      eventType: "WHATSAPP_INBOUND_MESSAGE",
+    });
+    expect(afterUsage - beforeUsage).toBe(1);
+
+    const usageForPmid = await query<{ Cnt: number }>(
       `SELECT COUNT(1) AS Cnt FROM TblUsageEvent
        WHERE BusinessID = @businessId
          AND EventType = N'WHATSAPP_INBOUND_MESSAGE'
@@ -353,11 +363,118 @@ describe("Phase 3A messaging ingest isolation", () => {
         {
           name: "like",
           type: sql.NVarChar(512),
-          value: `%"channelConnectionId":"${channelAId}"%`,
+          value: `%"providerMessageId":"${providerMessageId}"%`,
         },
       ],
     );
-    void usage;
+    expect(Number(usageForPmid.recordset[0]?.Cnt)).toBe(1);
     void channelBId;
+  });
+
+  it("pagination returns latest page ascending and previous page without duplicates", async ({
+    skip,
+  }) => {
+    requireDb(skip);
+    const contactKey = `201555600006@s.whatsapp.net`;
+    let conversationId = "";
+
+    for (let i = 1; i <= 25; i += 1) {
+      const result = await ingestWhatsAppInbound(
+        dto({
+          externalContactKey: contactKey,
+          providerMessageId: `page-${i.toString().padStart(3, "0")}-${randomUUID()}`,
+          content: `msg-${i}`,
+          // Distinct provider timestamps for stable ordering
+        }),
+      );
+      // Override timestamps via direct SQL after first create for deterministic order
+      if (result.outcome === "accepted") {
+        conversationId = result.conversationId;
+        await query(
+          `UPDATE TblMessage
+           SET ProviderTimestampUtc = DATEADD(second, @sec, '2026-01-01T00:00:00'),
+               CreatedAtUtc = DATEADD(second, @sec, '2026-01-01T00:00:00')
+           WHERE BusinessID = @businessId AND MessageID = @messageId`,
+          [
+            { name: "sec", type: sql.Int, value: i },
+            {
+              name: "businessId",
+              type: sql.UniqueIdentifier,
+              value: businessAId,
+            },
+            {
+              name: "messageId",
+              type: sql.UniqueIdentifier,
+              value: result.messageId,
+            },
+          ],
+        );
+      } else {
+        throw new Error(`expected accepted ingest for msg-${i}`);
+      }
+    }
+
+    const latest = await listInboxMessages({
+      businessId: businessAId,
+      conversationId,
+      limit: 10,
+    });
+    expect(latest).toHaveLength(10);
+    expect(latest.map((m) => m.textContent)).toEqual([
+      "msg-16",
+      "msg-17",
+      "msg-18",
+      "msg-19",
+      "msg-20",
+      "msg-21",
+      "msg-22",
+      "msg-23",
+      "msg-24",
+      "msg-25",
+    ]);
+    for (let i = 1; i < latest.length; i += 1) {
+      const prev = latest[i - 1]!;
+      const cur = latest[i]!;
+      const prevAt = (prev.providerTimestampUtc ?? prev.createdAtUtc).getTime();
+      const curAt = (cur.providerTimestampUtc ?? cur.createdAtUtc).getTime();
+      expect(curAt).toBeGreaterThanOrEqual(prevAt);
+    }
+
+    const oldestOnPage = latest[0]!;
+    const previous = await listInboxMessages({
+      businessId: businessAId,
+      conversationId,
+      limit: 10,
+      before: {
+        at: oldestOnPage.providerTimestampUtc ?? oldestOnPage.createdAtUtc,
+        createdAtUtc: oldestOnPage.createdAtUtc,
+        messageId: oldestOnPage.messageId,
+      },
+    });
+    expect(previous).toHaveLength(10);
+    expect(previous.map((m) => m.textContent)).toEqual([
+      "msg-6",
+      "msg-7",
+      "msg-8",
+      "msg-9",
+      "msg-10",
+      "msg-11",
+      "msg-12",
+      "msg-13",
+      "msg-14",
+      "msg-15",
+    ]);
+
+    const latestIds = new Set(latest.map((m) => m.messageId));
+    const prevIds = previous.map((m) => m.messageId);
+    expect(prevIds.every((id) => !latestIds.has(id))).toBe(true);
+
+    await expect(
+      listInboxMessages({
+        businessId: businessBId,
+        conversationId,
+        limit: 10,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 });

@@ -9,10 +9,37 @@ import {
 import { ingestWhatsAppInbound } from "@/modules/messaging/service";
 import {
   assertInboundBodySize,
+  parseBoundedRuntimeJsonBody,
   requireRuntimeBearer,
   RUNTIME_INBOUND_MAX_BODY_BYTES,
 } from "@/lib/api/runtime-auth";
 import { AuthError } from "@/lib/tenancy/errors";
+
+function requestWithStreamBody(body: Uint8Array): Request {
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const mid = Math.floor(body.byteLength / 2) || body.byteLength;
+      if (body.byteLength > 0) {
+        controller.enqueue(body.subarray(0, mid));
+        if (mid < body.byteLength) {
+          controller.enqueue(body.subarray(mid));
+        }
+      }
+      controller.close();
+    },
+  });
+  return new Request("http://localhost/api/runtime/whatsapp/inbound", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    // Node fetch requires duplex for streaming request bodies
+    duplex: "half",
+    body: stream,
+  } as RequestInit);
+}
+
+function utf8(s: string): Uint8Array {
+  return new TextEncoder().encode(s);
+}
 
 describe("Phase 3A content normalization", () => {
   it("17a. string content becomes TEXT", () => {
@@ -135,6 +162,57 @@ describe("Phase 3A runtime bearer auth", () => {
       },
     });
     expect(() => assertInboundBodySize(req)).toThrow();
+  });
+
+  it("rejects oversized body WITHOUT Content-Length", async () => {
+    const oversized = Buffer.alloc(RUNTIME_INBOUND_MAX_BODY_BYTES + 1, 0x61);
+    const req = requestWithStreamBody(oversized);
+    expect(req.headers.get("content-length")).toBeNull();
+    await expect(parseBoundedRuntimeJsonBody(req)).rejects.toThrow(/too large/i);
+  });
+
+  it("accepts valid body without Content-Length", async () => {
+    const payload = utf8(
+      JSON.stringify({
+        accountKey: "wa_abc123def456abc123def456",
+        provider: "baileys",
+        providerMessageId: "m1",
+        externalContactKey: "201@s.whatsapp.net",
+        fromMe: false,
+        isGroup: false,
+        upsertType: "notify",
+        content: "ok",
+      }),
+    );
+    const req = requestWithStreamBody(payload);
+    expect(req.headers.get("content-length")).toBeNull();
+    const parsed = await parseBoundedRuntimeJsonBody(req);
+    expect(parsed).toEqual(
+      expect.objectContaining({
+        provider: "baileys",
+        providerMessageId: "m1",
+      }),
+    );
+  });
+
+  it("rejects malformed JSON after bounded read", async () => {
+    const req = requestWithStreamBody(utf8("{not-json"));
+    await expect(parseBoundedRuntimeJsonBody(req)).rejects.toThrow(
+      /Invalid JSON/i,
+    );
+  });
+
+  it("enforces max size in bytes, not JS character count", async () => {
+    // One code point '😀' is 4 UTF-8 bytes. 20_000 chars = 80_000 bytes > 65536,
+    // while character count alone would look "smaller" than a 70k ASCII string.
+    const emoji = "😀";
+    const chars = 20_000;
+    expect(chars).toBeLessThan(RUNTIME_INBOUND_MAX_BODY_BYTES);
+    const body = utf8(`{"x":"${emoji.repeat(chars)}"}`);
+    expect(body.byteLength).toBeGreaterThan(RUNTIME_INBOUND_MAX_BODY_BYTES);
+    const req = requestWithStreamBody(body);
+    expect(req.headers.get("content-length")).toBeNull();
+    await expect(parseBoundedRuntimeJsonBody(req)).rejects.toThrow(/too large/i);
   });
 });
 

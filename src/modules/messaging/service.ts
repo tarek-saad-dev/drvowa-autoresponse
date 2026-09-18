@@ -144,6 +144,8 @@ export async function ingestWhatsAppInbound(
         metadata: {
           channelConnectionId,
           conversationId: conversation.conversationId,
+          providerMessageId: dto.providerMessageId,
+          messageId: message.messageId,
         },
       },
       trx,
@@ -170,6 +172,11 @@ export async function listInboxMessages(params: {
   businessId: string;
   conversationId: string;
   limit?: number;
+  before?: {
+    at: Date;
+    createdAtUtc: Date;
+    messageId: string;
+  } | null;
 }): Promise<Message[]> {
   const conversation = await repo.getConversationForBusiness({
     businessId: params.businessId,
@@ -186,6 +193,7 @@ export async function listInboxMessages(params: {
     businessId: params.businessId,
     conversationId: params.conversationId,
     limit: params.limit,
+    before: params.before ?? null,
   });
 }
 
