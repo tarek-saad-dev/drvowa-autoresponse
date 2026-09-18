@@ -17,6 +17,8 @@ export { processAiReplyJob } from "./orchestrator";
 export {
   createGeminiProvider,
   AiProviderError,
+  DEFAULT_GEMINI_MODEL,
+  resolveGeminiModel,
 } from "./gemini-provider";
 export type { AiReplyProvider, AiReplyRequest, AiReplyResult } from "./provider";
 export {
