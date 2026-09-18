@@ -1,9 +1,6 @@
 import { redirect } from "next/navigation";
 
-import {
-  InboxPanel,
-  serializeConversations,
-} from "@/components/dashboard/inbox-panel";
+import { InboxPanel } from "@/components/dashboard/inbox-panel";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import { listInboxConversations } from "@/modules/messaging";
@@ -17,6 +14,18 @@ export default async function InboxPage() {
   if (!businessId) redirect("/onboarding");
 
   const conversations = await listInboxConversations({ businessId, limit: 50 });
+  const initialConversations = conversations.map((c) => ({
+    conversationId: c.conversationId,
+    contactExternalKey: c.contactExternalKey,
+    contactDisplayName: c.contactDisplayName,
+    contactPhoneNormalized: c.contactPhoneNormalized,
+    lastMessagePreview: c.lastMessagePreview,
+    lastMessageDirection: c.lastMessageDirection,
+    lastMessageAtUtc: c.lastMessageAtUtc
+      ? new Date(c.lastMessageAtUtc).toISOString()
+      : null,
+    status: c.status,
+  }));
 
   return (
     <div className="space-y-6">
@@ -26,7 +35,7 @@ export default async function InboxPage() {
           محادثات واتساب الواردة — عرض فقط في هذه المرحلة.
         </p>
       </div>
-      <InboxPanel initialConversations={serializeConversations(conversations)} />
+      <InboxPanel initialConversations={initialConversations} />
     </div>
   );
 }
