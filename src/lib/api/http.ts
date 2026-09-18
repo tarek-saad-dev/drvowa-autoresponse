@@ -7,6 +7,7 @@ import {
   ForbiddenError,
   NotFoundError,
 } from "@/lib/tenancy/errors";
+import { WhatsAppRuntimeError } from "@/modules/channels/runtime-client";
 
 export function jsonOk<T>(
   data: T,
@@ -18,8 +19,9 @@ export function jsonOk<T>(
 export function jsonError(
   message: string,
   status: number,
+  extra?: Record<string, unknown>,
 ): NextResponse {
-  return NextResponse.json({ error: message }, { status });
+  return NextResponse.json({ error: message, ...extra }, { status });
 }
 
 export async function parseJsonBody(request: Request): Promise<unknown> {
@@ -55,8 +57,12 @@ export function handleApiError(error: unknown): NextResponse {
     return jsonError(message, 400);
   }
   if (error instanceof DbError) {
-    // Sanitized messages only (no secrets). Config/connectivity → 503.
     return jsonError(error.message || "Database unavailable", 503);
+  }
+  if (error instanceof WhatsAppRuntimeError) {
+    return jsonError(error.message, error.status >= 400 ? error.status : 503, {
+      code: error.code,
+    });
   }
 
   return jsonError("Request failed", 500);

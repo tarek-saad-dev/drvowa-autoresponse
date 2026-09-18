@@ -27,6 +27,16 @@ export async function createChannelConnectionShell(params: {
   provider?: string;
   locationId?: string | null;
   displayName?: string | null;
+  externalAccountKey?: string | null;
 }): Promise<ChannelConnection> {
   return repo.createChannelConnectionShell(params);
 }
+
+export {
+  ensureWhatsAppConnection,
+  getWhatsAppConnectionView,
+  startWhatsAppPairing,
+  stopWhatsAppRuntime,
+  getWhatsAppQrForBusiness,
+  getTrustedAccountKey,
+} from "./whatsapp-service";
