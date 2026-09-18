@@ -161,3 +161,103 @@ export async function getAccountQr(accountKey: string): Promise<{
     { timeoutMs: 5_000 },
   );
 }
+
+export type RuntimeSendResult = {
+  success: boolean;
+  status?: string;
+  messageId?: string | null;
+  phone?: string;
+  error?: string;
+  code?: string;
+};
+
+async function runtimeFetchWithBody<T>(
+  method: string,
+  path: string,
+  body: unknown,
+  init?: { timeoutMs?: number },
+): Promise<T> {
+  const baseUrl = getBaseUrl();
+  const token = getToken();
+  const timeoutMs = init?.timeoutMs ?? 8_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${baseUrl}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+      cache: "no-store",
+    });
+
+    let parsed: unknown = null;
+    try {
+      parsed = await response.json();
+    } catch {
+      parsed = null;
+    }
+
+    const record =
+      parsed && typeof parsed === "object"
+        ? (parsed as Record<string, unknown>)
+        : {};
+
+    if (!response.ok) {
+      const errorMessage =
+        typeof record.error === "string"
+          ? sanitizeRuntimeMessage(record.error)
+          : `WhatsApp runtime request failed (${response.status})`;
+      const errorCode =
+        typeof record.code === "string"
+          ? record.code
+          : `RUNTIME_HTTP_${response.status}`;
+      throw new WhatsAppRuntimeError(errorMessage, {
+        status: response.status,
+        code: errorCode,
+      });
+    }
+
+    return parsed as T;
+  } catch (error) {
+    if (error instanceof WhatsAppRuntimeError) {
+      throw error;
+    }
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new WhatsAppRuntimeError("WhatsApp runtime timed out", {
+        status: 504,
+        code: "RUNTIME_TIMEOUT",
+      });
+    }
+    throw new WhatsAppRuntimeError("WhatsApp runtime unavailable", {
+      status: 503,
+      code: "RUNTIME_UNAVAILABLE",
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Send a text message via managed WhatsApp account.
+ * Server-only — never expose DRVOWA_RUNTIME_TOKEN to the browser.
+ */
+export async function sendAccountMessage(params: {
+  accountKey: string;
+  phone: string;
+  message: string;
+  timeoutMs?: number;
+}): Promise<RuntimeSendResult> {
+  const result = await runtimeFetchWithBody<RuntimeSendResult>(
+    "POST",
+    `/api/accounts/${encodeURIComponent(params.accountKey)}/send`,
+    { phone: params.phone, message: params.message },
+    { timeoutMs: params.timeoutMs ?? 10_000 },
+  );
+  return result;
+}

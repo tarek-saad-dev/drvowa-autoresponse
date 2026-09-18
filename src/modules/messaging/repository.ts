@@ -682,6 +682,133 @@ export async function touchConversationInbound(
   );
 }
 
+export async function touchConversationOutbound(
+  params: {
+    businessId: string;
+    conversationId: string;
+    at: Date;
+  },
+  trx?: TransactionClient,
+): Promise<void> {
+  const run = trx
+    ? trx.execute.bind(trx)
+    : async (text: string, inputs: Parameters<typeof query>[1] = []) => {
+        const result = await query(text, inputs);
+        return result.rowsAffected.reduce((s, n) => s + n, 0);
+      };
+
+  await run(
+    `UPDATE TblConversation
+     SET LastMessageAtUtc = @at,
+         LastOutboundAtUtc = @at,
+         Status = N'OPEN',
+         UpdatedAtUtc = SYSUTCDATETIME()
+     WHERE BusinessID = @businessId AND ConversationID = @conversationId`,
+    [
+      { name: "at", type: sql.DateTime2, value: params.at },
+      {
+        name: "businessId",
+        type: sql.UniqueIdentifier,
+        value: params.businessId,
+      },
+      {
+        name: "conversationId",
+        type: sql.UniqueIdentifier,
+        value: params.conversationId,
+      },
+    ],
+  );
+}
+
+export async function getContactForBusiness(params: {
+  businessId: string;
+  contactId: string;
+}): Promise<Contact | null> {
+  const result = await query<ContactRow>(
+    `SELECT ContactID, BusinessID, ChannelConnectionID, ExternalContactKey,
+            DisplayName, PhoneNormalized, CreatedAtUtc, UpdatedAtUtc
+     FROM TblContact
+     WHERE BusinessID = @businessId AND ContactID = @contactId`,
+    [
+      {
+        name: "businessId",
+        type: sql.UniqueIdentifier,
+        value: params.businessId,
+      },
+      {
+        name: "contactId",
+        type: sql.UniqueIdentifier,
+        value: params.contactId,
+      },
+    ],
+  );
+  const row = result.recordset[0];
+  return row ? mapContact(row) : null;
+}
+
+export async function getMessageForBusiness(params: {
+  businessId: string;
+  messageId: string;
+}): Promise<Message | null> {
+  const result = await query<MessageRow>(
+    `SELECT MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
+            Direction, Provider, ProviderMessageID, ContentType, TextContent,
+            ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
+     FROM TblMessage
+     WHERE BusinessID = @businessId AND MessageID = @messageId`,
+    [
+      {
+        name: "businessId",
+        type: sql.UniqueIdentifier,
+        value: params.businessId,
+      },
+      {
+        name: "messageId",
+        type: sql.UniqueIdentifier,
+        value: params.messageId,
+      },
+    ],
+  );
+  const row = result.recordset[0];
+  return row ? mapMessage(row) : null;
+}
+
+export async function listRecentTextMessages(params: {
+  businessId: string;
+  conversationId: string;
+  limit?: number;
+}): Promise<Message[]> {
+  const limit = Math.min(Math.max(params.limit ?? 16, 1), 40);
+  const result = await query<MessageRow>(
+    `SELECT * FROM (
+       SELECT TOP (@limit)
+          MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
+          Direction, Provider, ProviderMessageID, ContentType, TextContent,
+          ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
+       FROM TblMessage
+       WHERE BusinessID = @businessId
+         AND ConversationID = @conversationId
+         AND ContentType = N'TEXT'
+       ORDER BY ISNULL(ProviderTimestampUtc, CreatedAtUtc) DESC, CreatedAtUtc DESC, MessageID DESC
+     ) AS recent
+     ORDER BY ISNULL(ProviderTimestampUtc, CreatedAtUtc) ASC, CreatedAtUtc ASC, MessageID ASC`,
+    [
+      {
+        name: "businessId",
+        type: sql.UniqueIdentifier,
+        value: params.businessId,
+      },
+      {
+        name: "conversationId",
+        type: sql.UniqueIdentifier,
+        value: params.conversationId,
+      },
+      { name: "limit", type: sql.Int, value: limit },
+    ],
+  );
+  return result.recordset.map(mapMessage);
+}
+
 export async function insertUsageEventInTrx(
   params: {
     businessId: string;

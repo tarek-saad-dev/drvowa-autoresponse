@@ -3,6 +3,7 @@ import {
   ForbiddenError,
   NotFoundError,
 } from "@/lib/tenancy/errors";
+import { maybeScheduleAiReplyAfterInbound } from "@/modules/ai/schedule";
 import type { ConversationListItem, Message } from "@/types/domain";
 
 import {
@@ -147,6 +148,19 @@ export async function ingestWhatsAppInbound(
           providerMessageId: dto.providerMessageId,
           messageId: message.messageId,
         },
+      },
+      trx,
+    );
+
+    await maybeScheduleAiReplyAfterInbound(
+      {
+        businessId,
+        channelConnectionId,
+        conversationId: conversation.conversationId,
+        contactId: contact.contactId,
+        triggerMessageId: message.messageId,
+        contentType: normalized.contentType,
+        messageReceivedAt: receivedAtUtc,
       },
       trx,
     );

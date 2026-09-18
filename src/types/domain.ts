@@ -177,6 +177,44 @@ export type ConversationListItem = Conversation & {
   lastMessageDirection: MessageDirection | null;
 };
 
+export type AiReplyJobStatus =
+  | "PENDING"
+  | "PROCESSING"
+  | "SENT"
+  | "SKIPPED"
+  | "FAILED"
+  | "COALESCED";
+
+export type ChannelAiSetting = {
+  channelAiSettingId: string;
+  businessId: string;
+  channelConnectionId: string;
+  agentId: string;
+  autoReplyEnabled: boolean;
+  enabledAtUtc: Date | null;
+  debounceMs: number;
+  createdAtUtc: Date;
+  updatedAtUtc: Date;
+};
+
+export type AiReplyJob = {
+  aiReplyJobId: string;
+  businessId: string;
+  channelConnectionId: string;
+  conversationId: string;
+  contactId: string;
+  triggerMessageId: string;
+  status: AiReplyJobStatus;
+  notBeforeUtc: Date;
+  attemptCount: number;
+  leaseUntilUtc: Date | null;
+  startedAtUtc: Date | null;
+  completedAtUtc: Date | null;
+  lastErrorCode: string | null;
+  createdAtUtc: Date;
+  updatedAtUtc: Date;
+};
+
 export type Integration = {
   integrationId: string;
   businessId: string;
