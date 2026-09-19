@@ -102,13 +102,33 @@ async function getAppliedVersions(): Promise<Set<string>> {
   }
 }
 
+function expandIncludes(sqlText: string, fromFile: string): string {
+  const baseDir = resolve(fromFile, "..");
+  return sqlText.replace(
+    /^\s*--\s*@include:\s*(.+?)\s*$/gim,
+    (_match, includePath: string) => {
+      const resolved = resolve(baseDir, includePath.trim());
+      if (!existsSync(resolved)) {
+        throw new DbError(`Migration include not found: ${resolved}`, {
+          code: "DB_MIGRATE",
+        });
+      }
+      const included = readFileSync(resolved, "utf8");
+      // Nested includes relative to the included file.
+      return expandIncludes(included, resolved);
+    },
+  );
+}
+
 async function applyMigration(migration: MigrationFile): Promise<void> {
-  const sqlText = readFileSync(migration.fullPath, "utf8");
-  if (!sqlText.trim()) {
+  const rawText = readFileSync(migration.fullPath, "utf8");
+  if (!rawText.trim()) {
     throw new DbError(`Migration file is empty: ${migration.fileName}`, {
       code: "DB_MIGRATE",
     });
   }
+
+  const sqlText = expandIncludes(rawText, migration.fullPath);
 
   // Split on GO batch separators (sqlcmd-compatible). node-mssql does not.
   const batches = sqlText

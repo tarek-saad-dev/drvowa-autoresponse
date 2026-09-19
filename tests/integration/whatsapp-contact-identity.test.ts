@@ -17,27 +17,13 @@ import { completeOnboarding } from "@/modules/onboarding/service";
 import { rethrowDbBootstrapFailure } from "../helpers/db-bootstrap";
 import { clearTestCookies } from "../helpers/cookies";
 
-async function refreshMergeProcedureFromMigration(): Promise<void> {
-  const sqlText = readFileSync(
-    resolve(
-      process.cwd(),
-      "db/migrations/008_whatsapp_contact_identity_canonicalization.sql",
-    ),
-    "utf8",
-  );
-  const batches = sqlText
-    .split(/^\s*GO\s*$/gim)
-    .map((b) => b.trim())
-    .filter((b) => b.length > 0);
-  const procBatch = batches.find((b) =>
-    /CREATE\s+OR\s+ALTER\s+PROCEDURE\s+dbo\.usp_MergeWhatsAppContactDuplicates/i.test(
-      b,
-    ),
-  );
-  if (!procBatch) {
-    throw new Error("Merge procedure batch not found in migration 008");
-  }
-  await batch(procBatch);
+const MERGE_SQL_PATH = resolve(
+  process.cwd(),
+  "db/sql/merge_whatsapp_contact_duplicates.sql",
+);
+
+function loadMergeSql(): string {
+  return readFileSync(MERGE_SQL_PATH, "utf8");
 }
 
 async function dropPhoneUniqueIndex(): Promise<void> {
@@ -65,10 +51,11 @@ async function ensurePhoneUniqueIndex(): Promise<void> {
 }
 
 async function execMergeWithRetry(attempts = 4): Promise<void> {
+  const mergeSql = loadMergeSql();
   let lastError: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
-      await query(`EXEC dbo.usp_MergeWhatsAppContactDuplicates`);
+      await batch(mergeSql);
       return;
     } catch (error) {
       lastError = error;
@@ -117,8 +104,11 @@ describe("Phase 3B Part 2B.1 contact identity + merge", () => {
       rethrowDbBootstrapFailure(error);
     }
 
-    // Keep local DB proc in sync with migration file (008 already applied once).
-    await refreshMergeProcedureFromMigration();
+    // Drop leftover repair procedure from earlier 008 drafts if present.
+    await query(
+      `IF OBJECT_ID(N'dbo.usp_MergeWhatsAppContactDuplicates', N'P') IS NOT NULL
+       DROP PROCEDURE dbo.usp_MergeWhatsAppContactDuplicates`,
+    );
 
     clearTestCookies();
     const suffix = randomUUID().slice(0, 8);
