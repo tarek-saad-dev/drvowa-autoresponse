@@ -3,6 +3,7 @@
  * Production: run as drvowa-ai-worker.service via `npm run ai:worker`.
  *
  * Never processes Gemini inside the inbound HTTP request path.
+ * Graceful SIGTERM/SIGINT: stop claiming, drain in-flight, close pool.
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -13,6 +14,8 @@ import {
   claimNextJob,
   processAiReplyJob,
 } from "../src/modules/ai";
+
+const SHUTDOWN_DEADLINE_MS = 60_000;
 
 function loadDotEnvIfPresent(): void {
   const envPath = resolve(process.cwd(), ".env");
@@ -60,16 +63,13 @@ async function main(): Promise<void> {
 
   console.info("[ai-worker] started", { concurrency, pollMs });
 
-  const shutdown = async () => {
+  const requestShutdown = () => {
+    if (stopping) return;
     stopping = true;
     console.info("[ai-worker] shutting_down");
   };
-  process.once("SIGINT", () => {
-    void shutdown().finally(() => process.exit(0));
-  });
-  process.once("SIGTERM", () => {
-    void shutdown().finally(() => process.exit(0));
-  });
+  process.once("SIGINT", requestShutdown);
+  process.once("SIGTERM", requestShutdown);
 
   while (!stopping) {
     try {
@@ -96,13 +96,20 @@ async function main(): Promise<void> {
         errorCode: error instanceof Error ? error.name : "LOOP_ERROR",
       });
     }
+    if (stopping) break;
     await new Promise((r) => setTimeout(r, pollMs));
   }
 
-  while (inFlight > 0) {
+  const deadline = Date.now() + SHUTDOWN_DEADLINE_MS;
+  while (inFlight > 0 && Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 100));
   }
+  if (inFlight > 0) {
+    console.warn("[ai-worker] shutdown_deadline_reached", { inFlight });
+  }
+
   await closePool().catch(() => undefined);
+  console.info("[ai-worker] stopped");
 }
 
 main().catch(async (error: unknown) => {

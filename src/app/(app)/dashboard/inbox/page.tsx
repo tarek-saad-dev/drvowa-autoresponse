@@ -25,6 +25,8 @@ export default async function InboxPage() {
       ? new Date(c.lastMessageAtUtc).toISOString()
       : null,
     status: c.status,
+    aiMode: c.aiMode ?? "AUTO",
+    aiPauseReason: c.aiPauseReason,
   }));
 
   return (

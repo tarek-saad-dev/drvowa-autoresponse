@@ -23,9 +23,20 @@ type JobRow = {
   StartedAtUtc: Date | null;
   CompletedAtUtc: Date | null;
   LastErrorCode: string | null;
+  GeneratedReplyText: string | null;
+  GeneratedModel: string | null;
+  GeneratedAtUtc: Date | null;
+  OutboundProviderMessageID: string | null;
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
+
+const JOB_SELECT_COLS = `
+  AiReplyJobID, BusinessID, ChannelConnectionID, ConversationID, ContactID,
+  TriggerMessageID, Status, NotBeforeUtc, AttemptCount, LeaseUntilUtc,
+  StartedAtUtc, CompletedAtUtc, LastErrorCode,
+  GeneratedReplyText, GeneratedModel, GeneratedAtUtc, OutboundProviderMessageID,
+  CreatedAtUtc, UpdatedAtUtc`;
 
 function mapJob(row: JobRow): AiReplyJob {
   return {
@@ -42,6 +53,10 @@ function mapJob(row: JobRow): AiReplyJob {
     startedAtUtc: row.StartedAtUtc,
     completedAtUtc: row.CompletedAtUtc,
     lastErrorCode: row.LastErrorCode,
+    generatedReplyText: row.GeneratedReplyText,
+    generatedModel: row.GeneratedModel,
+    generatedAtUtc: row.GeneratedAtUtc,
+    outboundProviderMessageId: row.OutboundProviderMessageID,
     createdAtUtc: row.CreatedAtUtc,
     updatedAtUtc: row.UpdatedAtUtc,
   };
@@ -64,10 +79,7 @@ export async function findPendingJobForConversation(params: {
   conversationId: string;
 }, trx?: TransactionClient): Promise<AiReplyJob | null> {
   const result = await db(trx).query<JobRow>(
-    `SELECT TOP 1
-        AiReplyJobID, BusinessID, ChannelConnectionID, ConversationID, ContactID,
-        TriggerMessageID, Status, NotBeforeUtc, AttemptCount, LeaseUntilUtc,
-        StartedAtUtc, CompletedAtUtc, LastErrorCode, CreatedAtUtc, UpdatedAtUtc
+    `SELECT TOP 1 ${JOB_SELECT_COLS}
      FROM TblAiReplyJob
      WHERE BusinessID = @businessId
        AND ConversationID = @conversationId
@@ -170,10 +182,12 @@ export async function scheduleOrCoalesceJob(params: {
          AiReplyJobID, BusinessID, ChannelConnectionID, ConversationID, ContactID,
          TriggerMessageID, Status, NotBeforeUtc, AttemptCount,
          LeaseUntilUtc, StartedAtUtc, CompletedAtUtc, LastErrorCode,
+         GeneratedReplyText, GeneratedModel, GeneratedAtUtc, OutboundProviderMessageID,
          CreatedAtUtc, UpdatedAtUtc
        ) VALUES (
          @jobId, @businessId, @channelConnectionId, @conversationId, @contactId,
          @triggerMessageId, N'PENDING', @notBeforeUtc, 0,
+         NULL, NULL, NULL, NULL,
          NULL, NULL, NULL, NULL,
          SYSUTCDATETIME(), SYSUTCDATETIME()
        )`,
@@ -209,7 +223,6 @@ export async function scheduleOrCoalesceJob(params: {
     );
   } catch (error) {
     if (!isUniqueViolationError(error)) throw error;
-    // Another request won the PENDING slot — coalesce onto the winner once.
     const winner = await findPendingJobForConversation(
       {
         businessId: params.businessId,
@@ -244,6 +257,10 @@ export async function scheduleOrCoalesceJob(params: {
       startedAtUtc: null,
       completedAtUtc: null,
       lastErrorCode: null,
+      generatedReplyText: null,
+      generatedModel: null,
+      generatedAtUtc: null,
+      outboundProviderMessageId: null,
       createdAtUtc: new Date(),
       updatedAtUtc: new Date(),
     },
@@ -254,8 +271,10 @@ export async function scheduleOrCoalesceJob(params: {
 const LEASE_SECONDS = 90;
 
 /**
- * Atomically claim the next eligible job. Expired leases recover unless
- * LastErrorCode = UNKNOWN_SEND_RESULT (ambiguous outbound).
+ * Atomically claim the next eligible job.
+ * - Never claims PENDING while another PROCESSING job exists for the same conversation.
+ * - Expired PROCESSING leases are reclaimable, including OUTBOUND_RESULT_UNKNOWN.
+ * - Prefer reclaiming expired PROCESSING over PENDING for the same ordering window.
  */
 export async function claimNextJob(params?: {
   workerId?: string;
@@ -272,16 +291,31 @@ export async function claimNextJob(params?: {
        FROM TblAiReplyJob WITH (UPDLOCK, READPAST, ROWLOCK)
        WHERE (
          (
-           Status = N'PENDING' AND NotBeforeUtc <= SYSUTCDATETIME()
+           Status = N'PENDING'
+           AND NotBeforeUtc <= SYSUTCDATETIME()
+           AND NOT EXISTS (
+             SELECT 1
+             FROM TblAiReplyJob AS other WITH (UPDLOCK, READPAST, ROWLOCK)
+             WHERE other.BusinessID = TblAiReplyJob.BusinessID
+               AND other.ConversationID = TblAiReplyJob.ConversationID
+               AND other.Status = N'PROCESSING'
+               AND other.AiReplyJobID <> TblAiReplyJob.AiReplyJobID
+           )
          ) OR (
            Status = N'PROCESSING'
            AND LeaseUntilUtc IS NOT NULL
            AND LeaseUntilUtc < SYSUTCDATETIME()
-           AND (LastErrorCode IS NULL OR LastErrorCode <> N'UNKNOWN_SEND_RESULT')
+           AND (
+             LastErrorCode IS NULL
+             OR LastErrorCode = N'OUTBOUND_RESULT_UNKNOWN'
+           )
          )
        )
        ${businessFilter}
-       ORDER BY NotBeforeUtc ASC, CreatedAtUtc ASC
+       ORDER BY
+         CASE WHEN Status = N'PROCESSING' THEN 0 ELSE 1 END,
+         NotBeforeUtc ASC,
+         CreatedAtUtc ASC
      )
      UPDATE cte
      SET Status = N'PROCESSING',
@@ -294,7 +328,10 @@ export async function claimNextJob(params?: {
        INSERTED.ConversationID, INSERTED.ContactID, INSERTED.TriggerMessageID,
        INSERTED.Status, INSERTED.NotBeforeUtc, INSERTED.AttemptCount,
        INSERTED.LeaseUntilUtc, INSERTED.StartedAtUtc, INSERTED.CompletedAtUtc,
-       INSERTED.LastErrorCode, INSERTED.CreatedAtUtc, INSERTED.UpdatedAtUtc;`,
+       INSERTED.LastErrorCode,
+       INSERTED.GeneratedReplyText, INSERTED.GeneratedModel, INSERTED.GeneratedAtUtc,
+       INSERTED.OutboundProviderMessageID,
+       INSERTED.CreatedAtUtc, INSERTED.UpdatedAtUtc;`,
     [
       { name: "leaseSeconds", type: sql.Int, value: leaseSeconds },
       ...(params?.businessId
@@ -317,21 +354,35 @@ export async function completeJob(params: {
   jobId: string;
   status: Extract<AiReplyJobStatus, "SENT" | "SKIPPED" | "FAILED" | "COALESCED">;
   errorCode?: string | null;
-}): Promise<void> {
-  await query(
+  outboundProviderMessageId?: string | null;
+  trx?: TransactionClient;
+}): Promise<boolean> {
+  const result = await db(params.trx).query<{ AiReplyJobID: string }>(
     `UPDATE TblAiReplyJob
      SET Status = @status,
          LastErrorCode = @errorCode,
+         OutboundProviderMessageID = COALESCE(
+           @outboundProviderMessageId,
+           OutboundProviderMessageID
+         ),
          CompletedAtUtc = SYSUTCDATETIME(),
          LeaseUntilUtc = NULL,
          UpdatedAtUtc = SYSUTCDATETIME()
-     WHERE BusinessID = @businessId AND AiReplyJobID = @jobId`,
+     OUTPUT INSERTED.AiReplyJobID
+     WHERE BusinessID = @businessId
+       AND AiReplyJobID = @jobId
+       AND Status = N'PROCESSING'`,
     [
       { name: "status", type: sql.NVarChar(32), value: params.status },
       {
         name: "errorCode",
         type: sql.NVarChar(64),
         value: params.errorCode ?? null,
+      },
+      {
+        name: "outboundProviderMessageId",
+        type: sql.NVarChar(256),
+        value: params.outboundProviderMessageId ?? null,
       },
       {
         name: "businessId",
@@ -341,6 +392,116 @@ export async function completeJob(params: {
       { name: "jobId", type: sql.UniqueIdentifier, value: params.jobId },
     ],
   );
+  return Boolean(result.recordset[0]);
+}
+
+/**
+ * Persist Gemini output once. Never overwrite an existing GeneratedReplyText.
+ */
+export async function persistGeneratedReply(params: {
+  businessId: string;
+  jobId: string;
+  replyText: string;
+  model: string;
+}, trx?: TransactionClient): Promise<void> {
+  await db(trx).execute(
+    `UPDATE TblAiReplyJob
+     SET GeneratedReplyText = CASE
+           WHEN GeneratedReplyText IS NULL OR LTRIM(RTRIM(GeneratedReplyText)) = N''
+           THEN @replyText
+           ELSE GeneratedReplyText
+         END,
+         GeneratedModel = CASE
+           WHEN GeneratedModel IS NULL OR LTRIM(RTRIM(GeneratedModel)) = N''
+           THEN @model
+           ELSE GeneratedModel
+         END,
+         GeneratedAtUtc = ISNULL(GeneratedAtUtc, SYSUTCDATETIME()),
+         UpdatedAtUtc = SYSUTCDATETIME()
+     WHERE BusinessID = @businessId
+       AND AiReplyJobID = @jobId
+       AND Status = N'PROCESSING'`,
+    [
+      { name: "replyText", type: sql.NVarChar(sql.MAX), value: params.replyText },
+      { name: "model", type: sql.NVarChar(128), value: params.model },
+      {
+        name: "businessId",
+        type: sql.UniqueIdentifier,
+        value: params.businessId,
+      },
+      { name: "jobId", type: sql.UniqueIdentifier, value: params.jobId },
+    ],
+  );
+}
+
+/**
+ * Keep job PROCESSING but expire the lease after delaySeconds so claim can retry
+ * the same idempotency key without regenerating Gemini.
+ */
+export async function deferUnknownOutbound(params: {
+  businessId: string;
+  jobId: string;
+  delaySeconds: number;
+  errorCode?: string;
+}): Promise<void> {
+  const delay = Math.max(params.delaySeconds, 1);
+  await query(
+    `UPDATE TblAiReplyJob
+     SET LastErrorCode = @errorCode,
+         LeaseUntilUtc = DATEADD(second, @delaySeconds, SYSUTCDATETIME()),
+         NotBeforeUtc = DATEADD(second, @delaySeconds, SYSUTCDATETIME()),
+         UpdatedAtUtc = SYSUTCDATETIME()
+     WHERE BusinessID = @businessId
+       AND AiReplyJobID = @jobId
+       AND Status = N'PROCESSING'`,
+    [
+      {
+        name: "errorCode",
+        type: sql.NVarChar(64),
+        value: params.errorCode ?? "OUTBOUND_RESULT_UNKNOWN",
+      },
+      { name: "delaySeconds", type: sql.Int, value: delay },
+      {
+        name: "businessId",
+        type: sql.UniqueIdentifier,
+        value: params.businessId,
+      },
+      { name: "jobId", type: sql.UniqueIdentifier, value: params.jobId },
+    ],
+  );
+}
+
+export async function skipPendingJobsForConversation(params: {
+  businessId: string;
+  conversationId: string;
+  errorCode: string;
+}, trx?: TransactionClient): Promise<number> {
+  const result = await db(trx).query<{ AiReplyJobID: string }>(
+    `UPDATE TblAiReplyJob
+     SET Status = N'SKIPPED',
+         LastErrorCode = @errorCode,
+         CompletedAtUtc = SYSUTCDATETIME(),
+         LeaseUntilUtc = NULL,
+         UpdatedAtUtc = SYSUTCDATETIME()
+     OUTPUT INSERTED.AiReplyJobID
+     WHERE BusinessID = @businessId
+       AND ConversationID = @conversationId
+       AND Status = N'PENDING'`,
+    [
+      { name: "errorCode", type: sql.NVarChar(64), value: params.errorCode },
+      {
+        name: "businessId",
+        type: sql.UniqueIdentifier,
+        value: params.businessId,
+      },
+      {
+        name: "conversationId",
+        type: sql.UniqueIdentifier,
+        value: params.conversationId,
+      },
+    ],
+  );
+  return result.recordset.length;
 }
 
 export async function extendLease(params: {
@@ -396,9 +557,7 @@ export async function getJob(params: {
   jobId: string;
 }): Promise<AiReplyJob | null> {
   const result = await query<JobRow>(
-    `SELECT AiReplyJobID, BusinessID, ChannelConnectionID, ConversationID, ContactID,
-            TriggerMessageID, Status, NotBeforeUtc, AttemptCount, LeaseUntilUtc,
-            StartedAtUtc, CompletedAtUtc, LastErrorCode, CreatedAtUtc, UpdatedAtUtc
+    `SELECT ${JOB_SELECT_COLS}
      FROM TblAiReplyJob
      WHERE BusinessID = @businessId AND AiReplyJobID = @jobId`,
     [
@@ -412,4 +571,29 @@ export async function getJob(params: {
   );
   const row = result.recordset[0];
   return row ? mapJob(row) : null;
+}
+
+export async function countProcessingJobsForConversation(params: {
+  businessId: string;
+  conversationId: string;
+}): Promise<number> {
+  const result = await query<{ Cnt: number }>(
+    `SELECT COUNT(1) AS Cnt FROM TblAiReplyJob
+     WHERE BusinessID = @businessId
+       AND ConversationID = @conversationId
+       AND Status = N'PROCESSING'`,
+    [
+      {
+        name: "businessId",
+        type: sql.UniqueIdentifier,
+        value: params.businessId,
+      },
+      {
+        name: "conversationId",
+        type: sql.UniqueIdentifier,
+        value: params.conversationId,
+      },
+    ],
+  );
+  return Number(result.recordset[0]?.Cnt ?? 0);
 }

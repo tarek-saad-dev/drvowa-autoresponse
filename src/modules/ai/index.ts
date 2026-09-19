@@ -12,6 +12,10 @@ export {
   countJobs,
   getJob,
   findPendingJobForConversation,
+  persistGeneratedReply,
+  deferUnknownOutbound,
+  skipPendingJobsForConversation,
+  countProcessingJobsForConversation,
 } from "./jobs-repository";
 export { processAiReplyJob } from "./orchestrator";
 export {
@@ -40,3 +44,25 @@ export {
   sanitizeReplyText,
   MAX_REPLY_CHARS,
 } from "./provider";
+export {
+  getConversationAiState,
+  getEffectiveConversationAiState,
+  pauseConversationAi,
+  resumeConversationAi,
+  evaluateConversationAiScheduleGate,
+  evaluateConversationAiSendGate,
+} from "./conversation-state-repository";
+export {
+  aiOutboundIdempotencyKey,
+  MAX_SEND_RESOLUTION_ATTEMPTS,
+  outboundUnknownRetryDelaySeconds,
+} from "./outbound-policy";
+export {
+  ingestWhatsAppOutboundObserved,
+  outboundObservedDtoSchema,
+} from "./observation-service";
+export {
+  getInboxConversationAiState,
+  resumeInboxConversationAi,
+  pauseInboxConversationAi,
+} from "./inbox-ai-service";

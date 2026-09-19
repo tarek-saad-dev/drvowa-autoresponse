@@ -565,6 +565,7 @@ describe("Phase 3B AI jobs integration", () => {
       expect.objectContaining({
         accountKey,
         phone: "201555900009",
+        idempotencyKey: `ai:${job!.aiReplyJobId}`,
       }),
     );
 
@@ -637,14 +638,23 @@ describe("Phase 3B AI jobs integration", () => {
         },
         logger: { info() {}, warn() {} },
       });
-      expect(failed.status).toBe("FAILED");
-      expect(failed.errorCode).toBe("UNKNOWN_SEND_RESULT");
+      // First ambiguous attempt defers for idempotent recovery (does not fail closed yet).
+      expect(failed.status).toBe("DEFERRED");
+      expect(failed.errorCode).toBe("OUTBOUND_RESULT_UNKNOWN");
       const stored = await getJob({
         businessId,
         jobId: jobTo!.aiReplyJobId,
       });
-      expect(stored?.status).toBe("FAILED");
-      expect(stored?.lastErrorCode).toBe("UNKNOWN_SEND_RESULT");
+      expect(stored?.status).toBe("PROCESSING");
+      expect(stored?.lastErrorCode).toBe("OUTBOUND_RESULT_UNKNOWN");
+      expect(stored?.generatedReplyText).toBe("رد");
+      // Release conversation serialization so later cases can claim.
+      await completeJob({
+        businessId,
+        jobId: jobTo!.aiReplyJobId,
+        status: "FAILED",
+        errorCode: "TEST_CLEANUP_AFTER_DEFER",
+      });
     }
 
     // Definitive failure does not persist outbound for a new job

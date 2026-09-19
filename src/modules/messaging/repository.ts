@@ -78,6 +78,8 @@ type ConversationListRow = ConversationRow & {
   ContactPhoneNormalized: string | null;
   LastMessagePreview: string | null;
   LastMessageDirection: string | null;
+  AiMode: string | null;
+  AiPauseReason: string | null;
 };
 
 function mapChannel(row: ChannelRow): ChannelConnection {
@@ -878,10 +880,14 @@ export async function listConversationsForBusiness(params: {
           FROM TblMessage m
           WHERE m.BusinessID = c.BusinessID AND m.ConversationID = c.ConversationID
           ORDER BY ISNULL(m.ProviderTimestampUtc, m.CreatedAtUtc) DESC, m.CreatedAtUtc DESC
-        ) AS LastMessageDirection
+        ) AS LastMessageDirection,
+        ai.Mode AS AiMode,
+        ai.PauseReason AS AiPauseReason
      FROM TblConversation c
      INNER JOIN TblContact ct
        ON ct.ContactID = c.ContactID AND ct.BusinessID = c.BusinessID
+     LEFT JOIN TblConversationAiState ai
+       ON ai.BusinessID = c.BusinessID AND ai.ConversationID = c.ConversationID
      WHERE c.BusinessID = @businessId
      ORDER BY ISNULL(c.LastMessageAtUtc, c.CreatedAtUtc) DESC`,
     [
@@ -903,6 +909,8 @@ export async function listConversationsForBusiness(params: {
     lastMessageDirection: row.LastMessageDirection
       ? (row.LastMessageDirection as MessageDirection)
       : null,
+    aiMode: (row.AiMode as ConversationListItem["aiMode"]) || "AUTO",
+    aiPauseReason: row.AiPauseReason,
   }));
 }
 

@@ -10,9 +10,22 @@ import { recordUsageEvent } from "@/modules/usage/service";
 import type { AiReplyJob } from "@/types/domain";
 import * as messagingRepo from "@/modules/messaging/repository";
 
+import {
+  evaluateConversationAiSendGate,
+  pauseConversationAi,
+} from "./conversation-state-repository";
 import { createGeminiProvider, AiProviderError } from "./gemini-provider";
 import { evaluateConversationLoopGuard, logAiSafety } from "./guard-repository";
-import { completeJob } from "./jobs-repository";
+import {
+  completeJob,
+  deferUnknownOutbound,
+  getJob,
+  persistGeneratedReply,
+} from "./jobs-repository";
+import {
+  aiOutboundIdempotencyKey,
+  outboundUnknownRetryDelaySeconds,
+} from "./outbound-policy";
 import {
   MAX_HISTORY_MESSAGES,
   MAX_KNOWLEDGE_CHARS,
@@ -26,6 +39,7 @@ function logAi(
   logger: { info: (...a: unknown[]) => void; warn: (...a: unknown[]) => void },
 ) {
   const fn = event.includes("fail") || event.includes("skipped")
+    || event.includes("unknown")
     ? logger.warn.bind(logger)
     : logger.info.bind(logger);
   fn(`[ai-worker] ${event}`, fields);
@@ -52,16 +66,77 @@ function orderKnowledge<T extends { category: string }>(items: T[]): T[] {
   });
 }
 
+async function handleAmbiguousOutbound(params: {
+  job: AiReplyJob;
+  logger: { info: (...a: unknown[]) => void; warn: (...a: unknown[]) => void };
+}): Promise<{ status: "FAILED" | "DEFERRED"; errorCode: string }> {
+  const { job, logger } = params;
+  const businessId = job.businessId;
+  const delay = outboundUnknownRetryDelaySeconds(job.attemptCount);
+
+  if (delay === null) {
+    await completeJob({
+      businessId,
+      jobId: job.aiReplyJobId,
+      status: "FAILED",
+      errorCode: "OUTBOUND_RESULT_UNKNOWN_FINAL",
+    });
+    await pauseConversationAi({
+      businessId,
+      conversationId: job.conversationId,
+      mode: "SAFETY_PAUSED",
+      pauseReason: "AMBIGUOUS_OUTBOUND",
+    });
+    logAi("outbound_unknown_final", {
+      businessId,
+      conversationId: job.conversationId,
+      jobId: job.aiReplyJobId,
+      attempt: job.attemptCount,
+      reason: "OUTBOUND_RESULT_UNKNOWN_FINAL",
+    }, logger);
+    logAiSafety(
+      "safety_paused",
+      {
+        businessId,
+        conversationId: job.conversationId,
+        jobId: job.aiReplyJobId,
+        reason: "AMBIGUOUS_OUTBOUND",
+      },
+      logger,
+    );
+    return { status: "FAILED", errorCode: "OUTBOUND_RESULT_UNKNOWN_FINAL" };
+  }
+
+  await deferUnknownOutbound({
+    businessId,
+    jobId: job.aiReplyJobId,
+    delaySeconds: delay,
+    errorCode: "OUTBOUND_RESULT_UNKNOWN",
+  });
+  logAi("outbound_unknown_retry", {
+    businessId,
+    conversationId: job.conversationId,
+    jobId: job.aiReplyJobId,
+    attempt: job.attemptCount,
+    reason: "OUTBOUND_RESULT_UNKNOWN",
+  }, logger);
+  return { status: "DEFERRED", errorCode: "OUTBOUND_RESULT_UNKNOWN" };
+}
+
 export async function processAiReplyJob(params: {
   job: AiReplyJob;
   provider?: AiReplyProvider;
   sendMessage?: typeof sendAccountMessage;
   logger?: { info: (...a: unknown[]) => void; warn: (...a: unknown[]) => void };
-}): Promise<{ status: "SENT" | "SKIPPED" | "FAILED"; errorCode?: string }> {
+}): Promise<{
+  status: "SENT" | "SKIPPED" | "FAILED" | "DEFERRED";
+  errorCode?: string;
+}> {
   const logger = params.logger ?? console;
   const job = params.job;
   const businessId = job.businessId;
   const sendMessage = params.sendMessage ?? sendAccountMessage;
+  const idempotencyKey = aiOutboundIdempotencyKey(job.aiReplyJobId);
 
   logAi("job_claimed", {
     businessId,
@@ -69,7 +144,6 @@ export async function processAiReplyJob(params: {
     jobId: job.aiReplyJobId,
   }, logger);
 
-  // Wait until NotBeforeUtc if somehow claimed early
   const waitMs = job.notBeforeUtc.getTime() - Date.now();
   if (waitMs > 0 && waitMs < 5_000) {
     logAi("debounce_wait", {
@@ -167,99 +241,123 @@ export async function processAiReplyJob(params: {
     return { status: "FAILED", errorCode: "ACCOUNT_KEY_MISSING" };
   }
 
-  const knowledgeItems = orderKnowledge(
-    await listItems({ businessId, includeInactive: false }),
-  );
-  let knowledgeChars = 0;
-  const knowledge = [];
-  for (const item of knowledgeItems) {
-    const chunk = `${item.title}\n${item.content}`;
-    if (knowledgeChars + chunk.length > MAX_KNOWLEDGE_CHARS) break;
-    knowledge.push({
-      category: item.category,
-      title: item.title,
-      content: item.content,
-    });
-    knowledgeChars += chunk.length;
-  }
-
-  const recentMessages = await messagingRepo.listRecentTextMessages({
-    businessId,
-    conversationId: job.conversationId,
-    limit: MAX_HISTORY_MESSAGES,
-  });
-
-  const provider = params.provider ?? createGeminiProvider();
-
-  logAi("generation_start", {
-    businessId,
-    conversationId: job.conversationId,
-    jobId: job.aiReplyJobId,
-  }, logger);
-
-  let replyText: string;
-  let modelName = "unknown";
+  // Reuse durable generated reply on outbound recovery — never call Gemini again.
+  let replyText = job.generatedReplyText?.trim() || "";
+  let modelName = job.generatedModel || "unknown";
   let genLatency = 0;
-  try {
-    const generated = await provider.generateReply({
+
+  if (!replyText) {
+    const knowledgeItems = orderKnowledge(
+      await listItems({ businessId, includeInactive: false }),
+    );
+    let knowledgeChars = 0;
+    const knowledge = [];
+    for (const item of knowledgeItems) {
+      const chunk = `${item.title}\n${item.content}`;
+      if (knowledgeChars + chunk.length > MAX_KNOWLEDGE_CHARS) break;
+      knowledge.push({
+        category: item.category,
+        title: item.title,
+        content: item.content,
+      });
+      knowledgeChars += chunk.length;
+    }
+
+    const recentMessages = await messagingRepo.listRecentTextMessages({
       businessId,
       conversationId: job.conversationId,
-      agent: {
-        name: agent.name,
-        roleTitle: agent.roleTitle,
-        language: agent.language,
-        dialect: agent.dialect,
-        tone: agent.tone,
-        instructions: agent.instructions,
-      },
-      knowledge,
-      recentMessages: recentMessages.map((m) => ({
-        direction: m.direction,
-        textContent: m.textContent,
-        createdAtUtc: m.createdAtUtc,
-        messageId: m.messageId,
-      })),
-      customerPhoneHint: contact.phoneNormalized,
+      limit: MAX_HISTORY_MESSAGES,
     });
-    replyText = generated.text;
-    modelName = generated.model;
-    genLatency = generated.latencyMs;
-    if (!replyText.trim()) {
+
+    const provider = params.provider ?? createGeminiProvider();
+
+    logAi("generation_start", {
+      businessId,
+      conversationId: job.conversationId,
+      jobId: job.aiReplyJobId,
+    }, logger);
+
+    try {
+      const generated = await provider.generateReply({
+        businessId,
+        conversationId: job.conversationId,
+        agent: {
+          name: agent.name,
+          roleTitle: agent.roleTitle,
+          language: agent.language,
+          dialect: agent.dialect,
+          tone: agent.tone,
+          instructions: agent.instructions,
+        },
+        knowledge,
+        recentMessages: recentMessages.map((m) => ({
+          direction: m.direction,
+          textContent: m.textContent,
+          createdAtUtc: m.createdAtUtc,
+          messageId: m.messageId,
+        })),
+        customerPhoneHint: contact.phoneNormalized,
+      });
+      replyText = generated.text;
+      modelName = generated.model;
+      genLatency = generated.latencyMs;
+      if (!replyText.trim()) {
+        await completeJob({
+          businessId,
+          jobId: job.aiReplyJobId,
+          status: "FAILED",
+          errorCode: "GEMINI_EMPTY",
+        });
+        logAi("failed", {
+          businessId,
+          jobId: job.aiReplyJobId,
+          errorCode: "GEMINI_EMPTY",
+        }, logger);
+        return { status: "FAILED", errorCode: "GEMINI_EMPTY" };
+      }
+    } catch (error) {
+      const code =
+        error instanceof AiProviderError ? error.code : "GEMINI_FAILED";
       await completeJob({
         businessId,
         jobId: job.aiReplyJobId,
         status: "FAILED",
-        errorCode: "GEMINI_EMPTY",
+        errorCode: code,
       });
-      logAi("failed", {
-        businessId,
-        jobId: job.aiReplyJobId,
-        errorCode: "GEMINI_EMPTY",
-      }, logger);
-      return { status: "FAILED", errorCode: "GEMINI_EMPTY" };
+      logAi("failed", { businessId, jobId: job.aiReplyJobId, errorCode: code }, logger);
+      return { status: "FAILED", errorCode: code };
     }
-  } catch (error) {
-    const code =
-      error instanceof AiProviderError ? error.code : "GEMINI_FAILED";
-    await completeJob({
+
+    await persistGeneratedReply({
       businessId,
       jobId: job.aiReplyJobId,
-      status: "FAILED",
-      errorCode: code,
+      replyText,
+      model: modelName,
     });
-    logAi("failed", { businessId, jobId: job.aiReplyJobId, errorCode: code }, logger);
-    return { status: "FAILED", errorCode: code };
+
+    logAi("generation_complete", {
+      businessId,
+      conversationId: job.conversationId,
+      jobId: job.aiReplyJobId,
+      latencyMs: genLatency,
+      model: modelName,
+    }, logger);
+  } else {
+    logAi("generation_reused", {
+      businessId,
+      conversationId: job.conversationId,
+      jobId: job.aiReplyJobId,
+      attempt: job.attemptCount,
+    }, logger);
   }
 
-  logAi("generation_complete", {
-    businessId,
-    conversationId: job.conversationId,
-    jobId: job.aiReplyJobId,
-    latencyMs: genLatency,
-    model: modelName,
-  }, logger);
-
-  // Send-time hard kill switch + activation watermark + loop guard.
+  // Send-time checks (order is deterministic; no check weakens another):
+  // 1. global AutoReplyEnabled
+  // 2. global activation watermark
+  // 3. per-conversation state
+  // 4. conversation resume watermark
+  // 5. loop guard
+  // 6. runtime send
   const liveSetting = await getChannelAiSettingByConnection({
     businessId,
     channelConnectionId: job.channelConnectionId,
@@ -314,6 +412,61 @@ export async function processAiReplyJob(params: {
     return { status: "SKIPPED", errorCode: "STALE_ACTIVATION" };
   }
 
+  const conversationSendGate = await evaluateConversationAiSendGate({
+    businessId,
+    conversationId: job.conversationId,
+    jobCreatedAtUtc: job.createdAtUtc,
+  });
+  if (!conversationSendGate.allow) {
+    const errorCode = conversationSendGate.reason ?? "CONVERSATION_PAUSED";
+    await completeJob({
+      businessId,
+      jobId: job.aiReplyJobId,
+      status: "SKIPPED",
+      errorCode,
+    });
+    if (errorCode === "HUMAN_TAKEOVER_BEFORE_SEND") {
+      logAiSafety(
+        "human_takeover_before_send",
+        {
+          businessId,
+          conversationId: job.conversationId,
+          jobId: job.aiReplyJobId,
+          reason: errorCode,
+        },
+        logger,
+      );
+    } else if (errorCode === "STALE_CONVERSATION_ACTIVATION") {
+      logAiSafety(
+        "stale_conversation_activation",
+        {
+          businessId,
+          conversationId: job.conversationId,
+          jobId: job.aiReplyJobId,
+          reason: errorCode,
+        },
+        logger,
+      );
+    } else if (errorCode === "CONVERSATION_SAFETY_PAUSED") {
+      logAiSafety(
+        "safety_paused",
+        {
+          businessId,
+          conversationId: job.conversationId,
+          jobId: job.aiReplyJobId,
+          reason: errorCode,
+        },
+        logger,
+      );
+    }
+    logAi("skipped", {
+      businessId,
+      jobId: job.aiReplyJobId,
+      errorCode,
+    }, logger);
+    return { status: "SKIPPED", errorCode };
+  }
+
   const sendGuard = await evaluateConversationLoopGuard({
     businessId,
     conversationId: job.conversationId,
@@ -339,6 +492,7 @@ export async function processAiReplyJob(params: {
     businessId,
     conversationId: job.conversationId,
     jobId: job.aiReplyJobId,
+    attempt: job.attemptCount,
   }, logger);
 
   let sendResult;
@@ -347,32 +501,42 @@ export async function processAiReplyJob(params: {
       accountKey,
       phone: contact.phoneNormalized,
       message: replyText,
+      idempotencyKey,
     });
   } catch (error) {
     if (error instanceof WhatsAppRuntimeError) {
+      if (error.code === "IDEMPOTENCY_CONFLICT") {
+        await completeJob({
+          businessId,
+          jobId: job.aiReplyJobId,
+          status: "FAILED",
+          errorCode: "IDEMPOTENCY_CONFLICT",
+        });
+        logAi("failed", {
+          businessId,
+          jobId: job.aiReplyJobId,
+          errorCode: "IDEMPOTENCY_CONFLICT",
+        }, logger);
+        return { status: "FAILED", errorCode: "IDEMPOTENCY_CONFLICT" };
+      }
+
       const ambiguous =
-        error.code === "RUNTIME_TIMEOUT"
+        error.code === "OUTBOUND_RESULT_UNKNOWN"
+        || error.code === "RUNTIME_TIMEOUT"
         || error.code === "RUNTIME_UNAVAILABLE";
+
+      if (ambiguous) {
+        const deferred = await handleAmbiguousOutbound({ job, logger });
+        return deferred.status === "DEFERRED"
+          ? { status: "DEFERRED", errorCode: deferred.errorCode }
+          : { status: "FAILED", errorCode: deferred.errorCode };
+      }
+
       const definitive =
         error.code === "NOT_READY"
         || error.code === "LOGGED_OUT"
         || error.code === "NOT_STARTED"
         || error.status === 409;
-
-      if (ambiguous) {
-        await completeJob({
-          businessId,
-          jobId: job.aiReplyJobId,
-          status: "FAILED",
-          errorCode: "UNKNOWN_SEND_RESULT",
-        });
-        logAi("failed", {
-          businessId,
-          jobId: job.aiReplyJobId,
-          errorCode: "UNKNOWN_SEND_RESULT",
-        }, logger);
-        return { status: "FAILED", errorCode: "UNKNOWN_SEND_RESULT" };
-      }
 
       const code = definitive ? error.code : `RUNTIME_${error.status}`;
       await completeJob({
@@ -384,16 +548,39 @@ export async function processAiReplyJob(params: {
       logAi("failed", { businessId, jobId: job.aiReplyJobId, errorCode: code }, logger);
       return { status: "FAILED", errorCode: code };
     }
+    const deferred = await handleAmbiguousOutbound({ job, logger });
+    return deferred.status === "DEFERRED"
+      ? { status: "DEFERRED", errorCode: deferred.errorCode }
+      : { status: "FAILED", errorCode: deferred.errorCode };
+  }
+
+  const statusLower = (sendResult.status ?? "").toLowerCase();
+  const isDuplicate = statusLower === "duplicate";
+  const isSent = statusLower === "sent" || sendResult.success;
+
+  if (sendResult.code === "OUTBOUND_RESULT_UNKNOWN") {
+    const deferred = await handleAmbiguousOutbound({ job, logger });
+    return deferred.status === "DEFERRED"
+      ? { status: "DEFERRED", errorCode: deferred.errorCode }
+      : { status: "FAILED", errorCode: deferred.errorCode };
+  }
+
+  if (sendResult.code === "IDEMPOTENCY_CONFLICT") {
     await completeJob({
       businessId,
       jobId: job.aiReplyJobId,
       status: "FAILED",
-      errorCode: "UNKNOWN_SEND_RESULT",
+      errorCode: "IDEMPOTENCY_CONFLICT",
     });
-    return { status: "FAILED", errorCode: "UNKNOWN_SEND_RESULT" };
+    logAi("failed", {
+      businessId,
+      jobId: job.aiReplyJobId,
+      errorCode: "IDEMPOTENCY_CONFLICT",
+    }, logger);
+    return { status: "FAILED", errorCode: "IDEMPOTENCY_CONFLICT" };
   }
 
-  if (!sendResult.success || !sendResult.messageId) {
+  if ((!isSent && !isDuplicate) || !sendResult.messageId) {
     const code = sendResult.code || "SEND_FAILED";
     await completeJob({
       businessId,
@@ -405,11 +592,26 @@ export async function processAiReplyJob(params: {
     return { status: "FAILED", errorCode: code };
   }
 
-  const providerMessageId = String(sendResult.messageId);
+  const providerMessageId = String(
+    sendResult.originalMessageId ?? sendResult.messageId,
+  );
+
+  if (isDuplicate) {
+    logAi("outbound_duplicate_ack", {
+      businessId,
+      conversationId: job.conversationId,
+      jobId: job.aiReplyJobId,
+      providerMessageId,
+      attempt: job.attemptCount,
+    }, logger);
+  }
+
   const sentAt = new Date();
+  const freshJob = await getJob({ businessId, jobId: job.aiReplyJobId });
+  const usageModel = freshJob?.generatedModel || modelName;
 
   await withTransaction(async (trx) => {
-    await messagingRepo.insertMessageIdempotent(
+    const { inserted } = await messagingRepo.insertMessageIdempotent(
       {
         businessId,
         conversationId: job.conversationId,
@@ -433,44 +635,49 @@ export async function processAiReplyJob(params: {
       },
       trx,
     );
-    await messagingRepo.insertUsageEventInTrx(
-      {
-        businessId,
-        eventType: "AI_REPLY_GENERATED",
-        quantity: 1,
-        metadata: { jobId: job.aiReplyJobId, model: modelName },
-      },
+    const completed = await completeJob({
+      businessId,
+      jobId: job.aiReplyJobId,
+      status: "SENT",
+      outboundProviderMessageId: providerMessageId,
       trx,
-    );
-    await messagingRepo.insertUsageEventInTrx(
-      {
-        businessId,
-        eventType: "WHATSAPP_OUTBOUND_MESSAGE",
-        quantity: 1,
-        metadata: {
-          jobId: job.aiReplyJobId,
-          providerMessageId,
+    });
+    // Usage once per successful SENT transition (duplicate ack must not double-bill).
+    if (completed) {
+      await messagingRepo.insertUsageEventInTrx(
+        {
+          businessId,
+          eventType: "AI_REPLY_GENERATED",
+          quantity: 1,
+          metadata: { jobId: job.aiReplyJobId, model: usageModel },
         },
-      },
-      trx,
-    );
+        trx,
+      );
+      await messagingRepo.insertUsageEventInTrx(
+        {
+          businessId,
+          eventType: "WHATSAPP_OUTBOUND_MESSAGE",
+          quantity: 1,
+          metadata: {
+            jobId: job.aiReplyJobId,
+            providerMessageId,
+          },
+        },
+        trx,
+      );
+    }
+    void inserted;
   });
 
-  // recordUsageEvent available for non-trx paths; already inserted in trx above.
   void recordUsageEvent;
-
-  await completeJob({
-    businessId,
-    jobId: job.aiReplyJobId,
-    status: "SENT",
-  });
 
   logAi("sent", {
     businessId,
     conversationId: job.conversationId,
     jobId: job.aiReplyJobId,
-    model: modelName,
+    model: usageModel,
     latencyMs: genLatency,
+    providerMessageId,
   }, logger);
 
   return { status: "SENT" };

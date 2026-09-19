@@ -2,6 +2,8 @@
 
 import { useCallback, useState, useTransition } from "react";
 
+export type ConversationAiMode = "AUTO" | "HUMAN_PAUSED" | "SAFETY_PAUSED";
+
 export type ConversationRow = {
   conversationId: string;
   contactExternalKey: string;
@@ -11,6 +13,8 @@ export type ConversationRow = {
   lastMessageDirection: "INBOUND" | "OUTBOUND" | null;
   lastMessageAtUtc: string | null;
   status: string;
+  aiMode: ConversationAiMode;
+  aiPauseReason: string | null;
 };
 
 type MessageRow = {
@@ -47,6 +51,14 @@ function previewText(c: ConversationRow): string {
   return "بدون نص";
 }
 
+function aiStatusLabel(mode: ConversationAiMode): string {
+  if (mode === "HUMAN_PAUSED") return "متوقف — تدخل موظف";
+  if (mode === "SAFETY_PAUSED") {
+    return "متوقف للأمان — حالة إرسال غير مؤكدة";
+  }
+  return "AI نشط";
+}
+
 function serializeConversations(
   rows: Array<{
     conversationId: string;
@@ -57,6 +69,8 @@ function serializeConversations(
     lastMessageDirection: "INBOUND" | "OUTBOUND" | null;
     lastMessageAtUtc: Date | null;
     status: string;
+    aiMode?: ConversationAiMode | null;
+    aiPauseReason?: string | null;
   }>,
 ): ConversationRow[] {
   return rows.map((c) => ({
@@ -70,6 +84,8 @@ function serializeConversations(
       ? new Date(c.lastMessageAtUtc).toISOString()
       : null,
     status: c.status,
+    aiMode: c.aiMode ?? "AUTO",
+    aiPauseReason: c.aiPauseReason ?? null,
   }));
 }
 
@@ -84,6 +100,7 @@ export function InboxPanel({
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, startRefresh] = useTransition();
+  const [resuming, setResuming] = useState(false);
 
   const loadConversations = useCallback(() => {
     startRefresh(async () => {
@@ -103,6 +120,8 @@ export function InboxPanel({
             lastMessageDirection: "INBOUND" | "OUTBOUND" | null;
             lastMessageAtUtc: string | Date | null;
             status: string;
+            aiMode?: ConversationAiMode | null;
+            aiPauseReason?: string | null;
           }>;
           error?: string;
         };
@@ -116,6 +135,8 @@ export function InboxPanel({
               lastMessageAtUtc: c.lastMessageAtUtc
                 ? new Date(c.lastMessageAtUtc)
                 : null,
+              aiMode: c.aiMode ?? "AUTO",
+              aiPauseReason: c.aiPauseReason ?? null,
             })),
           ),
         );
@@ -152,6 +173,43 @@ export function InboxPanel({
       }
     })();
   }, []);
+
+  const resumeAi = useCallback(async () => {
+    if (!selectedId) return;
+    setResuming(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/inbox/conversations/${encodeURIComponent(selectedId)}/ai/resume`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+        },
+      );
+      const data = (await res.json()) as {
+        state?: { mode: ConversationAiMode; pauseReason: string | null };
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(data.error || "تعذر استئناف الذكاء الاصطناعي");
+      }
+      const mode = data.state?.mode ?? "AUTO";
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.conversationId === selectedId
+            ? { ...c, aiMode: mode, aiPauseReason: data.state?.pauseReason ?? null }
+            : c,
+        ),
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "تعذر استئناف الذكاء الاصطناعي",
+      );
+    } finally {
+      setResuming(false);
+    }
+  }, [selectedId]);
 
   const selected = conversations.find((c) => c.conversationId === selectedId);
 
@@ -198,6 +256,11 @@ export function InboxPanel({
                       <span className="truncate text-xs text-muted-foreground">
                         {previewText(c)}
                       </span>
+                      {c.aiMode !== "AUTO" ? (
+                        <span className="truncate text-[11px] text-amber-700">
+                          {aiStatusLabel(c.aiMode)}
+                        </span>
+                      ) : null}
                     </button>
                   </li>
                 );
@@ -209,9 +272,42 @@ export function InboxPanel({
         <section className="flex min-h-[20rem] flex-col">
           <div className="border-b border-border px-4 py-3">
             {selected ? (
-              <div>
-                <h2 className="text-sm font-semibold">{contactLabel(selected)}</h2>
-                <p className="text-xs text-muted-foreground">عرض فقط — لا إرسال بعد</p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold">{contactLabel(selected)}</h2>
+                  <p className="text-xs text-muted-foreground">
+                    عرض فقط — لا إرسال بعد
+                  </p>
+                  <p className="mt-1 text-xs font-medium text-foreground">
+                    {aiStatusLabel(selected.aiMode)}
+                  </p>
+                  {selected.aiMode === "SAFETY_PAUSED" ? (
+                    <p className="mt-1 text-xs text-amber-800">
+                      توقف الأمان بسبب نتيجة إرسال غير مؤكدة. راجع المحادثة قبل
+                      الاستئناف.
+                    </p>
+                  ) : null}
+                </div>
+                {selected.aiMode === "HUMAN_PAUSED" ? (
+                  <button
+                    type="button"
+                    onClick={() => void resumeAi()}
+                    disabled={resuming}
+                    className="shrink-0 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
+                  >
+                    {resuming ? "جاري الاستئناف…" : "استئناف الذكاء الاصطناعي"}
+                  </button>
+                ) : null}
+                {selected.aiMode === "SAFETY_PAUSED" ? (
+                  <button
+                    type="button"
+                    onClick={() => void resumeAi()}
+                    disabled={resuming}
+                    className="shrink-0 rounded-md border border-amber-700 px-3 py-1.5 text-xs font-medium text-amber-900 disabled:opacity-50"
+                  >
+                    {resuming ? "جاري الاستئناف…" : "استئناف بعد المراجعة"}
+                  </button>
+                ) : null}
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">اختر محادثة لعرض الرسائل</p>
@@ -228,43 +324,25 @@ export function InboxPanel({
             {!selectedId ? null : loadingMessages ? (
               <p className="text-sm text-muted-foreground">جاري تحميل الرسائل…</p>
             ) : messages.length === 0 ? (
-              <p className="text-sm text-muted-foreground">لا توجد رسائل في هذه المحادثة.</p>
+              <p className="text-sm text-muted-foreground">لا توجد رسائل</p>
             ) : (
-              messages.map((m) => {
-                const inbound = m.direction === "INBOUND";
-                return (
-                  <div
-                    key={m.messageId}
-                    className={`flex ${inbound ? "justify-start" : "justify-end"}`}
-                  >
-                    <div
-                      className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
-                        inbound
-                          ? "rounded-ss-md bg-card text-card-foreground"
-                          : "rounded-se-md bg-primary text-primary-foreground"
-                      }`}
-                    >
-                      <p className="whitespace-pre-wrap break-words">
-                        {m.textContent?.trim()
-                          || (m.contentType === "UNKNOWN"
-                            ? "رسالة غير نصية"
-                            : "")}
-                      </p>
-                      <p
-                        className={`mt-1 text-[10px] ${
-                          inbound
-                            ? "text-muted-foreground"
-                            : "text-primary-foreground/80"
-                        }`}
-                      >
-                        {formatTime(
-                          m.providerTimestampUtc || m.receivedAtUtc || m.createdAtUtc,
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })
+              messages.map((m) => (
+                <div
+                  key={m.messageId}
+                  className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+                    m.direction === "OUTBOUND"
+                      ? "ms-auto bg-primary/15"
+                      : "me-auto bg-card border border-border"
+                  }`}
+                >
+                  <p className="whitespace-pre-wrap break-words">
+                    {m.textContent || `[${m.contentType}]`}
+                  </p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    {formatTime(m.providerTimestampUtc || m.receivedAtUtc)}
+                  </p>
+                </div>
+              ))
             )}
           </div>
         </section>

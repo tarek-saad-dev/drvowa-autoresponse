@@ -169,12 +169,16 @@ export type Message = {
   createdAtUtc: Date;
 };
 
+export type ConversationAiMode = "AUTO" | "HUMAN_PAUSED" | "SAFETY_PAUSED";
+
 export type ConversationListItem = Conversation & {
   contactExternalKey: string;
   contactDisplayName: string | null;
   contactPhoneNormalized: string | null;
   lastMessagePreview: string | null;
   lastMessageDirection: MessageDirection | null;
+  aiMode: ConversationAiMode;
+  aiPauseReason: string | null;
 };
 
 export type AiReplyJobStatus =
@@ -211,8 +215,40 @@ export type AiReplyJob = {
   startedAtUtc: Date | null;
   completedAtUtc: Date | null;
   lastErrorCode: string | null;
+  generatedReplyText: string | null;
+  generatedModel: string | null;
+  generatedAtUtc: Date | null;
+  outboundProviderMessageId: string | null;
   createdAtUtc: Date;
   updatedAtUtc: Date;
+};
+
+export type ConversationAiState = {
+  businessId: string;
+  conversationId: string;
+  mode: ConversationAiMode;
+  pausedAtUtc: Date | null;
+  pauseReason: string | null;
+  resumedAtUtc: Date | null;
+  lastHumanOutboundProviderMessageId: string | null;
+  createdAtUtc: Date;
+  updatedAtUtc: Date;
+};
+
+export type WhatsappOutboundOrigin = "DRVOWA_API" | "HUMAN_MANUAL";
+
+export type WhatsappOutboundObservation = {
+  outboundObservationId: string;
+  businessId: string;
+  channelConnectionId: string;
+  conversationId: string | null;
+  contactId: string | null;
+  providerMessageId: string;
+  origin: WhatsappOutboundOrigin;
+  phoneNormalized: string | null;
+  externalContactKey: string | null;
+  occurredAtUtc: Date | null;
+  createdAtUtc: Date;
 };
 
 export type AiConversationGuard = {

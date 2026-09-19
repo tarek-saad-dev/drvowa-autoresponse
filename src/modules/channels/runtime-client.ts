@@ -169,6 +169,7 @@ export type RuntimeSendResult = {
   phone?: string;
   error?: string;
   code?: string;
+  originalMessageId?: string | null;
 };
 
 async function runtimeFetchWithBody<T>(
@@ -245,19 +246,60 @@ async function runtimeFetchWithBody<T>(
 
 /**
  * Send a text message via managed WhatsApp account.
+ * Requires a stable idempotencyKey (AI jobs use ai:<jobId>).
  * Server-only — never expose DRVOWA_RUNTIME_TOKEN to the browser.
  */
 export async function sendAccountMessage(params: {
   accountKey: string;
   phone: string;
   message: string;
+  idempotencyKey: string;
   timeoutMs?: number;
 }): Promise<RuntimeSendResult> {
+  if (!params.idempotencyKey.trim()) {
+    throw new WhatsAppRuntimeError("idempotencyKey is required", {
+      status: 400,
+      code: "IDEMPOTENCY_KEY_REQUIRED",
+    });
+  }
+
   const result = await runtimeFetchWithBody<RuntimeSendResult>(
     "POST",
     `/api/accounts/${encodeURIComponent(params.accountKey)}/send`,
-    { phone: params.phone, message: params.message },
+    {
+      phone: params.phone,
+      message: params.message,
+      idempotencyKey: params.idempotencyKey,
+    },
     { timeoutMs: params.timeoutMs ?? 10_000 },
   );
+
+  const status = typeof result.status === "string"
+    ? result.status.toLowerCase()
+    : "";
+
+  // Normalize duplicate ack into a success shape with original messageId.
+  if (status === "duplicate") {
+    const original =
+      result.originalMessageId
+      ?? result.messageId
+      ?? null;
+    return {
+      ...result,
+      success: true,
+      status: "duplicate",
+      messageId: original,
+      originalMessageId: original,
+    };
+  }
+
+  if (status === "sent" && result.messageId) {
+    return {
+      ...result,
+      success: true,
+      status: "sent",
+    };
+  }
+
   return result;
 }
