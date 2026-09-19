@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { closePool, getDbConfig, getPool, query, sql } from "@/lib/db";
+import { batch, closePool, getDbConfig, getPool, query, sql } from "@/lib/db";
 import {
   getEffectiveConversationAiState,
   ingestWhatsAppOutboundObserved,
@@ -14,6 +16,69 @@ import { ingestWhatsAppInbound } from "@/modules/messaging/service";
 import { completeOnboarding } from "@/modules/onboarding/service";
 import { rethrowDbBootstrapFailure } from "../helpers/db-bootstrap";
 import { clearTestCookies } from "../helpers/cookies";
+
+async function refreshMergeProcedureFromMigration(): Promise<void> {
+  const sqlText = readFileSync(
+    resolve(
+      process.cwd(),
+      "db/migrations/008_whatsapp_contact_identity_canonicalization.sql",
+    ),
+    "utf8",
+  );
+  const batches = sqlText
+    .split(/^\s*GO\s*$/gim)
+    .map((b) => b.trim())
+    .filter((b) => b.length > 0);
+  const procBatch = batches.find((b) =>
+    /CREATE\s+OR\s+ALTER\s+PROCEDURE\s+dbo\.usp_MergeWhatsAppContactDuplicates/i.test(
+      b,
+    ),
+  );
+  if (!procBatch) {
+    throw new Error("Merge procedure batch not found in migration 008");
+  }
+  await batch(procBatch);
+}
+
+async function dropPhoneUniqueIndex(): Promise<void> {
+  await query(
+    `IF EXISTS (
+       SELECT 1 FROM sys.indexes
+       WHERE name = N'UQ_TblContact_Business_Channel_PhoneNormalized'
+         AND object_id = OBJECT_ID(N'dbo.TblContact')
+     )
+     DROP INDEX UQ_TblContact_Business_Channel_PhoneNormalized ON dbo.TblContact`,
+  );
+}
+
+async function ensurePhoneUniqueIndex(): Promise<void> {
+  await query(
+    `IF NOT EXISTS (
+       SELECT 1 FROM sys.indexes
+       WHERE name = N'UQ_TblContact_Business_Channel_PhoneNormalized'
+         AND object_id = OBJECT_ID(N'dbo.TblContact')
+     )
+     CREATE UNIQUE INDEX UQ_TblContact_Business_Channel_PhoneNormalized
+       ON dbo.TblContact (BusinessID, ChannelConnectionID, PhoneNormalized)
+       WHERE PhoneNormalized IS NOT NULL`,
+  );
+}
+
+async function execMergeWithRetry(attempts = 4): Promise<void> {
+  let lastError: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      await query(`EXEC dbo.usp_MergeWhatsAppContactDuplicates`);
+      return;
+    } catch (error) {
+      lastError = error;
+      const msg = error instanceof Error ? error.message : String(error);
+      if (!/deadlock/i.test(msg) || i === attempts - 1) throw error;
+      await new Promise((r) => setTimeout(r, 150 * (i + 1)));
+    }
+  }
+  throw lastError;
+}
 
 function dbEnvConfigured(): boolean {
   try {
@@ -51,6 +116,9 @@ describe("Phase 3B Part 2B.1 contact identity + merge", () => {
     } catch (error) {
       rethrowDbBootstrapFailure(error);
     }
+
+    // Keep local DB proc in sync with migration file (008 already applied once).
+    await refreshMergeProcedureFromMigration();
 
     clearTestCookies();
     const suffix = randomUUID().slice(0, 8);
@@ -560,7 +628,7 @@ describe("Phase 3B Part 2B.1 contact identity + merge", () => {
       ],
     );
 
-    await query(`EXEC dbo.usp_MergeWhatsAppContactDuplicates`);
+    await execMergeWithRetry();
 
     const contacts = await query<{ ContactID: string; ExternalContactKey: string }>(
       `SELECT ContactID, ExternalContactKey FROM TblContact
@@ -785,7 +853,7 @@ describe("Phase 3B Part 2B.1 contact identity + merge", () => {
       ],
     );
 
-    await query(`EXEC dbo.usp_MergeWhatsAppContactDuplicates`);
+    await execMergeWithRetry();
 
     const state = await getEffectiveConversationAiState({
       businessId,
@@ -794,15 +862,713 @@ describe("Phase 3B Part 2B.1 contact identity + merge", () => {
     expect(state.mode).toBe("SAFETY_PAUSED");
     expect(state.pauseReason).toBe("AMBIGUOUS_OUTBOUND");
 
+    await ensurePhoneUniqueIndex();
+  });
+
+  it("3. PENDING collision: normalize before repoint with unique index installed", async ({
+    skip,
+  }) => {
+    requireDb(skip);
+    const phone = "201111963301";
+    const contactA = randomUUID();
+    const contactB = randomUUID();
+    const convA = randomUUID();
+    const convB = randomUUID();
+    const msgA = randomUUID();
+    const msgB = randomUUID();
+    const jobA = randomUUID();
+    const jobB = randomUUID();
+
+    await dropPhoneUniqueIndex();
     await query(
-      `IF NOT EXISTS (
-         SELECT 1 FROM sys.indexes
-         WHERE name = N'UQ_TblContact_Business_Channel_PhoneNormalized'
-           AND object_id = OBJECT_ID(N'dbo.TblContact')
-       )
-       CREATE UNIQUE INDEX UQ_TblContact_Business_Channel_PhoneNormalized
-         ON dbo.TblContact (BusinessID, ChannelConnectionID, PhoneNormalized)
-         WHERE PhoneNormalized IS NOT NULL`,
+      `INSERT INTO TblContact (
+         ContactID, BusinessID, ChannelConnectionID, ExternalContactKey,
+         PhoneNormalized, CreatedAtUtc, UpdatedAtUtc
+       ) VALUES
+       (@contactA, @businessId, @channelConnectionId, @bare, @phone,
+        DATEADD(day, -3, SYSUTCDATETIME()), SYSUTCDATETIME()),
+       (@contactB, @businessId, @channelConnectionId, @jid, @phone,
+        SYSUTCDATETIME(), SYSUTCDATETIME())`,
+      [
+        { name: "contactA", type: sql.UniqueIdentifier, value: contactA },
+        { name: "contactB", type: sql.UniqueIdentifier, value: contactB },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: channelConnectionId,
+        },
+        { name: "bare", type: sql.NVarChar(256), value: phone },
+        {
+          name: "jid",
+          type: sql.NVarChar(256),
+          value: `${phone}@s.whatsapp.net`,
+        },
+        { name: "phone", type: sql.NVarChar(32), value: phone },
+      ],
     );
+    await query(
+      `INSERT INTO TblConversation (
+         ConversationID, BusinessID, ChannelConnectionID, ContactID, Status,
+         CreatedAtUtc, UpdatedAtUtc
+       ) VALUES
+       (@convA, @businessId, @channelConnectionId, @contactA, N'OPEN',
+        DATEADD(day, -3, SYSUTCDATETIME()), SYSUTCDATETIME()),
+       (@convB, @businessId, @channelConnectionId, @contactB, N'OPEN',
+        SYSUTCDATETIME(), SYSUTCDATETIME())`,
+      [
+        { name: "convA", type: sql.UniqueIdentifier, value: convA },
+        { name: "convB", type: sql.UniqueIdentifier, value: convB },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: channelConnectionId,
+        },
+        { name: "contactA", type: sql.UniqueIdentifier, value: contactA },
+        { name: "contactB", type: sql.UniqueIdentifier, value: contactB },
+      ],
+    );
+    await query(
+      `INSERT INTO TblMessage (
+         MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
+         Direction, Provider, ProviderMessageID, ContentType, TextContent,
+         ReceivedAtUtc, CreatedAtUtc
+       ) VALUES
+       (@msgA, @businessId, @convA, @channelConnectionId, @contactA,
+        N'INBOUND', N'baileys', @pmidA, N'TEXT', N'a',
+        SYSUTCDATETIME(), SYSUTCDATETIME()),
+       (@msgB, @businessId, @convB, @channelConnectionId, @contactB,
+        N'INBOUND', N'baileys', @pmidB, N'TEXT', N'b',
+        SYSUTCDATETIME(), SYSUTCDATETIME())`,
+      [
+        { name: "msgA", type: sql.UniqueIdentifier, value: msgA },
+        { name: "msgB", type: sql.UniqueIdentifier, value: msgB },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        { name: "convA", type: sql.UniqueIdentifier, value: convA },
+        { name: "convB", type: sql.UniqueIdentifier, value: convB },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: channelConnectionId,
+        },
+        { name: "contactA", type: sql.UniqueIdentifier, value: contactA },
+        { name: "contactB", type: sql.UniqueIdentifier, value: contactB },
+        { name: "pmidA", type: sql.NVarChar(256), value: `pa-${randomUUID()}` },
+        { name: "pmidB", type: sql.NVarChar(256), value: `pb-${randomUUID()}` },
+      ],
+    );
+    await query(
+      `INSERT INTO TblAiReplyJob (
+         AiReplyJobID, BusinessID, ChannelConnectionID, ConversationID, ContactID,
+         TriggerMessageID, Status, NotBeforeUtc, AttemptCount,
+         CreatedAtUtc, UpdatedAtUtc
+       ) VALUES
+       (@jobA, @businessId, @channelConnectionId, @convA, @contactA,
+        @msgA, N'PENDING', SYSUTCDATETIME(), 0, SYSUTCDATETIME(), SYSUTCDATETIME()),
+       (@jobB, @businessId, @channelConnectionId, @convB, @contactB,
+        @msgB, N'PENDING', SYSUTCDATETIME(), 0, SYSUTCDATETIME(), SYSUTCDATETIME())`,
+      [
+        { name: "jobA", type: sql.UniqueIdentifier, value: jobA },
+        { name: "jobB", type: sql.UniqueIdentifier, value: jobB },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: channelConnectionId,
+        },
+        { name: "convA", type: sql.UniqueIdentifier, value: convA },
+        { name: "convB", type: sql.UniqueIdentifier, value: convB },
+        { name: "contactA", type: sql.UniqueIdentifier, value: contactA },
+        { name: "contactB", type: sql.UniqueIdentifier, value: contactB },
+        { name: "msgA", type: sql.UniqueIdentifier, value: msgA },
+        { name: "msgB", type: sql.UniqueIdentifier, value: msgB },
+      ],
+    );
+
+    // Active-job filtered indexes stay installed; phone uniqueness restored after merge.
+    await expect(execMergeWithRetry()).resolves.toBeUndefined();
+    await ensurePhoneUniqueIndex();
+
+    const contacts = await query<{ Cnt: number }>(
+      `SELECT COUNT(1) AS Cnt FROM TblContact
+       WHERE BusinessID = @businessId AND PhoneNormalized = @phone`,
+      [
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        { name: "phone", type: sql.NVarChar(32), value: phone },
+      ],
+    );
+    expect(Number(contacts.recordset[0]?.Cnt)).toBe(1);
+
+    const pending = await query<{
+      AiReplyJobID: string;
+      Status: string;
+      LastErrorCode: string | null;
+    }>(
+      `SELECT AiReplyJobID, Status, LastErrorCode FROM TblAiReplyJob
+       WHERE AiReplyJobID IN (@jobA, @jobB)`,
+      [
+        { name: "jobA", type: sql.UniqueIdentifier, value: jobA },
+        { name: "jobB", type: sql.UniqueIdentifier, value: jobB },
+      ],
+    );
+    const pendingRows = pending.recordset.filter((r) => r.Status === "PENDING");
+    const coalesced = pending.recordset.filter((r) => r.Status === "COALESCED");
+    expect(pendingRows.length).toBe(1);
+    expect(coalesced.length).toBe(1);
+    expect(String(pendingRows[0]?.AiReplyJobID).toLowerCase()).toBe(
+      jobA.toLowerCase(),
+    );
+    expect(coalesced[0]?.LastErrorCode).toBe("DEDUP_CONTACT_MERGE_PENDING");
+
+    const pointed = await query<{ ConversationID: string; ContactID: string }>(
+      `SELECT ConversationID, ContactID FROM TblAiReplyJob
+       WHERE AiReplyJobID IN (@jobA, @jobB)`,
+      [
+        { name: "jobA", type: sql.UniqueIdentifier, value: jobA },
+        { name: "jobB", type: sql.UniqueIdentifier, value: jobB },
+      ],
+    );
+    for (const row of pointed.recordset) {
+      expect(String(row.ConversationID).toLowerCase()).toBe(convA.toLowerCase());
+      expect(String(row.ContactID).toLowerCase()).toBe(contactA.toLowerCase());
+    }
+
+    const pendingIdx = await query<{ Cnt: number }>(
+      `SELECT COUNT(1) AS Cnt FROM sys.indexes
+       WHERE name = N'UQ_TblAiReplyJob_Business_Conversation_Pending'
+         AND object_id = OBJECT_ID(N'dbo.TblAiReplyJob')`,
+    );
+    expect(Number(pendingIdx.recordset[0]?.Cnt)).toBe(1);
+  });
+
+  it("4. PROCESSING collision: normalize before repoint", async ({ skip }) => {
+    requireDb(skip);
+    const phone = "201111963401";
+    const contactA = randomUUID();
+    const contactB = randomUUID();
+    const convA = randomUUID();
+    const convB = randomUUID();
+    const msgA = randomUUID();
+    const msgB = randomUUID();
+    const jobA = randomUUID();
+    const jobB = randomUUID();
+
+    await dropPhoneUniqueIndex();
+    await query(
+      `INSERT INTO TblContact (
+         ContactID, BusinessID, ChannelConnectionID, ExternalContactKey,
+         PhoneNormalized, CreatedAtUtc, UpdatedAtUtc
+       ) VALUES
+       (@contactA, @businessId, @channelConnectionId, @bare, @phone,
+        DATEADD(day, -3, SYSUTCDATETIME()), SYSUTCDATETIME()),
+       (@contactB, @businessId, @channelConnectionId, @jid, @phone,
+        SYSUTCDATETIME(), SYSUTCDATETIME())`,
+      [
+        { name: "contactA", type: sql.UniqueIdentifier, value: contactA },
+        { name: "contactB", type: sql.UniqueIdentifier, value: contactB },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: channelConnectionId,
+        },
+        { name: "bare", type: sql.NVarChar(256), value: phone },
+        {
+          name: "jid",
+          type: sql.NVarChar(256),
+          value: `${phone}@s.whatsapp.net`,
+        },
+        { name: "phone", type: sql.NVarChar(32), value: phone },
+      ],
+    );
+    await query(
+      `INSERT INTO TblConversation (
+         ConversationID, BusinessID, ChannelConnectionID, ContactID, Status,
+         CreatedAtUtc, UpdatedAtUtc
+       ) VALUES
+       (@convA, @businessId, @channelConnectionId, @contactA, N'OPEN',
+        DATEADD(day, -3, SYSUTCDATETIME()), SYSUTCDATETIME()),
+       (@convB, @businessId, @channelConnectionId, @contactB, N'OPEN',
+        SYSUTCDATETIME(), SYSUTCDATETIME())`,
+      [
+        { name: "convA", type: sql.UniqueIdentifier, value: convA },
+        { name: "convB", type: sql.UniqueIdentifier, value: convB },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: channelConnectionId,
+        },
+        { name: "contactA", type: sql.UniqueIdentifier, value: contactA },
+        { name: "contactB", type: sql.UniqueIdentifier, value: contactB },
+      ],
+    );
+    await query(
+      `INSERT INTO TblMessage (
+         MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
+         Direction, Provider, ProviderMessageID, ContentType, TextContent,
+         ReceivedAtUtc, CreatedAtUtc
+       ) VALUES
+       (@msgA, @businessId, @convA, @channelConnectionId, @contactA,
+        N'INBOUND', N'baileys', @pmidA, N'TEXT', N'a',
+        SYSUTCDATETIME(), SYSUTCDATETIME()),
+       (@msgB, @businessId, @convB, @channelConnectionId, @contactB,
+        N'INBOUND', N'baileys', @pmidB, N'TEXT', N'b',
+        SYSUTCDATETIME(), SYSUTCDATETIME())`,
+      [
+        { name: "msgA", type: sql.UniqueIdentifier, value: msgA },
+        { name: "msgB", type: sql.UniqueIdentifier, value: msgB },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        { name: "convA", type: sql.UniqueIdentifier, value: convA },
+        { name: "convB", type: sql.UniqueIdentifier, value: convB },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: channelConnectionId,
+        },
+        { name: "contactA", type: sql.UniqueIdentifier, value: contactA },
+        { name: "contactB", type: sql.UniqueIdentifier, value: contactB },
+        { name: "pmidA", type: sql.NVarChar(256), value: `pra-${randomUUID()}` },
+        { name: "pmidB", type: sql.NVarChar(256), value: `prb-${randomUUID()}` },
+      ],
+    );
+    await query(
+      `INSERT INTO TblAiReplyJob (
+         AiReplyJobID, BusinessID, ChannelConnectionID, ConversationID, ContactID,
+         TriggerMessageID, Status, NotBeforeUtc, AttemptCount,
+         LeaseUntilUtc, StartedAtUtc, CreatedAtUtc, UpdatedAtUtc
+       ) VALUES
+       (@jobA, @businessId, @channelConnectionId, @convA, @contactA,
+        @msgA, N'PROCESSING', SYSUTCDATETIME(), 1,
+        DATEADD(minute, 5, SYSUTCDATETIME()), SYSUTCDATETIME(), SYSUTCDATETIME(), SYSUTCDATETIME()),
+       (@jobB, @businessId, @channelConnectionId, @convB, @contactB,
+        @msgB, N'PROCESSING', SYSUTCDATETIME(), 1,
+        DATEADD(minute, 5, SYSUTCDATETIME()), SYSUTCDATETIME(), SYSUTCDATETIME(), SYSUTCDATETIME())`,
+      [
+        { name: "jobA", type: sql.UniqueIdentifier, value: jobA },
+        { name: "jobB", type: sql.UniqueIdentifier, value: jobB },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: channelConnectionId,
+        },
+        { name: "convA", type: sql.UniqueIdentifier, value: convA },
+        { name: "convB", type: sql.UniqueIdentifier, value: convB },
+        { name: "contactA", type: sql.UniqueIdentifier, value: contactA },
+        { name: "contactB", type: sql.UniqueIdentifier, value: contactB },
+        { name: "msgA", type: sql.UniqueIdentifier, value: msgA },
+        { name: "msgB", type: sql.UniqueIdentifier, value: msgB },
+      ],
+    );
+
+    await expect(execMergeWithRetry()).resolves.toBeUndefined();
+    await ensurePhoneUniqueIndex();
+
+    const jobs = await query<{
+      AiReplyJobID: string;
+      Status: string;
+      LastErrorCode: string | null;
+      ConversationID: string;
+    }>(
+      `SELECT AiReplyJobID, Status, LastErrorCode, ConversationID
+       FROM TblAiReplyJob WHERE AiReplyJobID IN (@jobA, @jobB)`,
+      [
+        { name: "jobA", type: sql.UniqueIdentifier, value: jobA },
+        { name: "jobB", type: sql.UniqueIdentifier, value: jobB },
+      ],
+    );
+    const processing = jobs.recordset.filter((r) => r.Status === "PROCESSING");
+    const failed = jobs.recordset.filter((r) => r.Status === "FAILED");
+    expect(processing.length).toBe(1);
+    expect(failed.length).toBe(1);
+    expect(String(processing[0]?.AiReplyJobID).toLowerCase()).toBe(
+      jobA.toLowerCase(),
+    );
+    expect(failed[0]?.LastErrorCode).toBe("DEDUP_CONTACT_MERGE_PROCESSING");
+    for (const row of jobs.recordset) {
+      expect(String(row.ConversationID).toLowerCase()).toBe(convA.toLowerCase());
+    }
+
+    const idx = await query<{ Cnt: number }>(
+      `SELECT COUNT(1) AS Cnt FROM sys.indexes
+       WHERE name = N'UQ_TblAiReplyJob_Business_Conversation_Processing'
+         AND object_id = OBJECT_ID(N'dbo.TblAiReplyJob')`,
+    );
+    expect(Number(idx.recordset[0]?.Cnt)).toBe(1);
+  });
+
+  it("5. PROCESSING + PENDING combination both preserved", async ({ skip }) => {
+    requireDb(skip);
+    const phone = "201111963501";
+    const contactA = randomUUID();
+    const contactB = randomUUID();
+    const convA = randomUUID();
+    const convB = randomUUID();
+    const msgA = randomUUID();
+    const msgB = randomUUID();
+    const jobProc = randomUUID();
+    const jobPend = randomUUID();
+
+    await dropPhoneUniqueIndex();
+    await query(
+      `INSERT INTO TblContact (
+         ContactID, BusinessID, ChannelConnectionID, ExternalContactKey,
+         PhoneNormalized, CreatedAtUtc, UpdatedAtUtc
+       ) VALUES
+       (@contactA, @businessId, @channelConnectionId, @bare, @phone,
+        DATEADD(day, -2, SYSUTCDATETIME()), SYSUTCDATETIME()),
+       (@contactB, @businessId, @channelConnectionId, @jid, @phone,
+        SYSUTCDATETIME(), SYSUTCDATETIME())`,
+      [
+        { name: "contactA", type: sql.UniqueIdentifier, value: contactA },
+        { name: "contactB", type: sql.UniqueIdentifier, value: contactB },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: channelConnectionId,
+        },
+        { name: "bare", type: sql.NVarChar(256), value: phone },
+        {
+          name: "jid",
+          type: sql.NVarChar(256),
+          value: `${phone}@s.whatsapp.net`,
+        },
+        { name: "phone", type: sql.NVarChar(32), value: phone },
+      ],
+    );
+    await query(
+      `INSERT INTO TblConversation (
+         ConversationID, BusinessID, ChannelConnectionID, ContactID, Status,
+         CreatedAtUtc, UpdatedAtUtc
+       ) VALUES
+       (@convA, @businessId, @channelConnectionId, @contactA, N'OPEN',
+        DATEADD(day, -2, SYSUTCDATETIME()), SYSUTCDATETIME()),
+       (@convB, @businessId, @channelConnectionId, @contactB, N'OPEN',
+        SYSUTCDATETIME(), SYSUTCDATETIME())`,
+      [
+        { name: "convA", type: sql.UniqueIdentifier, value: convA },
+        { name: "convB", type: sql.UniqueIdentifier, value: convB },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: channelConnectionId,
+        },
+        { name: "contactA", type: sql.UniqueIdentifier, value: contactA },
+        { name: "contactB", type: sql.UniqueIdentifier, value: contactB },
+      ],
+    );
+    await query(
+      `INSERT INTO TblMessage (
+         MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
+         Direction, Provider, ProviderMessageID, ContentType, TextContent,
+         ReceivedAtUtc, CreatedAtUtc
+       ) VALUES
+       (@msgA, @businessId, @convA, @channelConnectionId, @contactA,
+        N'INBOUND', N'baileys', @pmidA, N'TEXT', N'a',
+        SYSUTCDATETIME(), SYSUTCDATETIME()),
+       (@msgB, @businessId, @convB, @channelConnectionId, @contactB,
+        N'INBOUND', N'baileys', @pmidB, N'TEXT', N'b',
+        SYSUTCDATETIME(), SYSUTCDATETIME())`,
+      [
+        { name: "msgA", type: sql.UniqueIdentifier, value: msgA },
+        { name: "msgB", type: sql.UniqueIdentifier, value: msgB },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        { name: "convA", type: sql.UniqueIdentifier, value: convA },
+        { name: "convB", type: sql.UniqueIdentifier, value: convB },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: channelConnectionId,
+        },
+        { name: "contactA", type: sql.UniqueIdentifier, value: contactA },
+        { name: "contactB", type: sql.UniqueIdentifier, value: contactB },
+        { name: "pmidA", type: sql.NVarChar(256), value: `ma-${randomUUID()}` },
+        { name: "pmidB", type: sql.NVarChar(256), value: `mb-${randomUUID()}` },
+      ],
+    );
+    await query(
+      `INSERT INTO TblAiReplyJob (
+         AiReplyJobID, BusinessID, ChannelConnectionID, ConversationID, ContactID,
+         TriggerMessageID, Status, NotBeforeUtc, AttemptCount,
+         LeaseUntilUtc, StartedAtUtc, CreatedAtUtc, UpdatedAtUtc
+       ) VALUES
+       (@jobProc, @businessId, @channelConnectionId, @convA, @contactA,
+        @msgA, N'PROCESSING', SYSUTCDATETIME(), 1,
+        DATEADD(minute, 5, SYSUTCDATETIME()), SYSUTCDATETIME(), SYSUTCDATETIME(), SYSUTCDATETIME()),
+       (@jobPend, @businessId, @channelConnectionId, @convB, @contactB,
+        @msgB, N'PENDING', SYSUTCDATETIME(), 0,
+        NULL, NULL, SYSUTCDATETIME(), SYSUTCDATETIME())`,
+      [
+        { name: "jobProc", type: sql.UniqueIdentifier, value: jobProc },
+        { name: "jobPend", type: sql.UniqueIdentifier, value: jobPend },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: channelConnectionId,
+        },
+        { name: "convA", type: sql.UniqueIdentifier, value: convA },
+        { name: "convB", type: sql.UniqueIdentifier, value: convB },
+        { name: "contactA", type: sql.UniqueIdentifier, value: contactA },
+        { name: "contactB", type: sql.UniqueIdentifier, value: contactB },
+        { name: "msgA", type: sql.UniqueIdentifier, value: msgA },
+        { name: "msgB", type: sql.UniqueIdentifier, value: msgB },
+      ],
+    );
+
+    await execMergeWithRetry();
+    await ensurePhoneUniqueIndex();
+
+    const jobs = await query<{ Status: string; ConversationID: string }>(
+      `SELECT Status, ConversationID FROM TblAiReplyJob
+       WHERE AiReplyJobID IN (@jobProc, @jobPend)`,
+      [
+        { name: "jobProc", type: sql.UniqueIdentifier, value: jobProc },
+        { name: "jobPend", type: sql.UniqueIdentifier, value: jobPend },
+      ],
+    );
+    const statuses = jobs.recordset.map((r) => r.Status).sort();
+    expect(statuses).toEqual(["PENDING", "PROCESSING"]);
+    for (const row of jobs.recordset) {
+      expect(String(row.ConversationID).toLowerCase()).toBe(convA.toLowerCase());
+    }
+  });
+
+  it("6. loop guard: latest PausedUntilUtc preserved on canonical", async ({
+    skip,
+  }) => {
+    requireDb(skip);
+    const phone = "201111963601";
+    const contactA = randomUUID();
+    const contactB = randomUUID();
+    const convA = randomUUID();
+    const convB = randomUUID();
+    const msgA = randomUUID();
+
+    await dropPhoneUniqueIndex();
+    await query(
+      `INSERT INTO TblContact (
+         ContactID, BusinessID, ChannelConnectionID, ExternalContactKey,
+         PhoneNormalized, CreatedAtUtc, UpdatedAtUtc
+       ) VALUES
+       (@contactA, @businessId, @channelConnectionId, @bare, @phone,
+        DATEADD(day, -2, SYSUTCDATETIME()), SYSUTCDATETIME()),
+       (@contactB, @businessId, @channelConnectionId, @jid, @phone,
+        SYSUTCDATETIME(), SYSUTCDATETIME())`,
+      [
+        { name: "contactA", type: sql.UniqueIdentifier, value: contactA },
+        { name: "contactB", type: sql.UniqueIdentifier, value: contactB },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: channelConnectionId,
+        },
+        { name: "bare", type: sql.NVarChar(256), value: phone },
+        {
+          name: "jid",
+          type: sql.NVarChar(256),
+          value: `${phone}@s.whatsapp.net`,
+        },
+        { name: "phone", type: sql.NVarChar(32), value: phone },
+      ],
+    );
+    await query(
+      `INSERT INTO TblConversation (
+         ConversationID, BusinessID, ChannelConnectionID, ContactID, Status,
+         CreatedAtUtc, UpdatedAtUtc
+       ) VALUES
+       (@convA, @businessId, @channelConnectionId, @contactA, N'OPEN',
+        DATEADD(day, -2, SYSUTCDATETIME()), SYSUTCDATETIME()),
+       (@convB, @businessId, @channelConnectionId, @contactB, N'OPEN',
+        SYSUTCDATETIME(), SYSUTCDATETIME())`,
+      [
+        { name: "convA", type: sql.UniqueIdentifier, value: convA },
+        { name: "convB", type: sql.UniqueIdentifier, value: convB },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: channelConnectionId,
+        },
+        { name: "contactA", type: sql.UniqueIdentifier, value: contactA },
+        { name: "contactB", type: sql.UniqueIdentifier, value: contactB },
+      ],
+    );
+    await query(
+      `INSERT INTO TblMessage (
+         MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
+         Direction, Provider, ProviderMessageID, ContentType, TextContent,
+         ReceivedAtUtc, CreatedAtUtc
+       ) VALUES (
+         @msgA, @businessId, @convA, @channelConnectionId, @contactA,
+         N'INBOUND', N'baileys', @pmid, N'TEXT', N'hist',
+         SYSUTCDATETIME(), SYSUTCDATETIME()
+       )`,
+      [
+        { name: "msgA", type: sql.UniqueIdentifier, value: msgA },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        { name: "convA", type: sql.UniqueIdentifier, value: convA },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: channelConnectionId,
+        },
+        { name: "contactA", type: sql.UniqueIdentifier, value: contactA },
+        { name: "pmid", type: sql.NVarChar(256), value: `g-${randomUUID()}` },
+      ],
+    );
+    await query(
+      `INSERT INTO TblAiConversationGuard (
+         BusinessID, ConversationID, PausedUntilUtc, PauseReason, TriggeredAtUtc,
+         CreatedAtUtc, UpdatedAtUtc
+       ) VALUES
+       (@businessId, @convA, DATEADD(minute, 5, SYSUTCDATETIME()), N'SHORT',
+        DATEADD(minute, -10, SYSUTCDATETIME()), SYSUTCDATETIME(), SYSUTCDATETIME()),
+       (@businessId, @convB, DATEADD(hour, 2, SYSUTCDATETIME()), N'LONGER',
+        SYSUTCDATETIME(), SYSUTCDATETIME(), SYSUTCDATETIME())`,
+      [
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        { name: "convA", type: sql.UniqueIdentifier, value: convA },
+        { name: "convB", type: sql.UniqueIdentifier, value: convB },
+      ],
+    );
+
+    await execMergeWithRetry();
+    await ensurePhoneUniqueIndex();
+
+    const guards = await query<{
+      ConversationID: string;
+      PausedUntilUtc: Date;
+      PauseReason: string | null;
+    }>(
+      `SELECT ConversationID, PausedUntilUtc, PauseReason
+       FROM TblAiConversationGuard
+       WHERE BusinessID = @businessId
+         AND ConversationID IN (@convA, @convB)`,
+      [
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        { name: "convA", type: sql.UniqueIdentifier, value: convA },
+        { name: "convB", type: sql.UniqueIdentifier, value: convB },
+      ],
+    );
+    expect(guards.recordset.length).toBe(1);
+    expect(String(guards.recordset[0]?.ConversationID).toLowerCase()).toBe(
+      convA.toLowerCase(),
+    );
+    // Latest pause wins (duplicate's +2h)
+    const pausedUntil = new Date(guards.recordset[0]!.PausedUntilUtc).getTime();
+    expect(pausedUntil).toBeGreaterThan(Date.now() + 30 * 60 * 1000);
+  });
+
+  it("8. inverse: JID canonical + bare duplicate → digits ExternalContactKey", async ({
+    skip,
+  }) => {
+    requireDb(skip);
+    const phone = "201111963701";
+    const contactA = randomUUID();
+    const contactB = randomUUID();
+    const convA = randomUUID();
+    const convB = randomUUID();
+    const msgA = randomUUID();
+
+    await dropPhoneUniqueIndex();
+    // History/canonical starts as JID; duplicate holds bare digits.
+    await query(
+      `INSERT INTO TblContact (
+         ContactID, BusinessID, ChannelConnectionID, ExternalContactKey,
+         PhoneNormalized, CreatedAtUtc, UpdatedAtUtc
+       ) VALUES
+       (@contactA, @businessId, @channelConnectionId, @jid, @phone,
+        DATEADD(day, -5, SYSUTCDATETIME()), SYSUTCDATETIME()),
+       (@contactB, @businessId, @channelConnectionId, @bare, @phone,
+        SYSUTCDATETIME(), SYSUTCDATETIME())`,
+      [
+        { name: "contactA", type: sql.UniqueIdentifier, value: contactA },
+        { name: "contactB", type: sql.UniqueIdentifier, value: contactB },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: channelConnectionId,
+        },
+        {
+          name: "jid",
+          type: sql.NVarChar(256),
+          value: `${phone}@s.whatsapp.net`,
+        },
+        { name: "bare", type: sql.NVarChar(256), value: phone },
+        { name: "phone", type: sql.NVarChar(32), value: phone },
+      ],
+    );
+    await query(
+      `INSERT INTO TblConversation (
+         ConversationID, BusinessID, ChannelConnectionID, ContactID, Status,
+         CreatedAtUtc, UpdatedAtUtc
+       ) VALUES
+       (@convA, @businessId, @channelConnectionId, @contactA, N'OPEN',
+        DATEADD(day, -5, SYSUTCDATETIME()), SYSUTCDATETIME()),
+       (@convB, @businessId, @channelConnectionId, @contactB, N'OPEN',
+        SYSUTCDATETIME(), SYSUTCDATETIME())`,
+      [
+        { name: "convA", type: sql.UniqueIdentifier, value: convA },
+        { name: "convB", type: sql.UniqueIdentifier, value: convB },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: channelConnectionId,
+        },
+        { name: "contactA", type: sql.UniqueIdentifier, value: contactA },
+        { name: "contactB", type: sql.UniqueIdentifier, value: contactB },
+      ],
+    );
+    await query(
+      `INSERT INTO TblMessage (
+         MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
+         Direction, Provider, ProviderMessageID, ContentType, TextContent,
+         ReceivedAtUtc, CreatedAtUtc
+       ) VALUES (
+         @msgA, @businessId, @convA, @channelConnectionId, @contactA,
+         N'INBOUND', N'baileys', @pmid, N'TEXT', N'history',
+         SYSUTCDATETIME(), SYSUTCDATETIME()
+       )`,
+      [
+        { name: "msgA", type: sql.UniqueIdentifier, value: msgA },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        { name: "convA", type: sql.UniqueIdentifier, value: convA },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: channelConnectionId,
+        },
+        { name: "contactA", type: sql.UniqueIdentifier, value: contactA },
+        { name: "pmid", type: sql.NVarChar(256), value: `inv-${randomUUID()}` },
+      ],
+    );
+
+    await execMergeWithRetry();
+    await ensurePhoneUniqueIndex();
+
+    const contacts = await query<{
+      ContactID: string;
+      ExternalContactKey: string;
+    }>(
+      `SELECT ContactID, ExternalContactKey FROM TblContact
+       WHERE BusinessID = @businessId AND PhoneNormalized = @phone`,
+      [
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        { name: "phone", type: sql.NVarChar(32), value: phone },
+      ],
+    );
+    expect(contacts.recordset.length).toBe(1);
+    expect(String(contacts.recordset[0]?.ContactID).toLowerCase()).toBe(
+      contactA.toLowerCase(),
+    );
+    expect(contacts.recordset[0]?.ExternalContactKey).toBe(phone);
   });
 });

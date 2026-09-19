@@ -236,29 +236,75 @@ BEGIN
   INNER JOIN dbo.TblConversation dup ON dup.ConversationID = d.DuplicateConversationID
   WHERE d.DuplicateConversationID IS NOT NULL;
 
-  -- AI jobs → canonical; normalize PENDING/PROCESSING uniqueness
-  UPDATE j
-  SET ConversationID = d.CanonicalConversationID,
-      ContactID = d.CanonicalContactID,
-      UpdatedAtUtc = SYSUTCDATETIME()
-  FROM dbo.TblAiReplyJob j
-  INNER JOIN #DupContacts d
-    ON j.BusinessID = d.BusinessID
-   AND (
-     j.ContactID = d.DuplicateContactID
-     OR j.ConversationID = d.DuplicateConversationID
-   );
+  ------------------------------------------------------------------
+  -- ACTIVE AI JOBS: normalize PENDING/PROCESSING BEFORE ConversationID
+  -- repoint so filtered unique indexes are never violated mid-merge.
+  ------------------------------------------------------------------
+  IF OBJECT_ID(N'tempdb..#JobsInMerge') IS NOT NULL DROP TABLE #JobsInMerge;
+  CREATE TABLE #JobsInMerge (
+    AiReplyJobID UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+    BusinessID UNIQUEIDENTIFIER NOT NULL,
+    ConversationID UNIQUEIDENTIFIER NOT NULL,
+    ContactID UNIQUEIDENTIFIER NOT NULL,
+    Status NVARCHAR(32) NOT NULL,
+    UpdatedAtUtc DATETIME2 NOT NULL,
+    CreatedAtUtc DATETIME2 NOT NULL,
+    StartedAtUtc DATETIME2 NULL,
+    LeaseUntilUtc DATETIME2 NULL,
+    CanonicalConversationID UNIQUEIDENTIFIER NOT NULL,
+    CanonicalContactID UNIQUEIDENTIFIER NOT NULL
+  );
 
-  ;WITH pendingDup AS (
+  INSERT INTO #JobsInMerge (
+    AiReplyJobID, BusinessID, ConversationID, ContactID, Status,
+    UpdatedAtUtc, CreatedAtUtc, StartedAtUtc, LeaseUntilUtc,
+    CanonicalConversationID, CanonicalContactID
+  )
+  SELECT DISTINCT
+    j.AiReplyJobID,
+    j.BusinessID,
+    j.ConversationID,
+    j.ContactID,
+    j.Status,
+    j.UpdatedAtUtc,
+    j.CreatedAtUtc,
+    j.StartedAtUtc,
+    j.LeaseUntilUtc,
+    g.CanonicalConversationID,
+    g.CanonicalContactID
+  FROM #DupGroups g
+  INNER JOIN dbo.TblAiReplyJob j
+    ON j.BusinessID = g.BusinessID
+   AND (
+     j.ConversationID = g.CanonicalConversationID
+     OR j.ContactID = g.CanonicalContactID
+     OR EXISTS (
+       SELECT 1
+       FROM #DupContacts d
+       WHERE d.CanonicalConversationID = g.CanonicalConversationID
+         AND (
+           j.ConversationID = d.DuplicateConversationID
+           OR j.ContactID = d.DuplicateContactID
+         )
+     )
+   )
+  WHERE g.CanonicalConversationID IS NOT NULL
+    AND g.CanonicalContactID IS NOT NULL;
+
+  -- PENDING: keep at most one per merged canonical conversation
+  ;WITH pendingRanked AS (
     SELECT
       AiReplyJobID,
       ROW_NUMBER() OVER (
-        PARTITION BY BusinessID, ConversationID
-        ORDER BY UpdatedAtUtc DESC, CreatedAtUtc DESC, AiReplyJobID DESC
+        PARTITION BY BusinessID, CanonicalConversationID
+        ORDER BY
+          CASE WHEN ConversationID = CanonicalConversationID THEN 0 ELSE 1 END,
+          UpdatedAtUtc DESC,
+          CreatedAtUtc DESC,
+          AiReplyJobID DESC
       ) AS rn
-    FROM dbo.TblAiReplyJob
+    FROM #JobsInMerge
     WHERE Status = N'PENDING'
-      AND ConversationID IN (SELECT CanonicalConversationID FROM #DupContacts)
   )
   UPDATE j
   SET Status = N'COALESCED',
@@ -267,23 +313,28 @@ BEGIN
       LeaseUntilUtc = NULL,
       UpdatedAtUtc = SYSUTCDATETIME()
   FROM dbo.TblAiReplyJob j
-  INNER JOIN pendingDup p ON p.AiReplyJobID = j.AiReplyJobID
-  WHERE p.rn > 1 AND j.Status = N'PENDING';
+  INNER JOIN pendingRanked p ON p.AiReplyJobID = j.AiReplyJobID
+  WHERE p.rn > 1
+    AND j.Status = N'PENDING';
 
-  ;WITH processingDup AS (
+  -- PROCESSING: keep at most one per merged canonical conversation
+  ;WITH processingRanked AS (
     SELECT
       AiReplyJobID,
       ROW_NUMBER() OVER (
-        PARTITION BY BusinessID, ConversationID
+        PARTITION BY BusinessID, CanonicalConversationID
         ORDER BY
-          CASE WHEN LeaseUntilUtc IS NOT NULL AND LeaseUntilUtc >= SYSUTCDATETIME() THEN 0 ELSE 1 END,
+          CASE
+            WHEN LeaseUntilUtc IS NOT NULL AND LeaseUntilUtc >= SYSUTCDATETIME() THEN 0
+            ELSE 1
+          END,
+          CASE WHEN ConversationID = CanonicalConversationID THEN 0 ELSE 1 END,
           StartedAtUtc DESC,
           UpdatedAtUtc DESC,
           AiReplyJobID DESC
       ) AS rn
-    FROM dbo.TblAiReplyJob
+    FROM #JobsInMerge
     WHERE Status = N'PROCESSING'
-      AND ConversationID IN (SELECT CanonicalConversationID FROM #DupContacts)
   )
   UPDATE j
   SET Status = N'FAILED',
@@ -292,8 +343,19 @@ BEGIN
       LeaseUntilUtc = NULL,
       UpdatedAtUtc = SYSUTCDATETIME()
   FROM dbo.TblAiReplyJob j
-  INNER JOIN processingDup p ON p.AiReplyJobID = j.AiReplyJobID
-  WHERE p.rn > 1 AND j.Status = N'PROCESSING';
+  INNER JOIN processingRanked p ON p.AiReplyJobID = j.AiReplyJobID
+  WHERE p.rn > 1
+    AND j.Status = N'PROCESSING';
+
+  -- Now safe to repoint all jobs (active losers are no longer PENDING/PROCESSING)
+  UPDATE j
+  SET ConversationID = jm.CanonicalConversationID,
+      ContactID = jm.CanonicalContactID,
+      UpdatedAtUtc = SYSUTCDATETIME()
+  FROM dbo.TblAiReplyJob j
+  INNER JOIN #JobsInMerge jm ON jm.AiReplyJobID = j.AiReplyJobID
+  WHERE j.ConversationID <> jm.CanonicalConversationID
+     OR j.ContactID <> jm.CanonicalContactID;
 
   -- Loop guard: preserve safest (latest) pause
   MERGE dbo.TblAiConversationGuard AS target
@@ -428,22 +490,7 @@ BEGIN
      OR o.ConversationID = d.DuplicateConversationID
    );
 
-  -- Normalize canonical ExternalContactKey to digits
-  UPDATE c
-  SET ExternalContactKey = g.PhoneNormalized,
-      UpdatedAtUtc = SYSUTCDATETIME()
-  FROM dbo.TblContact c
-  INNER JOIN #DupGroups g ON g.CanonicalContactID = c.ContactID
-  WHERE c.ExternalContactKey <> g.PhoneNormalized
-    AND NOT EXISTS (
-      SELECT 1 FROM dbo.TblContact other
-      WHERE other.BusinessID = c.BusinessID
-        AND other.ChannelConnectionID = c.ChannelConnectionID
-        AND other.ExternalContactKey = g.PhoneNormalized
-        AND other.ContactID <> c.ContactID
-    );
-
-  -- Delete duplicate conversations then contacts
+  -- Delete duplicate conversations then contacts FIRST
   DELETE conv
   FROM dbo.TblConversation conv
   INNER JOIN #DupContacts d
@@ -454,6 +501,23 @@ BEGIN
   DELETE c
   FROM dbo.TblContact c
   INNER JOIN #DupContacts d ON d.DuplicateContactID = c.ContactID;
+
+  -- Final ExternalContactKey canonicalization AFTER duplicates are gone
+  -- (supports inverse case: canonical was JID, duplicate held bare digits).
+  UPDATE c
+  SET ExternalContactKey = g.PhoneNormalized,
+      UpdatedAtUtc = SYSUTCDATETIME()
+  FROM dbo.TblContact c
+  INNER JOIN #DupGroups g ON g.CanonicalContactID = c.ContactID
+  WHERE g.PhoneNormalized IS NOT NULL
+    AND c.ExternalContactKey <> g.PhoneNormalized
+    AND NOT EXISTS (
+      SELECT 1 FROM dbo.TblContact other
+      WHERE other.BusinessID = c.BusinessID
+        AND other.ChannelConnectionID = c.ChannelConnectionID
+        AND other.ExternalContactKey = g.PhoneNormalized
+        AND other.ContactID <> c.ContactID
+    );
 
   COMMIT TRAN;
 END;
