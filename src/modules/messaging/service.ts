@@ -7,12 +7,12 @@ import { maybeScheduleAiReplyAfterInbound } from "@/modules/ai/schedule";
 import type { ConversationListItem, Message } from "@/types/domain";
 
 import {
-  derivePhoneNormalized,
   normalizeInboundContent,
   parseOptionalUtc,
   type InboundWhatsAppDto,
 } from "./content";
 import * as repo from "./repository";
+import { canonicalizeWhatsAppContactIdentity } from "./whatsapp-identity";
 
 export type IngestOutcome =
   | {
@@ -74,7 +74,10 @@ export async function ingestWhatsAppInbound(
   const businessId = connection.businessId;
   const channelConnectionId = connection.channelConnectionId;
   const normalized = normalizeInboundContent(dto.content);
-  const phoneNormalized = derivePhoneNormalized(dto.externalContactKey);
+  const identity = canonicalizeWhatsAppContactIdentity({
+    externalContactKey: dto.externalContactKey,
+  });
+  const phoneNormalized = identity.phoneNormalized;
   const providerTimestampUtc = parseOptionalUtc(dto.messageTimestamp);
   const receivedAtUtc =
     parseOptionalUtc(dto.receivedAt) ?? new Date();
@@ -85,7 +88,7 @@ export async function ingestWhatsAppInbound(
       {
         businessId,
         channelConnectionId,
-        externalContactKey: dto.externalContactKey,
+        externalContactKey: identity.canonicalExternalContactKey,
         phoneNormalized,
       },
       trx,

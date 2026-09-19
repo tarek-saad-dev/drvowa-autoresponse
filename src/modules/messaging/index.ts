@@ -7,6 +7,10 @@ export {
   type NormalizedContent,
 } from "./content";
 export {
+  canonicalizeWhatsAppContactIdentity,
+  type WhatsAppContactIdentity,
+} from "./whatsapp-identity";
+export {
   ingestWhatsAppInbound,
   listInboxConversations,
   listInboxMessages,

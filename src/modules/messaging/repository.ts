@@ -212,6 +212,83 @@ export async function upsertContact(
   },
   trx: TransactionClient,
 ): Promise<Contact> {
+  // Prefer durable phone identity when available (bare digits / JID / +prefix).
+  if (params.phoneNormalized) {
+    const byPhone = await trx.query<ContactRow>(
+      `SELECT ContactID, BusinessID, ChannelConnectionID, ExternalContactKey,
+              DisplayName, PhoneNormalized, CreatedAtUtc, UpdatedAtUtc
+       FROM TblContact
+       WHERE BusinessID = @businessId
+         AND ChannelConnectionID = @channelConnectionId
+         AND PhoneNormalized = @phoneNormalized`,
+      [
+        {
+          name: "businessId",
+          type: sql.UniqueIdentifier,
+          value: params.businessId,
+        },
+        {
+          name: "channelConnectionId",
+          type: sql.UniqueIdentifier,
+          value: params.channelConnectionId,
+        },
+        {
+          name: "phoneNormalized",
+          type: sql.NVarChar(32),
+          value: params.phoneNormalized,
+        },
+      ],
+    );
+    if (byPhone.recordset[0]) {
+      const row = byPhone.recordset[0];
+      // Normalize stored ExternalContactKey to canonical digits when known.
+      if (row.ExternalContactKey !== params.externalContactKey) {
+        await trx.execute(
+          `UPDATE TblContact
+           SET ExternalContactKey = @externalContactKey,
+               UpdatedAtUtc = SYSUTCDATETIME()
+           WHERE BusinessID = @businessId AND ContactID = @contactId
+             AND NOT EXISTS (
+               SELECT 1 FROM TblContact AS other
+               WHERE other.BusinessID = @businessId
+                 AND other.ChannelConnectionID = @channelConnectionId
+                 AND other.ExternalContactKey = @externalContactKey
+                 AND other.ContactID <> @contactId
+             )`,
+          [
+            {
+              name: "externalContactKey",
+              type: sql.NVarChar(256),
+              value: params.externalContactKey,
+            },
+            {
+              name: "businessId",
+              type: sql.UniqueIdentifier,
+              value: params.businessId,
+            },
+            {
+              name: "channelConnectionId",
+              type: sql.UniqueIdentifier,
+              value: params.channelConnectionId,
+            },
+            {
+              name: "contactId",
+              type: sql.UniqueIdentifier,
+              value: row.ContactID,
+            },
+          ],
+        );
+        return {
+          ...mapContact(row),
+          externalContactKey: params.externalContactKey,
+          phoneNormalized: params.phoneNormalized,
+          updatedAtUtc: new Date(),
+        };
+      }
+      return mapContact(row);
+    }
+  }
+
   const existing = await trx.query<ContactRow>(
     `SELECT ContactID, BusinessID, ChannelConnectionID, ExternalContactKey,
             DisplayName, PhoneNormalized, CreatedAtUtc, UpdatedAtUtc
@@ -240,33 +317,63 @@ export async function upsertContact(
 
   if (existing.recordset[0]) {
     const row = existing.recordset[0];
-    if (
-      params.phoneNormalized
-      && !row.PhoneNormalized
-    ) {
-      await trx.execute(
-        `UPDATE TblContact
-         SET PhoneNormalized = @phoneNormalized,
-             UpdatedAtUtc = SYSUTCDATETIME()
-         WHERE BusinessID = @businessId AND ContactID = @contactId`,
-        [
-          {
-            name: "phoneNormalized",
-            type: sql.NVarChar(32),
-            value: params.phoneNormalized,
-          },
-          {
-            name: "businessId",
-            type: sql.UniqueIdentifier,
-            value: params.businessId,
-          },
-          {
-            name: "contactId",
-            type: sql.UniqueIdentifier,
-            value: row.ContactID,
-          },
-        ],
-      );
+    if (params.phoneNormalized && !row.PhoneNormalized) {
+      try {
+        await trx.execute(
+          `UPDATE TblContact
+           SET PhoneNormalized = @phoneNormalized,
+               UpdatedAtUtc = SYSUTCDATETIME()
+           WHERE BusinessID = @businessId AND ContactID = @contactId`,
+          [
+            {
+              name: "phoneNormalized",
+              type: sql.NVarChar(32),
+              value: params.phoneNormalized,
+            },
+            {
+              name: "businessId",
+              type: sql.UniqueIdentifier,
+              value: params.businessId,
+            },
+            {
+              name: "contactId",
+              type: sql.UniqueIdentifier,
+              value: row.ContactID,
+            },
+          ],
+        );
+      } catch (error) {
+        if (!isUniqueViolationError(error)) throw error;
+        // Another contact already owns this phone — reuse that one.
+        const winner = await trx.query<ContactRow>(
+          `SELECT ContactID, BusinessID, ChannelConnectionID, ExternalContactKey,
+                  DisplayName, PhoneNormalized, CreatedAtUtc, UpdatedAtUtc
+           FROM TblContact
+           WHERE BusinessID = @businessId
+             AND ChannelConnectionID = @channelConnectionId
+             AND PhoneNormalized = @phoneNormalized`,
+          [
+            {
+              name: "businessId",
+              type: sql.UniqueIdentifier,
+              value: params.businessId,
+            },
+            {
+              name: "channelConnectionId",
+              type: sql.UniqueIdentifier,
+              value: params.channelConnectionId,
+            },
+            {
+              name: "phoneNormalized",
+              type: sql.NVarChar(32),
+              value: params.phoneNormalized,
+            },
+          ],
+        );
+        const winnerRow = winner.recordset[0];
+        if (!winnerRow) throw error;
+        return mapContact(winnerRow);
+      }
       return {
         ...mapContact(row),
         phoneNormalized: params.phoneNormalized,
@@ -316,6 +423,35 @@ export async function upsertContact(
     );
   } catch (error) {
     if (!isUniqueViolationError(error)) throw error;
+    // Race: re-query by phone first (canonical), then by external key.
+    if (params.phoneNormalized) {
+      const byPhone = await trx.query<ContactRow>(
+        `SELECT ContactID, BusinessID, ChannelConnectionID, ExternalContactKey,
+                DisplayName, PhoneNormalized, CreatedAtUtc, UpdatedAtUtc
+         FROM TblContact
+         WHERE BusinessID = @businessId
+           AND ChannelConnectionID = @channelConnectionId
+           AND PhoneNormalized = @phoneNormalized`,
+        [
+          {
+            name: "businessId",
+            type: sql.UniqueIdentifier,
+            value: params.businessId,
+          },
+          {
+            name: "channelConnectionId",
+            type: sql.UniqueIdentifier,
+            value: params.channelConnectionId,
+          },
+          {
+            name: "phoneNormalized",
+            type: sql.NVarChar(32),
+            value: params.phoneNormalized,
+          },
+        ],
+      );
+      if (byPhone.recordset[0]) return mapContact(byPhone.recordset[0]);
+    }
     const raced = await trx.query<ContactRow>(
       `SELECT ContactID, BusinessID, ChannelConnectionID, ExternalContactKey,
               DisplayName, PhoneNormalized, CreatedAtUtc, UpdatedAtUtc

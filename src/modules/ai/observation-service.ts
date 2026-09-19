@@ -2,11 +2,9 @@ import { z } from "zod";
 
 import { withTransaction } from "@/lib/db";
 import { NotFoundError } from "@/lib/tenancy/errors";
-import {
-  derivePhoneNormalized,
-  parseOptionalUtc,
-} from "@/modules/messaging/content";
+import { parseOptionalUtc } from "@/modules/messaging/content";
 import * as messagingRepo from "@/modules/messaging/repository";
+import { canonicalizeWhatsAppContactIdentity } from "@/modules/messaging/whatsapp-identity";
 
 import {
   pauseConversationAi,
@@ -59,19 +57,6 @@ function logObservation(
   logger.info(`[runtime-observation] ${event}`, fields);
 }
 
-function resolveExternalContactKey(dto: OutboundObservedDto): string | null {
-  if (dto.externalContactKey?.trim()) {
-    return dto.externalContactKey.trim();
-  }
-  if (dto.phone?.trim()) {
-    const phone = derivePhoneNormalized(dto.phone.trim()) ?? dto.phone.trim().replace(/^\+/, "");
-    if (/^\d{8,15}$/.test(phone)) {
-      return `${phone}@s.whatsapp.net`;
-    }
-  }
-  return null;
-}
-
 /**
  * Runtime → SaaS outbound observation. BusinessID resolved from accountKey only.
  */
@@ -97,10 +82,17 @@ export async function ingestWhatsAppOutboundObserved(
   const businessId = connection.businessId;
   const channelConnectionId = connection.channelConnectionId;
   const occurredAtUtc = parseOptionalUtc(dto.occurredAt) ?? new Date();
-  const externalContactKey = resolveExternalContactKey(dto);
-  const phoneNormalized =
-    (dto.phone ? derivePhoneNormalized(dto.phone) : null)
-    ?? (externalContactKey ? derivePhoneNormalized(externalContactKey) : null);
+
+  let identity: ReturnType<typeof canonicalizeWhatsAppContactIdentity> | null =
+    null;
+  if (dto.externalContactKey?.trim() || dto.phone?.trim()) {
+    identity = canonicalizeWhatsAppContactIdentity({
+      externalContactKey: dto.externalContactKey,
+      phone: dto.phone,
+    });
+  }
+  const phoneNormalized = identity?.phoneNormalized ?? null;
+  const externalContactKey = identity?.canonicalExternalContactKey ?? null;
 
   const existing = await findOutboundObservation({
     channelConnectionId,

@@ -231,11 +231,11 @@ describe("Phase 3A messaging ingest isolation", () => {
     );
     expect(Number(msgs.recordset[0]?.Cnt)).toBe(1);
 
-    const contacts = await query<{ Cnt: number }>(
+    const contacts = await query<{ Cnt: number; ExternalContactKey: string }>(
       `SELECT COUNT(1) AS Cnt FROM TblContact
        WHERE BusinessID = @businessId
          AND ChannelConnectionID = @channelId
-         AND ExternalContactKey = @key`,
+         AND PhoneNormalized = @phone`,
       [
         {
           name: "businessId",
@@ -247,10 +247,32 @@ describe("Phase 3A messaging ingest isolation", () => {
           type: sql.UniqueIdentifier,
           value: channelAId,
         },
-        { name: "key", type: sql.NVarChar(256), value: contactKey },
+        { name: "phone", type: sql.NVarChar(32), value: "201555200002" },
       ],
     );
     expect(Number(contacts.recordset[0]?.Cnt)).toBe(1);
+
+    const storedKey = await query<{ ExternalContactKey: string }>(
+      `SELECT ExternalContactKey FROM TblContact
+       WHERE BusinessID = @businessId
+         AND ChannelConnectionID = @channelId
+         AND PhoneNormalized = @phone`,
+      [
+        {
+          name: "businessId",
+          type: sql.UniqueIdentifier,
+          value: businessAId,
+        },
+        {
+          name: "channelId",
+          type: sql.UniqueIdentifier,
+          value: channelAId,
+        },
+        { name: "phone", type: sql.NVarChar(32), value: "201555200002" },
+      ],
+    );
+    // Canonical identity stores digits, not @s.whatsapp.net.
+    expect(storedKey.recordset[0]?.ExternalContactKey).toBe("201555200002");
   });
 
   it("7/8. Business A cannot read B conversations or messages", async ({

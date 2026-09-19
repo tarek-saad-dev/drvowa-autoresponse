@@ -110,13 +110,21 @@ async function applyMigration(migration: MigrationFile): Promise<void> {
     });
   }
 
+  // Split on GO batch separators (sqlcmd-compatible). node-mssql does not.
+  const batches = sqlText
+    .split(/^\s*GO\s*$/gim)
+    .map((b) => b.trim())
+    .filter((b) => b.length > 0);
+
   const pool = await getPool();
   const transaction = new sql.Transaction(pool);
 
   await transaction.begin();
   try {
-    const batchRequest = new sql.Request(transaction);
-    await batchRequest.batch(sqlText);
+    for (const batch of batches) {
+      const batchRequest = new sql.Request(transaction);
+      await batchRequest.batch(batch);
+    }
 
     const recordRequest = new sql.Request(transaction);
     recordRequest.input("Version", sql.NVarChar(32), migration.version);
