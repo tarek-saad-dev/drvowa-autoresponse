@@ -11,6 +11,7 @@ import type { AiReplyJob } from "@/types/domain";
 import * as messagingRepo from "@/modules/messaging/repository";
 
 import { createGeminiProvider, AiProviderError } from "./gemini-provider";
+import { evaluateConversationLoopGuard, logAiSafety } from "./guard-repository";
 import { completeJob } from "./jobs-repository";
 import {
   MAX_HISTORY_MESSAGES,
@@ -257,6 +258,82 @@ export async function processAiReplyJob(params: {
     latencyMs: genLatency,
     model: modelName,
   }, logger);
+
+  // Send-time hard kill switch + activation watermark + loop guard.
+  const liveSetting = await getChannelAiSettingByConnection({
+    businessId,
+    channelConnectionId: job.channelConnectionId,
+  });
+  if (!liveSetting?.autoReplyEnabled || !liveSetting.enabledAtUtc) {
+    await completeJob({
+      businessId,
+      jobId: job.aiReplyJobId,
+      status: "SKIPPED",
+      errorCode: "AI_DISABLED_BEFORE_SEND",
+    });
+    logAiSafety(
+      "disabled_before_send",
+      {
+        businessId,
+        conversationId: job.conversationId,
+        jobId: job.aiReplyJobId,
+        reason: "AI_DISABLED_BEFORE_SEND",
+      },
+      logger,
+    );
+    logAi("skipped", {
+      businessId,
+      jobId: job.aiReplyJobId,
+      errorCode: "AI_DISABLED_BEFORE_SEND",
+    }, logger);
+    return { status: "SKIPPED", errorCode: "AI_DISABLED_BEFORE_SEND" };
+  }
+
+  if (job.createdAtUtc.getTime() < liveSetting.enabledAtUtc.getTime()) {
+    await completeJob({
+      businessId,
+      jobId: job.aiReplyJobId,
+      status: "SKIPPED",
+      errorCode: "STALE_ACTIVATION",
+    });
+    logAiSafety(
+      "stale_activation",
+      {
+        businessId,
+        conversationId: job.conversationId,
+        jobId: job.aiReplyJobId,
+        reason: "STALE_ACTIVATION",
+      },
+      logger,
+    );
+    logAi("skipped", {
+      businessId,
+      jobId: job.aiReplyJobId,
+      errorCode: "STALE_ACTIVATION",
+    }, logger);
+    return { status: "SKIPPED", errorCode: "STALE_ACTIVATION" };
+  }
+
+  const sendGuard = await evaluateConversationLoopGuard({
+    businessId,
+    conversationId: job.conversationId,
+    jobId: job.aiReplyJobId,
+    logger,
+  });
+  if (!sendGuard.allow) {
+    await completeJob({
+      businessId,
+      jobId: job.aiReplyJobId,
+      status: "SKIPPED",
+      errorCode: "LOOP_GUARD_ACTIVE",
+    });
+    logAi("skipped", {
+      businessId,
+      jobId: job.aiReplyJobId,
+      errorCode: "LOOP_GUARD_ACTIVE",
+    }, logger);
+    return { status: "SKIPPED", errorCode: "LOOP_GUARD_ACTIVE" };
+  }
 
   logAi("send_start", {
     businessId,

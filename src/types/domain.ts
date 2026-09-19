@@ -215,6 +215,16 @@ export type AiReplyJob = {
   updatedAtUtc: Date;
 };
 
+export type AiConversationGuard = {
+  businessId: string;
+  conversationId: string;
+  pausedUntilUtc: Date | null;
+  pauseReason: string | null;
+  triggeredAtUtc: Date | null;
+  createdAtUtc: Date;
+  updatedAtUtc: Date;
+};
+
 export type Integration = {
   integrationId: string;
   businessId: string;

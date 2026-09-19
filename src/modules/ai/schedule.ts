@@ -1,12 +1,13 @@
 import type { TransactionClient } from "@/lib/db";
 import type { MessageContentType } from "@/types/domain";
 
-import { getChannelAiSettingByConnection } from "./settings-repository";
+import { evaluateConversationLoopGuard } from "./guard-repository";
 import { scheduleOrCoalesceJob } from "./jobs-repository";
+import { getChannelAiSettingByConnection } from "./settings-repository";
 
 /**
  * After a newly inserted inbound TEXT message, schedule/coalesce an AI job.
- * Safe no-op when AI disabled or message is before EnabledAtUtc watermark.
+ * Safe no-op when AI disabled, before EnabledAtUtc watermark, or loop-guarded.
  */
 export async function maybeScheduleAiReplyAfterInbound(params: {
   businessId: string;
@@ -16,7 +17,11 @@ export async function maybeScheduleAiReplyAfterInbound(params: {
   triggerMessageId: string;
   contentType: MessageContentType;
   messageReceivedAt: Date;
-}, trx?: TransactionClient): Promise<{ scheduled: boolean; coalesced?: boolean }> {
+}, trx?: TransactionClient): Promise<{
+  scheduled: boolean;
+  coalesced?: boolean;
+  reason?: string;
+}> {
   if (params.contentType !== "TEXT") {
     return { scheduled: false };
   }
@@ -36,6 +41,17 @@ export async function maybeScheduleAiReplyAfterInbound(params: {
   // Historical protection: only messages at/after activation watermark.
   if (params.messageReceivedAt.getTime() < setting.enabledAtUtc.getTime()) {
     return { scheduled: false };
+  }
+
+  const guard = await evaluateConversationLoopGuard(
+    {
+      businessId: params.businessId,
+      conversationId: params.conversationId,
+    },
+    trx,
+  );
+  if (!guard.allow) {
+    return { scheduled: false, reason: guard.reason ?? "LOOP_GUARD_ACTIVE" };
   }
 
   const result = await scheduleOrCoalesceJob(

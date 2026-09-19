@@ -14,9 +14,13 @@ const settingsMocks = vi.hoisted(() => ({
 const jobsMocks = vi.hoisted(() => ({
   scheduleOrCoalesceJob: vi.fn(),
 }));
+const guardMocks = vi.hoisted(() => ({
+  evaluateConversationLoopGuard: vi.fn(),
+}));
 
 vi.mock("@/modules/ai/settings-repository", () => settingsMocks);
 vi.mock("@/modules/ai/jobs-repository", () => jobsMocks);
+vi.mock("@/modules/ai/guard-repository", () => guardMocks);
 
 describe("Phase 3B AI provider helpers", () => {
   it("21. reply length bounded", () => {
@@ -71,6 +75,11 @@ describe("Phase 3B schedule gates", () => {
   beforeEach(() => {
     settingsMocks.getChannelAiSettingByConnection.mockReset();
     jobsMocks.scheduleOrCoalesceJob.mockReset();
+    guardMocks.evaluateConversationLoopGuard.mockReset();
+    guardMocks.evaluateConversationLoopGuard.mockResolvedValue({
+      allow: true,
+      recentSentCount: 0,
+    });
   });
 
   afterEach(() => {
@@ -150,5 +159,30 @@ describe("Phase 3B schedule gates", () => {
     });
     expect(result.scheduled).toBe(true);
     expect(jobsMocks.scheduleOrCoalesceJob).toHaveBeenCalledTimes(1);
+  });
+
+  it("loop guard active blocks schedule", async () => {
+    settingsMocks.getChannelAiSettingByConnection.mockResolvedValue({
+      autoReplyEnabled: true,
+      enabledAtUtc: new Date("2026-01-01T00:00:00.000Z"),
+      debounceMs: 900,
+    });
+    guardMocks.evaluateConversationLoopGuard.mockResolvedValue({
+      allow: false,
+      reason: "LOOP_GUARD_ACTIVE",
+      recentSentCount: 3,
+    });
+    const result = await maybeScheduleAiReplyAfterInbound({
+      businessId: "11111111-1111-1111-1111-111111111111",
+      channelConnectionId: "22222222-2222-2222-2222-222222222222",
+      conversationId: "33333333-3333-3333-3333-333333333333",
+      contactId: "44444444-4444-4444-4444-444444444444",
+      triggerMessageId: "55555555-5555-5555-5555-555555555555",
+      contentType: "TEXT",
+      messageReceivedAt: new Date("2026-09-01T00:00:00.000Z"),
+    });
+    expect(result.scheduled).toBe(false);
+    expect(result.reason).toBe("LOOP_GUARD_ACTIVE");
+    expect(jobsMocks.scheduleOrCoalesceJob).not.toHaveBeenCalled();
   });
 });
