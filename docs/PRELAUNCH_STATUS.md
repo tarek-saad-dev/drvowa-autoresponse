@@ -2,7 +2,7 @@
 
 **Updated:** 2026-09-21  
 **Branch:** `release/prelaunch-v1`  
-**SHA:** *(update after next commit)*  
+**SHA:** a5bcb939df6877bd84f0aeac34c3dd11ccbb1dfd  
 **Main (untouched):** `4b1a7b598f14a65d78283d85ba954dfec27d86fd`
 
 ## Completed phases
