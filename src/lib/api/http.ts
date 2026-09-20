@@ -7,6 +7,7 @@ import {
   ForbiddenError,
   NotFoundError,
 } from "@/lib/tenancy/errors";
+import { isPlanEntitlementError } from "@/modules/billing/errors";
 import { WhatsAppRuntimeError } from "@/modules/channels/runtime-client";
 
 export function jsonOk<T>(
@@ -45,6 +46,9 @@ export async function parseJsonBody(request: Request): Promise<unknown> {
 export function handleApiError(error: unknown): NextResponse {
   if (error instanceof AuthError) {
     return jsonError(error.message, 401);
+  }
+  if (isPlanEntitlementError(error)) {
+    return jsonError(error.message, 403, { code: error.code });
   }
   if (error instanceof ForbiddenError) {
     return jsonError(error.message, 403);

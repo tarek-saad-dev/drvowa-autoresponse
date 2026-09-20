@@ -1,4 +1,5 @@
 import { NotFoundError } from "@/lib/tenancy/errors";
+import { withResourceLimitGate } from "@/modules/billing/entitlements";
 import type { Agent } from "@/types/domain";
 
 import * as repo from "./repository";
@@ -30,11 +31,19 @@ export async function createAgent(params: {
   instructions?: string | null;
   isActive?: boolean;
 }): Promise<Agent> {
-  return repo.createAgent({
-    ...params,
-    name: params.name.trim(),
-    roleTitle: params.roleTitle.trim(),
-    language: params.language.trim(),
+  return withResourceLimitGate({
+    businessId: params.businessId,
+    kind: "agent",
+    createFn: (trx) =>
+      repo.createAgent(
+        {
+          ...params,
+          name: params.name.trim(),
+          roleTitle: params.roleTitle.trim(),
+          language: params.language.trim(),
+        },
+        trx,
+      ),
   });
 }
 

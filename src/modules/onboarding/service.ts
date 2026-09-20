@@ -80,6 +80,11 @@ export async function completeOnboarding(
     });
   }
 
+  // Entitlements require a current FREE subscription before Agent/Knowledge.
+  const subscription = await ensureDefaultSubscription({
+    businessId: business.businessId,
+  });
+
   let location: Location | null = null;
   if (input.location?.name?.trim()) {
     location = await createLocation({
@@ -136,10 +141,6 @@ export async function completeOnboarding(
   const completedBusiness = await updateBusiness({
     businessId: business.businessId,
     onboardingCompletedAtUtc: new Date(),
-  });
-
-  const subscription = await ensureDefaultSubscription({
-    businessId: business.businessId,
   });
 
   await writeAuditEvent({

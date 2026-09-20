@@ -1,12 +1,27 @@
 import { withTransaction } from "@/lib/db";
 import { getAgent } from "@/modules/agents/service";
+import {
+  consumeQuotaReservation,
+  markQuotaReservationUncertain,
+  releaseQuotaReservation,
+  reserveQuota,
+} from "@/modules/billing/entitlements";
+import {
+  isPlanEntitlementError,
+  PLAN_ERROR_CODES,
+} from "@/modules/billing/errors";
+import {
+  USAGE_EVENT_AI_REPLY,
+  USAGE_EVENT_WHATSAPP_OUTBOUND,
+  aiReplyReservationKey,
+  waOutboundReservationKey,
+} from "@/modules/billing/period";
 import { getChannelConnection } from "@/modules/channels/repository";
 import {
   sendAccountMessage,
   WhatsAppRuntimeError,
 } from "@/modules/channels/runtime-client";
 import { listItems } from "@/modules/knowledge/service";
-import { recordUsageEvent } from "@/modules/usage/service";
 import type { AiReplyJob } from "@/types/domain";
 import * as messagingRepo from "@/modules/messaging/repository";
 
@@ -244,6 +259,53 @@ export async function processAiReplyJob(params: {
     return { status, errorCode };
   }
 
+  const aiKey = aiReplyReservationKey(job.aiReplyJobId);
+  const waKey = waOutboundReservationKey(job.aiReplyJobId);
+  let aiReserved = false;
+  let waReserved = false;
+
+  async function releaseAiQuota(): Promise<void> {
+    if (!aiReserved) return;
+    await releaseQuotaReservation({
+      businessId,
+      eventType: USAGE_EVENT_AI_REPLY,
+      reservationKey: aiKey,
+    });
+    aiReserved = false;
+  }
+
+  async function releaseWaQuota(): Promise<void> {
+    if (!waReserved) return;
+    await releaseQuotaReservation({
+      businessId,
+      eventType: USAGE_EVENT_WHATSAPP_OUTBOUND,
+      reservationKey: waKey,
+    });
+    waReserved = false;
+  }
+
+  async function releaseReservedQuotas(): Promise<void> {
+    await releaseWaQuota();
+    await releaseAiQuota();
+  }
+
+  async function keepQuotasUncertain(): Promise<void> {
+    if (aiReserved) {
+      await markQuotaReservationUncertain({
+        businessId,
+        eventType: USAGE_EVENT_AI_REPLY,
+        reservationKey: aiKey,
+      });
+    }
+    if (waReserved) {
+      await markQuotaReservationUncertain({
+        businessId,
+        eventType: USAGE_EVENT_WHATSAPP_OUTBOUND,
+        reservationKey: waKey,
+      });
+    }
+  }
+
   logAi("job_claimed", {
     businessId,
     conversationId: job.conversationId,
@@ -294,6 +356,21 @@ export async function processAiReplyJob(params: {
   const accountKey = connection?.externalAccountKey;
   if (!accountKey) {
     return finishTerminal("FAILED", "ACCOUNT_KEY_MISSING");
+  }
+
+  // Authoritative AI quota gate (idempotent on retries / reclaim).
+  try {
+    await reserveQuota({
+      businessId,
+      eventType: USAGE_EVENT_AI_REPLY,
+      reservationKey: aiKey,
+    });
+    aiReserved = true;
+  } catch (error) {
+    if (isPlanEntitlementError(error)) {
+      return finishTerminal("SKIPPED", error.code);
+    }
+    throw error;
   }
 
   // Reuse durable generated reply on outbound recovery — never call Gemini again.
@@ -361,9 +438,11 @@ export async function processAiReplyJob(params: {
       modelName = generated.model;
       genLatency = generated.latencyMs;
       if (!replyText.trim()) {
+        await releaseAiQuota();
         return finishTerminal("FAILED", "GEMINI_EMPTY");
       }
     } catch (error) {
+      await releaseAiQuota();
       const code =
         error instanceof AiProviderError ? error.code : "GEMINI_FAILED";
       return finishTerminal("FAILED", code);
@@ -427,6 +506,7 @@ export async function processAiReplyJob(params: {
       },
       logger,
     );
+    await releaseAiQuota();
     return finishTerminal("SKIPPED", "AI_DISABLED_BEFORE_SEND");
   }
 
@@ -441,6 +521,7 @@ export async function processAiReplyJob(params: {
       },
       logger,
     );
+    await releaseAiQuota();
     return finishTerminal("SKIPPED", "STALE_ACTIVATION");
   }
 
@@ -485,6 +566,7 @@ export async function processAiReplyJob(params: {
         logger,
       );
     }
+    await releaseAiQuota();
     return finishTerminal("SKIPPED", errorCode);
   }
 
@@ -495,6 +577,7 @@ export async function processAiReplyJob(params: {
     logger,
   });
   if (!sendGuard.allow) {
+    await releaseAiQuota();
     return finishTerminal("SKIPPED", "LOOP_GUARD_ACTIVE");
   }
 
@@ -510,6 +593,26 @@ export async function processAiReplyJob(params: {
     return { status: "LEASE_LOST", errorCode: "LEASE_LOST" };
   }
 
+  try {
+    await reserveQuota({
+      businessId,
+      eventType: USAGE_EVENT_WHATSAPP_OUTBOUND,
+      reservationKey: waKey,
+    });
+    waReserved = true;
+  } catch (error) {
+    if (isPlanEntitlementError(error)) {
+      await releaseAiQuota();
+      return finishTerminal(
+        "SKIPPED",
+        error.code === PLAN_ERROR_CODES.WHATSAPP_OUTBOUND_QUOTA_EXCEEDED
+          ? PLAN_ERROR_CODES.WHATSAPP_OUTBOUND_QUOTA_EXCEEDED
+          : error.code,
+      );
+    }
+    throw error;
+  }
+
   let sendResult;
   try {
     sendResult = await sendMessage({
@@ -521,6 +624,8 @@ export async function processAiReplyJob(params: {
   } catch (error) {
     if (error instanceof WhatsAppRuntimeError) {
       if (error.code === "IDEMPOTENCY_CONFLICT") {
+        // Possible prior send — keep commitments.
+        await keepQuotasUncertain();
         return finishTerminal("FAILED", "IDEMPOTENCY_CONFLICT");
       }
 
@@ -530,6 +635,7 @@ export async function processAiReplyJob(params: {
         || error.code === "RUNTIME_UNAVAILABLE";
 
       if (ambiguous) {
+        await keepQuotasUncertain();
         const deferred = await handleAmbiguousOutbound({
           job,
           leaseToken,
@@ -547,9 +653,24 @@ export async function processAiReplyJob(params: {
         || error.code === "NOT_STARTED"
         || error.status === 409;
 
-      const code = definitive ? error.code : `RUNTIME_${error.status}`;
-      return finishTerminal("FAILED", code);
+      if (definitive) {
+        await releaseReservedQuotas();
+        const code = error.code;
+        return finishTerminal("FAILED", code);
+      }
+
+      await keepQuotasUncertain();
+      const deferredOther = await handleAmbiguousOutbound({
+        job,
+        leaseToken,
+        logger,
+      });
+      return {
+        status: deferredOther.status,
+        errorCode: deferredOther.errorCode,
+      };
     }
+    await keepQuotasUncertain();
     const deferred = await handleAmbiguousOutbound({
       job,
       leaseToken,
@@ -566,6 +687,7 @@ export async function processAiReplyJob(params: {
   const isSent = statusLower === "sent" || sendResult.success;
 
   if (sendResult.code === "OUTBOUND_RESULT_UNKNOWN") {
+    await keepQuotasUncertain();
     const deferred = await handleAmbiguousOutbound({
       job,
       leaseToken,
@@ -578,10 +700,12 @@ export async function processAiReplyJob(params: {
   }
 
   if (sendResult.code === "IDEMPOTENCY_CONFLICT") {
+    await keepQuotasUncertain();
     return finishTerminal("FAILED", "IDEMPOTENCY_CONFLICT");
   }
 
   if ((!isSent && !isDuplicate) || !sendResult.messageId) {
+    await releaseReservedQuotas();
     const code = sendResult.code || "SEND_FAILED";
     return finishTerminal("FAILED", code);
   }
@@ -652,28 +776,24 @@ export async function processAiReplyJob(params: {
         leaseToken: leaseToken!,
         trx,
       });
-      // Usage once per successful SENT transition (duplicate ack must not double-bill).
-      await messagingRepo.insertUsageEventInTrx(
-        {
-          businessId,
-          eventType: "AI_REPLY_GENERATED",
-          quantity: 1,
-          metadata: { jobId: job.aiReplyJobId, model: usageModel },
+      // Consume reservations (counter already committed at reserve; no second increment).
+      await consumeQuotaReservation({
+        businessId,
+        eventType: USAGE_EVENT_AI_REPLY,
+        reservationKey: aiKey,
+        metadata: { jobId: job.aiReplyJobId, model: usageModel },
+        trx,
+      });
+      await consumeQuotaReservation({
+        businessId,
+        eventType: USAGE_EVENT_WHATSAPP_OUTBOUND,
+        reservationKey: waKey,
+        metadata: {
+          jobId: job.aiReplyJobId,
+          providerMessageId,
         },
         trx,
-      );
-      await messagingRepo.insertUsageEventInTrx(
-        {
-          businessId,
-          eventType: "WHATSAPP_OUTBOUND_MESSAGE",
-          quantity: 1,
-          metadata: {
-            jobId: job.aiReplyJobId,
-            providerMessageId,
-          },
-        },
-        trx,
-      );
+      });
       void inserted;
     });
   } catch (error) {
@@ -688,8 +808,6 @@ export async function processAiReplyJob(params: {
     }
     throw error;
   }
-
-  void recordUsageEvent;
 
   logAi("sent", {
     businessId,

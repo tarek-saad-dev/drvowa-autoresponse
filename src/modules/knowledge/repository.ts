@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { KnowledgeCategory } from "@/constants/knowledge";
-import { query, sql } from "@/lib/db";
+import { query, sql, type TransactionClient } from "@/lib/db";
 import { normalizeUuid } from "@/lib/ids/uuid";
 import type { KnowledgeBase, KnowledgeItem } from "@/types/domain";
 
@@ -25,6 +25,12 @@ type KnowledgeItemRow = {
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
+
+function db(trx?: TransactionClient) {
+  return {
+    query: trx?.query.bind(trx) ?? query,
+  };
+}
 
 function mapBase(row: KnowledgeBaseRow): KnowledgeBase {
   return {
@@ -161,19 +167,22 @@ export async function getKnowledgeItem(params: {
   return row ? mapItem(row) : null;
 }
 
-export async function createKnowledgeItem(params: {
-  businessId: string;
-  knowledgeBaseId: string;
-  category: KnowledgeCategory;
-  title: string;
-  content: string;
-  isActive?: boolean;
-}): Promise<KnowledgeItem> {
+export async function createKnowledgeItem(
+  params: {
+    businessId: string;
+    knowledgeBaseId: string;
+    category: KnowledgeCategory;
+    title: string;
+    content: string;
+    isActive?: boolean;
+  },
+  trx?: TransactionClient,
+): Promise<KnowledgeItem> {
   const knowledgeItemId = randomUUID();
   const now = new Date();
   const isActive = params.isActive ?? true;
 
-  await query(
+  await db(trx).query(
     `INSERT INTO TblKnowledgeItem (
       KnowledgeItemID, KnowledgeBaseID, BusinessID, Category, Title, Content,
       IsActive, CreatedAtUtc, UpdatedAtUtc
@@ -223,14 +232,17 @@ export async function createKnowledgeItem(params: {
   };
 }
 
-export async function updateKnowledgeItem(params: {
-  businessId: string;
-  knowledgeItemId: string;
-  category?: KnowledgeCategory;
-  title?: string;
-  content?: string;
-  isActive?: boolean;
-}): Promise<KnowledgeItem | null> {
+export async function updateKnowledgeItem(
+  params: {
+    businessId: string;
+    knowledgeItemId: string;
+    category?: KnowledgeCategory;
+    title?: string;
+    content?: string;
+    isActive?: boolean;
+  },
+  trx?: TransactionClient,
+): Promise<KnowledgeItem | null> {
   const existing = await getKnowledgeItem({
     businessId: params.businessId,
     knowledgeItemId: params.knowledgeItemId,
@@ -247,7 +259,7 @@ export async function updateKnowledgeItem(params: {
   };
   const now = new Date();
 
-  await query(
+  await db(trx).query(
     `UPDATE TblKnowledgeItem
      SET Category = @category,
          Title = @title,

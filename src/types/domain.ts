@@ -17,7 +17,8 @@ export type SubscriptionStatus =
   | "ACTIVE"
   | "PAST_DUE"
   | "CANCELED"
-  | "INACTIVE";
+  | "INACTIVE"
+  | "EXPIRED";
 
 export type User = {
   userId: string;
@@ -283,6 +284,7 @@ export type UsageEvent = {
   quantity: number;
   occurredAtUtc: Date;
   metadataJson: string | null;
+  usageKey?: string | null;
 };
 
 export type Plan = {
@@ -290,6 +292,11 @@ export type Plan = {
   code: string;
   displayName: string;
   status: PlanStatus;
+  maxWhatsAppConnections?: number | null;
+  maxAgents?: number | null;
+  maxActiveKnowledgeItems?: number | null;
+  monthlyAiReplies?: number | null;
+  monthlyWhatsAppOutbound?: number | null;
   createdAtUtc: Date;
   updatedAtUtc: Date;
 };

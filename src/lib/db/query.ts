@@ -138,8 +138,31 @@ export async function withTransaction<T>(
     if (error instanceof DbError) {
       throw error;
     }
+    // Preserve domain errors thrown by business logic inside the transaction
+    // (e.g. plan entitlement / not-found). Only wrap SQL driver failures.
+    if (error instanceof Error && !isMssqlDriverError(error)) {
+      throw error;
+    }
     throw toDbError(error, "Database transaction failed");
   }
+}
+
+/** mssql RequestError / ConnectionError typically expose a numeric `number`. */
+function isMssqlDriverError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const e = error as { number?: unknown; name?: unknown; cause?: unknown };
+  if (typeof e.number === "number") {
+    return true;
+  }
+  if (e.name === "RequestError" || e.name === "ConnectionError") {
+    return true;
+  }
+  if (e.cause) {
+    return isMssqlDriverError(e.cause);
+  }
+  return false;
 }
 
 export { sql };

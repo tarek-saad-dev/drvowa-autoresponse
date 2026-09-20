@@ -1,5 +1,6 @@
 import QRCode from "qrcode";
 
+import { withResourceLimitGate } from "@/modules/billing/entitlements";
 import type { ChannelConnection, ChannelConnectionStatus } from "@/types/domain";
 
 import { generateWhatsAppAccountKey } from "./account-key";
@@ -148,14 +149,22 @@ export async function ensureWhatsAppConnection(params: {
     return updated;
   }
 
-  return repo.createChannelConnectionShell({
+  return withResourceLimitGate({
     businessId: params.businessId,
-    channel: "WHATSAPP",
-    provider: "BAILEYS",
-    displayName: "WhatsApp",
-    externalAccountKey: generateWhatsAppAccountKey(),
-    status: "PENDING",
-    isActive: false,
+    kind: "whatsapp_connection",
+    createFn: (trx) =>
+      repo.createChannelConnectionShell(
+        {
+          businessId: params.businessId,
+          channel: "WHATSAPP",
+          provider: "BAILEYS",
+          displayName: "WhatsApp",
+          externalAccountKey: generateWhatsAppAccountKey(),
+          status: "PENDING",
+          isActive: false,
+        },
+        trx,
+      ),
   });
 }
 

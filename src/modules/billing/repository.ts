@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { query, sql } from "@/lib/db";
+import { query, sql, type TransactionClient } from "@/lib/db";
 import { normalizeUuid } from "@/lib/ids/uuid";
 import type { Plan, Subscription, SubscriptionStatus } from "@/types/domain";
 
@@ -9,6 +9,11 @@ type PlanRow = {
   Code: string;
   DisplayName: string;
   Status: string;
+  MaxWhatsAppConnections: number | null;
+  MaxAgents: number | null;
+  MaxActiveKnowledgeItems: number | null;
+  MonthlyAiReplies: number | null;
+  MonthlyWhatsAppOutbound: number | null;
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
@@ -24,12 +29,33 @@ type SubscriptionRow = {
   UpdatedAtUtc: Date;
 };
 
+function db(trx?: TransactionClient) {
+  return {
+    query: trx?.query.bind(trx) ?? query,
+  };
+}
+
 function mapPlan(row: PlanRow): Plan {
   return {
     planId: normalizeUuid(row.PlanID),
     code: row.Code,
     displayName: row.DisplayName,
     status: row.Status as Plan["status"],
+    maxWhatsAppConnections:
+      row.MaxWhatsAppConnections == null
+        ? null
+        : Number(row.MaxWhatsAppConnections),
+    maxAgents: row.MaxAgents == null ? null : Number(row.MaxAgents),
+    maxActiveKnowledgeItems:
+      row.MaxActiveKnowledgeItems == null
+        ? null
+        : Number(row.MaxActiveKnowledgeItems),
+    monthlyAiReplies:
+      row.MonthlyAiReplies == null ? null : Number(row.MonthlyAiReplies),
+    monthlyWhatsAppOutbound:
+      row.MonthlyWhatsAppOutbound == null
+        ? null
+        : Number(row.MonthlyWhatsAppOutbound),
     createdAtUtc: row.CreatedAtUtc,
     updatedAtUtc: row.UpdatedAtUtc,
   };
@@ -48,11 +74,18 @@ function mapSubscription(row: SubscriptionRow): Subscription {
   };
 }
 
-export async function getPlanByCode(code: string): Promise<Plan | null> {
-  const result = await query<PlanRow>(
-    `SELECT PlanID, Code, DisplayName, Status, CreatedAtUtc, UpdatedAtUtc
-     FROM TblPlan
-     WHERE Code = @code`,
+const PLAN_SELECT = `
+  PlanID, Code, DisplayName, Status,
+  MaxWhatsAppConnections, MaxAgents, MaxActiveKnowledgeItems,
+  MonthlyAiReplies, MonthlyWhatsAppOutbound,
+  CreatedAtUtc, UpdatedAtUtc`;
+
+export async function getPlanByCode(
+  code: string,
+  trx?: TransactionClient,
+): Promise<Plan | null> {
+  const result = await db(trx).query<PlanRow>(
+    `SELECT ${PLAN_SELECT} FROM TblPlan WHERE Code = @code`,
     [{ name: "code", type: sql.NVarChar(64), value: code }],
   );
   const row = result.recordset[0];
@@ -80,16 +113,19 @@ export async function getSubscriptionByBusinessId(params: {
   return row ? mapSubscription(row) : null;
 }
 
-export async function insertSubscription(params: {
-  businessId: string;
-  planId: string;
-  status?: SubscriptionStatus;
-}): Promise<Subscription> {
+export async function insertSubscription(
+  params: {
+    businessId: string;
+    planId: string;
+    status?: SubscriptionStatus;
+  },
+  trx?: TransactionClient,
+): Promise<Subscription> {
   const subscriptionId = randomUUID();
   const now = new Date();
   const status = params.status ?? "ACTIVE";
 
-  await query(
+  await db(trx).query(
     `INSERT INTO TblSubscription (
       SubscriptionID, BusinessID, PlanID, Status,
       PeriodStartUtc, PeriodEndUtc, CreatedAtUtc, UpdatedAtUtc

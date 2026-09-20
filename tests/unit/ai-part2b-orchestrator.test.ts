@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { processAiReplyJob } from "@/modules/ai/orchestrator";
 import { WhatsAppRuntimeError } from "@/modules/channels/runtime-client";
 import { aiOutboundIdempotencyKey } from "@/modules/ai/outbound-policy";
+import {
+  PLAN_ERROR_CODES,
+  PlanEntitlementError,
+} from "@/modules/billing/errors";
 import type { AiReplyJob } from "@/types/domain";
 
 const settingsMocks = vi.hoisted(() => ({
@@ -40,6 +44,12 @@ const messagingMocks = vi.hoisted(() => ({
   touchConversationOutbound: vi.fn(),
   insertUsageEventInTrx: vi.fn(),
 }));
+const billingMocks = vi.hoisted(() => ({
+  reserveQuota: vi.fn(),
+  consumeQuotaReservation: vi.fn(),
+  releaseQuotaReservation: vi.fn(),
+  markQuotaReservationUncertain: vi.fn(),
+}));
 const dbMocks = vi.hoisted(() => ({
   withTransaction: vi.fn(async (fn: (trx: unknown) => Promise<unknown>) => fn({})),
 }));
@@ -52,7 +62,7 @@ vi.mock("@/modules/agents/service", () => agentMocks);
 vi.mock("@/modules/channels/repository", () => channelMocks);
 vi.mock("@/modules/knowledge/service", () => knowledgeMocks);
 vi.mock("@/modules/messaging/repository", () => messagingMocks);
-vi.mock("@/modules/usage/service", () => ({ recordUsageEvent: vi.fn() }));
+vi.mock("@/modules/billing/entitlements", () => billingMocks);
 vi.mock("@/lib/db", () => dbMocks);
 
 function baseJob(overrides: Partial<AiReplyJob> = {}): AiReplyJob {
@@ -147,6 +157,15 @@ describe("Phase 3B Part 2B orchestrator outbound", () => {
     });
     messagingMocks.touchConversationOutbound.mockResolvedValue(undefined);
     messagingMocks.insertUsageEventInTrx.mockResolvedValue(undefined);
+    billingMocks.reserveQuota.mockResolvedValue({
+      reservationId: "r1",
+      state: "RESERVED",
+      idempotent: false,
+      periodStartUtc: new Date(),
+    });
+    billingMocks.consumeQuotaReservation.mockResolvedValue(undefined);
+    billingMocks.releaseQuotaReservation.mockResolvedValue(undefined);
+    billingMocks.markQuotaReservationUncertain.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -214,7 +233,7 @@ describe("Phase 3B Part 2B orchestrator outbound", () => {
       expect.objectContaining({ providerMessageId: "wa-original" }),
       expect.anything(),
     );
-    expect(messagingMocks.insertUsageEventInTrx).toHaveBeenCalledTimes(2);
+    expect(billingMocks.consumeQuotaReservation).toHaveBeenCalledTimes(2);
   });
 
   it("8/9/10. unknown does not regenerate; reuses text + key", async () => {
@@ -414,7 +433,7 @@ describe("Phase 3B Part 2B orchestrator outbound", () => {
     expect(stale.status).toBe("LEASE_LOST");
     expect(messagingMocks.insertMessageIdempotent).not.toHaveBeenCalled();
     expect(messagingMocks.touchConversationOutbound).not.toHaveBeenCalled();
-    expect(messagingMocks.insertUsageEventInTrx).not.toHaveBeenCalled();
+    expect(billingMocks.consumeQuotaReservation).not.toHaveBeenCalled();
     expect(jobsMocks.completeJob).not.toHaveBeenCalled();
 
     // completeJob throws after side-effect calls → LEASE_LOST (TX would roll back).
@@ -445,7 +464,7 @@ describe("Phase 3B Part 2B orchestrator outbound", () => {
       logger: { info() {}, warn() {} },
     });
     expect(lostOnComplete.status).toBe("LEASE_LOST");
-    expect(messagingMocks.insertUsageEventInTrx).not.toHaveBeenCalled();
+    expect(billingMocks.consumeQuotaReservation).not.toHaveBeenCalled();
 
     // Terminal SKIPPED path must not pretend SKIPPED when lease is lost.
     vi.clearAllMocks();
@@ -468,5 +487,61 @@ describe("Phase 3B Part 2B orchestrator outbound", () => {
     });
     expect(lostSkip.status).toBe("LEASE_LOST");
     expect(lostSkip.errorCode).toBe("LEASE_LOST");
+  });
+
+  it("exhausted AI quota skips before Gemini", async () => {
+    billingMocks.reserveQuota.mockRejectedValueOnce(
+      new PlanEntitlementError(PLAN_ERROR_CODES.AI_QUOTA_EXCEEDED),
+    );
+    const generateReply = vi.fn(async () => {
+      throw new Error("must not call Gemini");
+    });
+    const sendMock = vi.fn();
+    const result = await processAiReplyJob({
+      job: baseJob(),
+      sendMessage: sendMock,
+      provider: { generateReply },
+      logger: { info() {}, warn() {} },
+    });
+    expect(result.status).toBe("SKIPPED");
+    expect(result.errorCode).toBe(PLAN_ERROR_CODES.AI_QUOTA_EXCEEDED);
+    expect(generateReply).not.toHaveBeenCalled();
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("exhausted WA quota skips before external send and releases AI", async () => {
+    billingMocks.reserveQuota
+      .mockResolvedValueOnce({
+        reservationId: "ai-r",
+        state: "RESERVED",
+        idempotent: false,
+        periodStartUtc: new Date(),
+      })
+      .mockRejectedValueOnce(
+        new PlanEntitlementError(
+          PLAN_ERROR_CODES.WHATSAPP_OUTBOUND_QUOTA_EXCEEDED,
+        ),
+      );
+    const sendMock = vi.fn();
+    const result = await processAiReplyJob({
+      job: baseJob({
+        generatedReplyText: "محفوظ",
+        generatedModel: "mock",
+        generatedAtUtc: new Date(),
+      }),
+      sendMessage: sendMock,
+      provider: {
+        async generateReply() {
+          throw new Error("must not regenerate");
+        },
+      },
+      logger: { info() {}, warn() {} },
+    });
+    expect(result.status).toBe("SKIPPED");
+    expect(result.errorCode).toBe(
+      PLAN_ERROR_CODES.WHATSAPP_OUTBOUND_QUOTA_EXCEEDED,
+    );
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(billingMocks.releaseQuotaReservation).toHaveBeenCalled();
   });
 });

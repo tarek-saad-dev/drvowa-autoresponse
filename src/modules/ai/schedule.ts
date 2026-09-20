@@ -1,4 +1,5 @@
 import type { TransactionClient } from "@/lib/db";
+import { isAiQuotaLikelyExhausted } from "@/modules/billing/entitlements";
 import type { MessageContentType } from "@/types/domain";
 
 import { evaluateConversationAiScheduleGate } from "./conversation-state-repository";
@@ -68,6 +69,16 @@ export async function maybeScheduleAiReplyAfterInbound(params: {
   );
   if (!guard.allow) {
     return { scheduled: false, reason: guard.reason ?? "LOOP_GUARD_ACTIVE" };
+  }
+
+  // Optional fast path only — worker reserveQuota is the concurrency gate.
+  // Errors here must not block scheduling.
+  try {
+    if (await isAiQuotaLikelyExhausted(params.businessId)) {
+      return { scheduled: false, reason: "PLAN_AI_QUOTA_EXCEEDED" };
+    }
+  } catch {
+    // ignore — authoritative reserve happens in the worker
   }
 
   const result = await scheduleOrCoalesceJob(

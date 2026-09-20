@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { query, sql } from "@/lib/db";
+import { query, sql, type TransactionClient } from "@/lib/db";
 import { normalizeUuid } from "@/lib/ids/uuid";
 import type { Agent } from "@/types/domain";
 
@@ -17,6 +17,12 @@ type AgentRow = {
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
+
+function db(trx?: TransactionClient) {
+  return {
+    query: trx?.query.bind(trx) ?? query,
+  };
+}
 
 function mapAgent(row: AgentRow): Agent {
   return {
@@ -76,21 +82,24 @@ export async function getAgent(params: {
   return row ? mapAgent(row) : null;
 }
 
-export async function createAgent(params: {
-  businessId: string;
-  name: string;
-  roleTitle: string;
-  language: string;
-  dialect?: string | null;
-  tone?: string | null;
-  instructions?: string | null;
-  isActive?: boolean;
-}): Promise<Agent> {
+export async function createAgent(
+  params: {
+    businessId: string;
+    name: string;
+    roleTitle: string;
+    language: string;
+    dialect?: string | null;
+    tone?: string | null;
+    instructions?: string | null;
+    isActive?: boolean;
+  },
+  trx?: TransactionClient,
+): Promise<Agent> {
   const agentId = randomUUID();
   const now = new Date();
   const isActive = params.isActive ?? true;
 
-  await query(
+  await db(trx).query(
     `INSERT INTO TblAgent (
       AgentID, BusinessID, Name, RoleTitle, Language, Dialect, Tone,
       Instructions, IsActive, CreatedAtUtc, UpdatedAtUtc

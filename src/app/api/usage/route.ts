@@ -1,5 +1,6 @@
 import { requireApiBusiness } from "@/lib/api/auth-context";
 import { handleApiError, jsonOk } from "@/lib/api/http";
+import { getEntitlementSnapshot } from "@/modules/billing/entitlements";
 import { listUsageEvents } from "@/modules/usage/service";
 
 export async function GET(request: Request) {
@@ -11,14 +12,33 @@ export async function GET(request: Request) {
     const { businessId } = await requireApiBusiness({
       businessId: queryBusinessId,
     });
-    const events = await listUsageEvents({
-      businessId,
-      limit:
-        limit !== undefined && Number.isFinite(limit) && limit > 0
-          ? Math.min(limit, 200)
-          : undefined,
+    const [snapshot, events] = await Promise.all([
+      getEntitlementSnapshot(businessId),
+      listUsageEvents({
+        businessId,
+        limit:
+          limit !== undefined && Number.isFinite(limit) && limit > 0
+            ? Math.min(limit, 200)
+            : undefined,
+      }),
+    ]);
+    return jsonOk({
+      usagePeriod: {
+        usagePeriodStartUtc: snapshot.usagePeriod.usagePeriodStartUtc,
+        usagePeriodEndUtc: snapshot.usagePeriod.usagePeriodEndUtc,
+      },
+      summary: {
+        aiReplies: snapshot.aiUsed,
+        whatsappOutbound: snapshot.whatsappOutboundUsed,
+        limits: snapshot.plan
+          ? {
+              monthlyAiReplies: snapshot.plan.monthlyAiReplies,
+              monthlyWhatsAppOutbound: snapshot.plan.monthlyWhatsAppOutbound,
+            }
+          : null,
+      },
+      events,
     });
-    return jsonOk({ events });
   } catch (error) {
     return handleApiError(error);
   }

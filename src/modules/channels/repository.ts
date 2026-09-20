@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { query, sql } from "@/lib/db";
+import { query, sql, type TransactionClient } from "@/lib/db";
 import { normalizeNullableUuid, normalizeUuid } from "@/lib/ids/uuid";
 import type {
   ChannelConnection,
@@ -21,6 +21,12 @@ type ChannelRow = {
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
+
+function db(trx?: TransactionClient) {
+  return {
+    query: trx?.query.bind(trx) ?? query,
+  };
+}
 
 function mapConnection(row: ChannelRow): ChannelConnection {
   return {
@@ -114,7 +120,8 @@ export async function getChannelConnection(params: {
 /**
  * Creates an inactive control-plane shell row (no WhatsApp runtime).
  */
-export async function createChannelConnectionShell(params: {
+export async function createChannelConnectionShell(
+  params: {
   businessId: string;
   channel?: string;
   provider?: string;
@@ -123,7 +130,9 @@ export async function createChannelConnectionShell(params: {
   externalAccountKey?: string | null;
   status?: ChannelConnectionStatus;
   isActive?: boolean;
-}): Promise<ChannelConnection> {
+  },
+  trx?: TransactionClient,
+): Promise<ChannelConnection> {
   const channelConnectionId = randomUUID();
   const now = new Date();
   const channel = params.channel ?? "WHATSAPP";
@@ -132,7 +141,7 @@ export async function createChannelConnectionShell(params: {
   const isActive = params.isActive ?? false;
   const externalAccountKey = params.externalAccountKey ?? null;
 
-  await query(
+  await db(trx).query(
     `INSERT INTO TblChannelConnection (
       ChannelConnectionID, BusinessID, LocationID, Channel, Provider,
       ExternalAccountKey, DisplayName, MaskedPhone, Status, IsActive,
