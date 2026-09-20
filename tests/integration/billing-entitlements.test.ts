@@ -8,6 +8,7 @@ import {
   consumeQuotaReservation,
   getCurrentSubscription,
   getEntitlementSnapshot,
+  markQuotaReservationUncertain,
   releaseQuotaReservation,
   reserveQuota,
   withResourceLimitGate,
@@ -87,6 +88,45 @@ async function countUsageEvents(
     ],
   );
   return Number(result.recordset[0]?.Cnt ?? 0);
+}
+
+async function getReservationState(
+  businessId: string,
+  eventType: string,
+  reservationKey: string,
+): Promise<string | null> {
+  const result = await query<{ State: string }>(
+    `SELECT State FROM TblUsageReservation
+     WHERE BusinessID = @businessId
+       AND EventType = @eventType
+       AND ReservationKey = @reservationKey`,
+    [
+      { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+      { name: "eventType", type: sql.NVarChar(64), value: eventType },
+      { name: "reservationKey", type: sql.NVarChar(200), value: reservationKey },
+    ],
+  );
+  return result.recordset[0]?.State ?? null;
+}
+
+async function onboardBillingBiz(suffix: string, label: string) {
+  clearTestCookies();
+  const auth = await signup({
+    email: `bill-${label}-${suffix}@example.com`,
+    password: "Password123!",
+    fullName: label,
+  });
+  return completeOnboarding({
+    userId: auth.user.userId,
+    business: {
+      name: `${label}Biz ${suffix}`,
+      category: "retail",
+      countryCode: "SA",
+      locale: "ar",
+      timezone: "Asia/Riyadh",
+    },
+    agent: { name: "Agent" },
+  });
 }
 
 describe("billing entitlements foundation", () => {
@@ -443,6 +483,183 @@ describe("billing entitlements foundation", () => {
     expect(retryWa.idempotent).toBe(true);
     expect(await getCounter(businessId, USAGE_EVENT_AI_REPLY, period.usagePeriodStartUtc)).toBe(1);
     expect(await getCounter(businessId, USAGE_EVENT_WHATSAPP_OUTBOUND, period.usagePeriodStartUtc)).toBe(1);
+  });
+
+  it("release states: RESERVED/RELEASED/UNCERTAIN/CONSUMED", async ({
+    skip,
+  }) => {
+    requireDb(skip);
+    const suffix = randomUUID().slice(0, 8);
+    const onboarded = await onboardBillingBiz(suffix, "relstate");
+    const businessId = onboarded.business.businessId;
+    const period = resolveUtcMonthPeriod();
+
+    // 1. RESERVED → release → RELEASED, counter -1
+    const reservedKey = aiReplyReservationKey(randomUUID());
+    await reserveQuota({
+      businessId,
+      eventType: USAGE_EVENT_AI_REPLY,
+      reservationKey: reservedKey,
+    });
+    expect(await getCounter(businessId, USAGE_EVENT_AI_REPLY, period.usagePeriodStartUtc)).toBe(1);
+    await releaseQuotaReservation({
+      businessId,
+      eventType: USAGE_EVENT_AI_REPLY,
+      reservationKey: reservedKey,
+    });
+    expect(await getReservationState(businessId, USAGE_EVENT_AI_REPLY, reservedKey)).toBe(
+      "RELEASED",
+    );
+    expect(await getCounter(businessId, USAGE_EVENT_AI_REPLY, period.usagePeriodStartUtc)).toBe(0);
+
+    // 2. duplicate release — still RELEASED, counter unchanged
+    await releaseQuotaReservation({
+      businessId,
+      eventType: USAGE_EVENT_AI_REPLY,
+      reservationKey: reservedKey,
+    });
+    expect(await getReservationState(businessId, USAGE_EVENT_AI_REPLY, reservedKey)).toBe(
+      "RELEASED",
+    );
+    expect(await getCounter(businessId, USAGE_EVENT_AI_REPLY, period.usagePeriodStartUtc)).toBe(0);
+
+    // 3. UNCERTAIN → release attempt — remains UNCERTAIN, counter unchanged
+    const uncertainKey = aiReplyReservationKey(randomUUID());
+    await reserveQuota({
+      businessId,
+      eventType: USAGE_EVENT_AI_REPLY,
+      reservationKey: uncertainKey,
+    });
+    await markQuotaReservationUncertain({
+      businessId,
+      eventType: USAGE_EVENT_AI_REPLY,
+      reservationKey: uncertainKey,
+    });
+    expect(await getReservationState(businessId, USAGE_EVENT_AI_REPLY, uncertainKey)).toBe(
+      "UNCERTAIN",
+    );
+    expect(await getCounter(businessId, USAGE_EVENT_AI_REPLY, period.usagePeriodStartUtc)).toBe(1);
+    await releaseQuotaReservation({
+      businessId,
+      eventType: USAGE_EVENT_AI_REPLY,
+      reservationKey: uncertainKey,
+    });
+    expect(await getReservationState(businessId, USAGE_EVENT_AI_REPLY, uncertainKey)).toBe(
+      "UNCERTAIN",
+    );
+    expect(await getCounter(businessId, USAGE_EVENT_AI_REPLY, period.usagePeriodStartUtc)).toBe(1);
+
+    // 4. CONSUMED → release attempt — remains CONSUMED, counter unchanged, one usage event
+    const consumedKey = aiReplyReservationKey(randomUUID());
+    await reserveQuota({
+      businessId,
+      eventType: USAGE_EVENT_AI_REPLY,
+      reservationKey: consumedKey,
+    });
+    await consumeQuotaReservation({
+      businessId,
+      eventType: USAGE_EVENT_AI_REPLY,
+      reservationKey: consumedKey,
+      metadata: { test: true },
+    });
+    expect(await getReservationState(businessId, USAGE_EVENT_AI_REPLY, consumedKey)).toBe(
+      "CONSUMED",
+    );
+    expect(await getCounter(businessId, USAGE_EVENT_AI_REPLY, period.usagePeriodStartUtc)).toBe(2);
+    expect(await countUsageEvents(businessId, USAGE_EVENT_AI_REPLY, consumedKey)).toBe(1);
+    await releaseQuotaReservation({
+      businessId,
+      eventType: USAGE_EVENT_AI_REPLY,
+      reservationKey: consumedKey,
+    });
+    expect(await getReservationState(businessId, USAGE_EVENT_AI_REPLY, consumedKey)).toBe(
+      "CONSUMED",
+    );
+    expect(await getCounter(businessId, USAGE_EVENT_AI_REPLY, period.usagePeriodStartUtc)).toBe(2);
+    expect(await countUsageEvents(businessId, USAGE_EVENT_AI_REPLY, consumedKey)).toBe(1);
+  });
+
+  it("ambiguous then definitive release preserves UNCERTAIN commitments", async ({
+    skip,
+  }) => {
+    requireDb(skip);
+    const suffix = randomUUID().slice(0, 8);
+    const onboarded = await onboardBillingBiz(suffix, "ambdef");
+    const businessId = onboarded.business.businessId;
+    const jobId = randomUUID();
+    const aiKey = aiReplyReservationKey(jobId);
+    const waKey = waOutboundReservationKey(jobId);
+    const period = resolveUtcMonthPeriod();
+
+    // Attempt A: reserve + mark UNCERTAIN (ambiguous outbound)
+    await reserveQuota({
+      businessId,
+      eventType: USAGE_EVENT_AI_REPLY,
+      reservationKey: aiKey,
+    });
+    await reserveQuota({
+      businessId,
+      eventType: USAGE_EVENT_WHATSAPP_OUTBOUND,
+      reservationKey: waKey,
+    });
+    await markQuotaReservationUncertain({
+      businessId,
+      eventType: USAGE_EVENT_AI_REPLY,
+      reservationKey: aiKey,
+    });
+    await markQuotaReservationUncertain({
+      businessId,
+      eventType: USAGE_EVENT_WHATSAPP_OUTBOUND,
+      reservationKey: waKey,
+    });
+    expect(await getReservationState(businessId, USAGE_EVENT_AI_REPLY, aiKey)).toBe("UNCERTAIN");
+    expect(await getReservationState(businessId, USAGE_EVENT_WHATSAPP_OUTBOUND, waKey)).toBe(
+      "UNCERTAIN",
+    );
+    expect(await getCounter(businessId, USAGE_EVENT_AI_REPLY, period.usagePeriodStartUtc)).toBe(1);
+    expect(
+      await getCounter(businessId, USAGE_EVENT_WHATSAPP_OUTBOUND, period.usagePeriodStartUtc),
+    ).toBe(1);
+
+    // Attempt B: same keys — idempotent UNCERTAIN, then accidental release path
+    const retryAi = await reserveQuota({
+      businessId,
+      eventType: USAGE_EVENT_AI_REPLY,
+      reservationKey: aiKey,
+    });
+    const retryWa = await reserveQuota({
+      businessId,
+      eventType: USAGE_EVENT_WHATSAPP_OUTBOUND,
+      reservationKey: waKey,
+    });
+    expect(retryAi.state).toBe("UNCERTAIN");
+    expect(retryAi.idempotent).toBe(true);
+    expect(retryWa.state).toBe("UNCERTAIN");
+    expect(retryWa.idempotent).toBe(true);
+    expect(await getCounter(businessId, USAGE_EVENT_AI_REPLY, period.usagePeriodStartUtc)).toBe(1);
+    expect(
+      await getCounter(businessId, USAGE_EVENT_WHATSAPP_OUTBOUND, period.usagePeriodStartUtc),
+    ).toBe(1);
+
+    await releaseQuotaReservation({
+      businessId,
+      eventType: USAGE_EVENT_AI_REPLY,
+      reservationKey: aiKey,
+    });
+    await releaseQuotaReservation({
+      businessId,
+      eventType: USAGE_EVENT_WHATSAPP_OUTBOUND,
+      reservationKey: waKey,
+    });
+
+    expect(await getReservationState(businessId, USAGE_EVENT_AI_REPLY, aiKey)).toBe("UNCERTAIN");
+    expect(await getReservationState(businessId, USAGE_EVENT_WHATSAPP_OUTBOUND, waKey)).toBe(
+      "UNCERTAIN",
+    );
+    expect(await getCounter(businessId, USAGE_EVENT_AI_REPLY, period.usagePeriodStartUtc)).toBe(1);
+    expect(
+      await getCounter(businessId, USAGE_EVENT_WHATSAPP_OUTBOUND, period.usagePeriodStartUtc),
+    ).toBe(1);
   });
 
   it("13/14/15. agent / knowledge / whatsapp cannot exceed FREE limits", async ({

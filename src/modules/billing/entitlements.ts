@@ -780,16 +780,18 @@ export async function releaseQuotaReservation(params: {
     );
     const row = existing.recordset[0];
     if (!row) return;
-    if (row.State === "RELEASED") return;
-    if (row.State === "CONSUMED") {
-      throw new Error("cannot release consumed reservation");
+    // Only RESERVED may be released. UNCERTAIN/CONSUMED/RELEASED stay put —
+    // a later definitive failure must never erase a prior ambiguous commitment.
+    if (row.State !== "RESERVED") {
+      return;
     }
-    // RESERVED or UNCERTAIN → RELEASED + decrement
+
     await trx.execute(
       `UPDATE TblUsageReservation
        SET State = N'RELEASED',
            UpdatedAtUtc = SYSUTCDATETIME()
-       WHERE UsageReservationID = @id`,
+       WHERE UsageReservationID = @id
+         AND State = N'RESERVED'`,
       [
         {
           name: "id",

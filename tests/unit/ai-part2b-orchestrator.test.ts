@@ -544,4 +544,115 @@ describe("Phase 3B Part 2B orchestrator outbound", () => {
     expect(sendMock).not.toHaveBeenCalled();
     expect(billingMocks.releaseQuotaReservation).toHaveBeenCalled();
   });
+
+  it("ambiguous then LOGGED_OUT does not release prior UNCERTAIN", async () => {
+    const job = baseJob({
+      generatedReplyText: "محفوظ",
+      generatedModel: "mock",
+      generatedAtUtc: new Date(),
+    });
+    const reserved = {
+      reservationId: "r1",
+      state: "RESERVED" as const,
+      idempotent: false,
+      periodStartUtc: new Date(),
+    };
+    const uncertain = {
+      reservationId: "r1",
+      state: "UNCERTAIN" as const,
+      idempotent: true,
+      periodStartUtc: new Date(),
+    };
+
+    billingMocks.reserveQuota
+      .mockResolvedValueOnce(reserved)
+      .mockResolvedValueOnce(reserved);
+    const attemptA = await processAiReplyJob({
+      job,
+      sendMessage: vi.fn().mockRejectedValue(
+        new WhatsAppRuntimeError("unknown", {
+          status: 202,
+          code: "OUTBOUND_RESULT_UNKNOWN",
+        }),
+      ),
+      provider: {
+        async generateReply() {
+          throw new Error("must not regenerate");
+        },
+      },
+      logger: { info() {}, warn() {} },
+    });
+    expect(attemptA.status).toBe("DEFERRED");
+    expect(billingMocks.markQuotaReservationUncertain).toHaveBeenCalled();
+    expect(billingMocks.releaseQuotaReservation).not.toHaveBeenCalled();
+
+    billingMocks.releaseQuotaReservation.mockClear();
+    billingMocks.markQuotaReservationUncertain.mockClear();
+    billingMocks.reserveQuota
+      .mockResolvedValueOnce(uncertain)
+      .mockResolvedValueOnce(uncertain);
+
+    const attemptB = await processAiReplyJob({
+      job: { ...job, attemptCount: 2 },
+      sendMessage: vi.fn().mockRejectedValue(
+        new WhatsAppRuntimeError("logged out", {
+          status: 401,
+          code: "LOGGED_OUT",
+        }),
+      ),
+      provider: {
+        async generateReply() {
+          throw new Error("must not regenerate");
+        },
+      },
+      logger: { info() {}, warn() {} },
+    });
+    expect(attemptB.status).toBe("FAILED");
+    expect(attemptB.errorCode).toBe("LOGGED_OUT");
+    // Must not auto-release an UNCERTAIN commitment from Attempt A
+    expect(billingMocks.releaseQuotaReservation).not.toHaveBeenCalled();
+  });
+
+  it("pre-send skip after prior UNCERTAIN does not release commitment", async () => {
+    const job = baseJob({
+      generatedReplyText: "محفوظ",
+      generatedModel: "mock",
+      generatedAtUtc: new Date(),
+    });
+    billingMocks.reserveQuota.mockResolvedValue({
+      reservationId: "r-unc",
+      state: "UNCERTAIN",
+      idempotent: true,
+      periodStartUtc: new Date(),
+    });
+    settingsMocks.getChannelAiSettingByConnection
+      .mockResolvedValueOnce({
+        autoReplyEnabled: true,
+        enabledAtUtc: new Date("2020-01-01T00:00:00.000Z"),
+        agentId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        debounceMs: 50,
+      })
+      .mockResolvedValueOnce({
+        autoReplyEnabled: false,
+        enabledAtUtc: new Date("2020-01-01T00:00:00.000Z"),
+        agentId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        debounceMs: 50,
+      });
+
+    const sendMock = vi.fn();
+    const result = await processAiReplyJob({
+      job,
+      sendMessage: sendMock,
+      provider: {
+        async generateReply() {
+          throw new Error("must not regenerate");
+        },
+      },
+      logger: { info() {}, warn() {} },
+    });
+    expect(result.status).toBe("SKIPPED");
+    expect(result.errorCode).toBe("AI_DISABLED_BEFORE_SEND");
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(billingMocks.releaseQuotaReservation).not.toHaveBeenCalled();
+  });
 });

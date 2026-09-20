@@ -360,12 +360,14 @@ export async function processAiReplyJob(params: {
 
   // Authoritative AI quota gate (idempotent on retries / reclaim).
   try {
-    await reserveQuota({
+    const aiReserve = await reserveQuota({
       businessId,
       eventType: USAGE_EVENT_AI_REPLY,
       reservationKey: aiKey,
     });
-    aiReserved = true;
+    // Only RESERVED commitments may be auto-released on definitive failure.
+    // UNCERTAIN/CONSUMED from a prior attempt must be preserved.
+    aiReserved = aiReserve.state === "RESERVED";
   } catch (error) {
     if (isPlanEntitlementError(error)) {
       return finishTerminal("SKIPPED", error.code);
@@ -594,12 +596,12 @@ export async function processAiReplyJob(params: {
   }
 
   try {
-    await reserveQuota({
+    const waReserve = await reserveQuota({
       businessId,
       eventType: USAGE_EVENT_WHATSAPP_OUTBOUND,
       reservationKey: waKey,
     });
-    waReserved = true;
+    waReserved = waReserve.state === "RESERVED";
   } catch (error) {
     if (isPlanEntitlementError(error)) {
       await releaseAiQuota();
