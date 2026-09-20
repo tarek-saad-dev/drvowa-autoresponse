@@ -25,15 +25,11 @@ const guardMocks = vi.hoisted(() => ({
 const conversationStateMocks = vi.hoisted(() => ({
   evaluateConversationAiScheduleGate: vi.fn(),
 }));
-const billingMocks = vi.hoisted(() => ({
-  isAiQuotaLikelyExhausted: vi.fn().mockResolvedValue(false),
-}));
 
 vi.mock("@/modules/ai/settings-repository", () => settingsMocks);
 vi.mock("@/modules/ai/jobs-repository", () => jobsMocks);
 vi.mock("@/modules/ai/guard-repository", () => guardMocks);
 vi.mock("@/modules/ai/conversation-state-repository", () => conversationStateMocks);
-vi.mock("@/modules/billing/entitlements", () => billingMocks);
 
 describe("Phase 3B AI provider helpers", () => {
   it("21. reply length bounded", () => {
@@ -113,7 +109,6 @@ describe("Phase 3B schedule gates", () => {
       allow: true,
       state: { mode: "AUTO" },
     });
-    billingMocks.isAiQuotaLikelyExhausted.mockResolvedValue(false);
   });
 
   afterEach(() => {

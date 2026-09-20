@@ -183,9 +183,26 @@ describe("Phase 3B Part 1.3 AI loop guard", () => {
 
   async function claimJobForConversation(conversationId: string) {
     await forceDue(conversationId);
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 50; i++) {
       const job = await claimNextJob({ businessId, leaseSeconds: 30 });
-      if (!job) return null;
+      if (!job) {
+        // Brief wait for debounce / NotBeforeUtc then retry.
+        await new Promise((r) => setTimeout(r, 25));
+        await forceDue(conversationId);
+        const retry = await claimNextJob({ businessId, leaseSeconds: 30 });
+        if (!retry) return null;
+        if (retry.conversationId.toLowerCase() === conversationId.toLowerCase()) {
+          return retry;
+        }
+        await completeJob({
+          businessId,
+          jobId: retry.aiReplyJobId,
+          status: "SKIPPED",
+          errorCode: "TEST_WRONG_CONVERSATION",
+          leaseToken: retry.leaseToken,
+        });
+        continue;
+      }
       if (job.conversationId.toLowerCase() === conversationId.toLowerCase()) {
         return job;
       }
@@ -194,6 +211,7 @@ describe("Phase 3B Part 1.3 AI loop guard", () => {
         jobId: job.aiReplyJobId,
         status: "SKIPPED",
         errorCode: "TEST_WRONG_CONVERSATION",
+        leaseToken: job.leaseToken,
       });
       await forceDue(conversationId);
     }
@@ -256,6 +274,7 @@ describe("Phase 3B Part 1.3 AI loop guard", () => {
   }) => {
     requireDb(skip);
     await enableAi(50);
+    await clearPendingJobs();
     const contact = `20155562${String(Date.now()).slice(-6)}@s.whatsapp.net`;
     const sendMock = vi.fn().mockResolvedValue({
       success: true,
@@ -316,6 +335,7 @@ describe("Phase 3B Part 1.3 AI loop guard", () => {
   it("8/9/10. guard scoped to conversation and business", async ({ skip }) => {
     requireDb(skip);
     await enableAi(50);
+    await clearPendingJobs();
     const contactA = `20155563${String(Date.now()).slice(-5)}1@s.whatsapp.net`;
     const contactB = `20155563${String(Date.now()).slice(-5)}2@s.whatsapp.net`;
 

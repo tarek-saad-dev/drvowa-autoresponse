@@ -261,27 +261,34 @@ export async function processAiReplyJob(params: {
 
   const aiKey = aiReplyReservationKey(job.aiReplyJobId);
   const waKey = waOutboundReservationKey(job.aiReplyJobId);
-  let aiReserved = false;
-  let waReserved = false;
+  // releaseEligible: this attempt freshly reserved (RESERVED && !idempotent).
+  // held: any live commitment (RESERVED or UNCERTAIN) — needed to mark UNCERTAIN
+  // after ambiguity even when reclaiming a prior RESERVED from a crash window.
+  let aiReleaseEligible = false;
+  let waReleaseEligible = false;
+  let aiHeld = false;
+  let waHeld = false;
 
   async function releaseAiQuota(): Promise<void> {
-    if (!aiReserved) return;
+    if (!aiReleaseEligible) return;
     await releaseQuotaReservation({
       businessId,
       eventType: USAGE_EVENT_AI_REPLY,
       reservationKey: aiKey,
     });
-    aiReserved = false;
+    aiReleaseEligible = false;
+    aiHeld = false;
   }
 
   async function releaseWaQuota(): Promise<void> {
-    if (!waReserved) return;
+    if (!waReleaseEligible) return;
     await releaseQuotaReservation({
       businessId,
       eventType: USAGE_EVENT_WHATSAPP_OUTBOUND,
       reservationKey: waKey,
     });
-    waReserved = false;
+    waReleaseEligible = false;
+    waHeld = false;
   }
 
   async function releaseReservedQuotas(): Promise<void> {
@@ -290,19 +297,21 @@ export async function processAiReplyJob(params: {
   }
 
   async function keepQuotasUncertain(): Promise<void> {
-    if (aiReserved) {
+    if (aiHeld) {
       await markQuotaReservationUncertain({
         businessId,
         eventType: USAGE_EVENT_AI_REPLY,
         reservationKey: aiKey,
       });
+      aiReleaseEligible = false;
     }
-    if (waReserved) {
+    if (waHeld) {
       await markQuotaReservationUncertain({
         businessId,
         eventType: USAGE_EVENT_WHATSAPP_OUTBOUND,
         reservationKey: waKey,
       });
+      waReleaseEligible = false;
     }
   }
 
@@ -365,9 +374,11 @@ export async function processAiReplyJob(params: {
       eventType: USAGE_EVENT_AI_REPLY,
       reservationKey: aiKey,
     });
-    // Only RESERVED commitments may be auto-released on definitive failure.
-    // UNCERTAIN/CONSUMED from a prior attempt must be preserved.
-    aiReserved = aiReserve.state === "RESERVED";
+    aiHeld =
+      aiReserve.state === "RESERVED" || aiReserve.state === "UNCERTAIN";
+    // Fresh RESERVED only — reused RESERVED (idempotent) must not auto-release.
+    aiReleaseEligible =
+      aiReserve.state === "RESERVED" && aiReserve.idempotent === false;
   } catch (error) {
     if (isPlanEntitlementError(error)) {
       return finishTerminal("SKIPPED", error.code);
@@ -601,7 +612,10 @@ export async function processAiReplyJob(params: {
       eventType: USAGE_EVENT_WHATSAPP_OUTBOUND,
       reservationKey: waKey,
     });
-    waReserved = waReserve.state === "RESERVED";
+    waHeld =
+      waReserve.state === "RESERVED" || waReserve.state === "UNCERTAIN";
+    waReleaseEligible =
+      waReserve.state === "RESERVED" && waReserve.idempotent === false;
   } catch (error) {
     if (isPlanEntitlementError(error)) {
       await releaseAiQuota();

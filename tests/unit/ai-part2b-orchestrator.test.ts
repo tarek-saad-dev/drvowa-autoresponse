@@ -655,4 +655,76 @@ describe("Phase 3B Part 2B orchestrator outbound", () => {
     expect(sendMock).not.toHaveBeenCalled();
     expect(billingMocks.releaseQuotaReservation).not.toHaveBeenCalled();
   });
+
+  it("reused RESERVED (crash window) is not auto-released on definitive failure", async () => {
+    const job = baseJob({
+      generatedReplyText: "محفوظ",
+      generatedModel: "mock",
+      generatedAtUtc: new Date(),
+    });
+    const reusedReserved = {
+      reservationId: "r-reused",
+      state: "RESERVED" as const,
+      idempotent: true,
+      periodStartUtc: new Date(),
+    };
+    billingMocks.reserveQuota
+      .mockResolvedValueOnce(reusedReserved)
+      .mockResolvedValueOnce(reusedReserved);
+
+    const result = await processAiReplyJob({
+      job: { ...job, attemptCount: 2 },
+      sendMessage: vi.fn().mockRejectedValue(
+        new WhatsAppRuntimeError("not ready", {
+          status: 409,
+          code: "NOT_READY",
+        }),
+      ),
+      provider: {
+        async generateReply() {
+          throw new Error("must not regenerate");
+        },
+      },
+      logger: { info() {}, warn() {} },
+    });
+    expect(result.status).toBe("FAILED");
+    expect(result.errorCode).toBe("NOT_READY");
+    expect(billingMocks.releaseQuotaReservation).not.toHaveBeenCalled();
+  });
+
+  it("reused RESERVED can still be marked UNCERTAIN on ambiguous send", async () => {
+    const job = baseJob({
+      generatedReplyText: "محفوظ",
+      generatedModel: "mock",
+      generatedAtUtc: new Date(),
+    });
+    const reusedReserved = {
+      reservationId: "r-reused",
+      state: "RESERVED" as const,
+      idempotent: true,
+      periodStartUtc: new Date(),
+    };
+    billingMocks.reserveQuota
+      .mockResolvedValueOnce(reusedReserved)
+      .mockResolvedValueOnce(reusedReserved);
+
+    const result = await processAiReplyJob({
+      job: { ...job, attemptCount: 2 },
+      sendMessage: vi.fn().mockRejectedValue(
+        new WhatsAppRuntimeError("unknown", {
+          status: 202,
+          code: "OUTBOUND_RESULT_UNKNOWN",
+        }),
+      ),
+      provider: {
+        async generateReply() {
+          throw new Error("must not regenerate");
+        },
+      },
+      logger: { info() {}, warn() {} },
+    });
+    expect(result.status).toBe("DEFERRED");
+    expect(billingMocks.markQuotaReservationUncertain).toHaveBeenCalled();
+    expect(billingMocks.releaseQuotaReservation).not.toHaveBeenCalled();
+  });
 });
