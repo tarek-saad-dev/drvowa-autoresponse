@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 export function DeferredState({
   title,
   description,
-  badge = "المرحلة التالية",
+  badge = "خارج V1",
 }: {
   title: string;
   description: string;
@@ -27,7 +27,7 @@ export function DeferredState({
       </CardHeader>
       <CardContent>
         <p className="text-sm text-muted-foreground">
-          هذه الصفحة جاهزة شكلياً ولن تُفعَّل وظائفها قبل اكتمال المرحلة المناسبة.
+          هذه الصفحة مؤجلة عن قصد وليست جزءاً من نطاق V1 الحالي.
         </p>
       </CardContent>
     </Card>

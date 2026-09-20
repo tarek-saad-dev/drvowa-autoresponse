@@ -38,7 +38,7 @@ export function DashboardSidebar() {
               <span>{item.label}</span>
               {"deferred" in item && item.deferred ? (
                 <Badge variant="muted" className="bg-white/10 text-[10px] text-sidebar-muted">
-                  لاحقاً
+                  خارج V1
                 </Badge>
               ) : null}
             </Link>

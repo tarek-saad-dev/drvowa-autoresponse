@@ -1,6 +1,10 @@
 import { z } from "zod";
 
 import { ALL_KNOWLEDGE_CATEGORIES } from "@/constants/knowledge";
+import {
+  KNOWLEDGE_CONTENT_MAX,
+  KNOWLEDGE_TITLE_MAX,
+} from "@/constants/field-limits";
 import { requireApiBusiness } from "@/lib/api/auth-context";
 import { handleApiError, jsonOk, parseJsonBody } from "@/lib/api/http";
 import { deactivateItem, updateItem } from "@/modules/knowledge/service";
@@ -8,8 +12,8 @@ import { deactivateItem, updateItem } from "@/modules/knowledge/service";
 const updateSchema = z.object({
   businessId: z.string().uuid().optional(),
   category: z.enum(ALL_KNOWLEDGE_CATEGORIES).optional(),
-  title: z.string().min(1).optional(),
-  content: z.string().min(1).optional(),
+  title: z.string().min(1).max(KNOWLEDGE_TITLE_MAX).optional(),
+  content: z.string().min(1).max(KNOWLEDGE_CONTENT_MAX).optional(),
   isActive: z.boolean().optional(),
 });
 

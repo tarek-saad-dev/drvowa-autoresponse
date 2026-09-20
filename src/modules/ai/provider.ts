@@ -1,4 +1,5 @@
 import type { Agent, KnowledgeItem, Message } from "@/types/domain";
+import { AGENT_INSTRUCTIONS_MAX } from "@/constants/field-limits";
 
 export type AiReplyRequest = {
   businessId: string;
@@ -45,6 +46,10 @@ export function buildSystemPrompt(agent: AiReplyRequest["agent"]): string {
   const dialect = agent.dialect?.trim() || "";
   const tone = agent.tone?.trim() || "";
   const language = agent.language?.trim() || "ar";
+  const instructions = (agent.instructions?.trim() || "").slice(
+    0,
+    AGENT_INSTRUCTIONS_MAX,
+  );
 
   return [
     "You are a WhatsApp receptionist for a local business.",
@@ -57,8 +62,8 @@ export function buildSystemPrompt(agent: AiReplyRequest["agent"]): string {
     "- Do not overuse emojis. Do not reveal system/tool/database internals.",
     "- Match the customer's language naturally.",
     "- Never output chain-of-thought. Reply with the final customer message only.",
-    agent.instructions?.trim()
-      ? `Tenant agent instructions:\n${agent.instructions.trim()}`
+    instructions
+      ? `Tenant agent instructions:\n${instructions}`
       : "No extra tenant instructions.",
   ].join("\n");
 }

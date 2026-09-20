@@ -318,6 +318,39 @@ describe("tenant isolation", () => {
     expect(aSub?.subscriptionId).not.toBe(bSub?.subscriptionId);
   });
 
+  it("denies cross-tenant inbox conversation message listing", async ({
+    skip,
+  }) => {
+    requireDb(skip);
+
+    const { listInboxConversations, listInboxMessages } = await import(
+      "@/modules/messaging"
+    );
+
+    const bConversations = await listInboxConversations({
+      businessId: businessBId,
+      limit: 5,
+    });
+    // Even with empty list, foreign random UUID must 404 for A
+    await expect(
+      listInboxMessages({
+        businessId: businessAId,
+        conversationId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+        limit: 10,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+
+    if (bConversations[0]) {
+      await expect(
+        listInboxMessages({
+          businessId: businessAId,
+          conversationId: bConversations[0].conversationId,
+          limit: 10,
+        }),
+      ).rejects.toBeInstanceOf(NotFoundError);
+    }
+  });
+
   it("requires membership to access known foreign business ids", async ({
     skip,
   }) => {

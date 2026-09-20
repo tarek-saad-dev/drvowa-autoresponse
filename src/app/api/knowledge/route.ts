@@ -1,6 +1,10 @@
 import { z } from "zod";
 
 import { ALL_KNOWLEDGE_CATEGORIES } from "@/constants/knowledge";
+import {
+  KNOWLEDGE_CONTENT_MAX,
+  KNOWLEDGE_TITLE_MAX,
+} from "@/constants/field-limits";
 import { requireApiBusiness } from "@/lib/api/auth-context";
 import { handleApiError, jsonOk, parseJsonBody } from "@/lib/api/http";
 import { createItem, listItems } from "@/modules/knowledge/service";
@@ -8,8 +12,8 @@ import { createItem, listItems } from "@/modules/knowledge/service";
 const createSchema = z.object({
   businessId: z.string().uuid().optional(),
   category: z.enum(ALL_KNOWLEDGE_CATEGORIES),
-  title: z.string().min(1, "Title is required"),
-  content: z.string().min(1, "Content is required"),
+  title: z.string().min(1, "Title is required").max(KNOWLEDGE_TITLE_MAX),
+  content: z.string().min(1, "Content is required").max(KNOWLEDGE_CONTENT_MAX),
   knowledgeBaseId: z.string().uuid().optional(),
 });
 

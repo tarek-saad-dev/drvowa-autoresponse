@@ -19,7 +19,7 @@ export default async function KnowledgePage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">المعرفة</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          أدر معلومات نشاطك التي سيعتمد عليها الوكيل لاحقاً.
+          معلومات النشاط التي يستخدمها الوكيل عند الرد على العملاء.
         </p>
       </div>
       <KnowledgeManager items={items} />

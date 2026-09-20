@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { AGENT_INSTRUCTIONS_MAX } from "@/constants/field-limits";
 import { KNOWLEDGE_CATEGORIES } from "@/constants/knowledge";
 
 type KnowledgeDraft = {
@@ -31,44 +32,137 @@ const STEPS = [
   "المعرفة الأولية",
 ] as const;
 
-export function OnboardingWizard() {
-  const router = useRouter();
-  const [step, setStep] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+const DRAFT_KEY = "drvowa_onboarding_draft_v1";
 
-  const [business, setBusiness] = useState({
+type DraftState = {
+  step: number;
+  business: {
+    name: string;
+    category: string;
+    countryCode: string;
+    locale: string;
+    timezone: string;
+  };
+  location: {
+    name: string;
+    city: string;
+    addressLine: string;
+    phone: string;
+    code: string;
+  };
+  agent: {
+    name: string;
+    roleTitle: string;
+    language: string;
+    dialect: string;
+    tone: string;
+    instructions: string;
+  };
+  knowledgeItems: KnowledgeDraft[];
+};
+
+const defaultDraft = (): DraftState => ({
+  step: 0,
+  business: {
     name: "",
     category: "عام",
     countryCode: "SA",
     locale: "ar-SA",
     timezone: "Asia/Riyadh",
-  });
-
-  const [location, setLocation] = useState({
+  },
+  location: {
     name: "",
     city: "",
     addressLine: "",
     phone: "",
     code: "",
-  });
-
-  const [agent, setAgent] = useState({
+  },
+  agent: {
     name: "موظف الاستقبال",
     roleTitle: "AI receptionist",
     language: "ar",
     dialect: "",
     tone: "مهني وودود",
     instructions: "",
-  });
-
-  const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeDraft[]>([
+  },
+  knowledgeItems: [
     {
       category: KNOWLEDGE_CATEGORIES.ABOUT,
       title: "عن النشاط",
       content: "",
     },
-  ]);
+  ],
+});
+
+function loadDraft(): DraftState {
+  if (typeof window === "undefined") return defaultDraft();
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    if (!raw) return defaultDraft();
+    const parsed = JSON.parse(raw) as Partial<DraftState>;
+    const base = defaultDraft();
+    return {
+      ...base,
+      ...parsed,
+      business: { ...base.business, ...parsed.business },
+      location: { ...base.location, ...parsed.location },
+      agent: { ...base.agent, ...parsed.agent },
+      knowledgeItems:
+        parsed.knowledgeItems?.length
+          ? parsed.knowledgeItems
+          : base.knowledgeItems,
+      step:
+        typeof parsed.step === "number"
+          ? Math.min(Math.max(0, parsed.step), STEPS.length - 1)
+          : 0,
+    };
+  } catch {
+    return defaultDraft();
+  }
+}
+
+export function OnboardingWizard() {
+  const router = useRouter();
+  const [hydrated, setHydrated] = useState(false);
+  const [step, setStep] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  const [business, setBusiness] = useState(defaultDraft().business);
+  const [location, setLocation] = useState(defaultDraft().location);
+  const [agent, setAgent] = useState(defaultDraft().agent);
+  const [knowledgeItems, setKnowledgeItems] = useState<KnowledgeDraft[]>(
+    defaultDraft().knowledgeItems,
+  );
+
+  useEffect(() => {
+    // Hydrate draft from sessionStorage after mount (SSR-safe).
+    const draft = loadDraft();
+    /* eslint-disable react-hooks/set-state-in-effect -- intentional client restore */
+    setStep(draft.step);
+    setBusiness(draft.business);
+    setLocation(draft.location);
+    setAgent(draft.agent);
+    setKnowledgeItems(draft.knowledgeItems);
+    setHydrated(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const draft: DraftState = {
+      step,
+      business,
+      location,
+      agent,
+      knowledgeItems,
+    };
+    try {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+      // ignore quota / private mode
+    }
+  }, [hydrated, step, business, location, agent, knowledgeItems]);
 
   function updateKnowledge(index: number, patch: Partial<KnowledgeDraft>) {
     setKnowledgeItems((items) =>
@@ -129,6 +223,11 @@ export function OnboardingWizard() {
         setError(data.error ?? data.message ?? "تعذر إكمال الإعداد");
         return;
       }
+      try {
+        sessionStorage.removeItem(DRAFT_KEY);
+      } catch {
+        // ignore
+      }
       router.push("/dashboard?next=whatsapp");
       router.refresh();
     } catch {
@@ -136,6 +235,17 @@ export function OnboardingWizard() {
     } finally {
       setPending(false);
     }
+  }
+
+  if (!hydrated) {
+    return (
+      <Card className="mx-auto w-full max-w-2xl">
+        <CardHeader>
+          <CardTitle>إعداد مساحة العمل</CardTitle>
+          <CardDescription>جاري استعادة التقدم…</CardDescription>
+        </CardHeader>
+      </Card>
+    );
   }
 
   return (
@@ -362,6 +472,7 @@ export function OnboardingWizard() {
                 <Label htmlFor="instructions">التعليمات</Label>
                 <Textarea
                   id="instructions"
+                  maxLength={AGENT_INSTRUCTIONS_MAX}
                   value={agent.instructions}
                   onChange={(e) =>
                     setAgent((a) => ({ ...a, instructions: e.target.value }))
