@@ -4,10 +4,18 @@ import {
   isUniqueViolationError,
   query,
   sql,
+  withTransaction,
   type TransactionClient,
 } from "@/lib/db";
 import { normalizeUuid } from "@/lib/ids/uuid";
 import type { AiReplyJob, AiReplyJobStatus } from "@/types/domain";
+
+import { AiJobLeaseLostError, AI_JOB_LEASE_SECONDS_DEFAULT } from "./lease";
+import {
+  MAX_SEND_RESOLUTION_ATTEMPTS,
+  outboundUnknownRetryDelaySeconds,
+} from "./outbound-policy";
+import { pauseConversationAi } from "./conversation-state-repository";
 
 type JobRow = {
   AiReplyJobID: string;
@@ -20,6 +28,10 @@ type JobRow = {
   NotBeforeUtc: Date;
   AttemptCount: number;
   LeaseUntilUtc: Date | null;
+  LeaseToken: string | null;
+  LeaseOwner: string | null;
+  LeaseVersion: number | null;
+  OutboundUnknownCount: number | null;
   StartedAtUtc: Date | null;
   CompletedAtUtc: Date | null;
   LastErrorCode: string | null;
@@ -34,9 +46,17 @@ type JobRow = {
 const JOB_SELECT_COLS = `
   AiReplyJobID, BusinessID, ChannelConnectionID, ConversationID, ContactID,
   TriggerMessageID, Status, NotBeforeUtc, AttemptCount, LeaseUntilUtc,
+  LeaseToken, LeaseOwner, LeaseVersion, OutboundUnknownCount,
   StartedAtUtc, CompletedAtUtc, LastErrorCode,
   GeneratedReplyText, GeneratedModel, GeneratedAtUtc, OutboundProviderMessageID,
   CreatedAtUtc, UpdatedAtUtc`;
+
+/** Authoritative live-lease fence (token + unexpired). */
+const LIVE_LEASE_FENCE = `
+       AND Status = N'PROCESSING'
+       AND LeaseToken = @leaseToken
+       AND LeaseUntilUtc IS NOT NULL
+       AND LeaseUntilUtc >= SYSUTCDATETIME()`;
 
 function mapJob(row: JobRow): AiReplyJob {
   return {
@@ -50,6 +70,10 @@ function mapJob(row: JobRow): AiReplyJob {
     notBeforeUtc: row.NotBeforeUtc,
     attemptCount: row.AttemptCount,
     leaseUntilUtc: row.LeaseUntilUtc,
+    leaseToken: row.LeaseToken ? normalizeUuid(row.LeaseToken) : null,
+    leaseOwner: row.LeaseOwner,
+    leaseVersion: Number(row.LeaseVersion ?? 0),
+    outboundUnknownCount: Number(row.OutboundUnknownCount ?? 0),
     startedAtUtc: row.StartedAtUtc,
     completedAtUtc: row.CompletedAtUtc,
     lastErrorCode: row.LastErrorCode,
@@ -261,6 +285,10 @@ export async function scheduleOrCoalesceJob(params: {
       generatedModel: null,
       generatedAtUtc: null,
       outboundProviderMessageId: null,
+      leaseToken: null,
+      leaseOwner: null,
+      leaseVersion: 0,
+      outboundUnknownCount: 0,
       createdAtUtc: new Date(),
       updatedAtUtc: new Date(),
     },
@@ -268,13 +296,11 @@ export async function scheduleOrCoalesceJob(params: {
   };
 }
 
-const LEASE_SECONDS = 90;
+const LEASE_SECONDS = AI_JOB_LEASE_SECONDS_DEFAULT;
 
 /**
  * Atomically claim the next eligible job.
- * - Never claims PENDING while another PROCESSING job exists for the same conversation.
- * - Expired PROCESSING leases are reclaimable, including OUTBOUND_RESULT_UNKNOWN.
- * - Prefer reclaiming expired PROCESSING over PENDING for the same ordering window.
+ * Assigns a NEW LeaseToken + increments LeaseVersion on every claim/reclaim.
  */
 export async function claimNextJob(params?: {
   workerId?: string;
@@ -282,6 +308,8 @@ export async function claimNextJob(params?: {
   businessId?: string;
 }): Promise<AiReplyJob | null> {
   const leaseSeconds = params?.leaseSeconds ?? LEASE_SECONDS;
+  const leaseToken = randomUUID();
+  const leaseOwner = (params?.workerId ?? "unknown").slice(0, 128);
   const businessFilter = params?.businessId
     ? "AND BusinessID = @businessId"
     : "";
@@ -321,19 +349,26 @@ export async function claimNextJob(params?: {
      SET Status = N'PROCESSING',
          AttemptCount = AttemptCount + 1,
          LeaseUntilUtc = DATEADD(second, @leaseSeconds, SYSUTCDATETIME()),
+         LeaseToken = @leaseToken,
+         LeaseOwner = @leaseOwner,
+         LeaseVersion = ISNULL(LeaseVersion, 0) + 1,
          StartedAtUtc = ISNULL(StartedAtUtc, SYSUTCDATETIME()),
          UpdatedAtUtc = SYSUTCDATETIME()
      OUTPUT
        INSERTED.AiReplyJobID, INSERTED.BusinessID, INSERTED.ChannelConnectionID,
        INSERTED.ConversationID, INSERTED.ContactID, INSERTED.TriggerMessageID,
        INSERTED.Status, INSERTED.NotBeforeUtc, INSERTED.AttemptCount,
-       INSERTED.LeaseUntilUtc, INSERTED.StartedAtUtc, INSERTED.CompletedAtUtc,
+       INSERTED.LeaseUntilUtc, INSERTED.LeaseToken, INSERTED.LeaseOwner,
+       INSERTED.LeaseVersion, INSERTED.OutboundUnknownCount,
+       INSERTED.StartedAtUtc, INSERTED.CompletedAtUtc,
        INSERTED.LastErrorCode,
        INSERTED.GeneratedReplyText, INSERTED.GeneratedModel, INSERTED.GeneratedAtUtc,
        INSERTED.OutboundProviderMessageID,
        INSERTED.CreatedAtUtc, INSERTED.UpdatedAtUtc;`,
     [
       { name: "leaseSeconds", type: sql.Int, value: leaseSeconds },
+      { name: "leaseToken", type: sql.UniqueIdentifier, value: leaseToken },
+      { name: "leaseOwner", type: sql.NVarChar(128), value: leaseOwner },
       ...(params?.businessId
         ? [
             {
@@ -349,14 +384,50 @@ export async function claimNextJob(params?: {
   return row ? mapJob(row) : null;
 }
 
+/**
+ * DB-authoritative live ownership check. Does not create or extend a lease.
+ */
+export async function assertJobLeaseOwned(params: {
+  businessId: string;
+  jobId: string;
+  leaseToken: string;
+  trx?: TransactionClient;
+}): Promise<void> {
+  const result = await db(params.trx).query<{ Ok: number }>(
+    `SELECT 1 AS Ok
+     FROM TblAiReplyJob
+     WHERE BusinessID = @businessId
+       AND AiReplyJobID = @jobId
+       ${LIVE_LEASE_FENCE}`,
+    [
+      {
+        name: "businessId",
+        type: sql.UniqueIdentifier,
+        value: params.businessId,
+      },
+      { name: "jobId", type: sql.UniqueIdentifier, value: params.jobId },
+      {
+        name: "leaseToken",
+        type: sql.UniqueIdentifier,
+        value: params.leaseToken,
+      },
+    ],
+  );
+  if (!result.recordset[0]) {
+    throw new AiJobLeaseLostError();
+  }
+}
+
 export async function completeJob(params: {
   businessId: string;
   jobId: string;
   status: Extract<AiReplyJobStatus, "SENT" | "SKIPPED" | "FAILED" | "COALESCED">;
   errorCode?: string | null;
   outboundProviderMessageId?: string | null;
+  leaseToken?: string | null;
   trx?: TransactionClient;
 }): Promise<boolean> {
+  const fenceByToken = Boolean(params.leaseToken);
   const result = await db(params.trx).query<{ AiReplyJobID: string }>(
     `UPDATE TblAiReplyJob
      SET Status = @status,
@@ -367,11 +438,20 @@ export async function completeJob(params: {
          ),
          CompletedAtUtc = SYSUTCDATETIME(),
          LeaseUntilUtc = NULL,
+         LeaseToken = NULL,
+         LeaseOwner = NULL,
          UpdatedAtUtc = SYSUTCDATETIME()
      OUTPUT INSERTED.AiReplyJobID
      WHERE BusinessID = @businessId
        AND AiReplyJobID = @jobId
-       AND Status = N'PROCESSING'`,
+       AND Status = N'PROCESSING'
+       ${
+         fenceByToken
+           ? `AND LeaseToken = @leaseToken
+              AND LeaseUntilUtc IS NOT NULL
+              AND LeaseUntilUtc >= SYSUTCDATETIME()`
+           : ""
+       }`,
     [
       { name: "status", type: sql.NVarChar(32), value: params.status },
       {
@@ -390,6 +470,15 @@ export async function completeJob(params: {
         value: params.businessId,
       },
       { name: "jobId", type: sql.UniqueIdentifier, value: params.jobId },
+      ...(fenceByToken
+        ? [
+            {
+              name: "leaseToken",
+              type: sql.UniqueIdentifier,
+              value: params.leaseToken,
+            },
+          ]
+        : []),
     ],
   );
   return Boolean(result.recordset[0]);
@@ -397,14 +486,17 @@ export async function completeJob(params: {
 
 /**
  * Persist Gemini output once. Never overwrite an existing GeneratedReplyText.
+ * When leaseToken provided, requires live fence.
  */
 export async function persistGeneratedReply(params: {
   businessId: string;
   jobId: string;
   replyText: string;
   model: string;
-}, trx?: TransactionClient): Promise<void> {
-  await db(trx).execute(
+  leaseToken?: string | null;
+}, trx?: TransactionClient): Promise<boolean> {
+  const fenceByToken = Boolean(params.leaseToken);
+  const affected = await db(trx).execute(
     `UPDATE TblAiReplyJob
      SET GeneratedReplyText = CASE
            WHEN GeneratedReplyText IS NULL OR LTRIM(RTRIM(GeneratedReplyText)) = N''
@@ -420,7 +512,14 @@ export async function persistGeneratedReply(params: {
          UpdatedAtUtc = SYSUTCDATETIME()
      WHERE BusinessID = @businessId
        AND AiReplyJobID = @jobId
-       AND Status = N'PROCESSING'`,
+       AND Status = N'PROCESSING'
+       ${
+         fenceByToken
+           ? `AND LeaseToken = @leaseToken
+              AND LeaseUntilUtc IS NOT NULL
+              AND LeaseUntilUtc >= SYSUTCDATETIME()`
+           : ""
+       }`,
     [
       { name: "replyText", type: sql.NVarChar(sql.MAX), value: params.replyText },
       { name: "model", type: sql.NVarChar(128), value: params.model },
@@ -430,30 +529,49 @@ export async function persistGeneratedReply(params: {
         value: params.businessId,
       },
       { name: "jobId", type: sql.UniqueIdentifier, value: params.jobId },
+      ...(fenceByToken
+        ? [
+            {
+              name: "leaseToken",
+              type: sql.UniqueIdentifier,
+              value: params.leaseToken,
+            },
+          ]
+        : []),
     ],
   );
+  if (fenceByToken && affected === 0) {
+    throw new AiJobLeaseLostError();
+  }
+  return affected > 0;
 }
 
 /**
- * Keep job PROCESSING but expire the lease after delaySeconds so claim can retry
- * the same idempotency key without regenerating Gemini.
+ * @deprecated Prefer recordAmbiguousOutbound (atomic increment + relinquish).
+ * Kept for transitional callers; requires leaseToken and clears ownership.
  */
 export async function deferUnknownOutbound(params: {
   businessId: string;
   jobId: string;
   delaySeconds: number;
   errorCode?: string;
-}): Promise<void> {
+  leaseToken?: string | null;
+}): Promise<boolean> {
   const delay = Math.max(params.delaySeconds, 1);
-  await query(
+  if (!params.leaseToken) {
+    throw new AiJobLeaseLostError("leaseToken required to defer unknown outbound");
+  }
+  const affected = await query(
     `UPDATE TblAiReplyJob
      SET LastErrorCode = @errorCode,
          LeaseUntilUtc = DATEADD(second, @delaySeconds, SYSUTCDATETIME()),
          NotBeforeUtc = DATEADD(second, @delaySeconds, SYSUTCDATETIME()),
+         LeaseToken = NULL,
+         LeaseOwner = NULL,
          UpdatedAtUtc = SYSUTCDATETIME()
      WHERE BusinessID = @businessId
        AND AiReplyJobID = @jobId
-       AND Status = N'PROCESSING'`,
+       ${LIVE_LEASE_FENCE}`,
     [
       {
         name: "errorCode",
@@ -467,8 +585,124 @@ export async function deferUnknownOutbound(params: {
         value: params.businessId,
       },
       { name: "jobId", type: sql.UniqueIdentifier, value: params.jobId },
+      {
+        name: "leaseToken",
+        type: sql.UniqueIdentifier,
+        value: params.leaseToken,
+      },
     ],
   );
+  return (affected.rowsAffected?.[0] ?? 0) > 0;
+}
+
+export type AmbiguousOutboundResult =
+  | {
+    outcome: "deferred";
+    outboundUnknownCount: number;
+    delaySeconds: number;
+  }
+  | {
+    outcome: "finalized";
+    outboundUnknownCount: number;
+  };
+
+/**
+ * Atomic ambiguous-outbound transition:
+ * - increments OutboundUnknownCount in SQL
+ * - counts 1–2: defer + relinquish lease in same UPDATE
+ * - count 3+: FAILED + SAFETY_PAUSED in one transaction
+ */
+export async function recordAmbiguousOutbound(params: {
+  businessId: string;
+  jobId: string;
+  conversationId: string;
+  leaseToken: string;
+}): Promise<AmbiguousOutboundResult> {
+  return withTransaction(async (trx) => {
+    const bump = await trx.query<{
+      OutboundUnknownCount: number;
+      Status: string;
+    }>(
+      `UPDATE TblAiReplyJob
+       SET OutboundUnknownCount = OutboundUnknownCount + 1,
+           LastErrorCode = CASE
+             WHEN OutboundUnknownCount + 1 >= @maxAttempts
+             THEN N'OUTBOUND_RESULT_UNKNOWN_FINAL'
+             ELSE N'OUTBOUND_RESULT_UNKNOWN'
+           END,
+           Status = CASE
+             WHEN OutboundUnknownCount + 1 >= @maxAttempts THEN N'FAILED'
+             ELSE Status
+           END,
+           CompletedAtUtc = CASE
+             WHEN OutboundUnknownCount + 1 >= @maxAttempts THEN SYSUTCDATETIME()
+             ELSE CompletedAtUtc
+           END,
+           LeaseToken = NULL,
+           LeaseOwner = NULL,
+           LeaseUntilUtc = CASE
+             WHEN OutboundUnknownCount + 1 >= @maxAttempts THEN NULL
+             WHEN OutboundUnknownCount + 1 = 1
+             THEN DATEADD(second, 2, SYSUTCDATETIME())
+             ELSE DATEADD(second, 5, SYSUTCDATETIME())
+           END,
+           NotBeforeUtc = CASE
+             WHEN OutboundUnknownCount + 1 >= @maxAttempts THEN NotBeforeUtc
+             WHEN OutboundUnknownCount + 1 = 1
+             THEN DATEADD(second, 2, SYSUTCDATETIME())
+             ELSE DATEADD(second, 5, SYSUTCDATETIME())
+           END,
+           UpdatedAtUtc = SYSUTCDATETIME()
+       OUTPUT INSERTED.OutboundUnknownCount, INSERTED.Status
+       WHERE BusinessID = @businessId
+         AND AiReplyJobID = @jobId
+         ${LIVE_LEASE_FENCE}`,
+      [
+        {
+          name: "maxAttempts",
+          type: sql.Int,
+          value: MAX_SEND_RESOLUTION_ATTEMPTS,
+        },
+        {
+          name: "businessId",
+          type: sql.UniqueIdentifier,
+          value: params.businessId,
+        },
+        { name: "jobId", type: sql.UniqueIdentifier, value: params.jobId },
+        {
+          name: "leaseToken",
+          type: sql.UniqueIdentifier,
+          value: params.leaseToken,
+        },
+      ],
+    );
+
+    const row = bump.recordset[0];
+    if (!row) {
+      throw new AiJobLeaseLostError();
+    }
+
+    const count = Number(row.OutboundUnknownCount);
+    if (row.Status === "FAILED" || count >= MAX_SEND_RESOLUTION_ATTEMPTS) {
+      await pauseConversationAi(
+        {
+          businessId: params.businessId,
+          conversationId: params.conversationId,
+          mode: "SAFETY_PAUSED",
+          pauseReason: "AMBIGUOUS_OUTBOUND",
+        },
+        trx,
+      );
+      return { outcome: "finalized", outboundUnknownCount: count };
+    }
+
+    const delaySeconds = outboundUnknownRetryDelaySeconds(count) ?? 5;
+    return {
+      outcome: "deferred",
+      outboundUnknownCount: count,
+      delaySeconds,
+    };
+  });
 }
 
 export async function skipPendingJobsForConversation(params: {
@@ -482,6 +716,8 @@ export async function skipPendingJobsForConversation(params: {
          LastErrorCode = @errorCode,
          CompletedAtUtc = SYSUTCDATETIME(),
          LeaseUntilUtc = NULL,
+         LeaseToken = NULL,
+         LeaseOwner = NULL,
          UpdatedAtUtc = SYSUTCDATETIME()
      OUTPUT INSERTED.AiReplyJobID
      WHERE BusinessID = @businessId
@@ -507,16 +743,18 @@ export async function skipPendingJobsForConversation(params: {
 export async function extendLease(params: {
   businessId: string;
   jobId: string;
+  leaseToken: string;
   leaseSeconds?: number;
-}): Promise<void> {
+}): Promise<boolean> {
   const leaseSeconds = params.leaseSeconds ?? LEASE_SECONDS;
-  await query(
+  const result = await query<{ AiReplyJobID: string }>(
     `UPDATE TblAiReplyJob
      SET LeaseUntilUtc = DATEADD(second, @leaseSeconds, SYSUTCDATETIME()),
          UpdatedAtUtc = SYSUTCDATETIME()
+     OUTPUT INSERTED.AiReplyJobID
      WHERE BusinessID = @businessId
        AND AiReplyJobID = @jobId
-       AND Status = N'PROCESSING'`,
+       ${LIVE_LEASE_FENCE}`,
     [
       { name: "leaseSeconds", type: sql.Int, value: leaseSeconds },
       {
@@ -525,8 +763,14 @@ export async function extendLease(params: {
         value: params.businessId,
       },
       { name: "jobId", type: sql.UniqueIdentifier, value: params.jobId },
+      {
+        name: "leaseToken",
+        type: sql.UniqueIdentifier,
+        value: params.leaseToken,
+      },
     ],
   );
+  return Boolean(result.recordset[0]);
 }
 
 export async function countJobs(params: {

@@ -212,6 +212,10 @@ export type AiReplyJob = {
   notBeforeUtc: Date;
   attemptCount: number;
   leaseUntilUtc: Date | null;
+  leaseToken: string | null;
+  leaseOwner: string | null;
+  leaseVersion: number;
+  outboundUnknownCount: number;
   startedAtUtc: Date | null;
   completedAtUtc: Date | null;
   lastErrorCode: string | null;
