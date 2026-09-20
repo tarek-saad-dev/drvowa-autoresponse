@@ -29,3 +29,12 @@ export function aiReplyReservationKey(jobId: string): string {
 export function waOutboundReservationKey(jobId: string): string {
   return `wa-outbound:${jobId}`;
 }
+
+/** Manual operator send — client supplies stable idempotency uuid per send attempt. */
+export function manualWaOutboundReservationKey(idempotencyKey: string): string {
+  return `manual-wa:${idempotencyKey}`;
+}
+
+export function manualWaIdempotencyKey(idempotencyKey: string): string {
+  return `manual:${idempotencyKey}`;
+}

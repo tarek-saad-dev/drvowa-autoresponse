@@ -10,8 +10,16 @@ export function LandingFooter() {
         <div>
           <p className="font-semibold text-foreground">{APP_NAME}</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            منصة استقبال ذكي للأعمال — قيد البناء بشفافية.
+            موظف استقبال ذكي عبر واتساب — جاهز للبدء على الخطة المجانية.
           </p>
+          <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
+            <Link href="/privacy" className="hover:text-foreground hover:underline">
+              الخصوصية
+            </Link>
+            <Link href="/terms" className="hover:text-foreground hover:underline">
+              الشروط
+            </Link>
+          </div>
         </div>
         <div className="flex gap-2">
           <Link href="/login">

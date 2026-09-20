@@ -95,6 +95,11 @@ export default function LoginPage() {
               dir="ltr"
               className="text-start"
             />
+            <p className="mt-1 text-end text-xs">
+              <Link href="/forgot-password" className="text-primary hover:underline">
+                نسيت كلمة المرور؟
+              </Link>
+            </p>
           </div>
           <Button type="submit" className="w-full" disabled={pending}>
             {pending ? "جارٍ الدخول..." : "دخول"}

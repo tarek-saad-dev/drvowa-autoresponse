@@ -58,7 +58,12 @@ export async function signup(params: {
     [{ name: "email", type: sql.NVarChar(320), value: email }],
   );
   if (existing.recordset[0]) {
-    throw new AuthError("An account with this email already exists");
+    // Generic message — avoid email enumeration on signup.
+    throw new AuthError("Unable to create account with the provided details");
+  }
+
+  if (params.password.length < 8) {
+    throw new AuthError("Password must be at least 8 characters");
   }
 
   const userId = randomUUID();

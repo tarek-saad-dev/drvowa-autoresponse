@@ -13,7 +13,6 @@ export const DASHBOARD_NAV = [
     href: "/dashboard/whatsapp",
     label: "واتساب",
     key: "WhatsApp",
-    deferred: true,
   },
   { href: "/dashboard/locations", label: "المواقع", key: "Locations" },
   {
@@ -26,13 +25,11 @@ export const DASHBOARD_NAV = [
     href: "/dashboard/usage",
     label: "الاستخدام",
     key: "Usage",
-    deferred: true,
   },
   {
     href: "/dashboard/billing",
     label: "الفوترة",
     key: "Billing",
-    deferred: true,
   },
   { href: "/dashboard/settings", label: "الإعدادات", key: "Settings" },
 ] as const;

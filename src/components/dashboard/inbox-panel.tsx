@@ -101,6 +101,8 @@ export function InboxPanel({
   const [error, setError] = useState<string | null>(null);
   const [refreshing, startRefresh] = useTransition();
   const [resuming, setResuming] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
 
   const loadConversations = useCallback(() => {
     startRefresh(async () => {
@@ -211,6 +213,71 @@ export function InboxPanel({
     }
   }, [selectedId]);
 
+  const sendManual = useCallback(async () => {
+    if (!selectedId || !draft.trim() || sending) return;
+    setSending(true);
+    setError(null);
+    const text = draft.trim();
+    const idempotencyKey = crypto.randomUUID();
+    try {
+      const res = await fetch(
+        `/api/inbox/conversations/${encodeURIComponent(selectedId)}/messages`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ text, idempotencyKey }),
+        },
+      );
+      const data = (await res.json()) as {
+        status?: string;
+        error?: string;
+        errorCode?: string;
+        messageId?: string;
+      };
+      if (res.status === 202 || data.status === "AMBIGUOUS") {
+        setError(
+          "أُرسل الطلب لكن النتيجة غير مؤكدة. لا تعِد الإرسال تلقائياً — راجع المحادثة.",
+        );
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(data.error || data.errorCode || "تعذر إرسال الرسالة");
+      }
+      setDraft("");
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.conversationId === selectedId
+            ? {
+                ...c,
+                aiMode: "HUMAN_PAUSED",
+                aiPauseReason: "HUMAN_TAKEOVER",
+                lastMessagePreview: text,
+                lastMessageDirection: "OUTBOUND",
+                lastMessageAtUtc: new Date().toISOString(),
+              }
+            : c,
+        ),
+      );
+      // Reload thread for authoritative message list
+      const thread = await fetch(
+        `/api/inbox/conversations/${encodeURIComponent(selectedId)}/messages?limit=100`,
+        { credentials: "same-origin", cache: "no-store" },
+      );
+      const threadData = (await thread.json()) as { messages?: MessageRow[] };
+      if (thread.ok) {
+        setMessages(threadData.messages ?? []);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "تعذر إرسال الرسالة");
+    } finally {
+      setSending(false);
+    }
+  }, [selectedId, draft, sending]);
+
   const selected = conversations.find((c) => c.conversationId === selectedId);
 
   return (
@@ -276,7 +343,7 @@ export function InboxPanel({
                 <div>
                   <h2 className="text-sm font-semibold">{contactLabel(selected)}</h2>
                   <p className="text-xs text-muted-foreground">
-                    عرض فقط — لا إرسال بعد
+                    رد يدوي من الموظف — يوقف الرد الآلي تلقائياً
                   </p>
                   <p className="mt-1 text-xs font-medium text-foreground">
                     {aiStatusLabel(selected.aiMode)}
@@ -345,6 +412,36 @@ export function InboxPanel({
               ))
             )}
           </div>
+
+          {selectedId ? (
+            <div className="border-t border-border p-3">
+              <label className="sr-only" htmlFor="inbox-manual-reply">
+                رسالة يدوية
+              </label>
+              <textarea
+                id="inbox-manual-reply"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                rows={2}
+                maxLength={4000}
+                placeholder="اكتب ردك هنا…"
+                className="w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <p className="text-[11px] text-muted-foreground">
+                  الإرسال يوقف الذكاء الاصطناعي لهذه المحادثة.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void sendManual()}
+                  disabled={sending || !draft.trim()}
+                  className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
+                >
+                  {sending ? "جاري الإرسال…" : "إرسال"}
+                </button>
+              </div>
+            </div>
+          ) : null}
         </section>
       </div>
     </div>

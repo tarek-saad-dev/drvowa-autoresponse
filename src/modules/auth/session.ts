@@ -148,6 +148,19 @@ export async function revokeSession(sessionId: string): Promise<void> {
   );
 }
 
+export async function revokeAllSessionsForUser(userId: string): Promise<void> {
+  const now = new Date();
+  await query(
+    `UPDATE TblSession
+     SET RevokedAtUtc = @revokedAtUtc
+     WHERE UserID = @userId AND RevokedAtUtc IS NULL`,
+    [
+      { name: "userId", type: sql.UniqueIdentifier, value: userId },
+      { name: "revokedAtUtc", type: sql.DateTime2, value: now },
+    ],
+  );
+}
+
 export async function setSessionActiveBusiness(params: {
   sessionId: string;
   activeBusinessId: string | null;

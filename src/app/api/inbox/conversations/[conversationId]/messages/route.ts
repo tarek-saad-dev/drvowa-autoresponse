@@ -1,5 +1,12 @@
+import { z } from "zod";
+
 import { requireApiBusiness } from "@/lib/api/auth-context";
-import { handleApiError, jsonOk } from "@/lib/api/http";
+import { handleApiError, jsonError, jsonOk, parseJsonBody } from "@/lib/api/http";
+import {
+  RATE_LIMITS,
+  assertRateLimit,
+} from "@/lib/security/rate-limit";
+import { sendManualInboxReply } from "@/modules/inbox/manual-reply-service";
 import { listInboxMessages } from "@/modules/messaging";
 
 type RouteContext = {
@@ -23,6 +30,11 @@ function parseBeforeCursor(url: URL): {
   return { at, createdAtUtc, messageId: beforeMessageId };
 }
 
+const postBodySchema = z.object({
+  text: z.string().min(1).max(4000),
+  idempotencyKey: z.string().uuid(),
+});
+
 export async function GET(request: Request, context: RouteContext) {
   try {
     const { businessId } = await requireApiBusiness();
@@ -39,6 +51,61 @@ export async function GET(request: Request, context: RouteContext) {
     });
     return jsonOk({ conversationId, messages });
   } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+export async function POST(request: Request, context: RouteContext) {
+  try {
+    const { businessId } = await requireApiBusiness();
+    const { conversationId } = await context.params;
+    assertRateLimit(`manual-send:${businessId}`, RATE_LIMITS.manualSend);
+    const raw = await parseJsonBody(request);
+    const body = postBodySchema.parse(raw);
+
+    const result = await sendManualInboxReply({
+      businessId,
+      conversationId,
+      text: body.text,
+      idempotencyKey: body.idempotencyKey,
+    });
+
+    if (result.status === "FAILED") {
+      return jsonError(result.errorCode, 403, { code: result.errorCode });
+    }
+    if (result.status === "AMBIGUOUS") {
+      return jsonOk(
+        {
+          conversationId,
+          status: result.status,
+          errorCode: result.errorCode,
+        },
+        { status: 202 },
+      );
+    }
+    return jsonOk({
+      conversationId,
+      status: result.status,
+      messageId: result.messageId,
+      providerMessageId: result.providerMessageId,
+      aiPaused: result.aiPaused,
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      if (
+        error.message === "EMPTY_MESSAGE"
+        || error.message === "MESSAGE_TOO_LONG"
+        || error.message === "INVALID_IDEMPOTENCY_KEY"
+      ) {
+        return jsonError(error.message, 400, { code: error.message });
+      }
+      if (
+        error.message === "DESTINATION_UNAVAILABLE"
+        || error.message === "ACCOUNT_KEY_MISSING"
+      ) {
+        return jsonError(error.message, 409, { code: error.message });
+      }
+    }
     return handleApiError(error);
   }
 }

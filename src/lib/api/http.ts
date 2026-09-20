@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 
 import { DbError } from "@/lib/db";
+import { RateLimitError } from "@/lib/security/rate-limit";
 import {
   AuthError,
   ForbiddenError,
@@ -26,6 +27,19 @@ export function jsonError(
 }
 
 export async function parseJsonBody(request: Request): Promise<unknown> {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength) {
+    const size = Number(contentLength);
+    if (Number.isFinite(size) && size > 256_000) {
+      throw new ZodError([
+        {
+          code: "custom",
+          path: [],
+          message: "Request body too large",
+        },
+      ]);
+    }
+  }
   try {
     return await request.json();
   } catch {
@@ -46,6 +60,14 @@ export async function parseJsonBody(request: Request): Promise<unknown> {
 export function handleApiError(error: unknown): NextResponse {
   if (error instanceof AuthError) {
     return jsonError(error.message, 401);
+  }
+  if (error instanceof RateLimitError) {
+    const res = jsonError(error.message, 429, {
+      code: "RATE_LIMITED",
+      retryAfterSec: error.retryAfterSec,
+    });
+    res.headers.set("Retry-After", String(error.retryAfterSec));
+    return res;
   }
   if (isPlanEntitlementError(error)) {
     return jsonError(error.message, 403, { code: error.code });
@@ -69,5 +91,9 @@ export function handleApiError(error: unknown): NextResponse {
     });
   }
 
+  console.error("[api]", {
+    name: error instanceof Error ? error.name : "unknown",
+    message: error instanceof Error ? error.message : "unknown",
+  });
   return jsonError("Request failed", 500);
 }

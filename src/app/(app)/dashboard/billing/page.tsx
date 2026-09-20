@@ -126,10 +126,16 @@ export default async function BillingPage() {
           <ul className="space-y-2 text-sm">
             {events.map((event) => (
               <li key={event.usageEventId} className="flex flex-wrap gap-x-3">
-                <span className="font-medium">{event.eventType}</span>
+                <span className="font-medium">
+                  {event.eventType === "AI_REPLY_GENERATED"
+                    ? "رد ذكاء اصطناعي"
+                    : event.eventType === "WHATSAPP_OUTBOUND_MESSAGE"
+                      ? "رسالة واتساب صادرة"
+                      : event.eventType}
+                </span>
                 <span className="text-muted-foreground">×{event.quantity}</span>
                 <span className="text-muted-foreground">
-                  {event.occurredAtUtc.toISOString()}
+                  {event.occurredAtUtc.toISOString().slice(0, 16)}Z
                 </span>
               </li>
             ))}

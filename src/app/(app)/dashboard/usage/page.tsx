@@ -9,6 +9,12 @@ function formatLimit(value: number | null | undefined): string {
   return String(value);
 }
 
+function eventTypeLabel(eventType: string): string {
+  if (eventType === "AI_REPLY_GENERATED") return "رد ذكاء اصطناعي";
+  if (eventType === "WHATSAPP_OUTBOUND_MESSAGE") return "رسالة واتساب صادرة";
+  return eventType;
+}
+
 export default async function UsagePage() {
   const user = await requireAuthenticatedUser();
   const businessId = await resolveActiveBusiness(
@@ -50,21 +56,37 @@ export default async function UsagePage() {
               {formatLimit(plan?.monthlyWhatsAppOutbound)}
             </dd>
           </div>
+          <div>
+            <dt className="text-muted-foreground">إعادة التعيين التالية (UTC)</dt>
+            <dd className="font-medium">
+              {overview.usagePeriod.usagePeriodEndUtc.toISOString().slice(0, 10)}
+            </dd>
+          </div>
         </dl>
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">الأحداث</h2>
+        <h2 className="text-lg font-semibold">الأحداث الأخيرة</h2>
         {events.length === 0 ? (
           <p className="text-sm text-muted-foreground">لا توجد أحداث بعد.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {events.map((event) => (
-              <li key={event.usageEventId} className="flex flex-wrap gap-x-3">
-                <span className="font-medium">{event.eventType}</span>
+              <li
+                key={event.usageEventId}
+                className="flex flex-wrap items-baseline gap-x-3 rounded-md border border-border px-3 py-2"
+              >
+                <span className="font-medium">
+                  {eventTypeLabel(event.eventType)}
+                </span>
                 <span className="text-muted-foreground">×{event.quantity}</span>
                 <span className="text-muted-foreground">
-                  {event.occurredAtUtc.toISOString()}
+                  {new Intl.DateTimeFormat("ar-SA", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                    timeZone: "UTC",
+                  }).format(event.occurredAtUtc)}{" "}
+                  UTC
                 </span>
               </li>
             ))}

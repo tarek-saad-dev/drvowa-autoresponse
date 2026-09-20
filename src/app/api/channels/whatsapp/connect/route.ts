@@ -1,10 +1,15 @@
 import { requireApiBusiness } from "@/lib/api/auth-context";
 import { handleApiError, jsonOk } from "@/lib/api/http";
+import {
+  RATE_LIMITS,
+  assertRateLimit,
+} from "@/lib/security/rate-limit";
 import { startWhatsAppPairing } from "@/modules/channels/whatsapp-service";
 
 export async function POST() {
   try {
     const { businessId } = await requireApiBusiness();
+    assertRateLimit(`wa-connect:${businessId}`, RATE_LIMITS.whatsappConnect);
     // Browser cannot supply accountKey — DB-owned ExternalAccountKey only.
     const view = await startWhatsAppPairing({ businessId });
     return jsonOk({
