@@ -3,19 +3,20 @@
  * Production: run as drvowa-ai-worker.service via `npm run ai:worker`.
  *
  * Never processes Gemini inside the inbound HTTP request path.
- * Graceful SIGTERM/SIGINT: stop claiming, drain in-flight, close pool.
+ * Graceful SIGTERM/SIGINT: stop claiming, drain in-flight (heartbeats continue),
+ * close pool on clean drain; force-exit on deadline without mutating jobs.
  */
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { closePool, getPool } from "../src/lib/db";
+import { getPool } from "../src/lib/db";
+import { createAiWorkerRunner } from "../src/modules/ai/worker-runner";
 import {
-  claimNextJob,
-  processAiReplyJob,
-} from "../src/modules/ai";
-
-const SHUTDOWN_DEADLINE_MS = 60_000;
+  resolveHeartbeatMs,
+  resolveLeaseSeconds,
+  resolveShutdownDeadlineMs,
+} from "../src/modules/ai/lease";
 
 function loadDotEnvIfPresent(): void {
   const envPath = resolve(process.cwd(), ".env");
@@ -56,71 +57,28 @@ async function main(): Promise<void> {
   loadDotEnvIfPresent();
   await getPool();
 
-  const concurrency = getConcurrency();
-  const pollMs = getPollMs();
-  let stopping = false;
-  let inFlight = 0;
+  const runner = createAiWorkerRunner({
+    concurrency: getConcurrency(),
+    pollMs: getPollMs(),
+    leaseSeconds: resolveLeaseSeconds(),
+    heartbeatMs: resolveHeartbeatMs(),
+    shutdownDeadlineMs: resolveShutdownDeadlineMs(),
+  });
 
-  console.info("[ai-worker] started", { concurrency, pollMs });
+  process.once("SIGINT", () => runner.requestShutdown());
+  process.once("SIGTERM", () => runner.requestShutdown());
 
-  const requestShutdown = () => {
-    if (stopping) return;
-    stopping = true;
-    console.info("[ai-worker] shutting_down");
-  };
-  process.once("SIGINT", requestShutdown);
-  process.once("SIGTERM", requestShutdown);
-
-  while (!stopping) {
-    try {
-      while (inFlight < concurrency && !stopping) {
-        const job = await claimNextJob();
-        if (!job) break;
-        inFlight += 1;
-        void processAiReplyJob({ job })
-          .catch((error) => {
-            console.warn("[ai-worker] failed", {
-              jobId: job.aiReplyJobId,
-              errorCode:
-                error && typeof error === "object" && "code" in error
-                  ? String((error as { code: unknown }).code)
-                  : "WORKER_ERROR",
-            });
-          })
-          .finally(() => {
-            inFlight -= 1;
-          });
-      }
-    } catch (error) {
-      console.warn("[ai-worker] loop_error", {
-        errorCode: error instanceof Error ? error.name : "LOOP_ERROR",
-      });
-    }
-    if (stopping) break;
-    await new Promise((r) => setTimeout(r, pollMs));
+  const result = await runner.loop();
+  if (result.reason === "deadline_exceeded") {
+    process.exitCode = 1;
+    // Force exit so OS stops heartbeats; jobs recover via lease expiry.
+    process.exit(1);
   }
-
-  const deadline = Date.now() + SHUTDOWN_DEADLINE_MS;
-  while (inFlight > 0 && Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  if (inFlight > 0) {
-    console.warn("[ai-worker] shutdown_deadline_reached", { inFlight });
-  }
-
-  await closePool().catch(() => undefined);
-  console.info("[ai-worker] stopped");
 }
 
-main().catch(async (error: unknown) => {
-  console.error(
-    "[ai-worker] fatal",
-    error instanceof Error ? error.message : "unknown",
-  );
-  try {
-    await closePool();
-  } catch {
-    // ignore
-  }
-  process.exitCode = 1;
+main().catch((error) => {
+  console.error("[ai-worker] fatal", {
+    errorCode: error instanceof Error ? error.name : "FATAL",
+  });
+  process.exit(1);
 });
