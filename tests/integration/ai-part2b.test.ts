@@ -541,6 +541,29 @@ describe("Phase 3B Part 2B human takeover + serialization", () => {
       ],
     );
 
+    // Isolate from other PENDING jobs left by earlier tests in this suite.
+    await query(
+      `UPDATE TblAiReplyJob
+       SET Status = N'SKIPPED',
+           LastErrorCode = N'TEST_ISOLATION',
+           CompletedAtUtc = SYSUTCDATETIME(),
+           LeaseUntilUtc = NULL,
+           LeaseToken = NULL,
+           LeaseOwner = NULL,
+           UpdatedAtUtc = SYSUTCDATETIME()
+       WHERE BusinessID = @businessId
+         AND Status = N'PENDING'
+         AND ConversationID <> @conversationId`,
+      [
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        {
+          name: "conversationId",
+          type: sql.UniqueIdentifier,
+          value: accepted.conversationId,
+        },
+      ],
+    );
+
     const sendMock = vi.fn().mockRejectedValue(
       new WhatsAppRuntimeError("unknown", {
         status: 202,
@@ -556,6 +579,7 @@ describe("Phase 3B Part 2B human takeover + serialization", () => {
     for (let i = 0; i < 3; i++) {
       const job = await claimNextJob({ businessId });
       expect(job).toBeTruthy();
+      expect(job!.conversationId).toBe(accepted.conversationId);
       // Force lease expired for reclaim between attempts
       if (i > 0) {
         expect(job!.generatedReplyText).toBe("رد ثابت");
@@ -568,6 +592,8 @@ describe("Phase 3B Part 2B human takeover + serialization", () => {
       });
       if (i < 2) {
         expect(result.status).toBe("DEFERRED");
+        expect(result.errorCode).toBe("OUTBOUND_RESULT_UNKNOWN");
+        expect(job!.outboundUnknownCount + 1).toBeLessThanOrEqual(2);
         await query(
           `UPDATE TblAiReplyJob
            SET LeaseUntilUtc = DATEADD(second, -1, SYSUTCDATETIME()),

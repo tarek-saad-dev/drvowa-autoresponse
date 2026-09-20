@@ -12,19 +12,21 @@ import * as messagingRepo from "@/modules/messaging/repository";
 
 import {
   evaluateConversationAiSendGate,
-  pauseConversationAi,
 } from "./conversation-state-repository";
 import { createGeminiProvider, AiProviderError } from "./gemini-provider";
 import { evaluateConversationLoopGuard, logAiSafety } from "./guard-repository";
 import {
+  assertJobLeaseOwned,
   completeJob,
-  deferUnknownOutbound,
   getJob,
   persistGeneratedReply,
+  recordAmbiguousOutbound,
 } from "./jobs-repository";
 import {
+  isAiJobLeaseLostError,
+} from "./lease";
+import {
   aiOutboundIdempotencyKey,
-  outboundUnknownRetryDelaySeconds,
 } from "./outbound-policy";
 import {
   MAX_HISTORY_MESSAGES,
@@ -33,13 +35,19 @@ import {
 } from "./provider";
 import { getChannelAiSettingByConnection } from "./settings-repository";
 
+export type AiJobLeaseContext = {
+  token: string;
+  isLost: () => boolean;
+  markLost?: () => void;
+};
+
 function logAi(
   event: string,
   fields: Record<string, unknown>,
   logger: { info: (...a: unknown[]) => void; warn: (...a: unknown[]) => void },
 ) {
   const fn = event.includes("fail") || event.includes("skipped")
-    || event.includes("unknown")
+    || event.includes("unknown") || event.includes("lease")
     ? logger.warn.bind(logger)
     : logger.info.bind(logger);
   fn(`[ai-worker] ${event}`, fields);
@@ -68,68 +76,75 @@ function orderKnowledge<T extends { category: string }>(items: T[]): T[] {
 
 async function handleAmbiguousOutbound(params: {
   job: AiReplyJob;
+  leaseToken: string | null;
   logger: { info: (...a: unknown[]) => void; warn: (...a: unknown[]) => void };
-}): Promise<{ status: "FAILED" | "DEFERRED"; errorCode: string }> {
-  const { job, logger } = params;
+}): Promise<{ status: "FAILED" | "DEFERRED" | "LEASE_LOST"; errorCode: string }> {
+  const { job, logger, leaseToken } = params;
   const businessId = job.businessId;
-  const delay = outboundUnknownRetryDelaySeconds(job.attemptCount);
 
-  if (delay === null) {
-    await completeJob({
+  if (!leaseToken) {
+    return { status: "LEASE_LOST", errorCode: "LEASE_LOST" };
+  }
+
+  try {
+    const result = await recordAmbiguousOutbound({
       businessId,
       jobId: job.aiReplyJobId,
-      status: "FAILED",
-      errorCode: "OUTBOUND_RESULT_UNKNOWN_FINAL",
-    });
-    await pauseConversationAi({
-      businessId,
       conversationId: job.conversationId,
-      mode: "SAFETY_PAUSED",
-      pauseReason: "AMBIGUOUS_OUTBOUND",
+      leaseToken,
     });
-    logAi("outbound_unknown_final", {
-      businessId,
-      conversationId: job.conversationId,
-      jobId: job.aiReplyJobId,
-      attempt: job.attemptCount,
-      reason: "OUTBOUND_RESULT_UNKNOWN_FINAL",
-    }, logger);
-    logAiSafety(
-      "safety_paused",
-      {
+
+    if (result.outcome === "finalized") {
+      logAi("outbound_unknown_final", {
         businessId,
         conversationId: job.conversationId,
         jobId: job.aiReplyJobId,
-        reason: "AMBIGUOUS_OUTBOUND",
-      },
-      logger,
-    );
-    return { status: "FAILED", errorCode: "OUTBOUND_RESULT_UNKNOWN_FINAL" };
-  }
+        outboundUnknownCount: result.outboundUnknownCount,
+        reason: "OUTBOUND_RESULT_UNKNOWN_FINAL",
+      }, logger);
+      logAiSafety(
+        "safety_paused",
+        {
+          businessId,
+          conversationId: job.conversationId,
+          jobId: job.aiReplyJobId,
+          reason: "AMBIGUOUS_OUTBOUND",
+        },
+        logger,
+      );
+      return { status: "FAILED", errorCode: "OUTBOUND_RESULT_UNKNOWN_FINAL" };
+    }
 
-  await deferUnknownOutbound({
-    businessId,
-    jobId: job.aiReplyJobId,
-    delaySeconds: delay,
-    errorCode: "OUTBOUND_RESULT_UNKNOWN",
-  });
-  logAi("outbound_unknown_retry", {
-    businessId,
-    conversationId: job.conversationId,
-    jobId: job.aiReplyJobId,
-    attempt: job.attemptCount,
-    reason: "OUTBOUND_RESULT_UNKNOWN",
-  }, logger);
-  return { status: "DEFERRED", errorCode: "OUTBOUND_RESULT_UNKNOWN" };
+    logAi("outbound_unknown_retry", {
+      businessId,
+      conversationId: job.conversationId,
+      jobId: job.aiReplyJobId,
+      outboundUnknownCount: result.outboundUnknownCount,
+      delaySeconds: result.delaySeconds,
+      reason: "OUTBOUND_RESULT_UNKNOWN",
+    }, logger);
+    return { status: "DEFERRED", errorCode: "OUTBOUND_RESULT_UNKNOWN" };
+  } catch (error) {
+    if (isAiJobLeaseLostError(error)) {
+      logAi("lease_lost", {
+        businessId,
+        jobId: job.aiReplyJobId,
+        phase: "ambiguous_outbound",
+      }, logger);
+      return { status: "LEASE_LOST", errorCode: "LEASE_LOST" };
+    }
+    throw error;
+  }
 }
 
 export async function processAiReplyJob(params: {
   job: AiReplyJob;
   provider?: AiReplyProvider;
   sendMessage?: typeof sendAccountMessage;
+  lease?: AiJobLeaseContext | null;
   logger?: { info: (...a: unknown[]) => void; warn: (...a: unknown[]) => void };
 }): Promise<{
-  status: "SENT" | "SKIPPED" | "FAILED" | "DEFERRED";
+  status: "SENT" | "SKIPPED" | "FAILED" | "DEFERRED" | "LEASE_LOST";
   errorCode?: string;
 }> {
   const logger = params.logger ?? console;
@@ -137,6 +152,55 @@ export async function processAiReplyJob(params: {
   const businessId = job.businessId;
   const sendMessage = params.sendMessage ?? sendAccountMessage;
   const idempotencyKey = aiOutboundIdempotencyKey(job.aiReplyJobId);
+  const leaseToken = params.lease?.token ?? job.leaseToken ?? null;
+
+  const markLeaseLostLocally = () => {
+    params.lease?.markLost?.();
+  };
+
+  async function requireLiveLease(phase: string): Promise<boolean> {
+    if (params.lease?.isLost()) {
+      markLeaseLostLocally();
+      logAi("lease_lost", { businessId, jobId: job.aiReplyJobId, phase }, logger);
+      return false;
+    }
+    if (!leaseToken) {
+      markLeaseLostLocally();
+      logAi("lease_lost", {
+        businessId,
+        jobId: job.aiReplyJobId,
+        phase,
+        reason: "missing_token",
+      }, logger);
+      return false;
+    }
+    try {
+      await assertJobLeaseOwned({
+        businessId,
+        jobId: job.aiReplyJobId,
+        leaseToken,
+      });
+      return true;
+    } catch (error) {
+      if (isAiJobLeaseLostError(error)) {
+        markLeaseLostLocally();
+        logAi("lease_lost", { businessId, jobId: job.aiReplyJobId, phase }, logger);
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  async function completeFenced(
+    args: Omit<Parameters<typeof completeJob>[0], "businessId" | "jobId" | "leaseToken">,
+  ): Promise<boolean> {
+    return completeJob({
+      ...args,
+      businessId,
+      jobId: job.aiReplyJobId,
+      leaseToken: leaseToken ?? undefined,
+    });
+  }
 
   logAi("job_claimed", {
     businessId,
@@ -160,9 +224,7 @@ export async function processAiReplyJob(params: {
     channelConnectionId: job.channelConnectionId,
   });
   if (!setting?.autoReplyEnabled) {
-    await completeJob({
-      businessId,
-      jobId: job.aiReplyJobId,
+    await completeFenced({
       status: "SKIPPED",
       errorCode: "AI_DISABLED",
     });
@@ -174,9 +236,7 @@ export async function processAiReplyJob(params: {
   try {
     agent = await getAgent({ businessId, agentId: setting.agentId });
   } catch {
-    await completeJob({
-      businessId,
-      jobId: job.aiReplyJobId,
+    await completeFenced({
       status: "SKIPPED",
       errorCode: "AGENT_NOT_AVAILABLE",
     });
@@ -188,9 +248,7 @@ export async function processAiReplyJob(params: {
     return { status: "SKIPPED", errorCode: "AGENT_NOT_AVAILABLE" };
   }
   if (!agent.isActive) {
-    await completeJob({
-      businessId,
-      jobId: job.aiReplyJobId,
+    await completeFenced({
       status: "SKIPPED",
       errorCode: "AGENT_NOT_AVAILABLE",
     });
@@ -207,9 +265,7 @@ export async function processAiReplyJob(params: {
     contactId: job.contactId,
   });
   if (!contact?.phoneNormalized) {
-    await completeJob({
-      businessId,
-      jobId: job.aiReplyJobId,
+    await completeFenced({
       status: "SKIPPED",
       errorCode: "DESTINATION_UNAVAILABLE",
     });
@@ -227,9 +283,7 @@ export async function processAiReplyJob(params: {
   });
   const accountKey = connection?.externalAccountKey;
   if (!accountKey) {
-    await completeJob({
-      businessId,
-      jobId: job.aiReplyJobId,
+    await completeFenced({
       status: "FAILED",
       errorCode: "ACCOUNT_KEY_MISSING",
     });
@@ -247,6 +301,10 @@ export async function processAiReplyJob(params: {
   let genLatency = 0;
 
   if (!replyText) {
+    if (!(await requireLiveLease("before_generation"))) {
+      return { status: "LEASE_LOST", errorCode: "LEASE_LOST" };
+    }
+
     const knowledgeItems = orderKnowledge(
       await listItems({ businessId, includeInactive: false }),
     );
@@ -302,9 +360,7 @@ export async function processAiReplyJob(params: {
       modelName = generated.model;
       genLatency = generated.latencyMs;
       if (!replyText.trim()) {
-        await completeJob({
-          businessId,
-          jobId: job.aiReplyJobId,
+        await completeFenced({
           status: "FAILED",
           errorCode: "GEMINI_EMPTY",
         });
@@ -318,9 +374,7 @@ export async function processAiReplyJob(params: {
     } catch (error) {
       const code =
         error instanceof AiProviderError ? error.code : "GEMINI_FAILED";
-      await completeJob({
-        businessId,
-        jobId: job.aiReplyJobId,
+      await completeFenced({
         status: "FAILED",
         errorCode: code,
       });
@@ -328,12 +382,25 @@ export async function processAiReplyJob(params: {
       return { status: "FAILED", errorCode: code };
     }
 
-    await persistGeneratedReply({
-      businessId,
-      jobId: job.aiReplyJobId,
-      replyText,
-      model: modelName,
-    });
+    if (!(await requireLiveLease("before_persist_generated"))) {
+      return { status: "LEASE_LOST", errorCode: "LEASE_LOST" };
+    }
+
+    try {
+      await persistGeneratedReply({
+        businessId,
+        jobId: job.aiReplyJobId,
+        replyText,
+        model: modelName,
+        leaseToken,
+      });
+    } catch (error) {
+      if (isAiJobLeaseLostError(error)) {
+        markLeaseLostLocally();
+        return { status: "LEASE_LOST", errorCode: "LEASE_LOST" };
+      }
+      throw error;
+    }
 
     logAi("generation_complete", {
       businessId,
@@ -363,9 +430,7 @@ export async function processAiReplyJob(params: {
     channelConnectionId: job.channelConnectionId,
   });
   if (!liveSetting?.autoReplyEnabled || !liveSetting.enabledAtUtc) {
-    await completeJob({
-      businessId,
-      jobId: job.aiReplyJobId,
+    await completeFenced({
       status: "SKIPPED",
       errorCode: "AI_DISABLED_BEFORE_SEND",
     });
@@ -388,9 +453,7 @@ export async function processAiReplyJob(params: {
   }
 
   if (job.createdAtUtc.getTime() < liveSetting.enabledAtUtc.getTime()) {
-    await completeJob({
-      businessId,
-      jobId: job.aiReplyJobId,
+    await completeFenced({
       status: "SKIPPED",
       errorCode: "STALE_ACTIVATION",
     });
@@ -419,9 +482,7 @@ export async function processAiReplyJob(params: {
   });
   if (!conversationSendGate.allow) {
     const errorCode = conversationSendGate.reason ?? "CONVERSATION_PAUSED";
-    await completeJob({
-      businessId,
-      jobId: job.aiReplyJobId,
+    await completeFenced({
       status: "SKIPPED",
       errorCode,
     });
@@ -474,9 +535,7 @@ export async function processAiReplyJob(params: {
     logger,
   });
   if (!sendGuard.allow) {
-    await completeJob({
-      businessId,
-      jobId: job.aiReplyJobId,
+    await completeFenced({
       status: "SKIPPED",
       errorCode: "LOOP_GUARD_ACTIVE",
     });
@@ -495,6 +554,11 @@ export async function processAiReplyJob(params: {
     attempt: job.attemptCount,
   }, logger);
 
+  // Final pre-send gate: DB-authoritative ownership (local isLost is only a fast path).
+  if (!(await requireLiveLease("before_send"))) {
+    return { status: "LEASE_LOST", errorCode: "LEASE_LOST" };
+  }
+
   let sendResult;
   try {
     sendResult = await sendMessage({
@@ -506,9 +570,7 @@ export async function processAiReplyJob(params: {
   } catch (error) {
     if (error instanceof WhatsAppRuntimeError) {
       if (error.code === "IDEMPOTENCY_CONFLICT") {
-        await completeJob({
-          businessId,
-          jobId: job.aiReplyJobId,
+        await completeFenced({
           status: "FAILED",
           errorCode: "IDEMPOTENCY_CONFLICT",
         });
@@ -526,10 +588,15 @@ export async function processAiReplyJob(params: {
         || error.code === "RUNTIME_UNAVAILABLE";
 
       if (ambiguous) {
-        const deferred = await handleAmbiguousOutbound({ job, logger });
-        return deferred.status === "DEFERRED"
-          ? { status: "DEFERRED", errorCode: deferred.errorCode }
-          : { status: "FAILED", errorCode: deferred.errorCode };
+        const deferred = await handleAmbiguousOutbound({
+          job,
+          leaseToken,
+          logger,
+        });
+        return {
+          status: deferred.status,
+          errorCode: deferred.errorCode,
+        };
       }
 
       const definitive =
@@ -539,19 +606,22 @@ export async function processAiReplyJob(params: {
         || error.status === 409;
 
       const code = definitive ? error.code : `RUNTIME_${error.status}`;
-      await completeJob({
-        businessId,
-        jobId: job.aiReplyJobId,
+      await completeFenced({
         status: "FAILED",
         errorCode: code,
       });
       logAi("failed", { businessId, jobId: job.aiReplyJobId, errorCode: code }, logger);
       return { status: "FAILED", errorCode: code };
     }
-    const deferred = await handleAmbiguousOutbound({ job, logger });
-    return deferred.status === "DEFERRED"
-      ? { status: "DEFERRED", errorCode: deferred.errorCode }
-      : { status: "FAILED", errorCode: deferred.errorCode };
+    const deferred = await handleAmbiguousOutbound({
+      job,
+      leaseToken,
+      logger,
+    });
+    return {
+      status: deferred.status,
+      errorCode: deferred.errorCode,
+    };
   }
 
   const statusLower = (sendResult.status ?? "").toLowerCase();
@@ -559,16 +629,19 @@ export async function processAiReplyJob(params: {
   const isSent = statusLower === "sent" || sendResult.success;
 
   if (sendResult.code === "OUTBOUND_RESULT_UNKNOWN") {
-    const deferred = await handleAmbiguousOutbound({ job, logger });
-    return deferred.status === "DEFERRED"
-      ? { status: "DEFERRED", errorCode: deferred.errorCode }
-      : { status: "FAILED", errorCode: deferred.errorCode };
+    const deferred = await handleAmbiguousOutbound({
+      job,
+      leaseToken,
+      logger,
+    });
+    return {
+      status: deferred.status,
+      errorCode: deferred.errorCode,
+    };
   }
 
   if (sendResult.code === "IDEMPOTENCY_CONFLICT") {
-    await completeJob({
-      businessId,
-      jobId: job.aiReplyJobId,
+    await completeFenced({
       status: "FAILED",
       errorCode: "IDEMPOTENCY_CONFLICT",
     });
@@ -582,9 +655,7 @@ export async function processAiReplyJob(params: {
 
   if ((!isSent && !isDuplicate) || !sendResult.messageId) {
     const code = sendResult.code || "SEND_FAILED";
-    await completeJob({
-      businessId,
-      jobId: job.aiReplyJobId,
+    await completeFenced({
       status: "FAILED",
       errorCode: code,
     });
@@ -635,9 +706,7 @@ export async function processAiReplyJob(params: {
       },
       trx,
     );
-    const completed = await completeJob({
-      businessId,
-      jobId: job.aiReplyJobId,
+    const completed = await completeFenced({
       status: "SENT",
       outboundProviderMessageId: providerMessageId,
       trx,

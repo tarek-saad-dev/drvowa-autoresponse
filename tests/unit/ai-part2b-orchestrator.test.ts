@@ -12,6 +12,8 @@ const jobsMocks = vi.hoisted(() => ({
   completeJob: vi.fn(),
   persistGeneratedReply: vi.fn(),
   deferUnknownOutbound: vi.fn(),
+  recordAmbiguousOutbound: vi.fn(),
+  assertJobLeaseOwned: vi.fn(),
   getJob: vi.fn(),
 }));
 const conversationStateMocks = vi.hoisted(() => ({
@@ -66,6 +68,10 @@ function baseJob(overrides: Partial<AiReplyJob> = {}): AiReplyJob {
     notBeforeUtc: new Date(Date.now() - 1000),
     attemptCount: 1,
     leaseUntilUtc: new Date(Date.now() + 60_000),
+    leaseToken: "66666666-6666-6666-6666-666666666666",
+    leaseOwner: "w-test-1",
+    leaseVersion: 1,
+    outboundUnknownCount: 0,
     startedAtUtc: new Date(),
     completedAtUtc: null,
     lastErrorCode: null,
@@ -123,8 +129,14 @@ describe("Phase 3B Part 2B orchestrator outbound", () => {
       recentSentCount: 0,
     });
     jobsMocks.completeJob.mockResolvedValue(true);
-    jobsMocks.persistGeneratedReply.mockResolvedValue(undefined);
-    jobsMocks.deferUnknownOutbound.mockResolvedValue(undefined);
+    jobsMocks.persistGeneratedReply.mockResolvedValue(true);
+    jobsMocks.deferUnknownOutbound.mockResolvedValue(true);
+    jobsMocks.assertJobLeaseOwned.mockResolvedValue(undefined);
+    jobsMocks.recordAmbiguousOutbound.mockResolvedValue({
+      outcome: "deferred",
+      outboundUnknownCount: 1,
+      delaySeconds: 2,
+    });
     jobsMocks.getJob.mockResolvedValue(baseJob({
       generatedReplyText: "حاضر",
       generatedModel: "mock",
@@ -236,8 +248,11 @@ describe("Phase 3B Part 2B orchestrator outbound", () => {
         idempotencyKey: aiOutboundIdempotencyKey(job.aiReplyJobId),
       }),
     );
-    expect(jobsMocks.deferUnknownOutbound).toHaveBeenCalledWith(
-      expect.objectContaining({ delaySeconds: 2 }),
+    expect(jobsMocks.recordAmbiguousOutbound).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: job.aiReplyJobId,
+        leaseToken: job.leaseToken,
+      }),
     );
   });
 
@@ -246,6 +261,7 @@ describe("Phase 3B Part 2B orchestrator outbound", () => {
       generatedReplyText: "نص محفوظ",
       generatedModel: "mock",
       attemptCount: 2,
+      outboundUnknownCount: 1,
       lastErrorCode: "OUTBOUND_RESULT_UNKNOWN",
     });
     const sendMock = vi.fn().mockResolvedValue({
@@ -267,10 +283,15 @@ describe("Phase 3B Part 2B orchestrator outbound", () => {
   });
 
   it("12/13/14. persistent unknown becomes FINAL and safety-pauses", async () => {
+    jobsMocks.recordAmbiguousOutbound.mockResolvedValue({
+      outcome: "finalized",
+      outboundUnknownCount: 3,
+    });
     const job = baseJob({
       generatedReplyText: "نص محفوظ",
       generatedModel: "mock",
-      attemptCount: 3,
+      attemptCount: 5,
+      outboundUnknownCount: 2,
     });
     const sendMock = vi.fn().mockRejectedValue(
       new WhatsAppRuntimeError("unknown", {
@@ -290,13 +311,7 @@ describe("Phase 3B Part 2B orchestrator outbound", () => {
     });
     expect(result.status).toBe("FAILED");
     expect(result.errorCode).toBe("OUTBOUND_RESULT_UNKNOWN_FINAL");
-    expect(conversationStateMocks.pauseConversationAi).toHaveBeenCalledWith(
-      expect.objectContaining({
-        mode: "SAFETY_PAUSED",
-        pauseReason: "AMBIGUOUS_OUTBOUND",
-        conversationId: job.conversationId,
-      }),
-    );
+    expect(jobsMocks.recordAmbiguousOutbound).toHaveBeenCalled();
   });
 
   it("15. IDEMPOTENCY_CONFLICT fails closed", async () => {

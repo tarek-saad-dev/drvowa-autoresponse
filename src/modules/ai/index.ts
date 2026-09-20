@@ -14,10 +14,25 @@ export {
   findPendingJobForConversation,
   persistGeneratedReply,
   deferUnknownOutbound,
+  recordAmbiguousOutbound,
+  assertJobLeaseOwned,
+  extendLease,
   skipPendingJobsForConversation,
   countProcessingJobsForConversation,
 } from "./jobs-repository";
 export { processAiReplyJob } from "./orchestrator";
+export type { AiJobLeaseContext } from "./orchestrator";
+export {
+  createAiWorkerId,
+  AiJobLeaseLostError,
+  isAiJobLeaseLostError,
+  resolveLeaseSeconds,
+  resolveHeartbeatMs,
+  resolveShutdownDeadlineMs,
+  AI_JOB_LEASE_SECONDS_DEFAULT,
+  AI_WORKER_HEARTBEAT_MS_DEFAULT,
+} from "./lease";
+export { createAiWorkerRunner } from "./worker-runner";
 export {
   evaluateConversationLoopGuard,
   getConversationGuard,
