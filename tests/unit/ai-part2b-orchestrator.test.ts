@@ -387,15 +387,21 @@ describe("Phase 3B Part 2B orchestrator outbound", () => {
     expect(sendMock).not.toHaveBeenCalled();
   });
 
-  it("duplicate usage only once when completeJob returns false", async () => {
-    jobsMocks.completeJob.mockResolvedValue(false);
+  it("fenced SENT finalization rolls back on lease loss; terminal complete maps LEASE_LOST", async () => {
+    const { AiJobLeaseLostError } = await import("@/modules/ai/lease");
+
+    // In-TX assert fails after send ACK → no outbound DB side effects.
+    jobsMocks.assertJobLeaseOwned
+      .mockResolvedValueOnce(undefined) // before_send
+      .mockResolvedValueOnce(undefined) // before_finalize
+      .mockRejectedValueOnce(new AiJobLeaseLostError()); // in-TX
     const job = baseJob({ generatedReplyText: "نص", generatedModel: "m" });
     const sendMock = vi.fn().mockResolvedValue({
       success: true,
-      status: "duplicate",
-      messageId: "wa-1",
+      status: "sent",
+      messageId: "wa-stale",
     });
-    await processAiReplyJob({
+    const stale = await processAiReplyJob({
       job,
       sendMessage: sendMock,
       provider: {
@@ -405,6 +411,62 @@ describe("Phase 3B Part 2B orchestrator outbound", () => {
       },
       logger: { info() {}, warn() {} },
     });
+    expect(stale.status).toBe("LEASE_LOST");
+    expect(messagingMocks.insertMessageIdempotent).not.toHaveBeenCalled();
+    expect(messagingMocks.touchConversationOutbound).not.toHaveBeenCalled();
     expect(messagingMocks.insertUsageEventInTrx).not.toHaveBeenCalled();
+    expect(jobsMocks.completeJob).not.toHaveBeenCalled();
+
+    // completeJob throws after side-effect calls → LEASE_LOST (TX would roll back).
+    vi.clearAllMocks();
+    jobsMocks.assertJobLeaseOwned.mockResolvedValue(undefined);
+    jobsMocks.getJob.mockResolvedValue(baseJob({
+      generatedReplyText: "نص",
+      generatedModel: "m",
+    }));
+    messagingMocks.insertMessageIdempotent.mockResolvedValue({
+      message: { messageId: "out-1" },
+      inserted: true,
+    });
+    messagingMocks.touchConversationOutbound.mockResolvedValue(undefined);
+    jobsMocks.completeJob.mockRejectedValue(new AiJobLeaseLostError());
+    const lostOnComplete = await processAiReplyJob({
+      job: baseJob({ generatedReplyText: "نص", generatedModel: "m" }),
+      sendMessage: vi.fn().mockResolvedValue({
+        success: true,
+        status: "sent",
+        messageId: "wa-2",
+      }),
+      provider: {
+        async generateReply() {
+          throw new Error("no");
+        },
+      },
+      logger: { info() {}, warn() {} },
+    });
+    expect(lostOnComplete.status).toBe("LEASE_LOST");
+    expect(messagingMocks.insertUsageEventInTrx).not.toHaveBeenCalled();
+
+    // Terminal SKIPPED path must not pretend SKIPPED when lease is lost.
+    vi.clearAllMocks();
+    settingsMocks.getChannelAiSettingByConnection.mockResolvedValue({
+      autoReplyEnabled: false,
+      enabledAtUtc: null,
+      agentId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      debounceMs: 50,
+    });
+    jobsMocks.completeJob.mockRejectedValue(new AiJobLeaseLostError());
+    const lostSkip = await processAiReplyJob({
+      job: baseJob({ generatedReplyText: "نص", generatedModel: "m" }),
+      sendMessage: vi.fn(),
+      provider: {
+        async generateReply() {
+          throw new Error("no");
+        },
+      },
+      logger: { info() {}, warn() {} },
+    });
+    expect(lostSkip.status).toBe("LEASE_LOST");
+    expect(lostSkip.errorCode).toBe("LEASE_LOST");
   });
 });

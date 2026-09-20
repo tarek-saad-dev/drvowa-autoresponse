@@ -28,9 +28,11 @@ export {
   isAiJobLeaseLostError,
   resolveLeaseSeconds,
   resolveHeartbeatMs,
+  resolveWorkerTimingConfig,
   resolveShutdownDeadlineMs,
   AI_JOB_LEASE_SECONDS_DEFAULT,
   AI_WORKER_HEARTBEAT_MS_DEFAULT,
+  HEARTBEAT_LEASE_RATIO,
 } from "./lease";
 export { createAiWorkerRunner } from "./worker-runner";
 export {

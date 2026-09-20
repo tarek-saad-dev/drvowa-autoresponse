@@ -142,6 +142,10 @@ export function createAiWorkerRunner(deps: WorkerRunnerDeps = {}) {
       heartbeat: null,
     };
 
+    // Register before processJob so a synchronous throw cannot create a ghost task
+    // (finally must not run delete-before-set).
+    active.set(job.aiReplyJobId, task);
+
     const lease: AiJobLeaseContext = {
       token,
       isLost: () => task.lost,
@@ -171,7 +175,6 @@ export function createAiWorkerRunner(deps: WorkerRunnerDeps = {}) {
     })();
 
     task.promise = work;
-    active.set(job.aiReplyJobId, task);
   }
 
   async function loop(): Promise<WorkerRunnerResult> {

@@ -16,7 +16,8 @@ npx tsx scripts/ai-worker-status.ts --business=<BusinessID>
 ```
 
 Fields: pending / eligible / processing / expired leases / unknown-outbound PROCESSING /
-recent SENT+FAILED (24h) / SAFETY_PAUSED conversations / ages.
+recent SENT+FAILED (24h) / SAFETY_PAUSED conversations /
+`oldestPendingAgeSeconds` / `oldestProcessingAgeSeconds` (true oldest = max age).
 
 May also inspect (aggregates only): `LeaseOwner`, `LeaseVersion`, `LeaseUntilUtc`,
 `AttemptCount`, `OutboundUnknownCount` — never `LeaseToken`.
@@ -29,6 +30,14 @@ May also inspect (aggregates only): `LeaseOwner`, `LeaseVersion`, `LeaseUntilUtc
 4. Clean drain → pool closes → exit 0.
 5. If shutdown deadline hits: process may exit without marking jobs FAILED.
    Jobs remain PROCESSING until lease expiry, then reclaim with a **new** token.
+   `closePool` is **not** called on deadline exceeded.
+
+## Timing config
+
+Defaults: lease **90s**, heartbeat **25s**.
+
+Invariant: `heartbeatMs <= floor(leaseMs / 2)`. Unsafe env combinations are
+clamped; heartbeat must never meet or exceed lease duration.
 
 ## Expired PROCESSING lease
 
@@ -36,6 +45,32 @@ May also inspect (aggregates only): `LeaseOwner`, `LeaseVersion`, `LeaseUntilUtc
 - Old token cannot complete / extend / persist / defer (requires live unexpired lease).
 - If `GeneratedReplyText` exists → reuse; Gemini is not called again.
 - Outbound key remains `ai:<jobId>`.
+
+## Fenced SENT finalization (critical)
+
+WhatsApp success ACK does **not** authorize a stale worker to commit SaaS state.
+
+Only the current **live** lease owner may finalize:
+
+1. DB assert immediately before the final SENT transaction.
+2. Inside the transaction: ownership lock (`UPDLOCK` + live fence) **first**.
+3. Then outbound message insert, conversation touch, fenced `completeJob`, usage.
+
+If the lease is invalid/expired:
+
+- return / propagate `LEASE_LOST`
+- transaction rolls back (zero outbound message / touch / usage from the stale worker)
+- fenced `completeJob` **throws** `AiJobLeaseLostError` on zero rows (never silent `false`)
+
+Recovery path when the old worker loses the lease after send:
+
+- new owner retries the **same** `ai:<jobId>` idempotency key
+- runtime duplicate ACK recovers the provider message id
+- DB/usage land **once** under the new owner
+
+All other fenced terminal completions (`SKIPPED` / `FAILED`) likewise return
+`LEASE_LOST` when ownership is gone — they must not look like this worker
+committed that status.
 
 ## OUTBOUND_RESULT_UNKNOWN
 

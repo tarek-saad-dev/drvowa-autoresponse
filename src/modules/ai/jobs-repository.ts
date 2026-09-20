@@ -393,9 +393,11 @@ export async function assertJobLeaseOwned(params: {
   leaseToken: string;
   trx?: TransactionClient;
 }): Promise<void> {
+  // UPDLOCK when transactional so finalization cannot race a reclaim mid-TX.
+  const lockHint = params.trx ? "WITH (UPDLOCK, ROWLOCK)" : "";
   const result = await db(params.trx).query<{ Ok: number }>(
     `SELECT 1 AS Ok
-     FROM TblAiReplyJob
+     FROM TblAiReplyJob ${lockHint}
      WHERE BusinessID = @businessId
        AND AiReplyJobID = @jobId
        ${LIVE_LEASE_FENCE}`,
@@ -481,12 +483,16 @@ export async function completeJob(params: {
         : []),
     ],
   );
-  return Boolean(result.recordset[0]);
+  const ok = Boolean(result.recordset[0]);
+  // Fenced production calls must never silently fail ownership.
+  if (fenceByToken && !ok) {
+    throw new AiJobLeaseLostError();
+  }
+  return ok;
 }
 
 /**
- * Persist Gemini output once. Never overwrite an existing GeneratedReplyText.
- * When leaseToken provided, requires live fence.
+ * Persist durable generated reply text. When leaseToken provided, requires live fence.
  */
 export async function persistGeneratedReply(params: {
   businessId: string;

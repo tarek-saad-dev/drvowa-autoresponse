@@ -72,9 +72,9 @@ export async function getAiWorkerQueueStatus(params?: {
        (SELECT COUNT(1) FROM TblConversationAiState s
          WHERE s.Mode = N'SAFETY_PAUSED'
            ${params?.businessId ? "AND s.BusinessID = @businessId" : ""}) AS SafetyPaused,
-       (SELECT MIN(DATEDIFF(second, j.CreatedAtUtc, SYSUTCDATETIME()))
+       (SELECT MAX(DATEDIFF(second, j.CreatedAtUtc, SYSUTCDATETIME()))
          FROM TblAiReplyJob j WHERE j.Status = N'PENDING' ${businessFilter}) AS OldestPendingAgeSeconds,
-       (SELECT MIN(DATEDIFF(second, j.StartedAtUtc, SYSUTCDATETIME()))
+       (SELECT MAX(DATEDIFF(second, j.StartedAtUtc, SYSUTCDATETIME()))
          FROM TblAiReplyJob j
          WHERE j.Status = N'PROCESSING' AND j.StartedAtUtc IS NOT NULL ${businessFilter}) AS OldestProcessingAgeSeconds`,
     inputs,
