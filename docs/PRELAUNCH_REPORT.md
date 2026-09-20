@@ -12,7 +12,7 @@ Remaining items are **external / human gates only** (credentials, legal review, 
 | Item | Value |
 |------|--------|
 | Release branch | `release/prelaunch-v1` |
-| Final SHA | `87fa9d0cbb02d4d443152043f9e75a2a06908e0e` |
+| Final SHA | `1c85aecc46ef865407eef6cdfca057bc1eafb964` |
 | Main (untouched) | `4b1a7b598f14a65d78283d85ba954dfec27d86fd` |
 | Working tree | clean after RC commit |
 
