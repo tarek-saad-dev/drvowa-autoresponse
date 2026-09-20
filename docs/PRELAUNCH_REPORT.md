@@ -1,87 +1,71 @@
 # DRVOWA Prelaunch Report
 
-**DRVOWA_PRELAUNCH: READY**
+**DRVOWA_PRELAUNCH: READY (ENGINEERING)**  
+**DRVOWA_FINAL_RELEASE_GATE: PASS** (FREE/BETA mode)
 
-Engineering release candidate is complete for V1 WhatsApp AI receptionist SaaS.
-Remaining items are **external / human gates only** (credentials, legal review, pricing, DNS).
+Paid commercial launch is **not** claimed while payment/pricing gates remain open.
 
 ---
 
-## Git
+## Git (non-self-referential)
 
 | Item | Value |
 |------|--------|
-| Release branch | `release/prelaunch-v1` |
-| Final SHA | `1c85aecc46ef865407eef6cdfca057bc1eafb964` |
+| Branch | `release/prelaunch-v1` |
+| Release code SHA | Commit titled `chore: finalize v1 release gate` (includes gate tooling + onboarding hydrate fix). Confirm with `git log -1 --grep="finalize v1 release gate" --format=%H` |
+| Branch tip | Always `git rev-parse origin/release/prelaunch-v1` — **do not** treat an in-doc SHA as tip after later commits |
 | Main (untouched) | `4b1a7b598f14a65d78283d85ba954dfec27d86fd` |
-| Working tree | clean after RC commit |
 
 ## Product
 
 | Area | Status |
 |------|--------|
-| Auth (signup/login/logout/sessions) | PASS |
-| Password reset lifecycle | PASS (email send gated) |
-| Onboarding | PASS (sessionStorage resumable draft) |
-| WhatsApp connect/QR/status UX | PASS |
-| Inbox + human manual reply | PASS |
-| AI worker + quotas + takeover | PASS (prior + reserved) |
+| Auth | PASS |
+| Password reset | PASS (email send gated) |
+| Onboarding | PASS |
+| WhatsApp UX | PASS |
+| Inbox + manual reply | PASS |
+| AI + quotas + takeover | PASS |
 | Knowledge + Agent limits | PASS |
-| Billing / usage / FREE plan | PASS |
-| Settings | PASS |
-| Dashboard / landing copy | PASS (truthful V1) |
-| Legal pages scaffold | PASS (lawyer gate) |
+| Billing/usage FREE | PASS |
+| Landing/dashboard copy | PASS |
+| Legal scaffolds | PASS (EXTERNAL_GATE_LEGAL_REVIEW) |
 
 ## Security
 
 | Area | Status |
 |------|--------|
-| Tenancy (service + inbox cross-tenant) | PASS |
-| Auth hardening / rate limits | PASS |
+| Tenancy | PASS |
+| Rate limits | PASS |
+| Session cookies | PASS (Secure in production NODE_ENV) |
+| Runtime inbound bearer auth | PASS |
 | Security headers / CSP | PASS |
-| Secrets not invented | PASS |
-| Dependency audit (`npm audit --omit=dev`) | PASS — 0 vulnerabilities |
-| PII logging | PARTIAL — no secret dumps; ongoing ops discipline |
+| Prod `npm audit --omit=dev` | PASS — 0 vulnerabilities |
 
 ## Database
 
 | Item | Status |
 |------|--------|
 | Latest migration | `012_password_reset_tokens.sql` |
-| Local migrate | PASS |
-| Production apply | EXTERNAL (do not apply from this agent) |
+| Live upgrade 001→012 | PASS (timestamps 009→012 ordered) |
+| 011 preserve counters | PASS (SQL + idempotent re-run) |
+| Clean empty DB create | **BLOCKED_BY_ENVIRONMENT** — DB user lacks `dbcreator` / CREATE DATABASE. File order + upgrade evidence substitute used. |
 
-## Tests / build
+## Tests / build (fresh gate)
 
 | Check | Status |
 |-------|--------|
-| Unit (auth, manual reply, release flows) | PASS |
-| Integration (existing billing/AI/tenant) | PASS when DB configured |
-| Browser Playwright E2E | DEFERRED — covered by contract + integration suites |
-| typecheck | PASS |
-| lint | PASS |
-| production build | PASS |
-| npm audit prod | PASS (0) |
+| `npm test` | PASS — 211/211 |
+| Flake recheck (loop-guard, crash-recovery, billing) | PASS — 29/29 |
+| typecheck / lint / build | PASS |
+| Playwright smoke A–H | PASS — 4/4 |
+| Prod audit | PASS — 0 |
 
-## Operations
+## External gates (OPEN)
 
-Runbooks present: deployment, rollback, incident, backup, AI worker recovery, rate limits, migration notes.
-
-## External gates remaining
-
-See `docs/EXTERNAL_GATES.md`:
-
-- EXTERNAL_GATE_PAYMENT_PROVIDER
-- EXTERNAL_GATE_PRICING
-- EXTERNAL_GATE_EMAIL_PROVIDER (prod delivery)
-- EXTERNAL_GATE_LEGAL_REVIEW
-- EXTERNAL_GATE_ERROR_MONITORING
-- EXTERNAL_GATE_DNS_DOMAIN
-- EXTERNAL_GATE_PRODUCTION_SECRETS
-
-**Launch mode without payments:** FREE/BETA with usage limits — explicit and supported.
+See `docs/EXTERNAL_GATES.md`.
 
 ## Do not
 
-- Merge to `main` until owner pre-launch gate
-- Deploy / SSH / touch production WhatsApp sessions from this agent
+- Merge to `main` until owner gate
+- Deploy / SSH / touch production WhatsApp from this agent

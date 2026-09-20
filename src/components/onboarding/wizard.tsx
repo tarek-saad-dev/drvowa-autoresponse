@@ -123,10 +123,10 @@ function loadDraft(): DraftState {
 
 export function OnboardingWizard() {
   const router = useRouter();
-  const [hydrated, setHydrated] = useState(false);
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [restored, setRestored] = useState(false);
 
   const [business, setBusiness] = useState(defaultDraft().business);
   const [location, setLocation] = useState(defaultDraft().location);
@@ -136,20 +136,19 @@ export function OnboardingWizard() {
   );
 
   useEffect(() => {
-    // Hydrate draft from sessionStorage after mount (SSR-safe).
     const draft = loadDraft();
-    /* eslint-disable react-hooks/set-state-in-effect -- intentional client restore */
+    /* eslint-disable react-hooks/set-state-in-effect -- sessionStorage restore */
     setStep(draft.step);
     setBusiness(draft.business);
     setLocation(draft.location);
     setAgent(draft.agent);
     setKnowledgeItems(draft.knowledgeItems);
-    setHydrated(true);
+    setRestored(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!restored) return;
     const draft: DraftState = {
       step,
       business,
@@ -162,7 +161,7 @@ export function OnboardingWizard() {
     } catch {
       // ignore quota / private mode
     }
-  }, [hydrated, step, business, location, agent, knowledgeItems]);
+  }, [restored, step, business, location, agent, knowledgeItems]);
 
   function updateKnowledge(index: number, patch: Partial<KnowledgeDraft>) {
     setKnowledgeItems((items) =>
@@ -235,17 +234,6 @@ export function OnboardingWizard() {
     } finally {
       setPending(false);
     }
-  }
-
-  if (!hydrated) {
-    return (
-      <Card className="mx-auto w-full max-w-2xl">
-        <CardHeader>
-          <CardTitle>إعداد مساحة العمل</CardTitle>
-          <CardDescription>جاري استعادة التقدم…</CardDescription>
-        </CardHeader>
-      </Card>
-    );
   }
 
   return (

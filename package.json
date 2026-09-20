@@ -15,7 +15,9 @@
     "db:status": "tsx scripts/db-status.ts",
     "ai:worker": "tsx scripts/ai-worker.ts",
     "ai:worker:status": "tsx scripts/ai-worker-status.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:migration-gate": "tsx scripts/release-migration-gate.ts"
   },
   "dependencies": {
     "@google/genai": "^2.23.0",
@@ -28,6 +30,7 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.1",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/mssql": "^12.3.0",
