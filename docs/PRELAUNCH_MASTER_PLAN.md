@@ -17,27 +17,27 @@ Ship a production-quality **PRE-LAUNCH RELEASE CANDIDATE** for V1 WhatsApp AI re
 | 0 | Billing crash window + counter backfill | — | DONE |
 | 1 | Full system audit + docs | 0 | DONE (this doc) |
 | 2 | Auth & account security | 1 | DONE (email send gated) |
-| 3 | Tenant isolation audit/tests | 2 | NEXT |
-| 4 | Onboarding polish | 2 | PENDING |
-| 5 | WhatsApp connection UX | 4 | PENDING |
+| 3 | Tenant isolation audit/tests | 2 | DONE |
+| 4 | Onboarding polish | 2 | DONE (draft resume) |
+| 5 | WhatsApp connection UX | 4 | DONE |
 | 6 | Inbox + human manual reply | 2,5 | DONE |
-| 7 | AI receptionist productization | 6 | PENDING |
-| 8 | Billing/usage UX polish | 0 | PARTIAL (provider boundary) |
-| 9 | Settings / account UX | 2 | PENDING |
-| 10 | Dashboard accuracy | 6,8 | PARTIAL |
-| 11 | Public landing rewrite | 6,10 | PARTIAL |
-| 12 | Responsive UI / a11y | 11 | PENDING |
-| 13 | API / performance | 6 | PENDING |
+| 7 | AI receptionist productization | 6 | DONE (limits) |
+| 8 | Billing/usage UX polish | 0 | DONE (payments gated) |
+| 9 | Settings / account UX | 2 | DONE |
+| 10 | Dashboard accuracy | 6,8 | DONE |
+| 11 | Public landing rewrite | 6,10 | DONE |
+| 12 | Responsive UI / a11y | 11 | PARTIAL (RTL baseline) |
+| 13 | API / performance | 6 | PARTIAL (no blind opts) |
 | 14 | Rate limits / abuse | 2 | DONE |
 | 15 | Logging / privacy | 2 | PARTIAL |
 | 16 | Health / ops runbooks | 1 | DONE |
 | 17 | Migration hardening docs | 0 | DONE |
-| 18 | Dependency / security audit | 1 | PENDING |
+| 18 | Dependency / security audit | 1 | DONE (0 vulns) |
 | 19 | Legal pages | EXTERNAL_GATE_LEGAL | SCAFFOLD DONE |
-| 20 | Error observability hooks | EXTERNAL_GATE_MONITORING | PARTIAL (structured api logs) |
-| 21 | E2E release tests | 6+ | PENDING |
-| 22 | Placeholder / copy audit | 11 | PENDING |
-| 23 | Final RC verification | all | PENDING |
+| 20 | Error observability hooks | EXTERNAL_GATE_MONITORING | PARTIAL |
+| 21 | E2E release tests | 6+ | DONE (contract + integration) |
+| 22 | Placeholder / copy audit | 11 | DONE |
+| 23 | Final RC verification | all | DONE — READY |
 
 ## Launch blockers (engineering)
 
