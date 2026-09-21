@@ -4,7 +4,7 @@
 
 **BRANCH:** `feature/product-finish-v1`  
 
-**SHA:** `2df0eefe992cdf8a4d847505414f0779618e0a05`  
+**SHA:** `9f6c227fd718e2f5b7cd65464b49855c96d872ad`  
 
 **Base main:** `8daf6c5` (untouched — no deploy / no merge)
 
