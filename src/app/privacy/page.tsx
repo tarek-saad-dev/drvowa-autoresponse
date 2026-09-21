@@ -4,9 +4,9 @@ import { LandingFooter } from "@/components/landing/footer";
 import { LandingHeader } from "@/components/landing/header";
 
 const COMPANY_NAME =
-  process.env.NEXT_PUBLIC_LEGAL_COMPANY_NAME?.trim() || "[COMPANY_NAME]";
+  process.env.NEXT_PUBLIC_LEGAL_COMPANY_NAME?.trim() || "الشركة";
 const SUPPORT_EMAIL =
-  process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || "[SUPPORT_EMAIL]";
+  process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || "فريق الدعم";
 
 export default function PrivacyPage() {
   return (
@@ -15,8 +15,7 @@ export default function PrivacyPage() {
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-12 sm:px-6">
         <h1 className="text-3xl font-bold tracking-tight">سياسة الخصوصية</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          مسودة تقنية للإطلاق — بانتظار مراجعة قانونية (
-          EXTERNAL_GATE_LEGAL_REVIEW). الجهة: {COMPANY_NAME}. التواصل:{" "}
+          مسودة بانتظار المراجعة القانونية. الجهة: {COMPANY_NAME}. للتواصل:{" "}
           {SUPPORT_EMAIL}.
         </p>
         <div className="mt-8 space-y-6 text-sm leading-7 text-foreground">
@@ -60,8 +59,8 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-lg font-semibold">التحديثات</h2>
             <p className="mt-2 text-muted-foreground">
-              قد نحدّث هذه الصفحة. النسخة المعتمدة قانونياً ستُنشر بعد إغلاق
-              EXTERNAL_GATE_LEGAL_REVIEW.
+              قد نحدّث هذه الصفحة. النسخة المعتمدة قانونياً ستُنشر بعد اكتمال
+              المراجعة القانونية.
             </p>
           </section>
         </div>

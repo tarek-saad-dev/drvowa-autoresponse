@@ -1,18 +1,15 @@
+import { Progress } from "@/components/ui/progress";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
+import { formatUsageRenewalAr } from "@/lib/ui/labels";
 import { getBillingOverview } from "@/modules/billing/service";
 import { listUsageEvents } from "@/modules/usage/service";
 import { redirect } from "next/navigation";
 
-function formatLimit(value: number | null | undefined): string {
-  if (value == null) return "غير محدود";
-  return String(value);
-}
-
 function eventTypeLabel(eventType: string): string {
-  if (eventType === "AI_REPLY_GENERATED") return "رد ذكاء اصطناعي";
+  if (eventType === "AI_REPLY_GENERATED") return "رد آلي";
   if (eventType === "WHATSAPP_OUTBOUND_MESSAGE") return "رسالة واتساب صادرة";
-  return eventType;
+  return "نشاط";
 }
 
 export default async function UsagePage() {
@@ -35,40 +32,43 @@ export default async function UsagePage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">الاستخدام</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          استهلاك الحصة الشهري (UTC) وأحداث القياس الأخيرة.
+          استهلاكك هذا الشهر. يتجدد في{" "}
+          {formatUsageRenewalAr(overview.usagePeriod.usagePeriodEndUtc)}.
         </p>
       </div>
 
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">ملخص الشهر الحالي</h2>
-        <dl className="grid gap-3 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-muted-foreground">ردود الذكاء الاصطناعي</dt>
-            <dd className="font-medium">
-              {overview.aiUsed} / {formatLimit(plan?.monthlyAiReplies)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">واتساب الصادر</dt>
-            <dd className="font-medium">
-              {overview.whatsappOutboundUsed}
-              {" / "}
-              {formatLimit(plan?.monthlyWhatsAppOutbound)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">إعادة التعيين التالية (UTC)</dt>
-            <dd className="font-medium">
-              {overview.usagePeriod.usagePeriodEndUtc.toISOString().slice(0, 10)}
-            </dd>
-          </div>
-        </dl>
+      <section className="space-y-4 rounded-xl border border-border bg-card p-5">
+        <Progress
+          label="ردود الذكاء الاصطناعي"
+          value={overview.aiUsed}
+          max={plan?.monthlyAiReplies}
+        />
+        <Progress
+          label="رسائل واتساب الصادرة"
+          value={overview.whatsappOutboundUsed}
+          max={plan?.monthlyWhatsAppOutbound}
+        />
+        <Progress
+          label="اتصالات واتساب"
+          value={overview.whatsappConnectionsUsed}
+          max={plan?.maxWhatsAppConnections}
+        />
+        <Progress
+          label="موظفو الاستقبال"
+          value={overview.agentsUsed}
+          max={plan?.maxAgents}
+        />
+        <Progress
+          label="عناصر المعرفة النشطة"
+          value={overview.activeKnowledgeUsed}
+          max={plan?.maxActiveKnowledgeItems}
+        />
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">الأحداث الأخيرة</h2>
+        <h2 className="text-lg font-semibold">النشاط الأخير</h2>
         {events.length === 0 ? (
-          <p className="text-sm text-muted-foreground">لا توجد أحداث بعد.</p>
+          <p className="text-sm text-muted-foreground">لا يوجد نشاط بعد.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {events.map((event) => (
@@ -84,9 +84,7 @@ export default async function UsagePage() {
                   {new Intl.DateTimeFormat("ar-SA", {
                     dateStyle: "short",
                     timeStyle: "short",
-                    timeZone: "UTC",
-                  }).format(event.occurredAtUtc)}{" "}
-                  UTC
+                  }).format(event.occurredAtUtc)}
                 </span>
               </li>
             ))}

@@ -4,9 +4,9 @@ import { LandingFooter } from "@/components/landing/footer";
 import { LandingHeader } from "@/components/landing/header";
 
 const COMPANY_NAME =
-  process.env.NEXT_PUBLIC_LEGAL_COMPANY_NAME?.trim() || "[COMPANY_NAME]";
+  process.env.NEXT_PUBLIC_LEGAL_COMPANY_NAME?.trim() || "الشركة";
 const SUPPORT_EMAIL =
-  process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || "[SUPPORT_EMAIL]";
+  process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || "فريق الدعم";
 
 export default function TermsPage() {
   return (
@@ -15,8 +15,7 @@ export default function TermsPage() {
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-12 sm:px-6">
         <h1 className="text-3xl font-bold tracking-tight">شروط الاستخدام</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          مسودة تقنية للإطلاق — بانتظار مراجعة قانونية (
-          EXTERNAL_GATE_LEGAL_REVIEW). الجهة: {COMPANY_NAME}. التواصل:{" "}
+          مسودة بانتظار المراجعة القانونية. الجهة: {COMPANY_NAME}. للتواصل:{" "}
           {SUPPORT_EMAIL}.
         </p>
         <div className="mt-8 space-y-6 text-sm leading-7 text-foreground">
@@ -37,9 +36,9 @@ export default function TermsPage() {
           <section>
             <h2 className="text-lg font-semibold">الخطط والحصص</h2>
             <p className="mt-2 text-muted-foreground">
-              تُطبَّق حدود الخطة (اتصالات، وكلاء، معرفة، ردود AI، رسائل صادرة)
-              على أساس شهري UTC ما لم يُنص على خلاف ذلك. الأسعار والتعبئة النهائية
-              تخضع لمراجعة المالك (EXTERNAL_GATE_PRICING).
+              تُطبَّق حدود خطتك (اتصالات واتساب، موظفو الاستقبال، المعرفة، الردود
+              الآلية، الرسائل الصادرة) على أساس شهري. الأسعار النهائية والتوفر
+              التجاري يُعلنان لاحقاً.
             </p>
           </section>
           <section>

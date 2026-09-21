@@ -65,7 +65,7 @@ export function BusinessSettingsForm({ business }: { business: Business }) {
       <CardHeader>
         <CardTitle>إعدادات النشاط</CardTitle>
         <CardDescription>
-          تحديث بيانات مساحة العمل الحالية ({business.slug})
+          تحديث بيانات نشاطك التجاري
         </CardDescription>
       </CardHeader>
       <CardContent>
