@@ -30,7 +30,7 @@ export default async function OnboardingPage() {
           مرحباً {user.fullName}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          لنُعد مساحة عملك الأولى ووكيل الاستقبال.
+          لنُعد مساحة عملك الأولى وموظف الاستقبال.
         </p>
       </div>
       <OnboardingWizard />

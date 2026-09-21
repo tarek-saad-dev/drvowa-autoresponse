@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { messageBodyDisplay } from "@/lib/ui/labels";
+import { mapUserFacingError } from "@/lib/ui/user-errors";
 
 export type ConversationAiMode = "AUTO" | "HUMAN_PAUSED" | "SAFETY_PAUSED";
 
@@ -154,9 +155,12 @@ export function InboxPanel({
             aiPauseReason?: string | null;
           }>;
           error?: string;
+          code?: string;
         };
         if (!res.ok) {
-          throw new Error(data.error || "تعذر تحميل المحادثات");
+          throw new Error(
+            mapUserFacingError(data, "تعذر تحميل المحادثات"),
+          );
         }
         setConversations(
           serializeConversations(
@@ -173,7 +177,10 @@ export function InboxPanel({
       } catch (err) {
         if (!silent) {
           setError(
-            err instanceof Error ? err.message : "تعذر تحميل المحادثات",
+            mapUserFacingError(
+              { error: err instanceof Error ? err.message : null },
+              "تعذر تحميل المحادثات",
+            ),
           );
         }
       }
@@ -191,16 +198,22 @@ export function InboxPanel({
         const data = (await res.json()) as {
           messages?: MessageRow[];
           error?: string;
+          code?: string;
         };
         if (!res.ok) {
-          throw new Error(data.error || "تعذر تحميل الرسائل");
+          throw new Error(mapUserFacingError(data, "تعذر تحميل الرسائل"));
         }
         if (selectedIdRef.current === conversationId) {
           setMessages(data.messages ?? []);
         }
       } catch (err) {
         if (!silent) {
-          setError(err instanceof Error ? err.message : "تعذر تحميل الرسائل");
+          setError(
+            mapUserFacingError(
+              { error: err instanceof Error ? err.message : null },
+              "تعذر تحميل الرسائل",
+            ),
+          );
           setMessages([]);
         }
       } finally {
@@ -256,9 +269,10 @@ export function InboxPanel({
       const data = (await res.json()) as {
         state?: { mode: ConversationAiMode; pauseReason: string | null };
         error?: string;
+        code?: string;
       };
       if (!res.ok) {
-        throw new Error(data.error || "تعذر استئناف الرد الآلي");
+        throw new Error(mapUserFacingError(data, "تعذر استئناف الرد الآلي"));
       }
       const mode = data.state?.mode ?? "AUTO";
       setConversations((prev) =>
@@ -273,7 +287,12 @@ export function InboxPanel({
         ),
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر استئناف الرد الآلي");
+      setError(
+        mapUserFacingError(
+          { error: err instanceof Error ? err.message : null },
+          "تعذر استئناف الرد الآلي",
+        ),
+      );
     } finally {
       setResuming(false);
     }
@@ -302,15 +321,19 @@ export function InboxPanel({
         status?: string;
         error?: string;
         errorCode?: string;
+        code?: string;
       };
       if (res.status === 202 || data.status === "AMBIGUOUS") {
         setError(
-          "أُرسل الطلب لكن النتيجة غير مؤكدة. لا تعِد الإرسال تلقائياً — راجع المحادثة.",
+          mapUserFacingError(
+            data,
+            "أُرسل الطلب لكن النتيجة غير مؤكدة. لا تعِد الإرسال تلقائياً — راجع المحادثة.",
+          ),
         );
         return;
       }
       if (!res.ok) {
-        throw new Error(data.error || "تعذر إرسال الرسالة");
+        throw new Error(mapUserFacingError(data, "تعذر إرسال الرسالة"));
       }
       setDraft("");
       setConversations((prev) =>
@@ -329,7 +352,12 @@ export function InboxPanel({
       );
       await loadMessages(selectedId, true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر إرسال الرسالة");
+      setError(
+        mapUserFacingError(
+          { error: err instanceof Error ? err.message : null },
+          "تعذر إرسال الرسالة",
+        ),
+      );
     } finally {
       setSending(false);
     }

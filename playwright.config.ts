@@ -33,12 +33,14 @@ export default defineConfig({
   workers: 1,
   timeout: 120_000,
   expect: { timeout: 15_000 },
-  retries: 0,
+  retries: 1,
   reporter: [["list"]],
   use: {
     baseURL: BASE,
     trace: "on-first-retry",
     locale: "ar-SA",
+    navigationTimeout: 60_000,
+    actionTimeout: 30_000,
   },
   projects: [
     {

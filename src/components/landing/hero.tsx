@@ -15,7 +15,7 @@ export function LandingHero() {
             موظف استقبال ذكي لنشاطك التجاري
           </h1>
           <p className="mt-5 max-w-lg text-base leading-7 text-muted-foreground sm:text-lg">
-            منصة SaaS تساعدك على إعداد وكيل ذكاء اصطناعي يرد على عملائك عبر
+            منصة SaaS تساعدك على إعداد موظف استقبال ذكي يرد على عملائك عبر
             واتساب بمعرفة نشاطك — مع تحكم كامل للموظف من صندوق الوارد.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">

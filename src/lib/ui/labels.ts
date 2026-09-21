@@ -1,5 +1,55 @@
 /** Shared Arabic labels for customer-facing status. */
 
+import {
+  KNOWLEDGE_CATEGORIES,
+  type KnowledgeCategory,
+} from "@/constants/knowledge";
+
+export function knowledgeCategoryLabel(
+  category: string | null | undefined,
+): string {
+  switch ((category ?? "").toUpperCase()) {
+    case KNOWLEDGE_CATEGORIES.FAQ:
+      return "سؤال وإجابة";
+    case KNOWLEDGE_CATEGORIES.ABOUT:
+      return "عن النشاط";
+    case KNOWLEDGE_CATEGORIES.POLICY:
+      return "سياسة";
+    case KNOWLEDGE_CATEGORIES.SERVICE:
+      return "الخدمات والأسعار";
+    case KNOWLEDGE_CATEGORIES.LOCATION_INFO:
+      return "ساعات العمل";
+    case KNOWLEDGE_CATEGORIES.CUSTOM:
+      return "معلومة أخرى";
+    default:
+      return "معلومة";
+  }
+}
+
+export const KNOWLEDGE_CATEGORY_OPTIONS: {
+  value: KnowledgeCategory;
+  label: string;
+}[] = [
+  { value: KNOWLEDGE_CATEGORIES.FAQ, label: knowledgeCategoryLabel("FAQ") },
+  { value: KNOWLEDGE_CATEGORIES.ABOUT, label: knowledgeCategoryLabel("ABOUT") },
+  {
+    value: KNOWLEDGE_CATEGORIES.SERVICE,
+    label: knowledgeCategoryLabel("SERVICE"),
+  },
+  {
+    value: KNOWLEDGE_CATEGORIES.POLICY,
+    label: knowledgeCategoryLabel("POLICY"),
+  },
+  {
+    value: KNOWLEDGE_CATEGORIES.LOCATION_INFO,
+    label: knowledgeCategoryLabel("LOCATION_INFO"),
+  },
+  {
+    value: KNOWLEDGE_CATEGORIES.CUSTOM,
+    label: knowledgeCategoryLabel("CUSTOM"),
+  },
+];
+
 export function whatsappStatusLabel(status: string | null | undefined): string {
   switch ((status ?? "").toUpperCase()) {
     case "ACTIVE":

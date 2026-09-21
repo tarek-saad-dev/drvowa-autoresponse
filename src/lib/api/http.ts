@@ -8,8 +8,12 @@ import {
   ForbiddenError,
   NotFoundError,
 } from "@/lib/tenancy/errors";
-import { isPlanEntitlementError } from "@/modules/billing/errors";
+import {
+  isPlanEntitlementError,
+  type PlanErrorCode,
+} from "@/modules/billing/errors";
 import { WhatsAppRuntimeError } from "@/modules/channels/runtime-client";
+import { mapUserFacingError } from "@/lib/ui/user-errors";
 
 export function jsonOk<T>(
   data: T,
@@ -59,41 +63,76 @@ export async function parseJsonBody(request: Request): Promise<unknown> {
  */
 export function handleApiError(error: unknown): NextResponse {
   if (error instanceof AuthError) {
-    return jsonError(error.message, 401);
+    return jsonError(
+      mapUserFacingError(
+        { error: error.message },
+        "انتهت الجلسة. سجّل الدخول من جديد.",
+      ),
+      401,
+    );
   }
   if (error instanceof RateLimitError) {
-    const res = jsonError(error.message, 429, {
-      code: "RATE_LIMITED",
-      retryAfterSec: error.retryAfterSec,
-    });
+    const res = jsonError(
+      mapUserFacingError({ code: "RATE_LIMITED", error: error.message }),
+      429,
+      {
+        code: "RATE_LIMITED",
+        retryAfterSec: error.retryAfterSec,
+      },
+    );
     res.headers.set("Retry-After", String(error.retryAfterSec));
     return res;
   }
   if (isPlanEntitlementError(error)) {
-    return jsonError(error.message, 403, { code: error.code });
+    const code = error.code as PlanErrorCode;
+    return jsonError(
+      mapUserFacingError({ code, error: error.message }),
+      403,
+      { code },
+    );
   }
   if (error instanceof ForbiddenError) {
-    return jsonError(error.message, 403);
+    return jsonError(
+      mapUserFacingError({ error: error.message }, "لا تملك صلاحية تنفيذ هذا الإجراء."),
+      403,
+    );
   }
   if (error instanceof NotFoundError) {
-    return jsonError(error.message, 404);
+    return jsonError(
+      mapUserFacingError({ error: error.message }, "العنصر غير موجود أو لم يعد متاحاً."),
+      404,
+    );
   }
   if (error instanceof ZodError) {
     const message = error.issues[0]?.message ?? "Validation failed";
-    return jsonError(message, 400);
+    return jsonError(
+      mapUserFacingError({ error: message }, "تحقق من الحقول المدخلة ثم أعد المحاولة."),
+      400,
+    );
   }
   if (error instanceof DbError) {
-    return jsonError(error.message || "Database unavailable", 503);
+    return jsonError(
+      mapUserFacingError(
+        { error: error.message },
+        "الخدمة غير متاحة مؤقتاً. حاول مرة أخرى بعد قليل.",
+      ),
+      503,
+    );
   }
   if (error instanceof WhatsAppRuntimeError) {
-    return jsonError(error.message, error.status >= 400 ? error.status : 503, {
-      code: error.code,
-    });
+    return jsonError(
+      mapUserFacingError(
+        { code: error.code, error: error.message },
+        "تعذر الاتصال بواتساب. حاول مرة أخرى.",
+      ),
+      error.status >= 400 ? error.status : 503,
+      { code: error.code },
+    );
   }
 
   console.error("[api]", {
     name: error instanceof Error ? error.name : "unknown",
     message: error instanceof Error ? error.message : "unknown",
   });
-  return jsonError("Request failed", 500);
+  return jsonError("تعذر إتمام الطلب. حاول مرة أخرى.", 500);
 }

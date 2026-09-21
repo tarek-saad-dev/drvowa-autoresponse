@@ -398,7 +398,7 @@ export function OnboardingWizard() {
             <>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <Label htmlFor="agentName">اسم الوكيل</Label>
+                  <Label htmlFor="agentName">اسم موظف الاستقبال</Label>
                   <Input
                     id="agentName"
                     required
@@ -465,7 +465,7 @@ export function OnboardingWizard() {
                   onChange={(e) =>
                     setAgent((a) => ({ ...a, instructions: e.target.value }))
                   }
-                  placeholder="كيف يجب أن يتصرف الوكيل مع العملاء؟"
+                  placeholder="كيف يجب أن يتصرف موظف الاستقبال مع العملاء؟"
                 />
               </div>
             </>

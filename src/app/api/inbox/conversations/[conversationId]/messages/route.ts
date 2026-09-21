@@ -6,6 +6,7 @@ import {
   RATE_LIMITS,
   assertRateLimit,
 } from "@/lib/security/rate-limit";
+import { mapUserFacingError } from "@/lib/ui/user-errors";
 import { sendManualInboxReply } from "@/modules/inbox/manual-reply-service";
 import { listInboxMessages } from "@/modules/messaging";
 
@@ -71,7 +72,14 @@ export async function POST(request: Request, context: RouteContext) {
     });
 
     if (result.status === "FAILED") {
-      return jsonError(result.errorCode, 403, { code: result.errorCode });
+      return jsonError(
+        mapUserFacingError(
+          { code: result.errorCode, error: result.errorCode },
+          "تعذر إرسال الرسالة.",
+        ),
+        403,
+        { code: result.errorCode },
+      );
     }
     if (result.status === "AMBIGUOUS") {
       return jsonOk(
@@ -79,6 +87,10 @@ export async function POST(request: Request, context: RouteContext) {
           conversationId,
           status: result.status,
           errorCode: result.errorCode,
+          error: mapUserFacingError(
+            { code: result.errorCode },
+            "أُرسل الطلب لكن النتيجة غير مؤكدة. لا تعِد الإرسال تلقائياً — راجع المحادثة.",
+          ),
         },
         { status: 202 },
       );
@@ -97,13 +109,21 @@ export async function POST(request: Request, context: RouteContext) {
         || error.message === "MESSAGE_TOO_LONG"
         || error.message === "INVALID_IDEMPOTENCY_KEY"
       ) {
-        return jsonError(error.message, 400, { code: error.message });
+        return jsonError(
+          mapUserFacingError({ code: error.message }),
+          400,
+          { code: error.message },
+        );
       }
       if (
         error.message === "DESTINATION_UNAVAILABLE"
         || error.message === "ACCOUNT_KEY_MISSING"
       ) {
-        return jsonError(error.message, 409, { code: error.message });
+        return jsonError(
+          mapUserFacingError({ code: error.message }),
+          409,
+          { code: error.message },
+        );
       }
     }
     return handleApiError(error);

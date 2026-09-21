@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { mapUserFacingError } from "@/lib/ui/user-errors";
 
 type UiState =
   | "NOT_CONNECTED"
@@ -51,7 +52,7 @@ const ACTIVE_POLL_STATES: UiState[] = [
 function stateLabel(state: UiState): string {
   switch (state) {
     case "NOT_CONNECTED":
-      return "غير متصل";
+      return "غير مربوط";
     case "STARTING":
       return "جاري البدء";
     case "QR_REQUIRED":
@@ -65,11 +66,36 @@ function stateLabel(state: UiState): string {
     case "LOGGED_OUT":
       return "انتهت الجلسة";
     case "RUNTIME_DISABLED":
-      return "التشغيل غير مفعّل";
+      return "الربط غير متاح مؤقتاً";
     case "ERROR":
-      return "خطأ";
+      return "خطأ في الاتصال";
     default:
-      return state;
+      return "حالة غير معروفة";
+  }
+}
+
+function stateExplanation(state: UiState): string {
+  switch (state) {
+    case "NOT_CONNECTED":
+      return "لم يتم ربط رقم واتساب بعد لهذه المساحة.";
+    case "STARTING":
+      return "نجهّز الاتصال. انتظر لحظات دون إغلاق الصفحة.";
+    case "QR_REQUIRED":
+      return "امسح الرمز من هاتفك لإكمال الربط. الرمز يتجدد تلقائياً إذا انتهت صلاحيته.";
+    case "CONNECTING":
+      return "تم مسح الرمز وجارٍ تأكيد الاتصال.";
+    case "READY":
+      return "واتساب متصل وجاهز لاستقبال وإرسال الرسائل.";
+    case "DISCONNECTED":
+      return "انقطع الاتصال. يمكنك إعادة الربط بأمان.";
+    case "LOGGED_OUT":
+      return "انتهت جلسة واتساب من الهاتف. يلزم ربط جديد يدوياً.";
+    case "RUNTIME_DISABLED":
+      return "الربط غير متاح مؤقتاً. بيانات مساحتك محفوظة.";
+    case "ERROR":
+      return "حدث خطأ أثناء الاتصال. يمكنك المحاولة مرة أخرى.";
+    default:
+      return "";
   }
 }
 
@@ -82,6 +108,11 @@ function badgeVariant(
   }
   if (state === "ERROR" || state === "LOGGED_OUT") return "muted";
   return "default";
+}
+
+function sanitizePanelMessage(message: string | null | undefined): string | null {
+  if (!message?.trim()) return null;
+  return mapUserFacingError({ error: message }, message);
 }
 
 export function WhatsAppConnectionPanel({
@@ -106,9 +137,14 @@ export function WhatsAppConnectionPanel({
     const res = await fetch("/api/channels/whatsapp/status", {
       cache: "no-store",
     });
-    const data = (await res.json()) as ConnectionPayload & { error?: string };
+    const data = (await res.json()) as ConnectionPayload & {
+      error?: string;
+      code?: string;
+    };
     if (!res.ok) {
-      throw new Error(data.error || "تعذر تحديث الحالة");
+      throw new Error(
+        mapUserFacingError(data, "تعذر تحديث حالة واتساب."),
+      );
     }
     if (mounted.current) {
       setView(data);
@@ -126,10 +162,11 @@ export function WhatsAppConnectionPanel({
       qrImageDataUrl?: string | null;
       qrAvailable?: boolean;
       error?: string;
+      code?: string;
       message?: string | null;
     };
     if (!res.ok) {
-      throw new Error(data.error || "تعذر جلب رمز QR");
+      throw new Error(mapUserFacingError(data, "تعذر جلب رمز QR."));
     }
     if (!mounted.current) return data;
     if (data.uiState === "READY") {
@@ -147,6 +184,19 @@ export function WhatsAppConnectionPanel({
     }));
     return data;
   }, []);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const status = await refreshStatus();
+        if (status.uiState === "QR_REQUIRED") {
+          await refreshQr();
+        }
+      } catch {
+        // Keep SSR initial state if refresh fails.
+      }
+    })();
+  }, [refreshStatus, refreshQr]);
 
   useEffect(() => {
     if (!ACTIVE_POLL_STATES.includes(view.uiState)) {
@@ -181,19 +231,19 @@ export function WhatsAppConnectionPanel({
         error?: string;
         code?: string;
       };
-      if (!res.ok && data.code !== "MULTI_ACCOUNT_DISABLED") {
-        // Runtime-disabled still returns a structured body from service path
-        // via 200 in startWhatsAppPairing — handle both shapes.
-      }
       if (!res.ok && !data.uiState) {
-        throw new Error(data.error || "تعذر بدء الربط");
+        throw new Error(mapUserFacingError(data, "تعذر بدء الربط."));
       }
       setView(data.uiState ? data : { ...view, ...data });
       if (data.uiState === "QR_REQUIRED" || data.runtime?.qrAvailable) {
         await refreshQr();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر بدء الربط");
+      setError(
+        err instanceof Error
+          ? mapUserFacingError({ error: err.message }, "تعذر بدء الربط.")
+          : "تعذر بدء الربط.",
+      );
     } finally {
       setBusy(false);
     }
@@ -206,20 +256,28 @@ export function WhatsAppConnectionPanel({
       const res = await fetch("/api/channels/whatsapp/disconnect", {
         method: "POST",
       });
-      const data = (await res.json()) as ConnectionPayload & { error?: string };
+      const data = (await res.json()) as ConnectionPayload & {
+        error?: string;
+        code?: string;
+      };
       if (!res.ok) {
-        throw new Error(data.error || "تعذر إيقاف الاتصال");
+        throw new Error(mapUserFacingError(data, "تعذر إيقاف الاتصال."));
       }
       setView(data);
       setQrImageDataUrl(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر إيقاف الاتصال");
+      setError(
+        err instanceof Error
+          ? mapUserFacingError({ error: err.message }, "تعذر إيقاف الاتصال.")
+          : "تعذر إيقاف الاتصال.",
+      );
     } finally {
       setBusy(false);
     }
   }
 
   const state = view.uiState;
+  const panelMessage = sanitizePanelMessage(view.message);
 
   return (
     <div className="space-y-4">
@@ -229,40 +287,49 @@ export function WhatsAppConnectionPanel({
             <CardTitle>اتصال واتساب</CardTitle>
             <Badge variant={badgeVariant(state)}>{stateLabel(state)}</Badge>
           </div>
-          <CardDescription>
-            اربط رقم واتساب بنشاطك عبر رمز QR. افتح واتساب على هاتفك ← الأجهزة
-            المرتبطة ← ربط جهاز، ثم امسح الرمز الظاهر هنا.
-          </CardDescription>
+          <CardDescription>{stateExplanation(state)}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {error ? <Alert variant="error">{error}</Alert> : null}
-          {view.message && state !== "READY" ? (
+          {error ? (
+            <Alert variant="error" aria-live="polite">
+              {error}
+            </Alert>
+          ) : null}
+          {panelMessage && state !== "READY" ? (
             <Alert variant={state === "RUNTIME_DISABLED" ? "warning" : "error"}>
-              {view.message}
+              {panelMessage}
             </Alert>
           ) : null}
 
           {state === "NOT_CONNECTED" || state === "DISCONNECTED" ? (
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                اضغط للبدء. سيتم إنشاء اتصال آمن لمساحة العمل الحالية فقط.
-              </p>
               <Button onClick={() => void connect()} disabled={busy}>
-                {busy ? "جاري الربط…" : "ربط واتساب"}
+                {busy
+                  ? "جاري الربط…"
+                  : state === "DISCONNECTED"
+                    ? "إعادة ربط واتساب"
+                    : "ربط واتساب"}
               </Button>
             </div>
           ) : null}
 
           {state === "STARTING" || state === "CONNECTING" ? (
-            <p className="text-sm text-muted-foreground">
-              جاري تجهيز الاتصال… يرجى الانتظار.
+            <p className="text-sm text-muted-foreground" aria-live="polite">
+              {stateExplanation(state)}
             </p>
           ) : null}
 
           {state === "QR_REQUIRED" ? (
             <div className="space-y-4">
-              <p className="text-sm leading-7 text-foreground">
-                افتح واتساب → الأجهزة المرتبطة → ربط جهاز
+              <ol className="list-decimal space-y-1 pe-5 text-sm leading-7 text-foreground">
+                <li>افتح واتساب على هاتفك</li>
+                <li>الإعدادات ← الأجهزة المرتبطة</li>
+                <li>اضغط «ربط جهاز»</li>
+                <li>امسح الرمز الظاهر أدناه</li>
+              </ol>
+              <p className="text-xs text-muted-foreground">
+                إذا انتهت صلاحية الرمز سيظهر رمز جديد تلقائياً — لا تغلق هذه
+                الصفحة أثناء المسح.
               </p>
               {qrImageDataUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -306,28 +373,20 @@ export function WhatsAppConnectionPanel({
 
           {state === "LOGGED_OUT" ? (
             <div className="space-y-3">
-              <Alert variant="error">
-                انتهت جلسة واتساب. يلزم ربط جديد يدوياً — لن تتم إعادة الاتصال
-                تلقائياً.
-              </Alert>
+              <Alert variant="error">{stateExplanation(state)}</Alert>
               <Button onClick={() => void connect()} disabled={busy}>
-                ربط من جديد
+                إعادة ربط واتساب
               </Button>
             </div>
           ) : null}
 
           {state === "RUNTIME_DISABLED" ? (
-            <Alert variant="warning">
-              ربط واتساب غير متاح مؤقتاً. بيانات مساحتك محفوظة ويمكنك المحاولة
-              مرة أخرى بعد قليل دون فقدان الإعدادات.
-            </Alert>
+            <Alert variant="warning">{stateExplanation(state)}</Alert>
           ) : null}
 
           {state === "ERROR" ? (
             <div className="space-y-3">
-              <Alert variant="error">
-                حدث خطأ أثناء الاتصال. يمكنك المحاولة مرة أخرى.
-              </Alert>
+              <Alert variant="error">{stateExplanation(state)}</Alert>
               <Button onClick={() => void connect()} disabled={busy}>
                 إعادة المحاولة
               </Button>

@@ -4,6 +4,8 @@ import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import { getWhatsAppAiSetting } from "@/modules/ai";
 import { listAgents } from "@/modules/agents/service";
+import { getWhatsAppConnectionView } from "@/modules/channels/whatsapp-service";
+import { listItems } from "@/modules/knowledge/service";
 import { redirect } from "next/navigation";
 
 export default async function AgentPage() {
@@ -14,9 +16,16 @@ export default async function AgentPage() {
   );
   if (!businessId) redirect("/onboarding");
 
-  const [agents, setting] = await Promise.all([
+  const [agents, setting, waView, knowledge] = await Promise.all([
     listAgents({ businessId }),
     getWhatsAppAiSetting({ businessId }),
+    Promise.race([
+      getWhatsAppConnectionView({ businessId }),
+      new Promise<null>((resolve) => {
+        setTimeout(() => resolve(null), 3_000);
+      }),
+    ]).catch(() => null),
+    listItems({ businessId, includeInactive: false }),
   ]);
 
   const activeAgents = agents.filter((a) => a.isActive);
@@ -49,6 +58,11 @@ export default async function AgentPage() {
           roleTitle: a.roleTitle,
           isActive: a.isActive,
         }))}
+        whatsapp={{
+          uiState: waView?.uiState ?? "NOT_CONNECTED",
+          maskedPhone: waView?.connection?.maskedPhone ?? null,
+        }}
+        knowledgeActiveCount={knowledge.length}
       />
       <AgentsManager agents={agents} />
     </div>

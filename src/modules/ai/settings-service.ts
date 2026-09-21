@@ -42,6 +42,11 @@ export async function upsertWhatsAppAiSetting(params: {
   if (!agent.isActive && params.autoReplyEnabled) {
     throw new ForbiddenError("Cannot enable auto-reply with an inactive agent");
   }
+  if (params.autoReplyEnabled && connection.status !== "ACTIVE") {
+    throw new ForbiddenError(
+      "WhatsApp must be connected before enabling auto-reply",
+    );
+  }
 
   return settingsRepo.upsertChannelAiSetting({
     businessId: params.businessId,
