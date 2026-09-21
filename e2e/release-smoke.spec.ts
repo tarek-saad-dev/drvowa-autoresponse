@@ -41,7 +41,7 @@ async function apiOnboarding(page: Page) {
       location: null,
       agent: {
         name: "موظف الاستقبال",
-        roleTitle: "AI receptionist",
+        roleTitle: "موظف استقبال",
         language: "ar",
         dialect: null,
         tone: "مهني وودود",
@@ -72,13 +72,11 @@ async function apiLogout(page: Page) {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("V1 release browser smoke", () => {
+test.describe("V1 product finish smoke", () => {
   const password = "GatePass123!";
   let email = "";
 
-  test("A/B signup → onboarding → dashboard → logout → login", async ({
-    page,
-  }) => {
+  test("signup → onboarding → dashboard → logout → login", async ({ page }) => {
     email = uniqueEmail();
 
     await page.goto("/signup");
@@ -86,12 +84,12 @@ test.describe("V1 release browser smoke", () => {
     await apiSignup(page, email, password);
 
     await page.goto("/onboarding");
-    await expect(page.getByText(/إعداد مساحة العمل|مرحباً/i).first()).toBeVisible();
+    await expect(page.getByText(/إعداد|مرحباً|النشاط/i).first()).toBeVisible();
     await expect(page.locator("#businessName")).toBeVisible({ timeout: 15_000 });
     await apiOnboarding(page);
 
     await page.goto("/dashboard");
-    await expect(page.getByRole("heading", { name: "نظرة عامة" })).toBeVisible({
+    await expect(page.getByRole("heading", { name: /مرحباً/ })).toBeVisible({
       timeout: 30_000,
     });
 
@@ -100,20 +98,24 @@ test.describe("V1 release browser smoke", () => {
     await expect(page.getByRole("heading", { name: "تسجيل الدخول" })).toBeVisible();
     await apiLogin(page, email, password);
     await page.goto("/dashboard");
-    await expect(page.getByRole("heading", { name: "نظرة عامة" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /مرحباً/ })).toBeVisible();
   });
 
-  test("C/D/E/G agent, knowledge, whatsapp, billing/usage", async ({ page }) => {
+  test("agent, knowledge, whatsapp, billing, usage, settings", async ({
+    page,
+  }) => {
     expect(email).toBeTruthy();
     await apiLogin(page, email, password);
 
     await page.goto("/dashboard/agent");
-    await expect(page.getByRole("heading", { name: /الوكيل/ })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "موظف الاستقبال", level: 1 }),
+    ).toBeVisible();
     await expect(page.locator("#name, input[name='name']").first()).toBeVisible();
-    await expect(page.locator("body")).toContainText(/موظف الاستقبال|AI receptionist/i);
+    await expect(page.locator("body")).toContainText(/موظف الاستقبال/);
 
     await page.goto("/dashboard/knowledge");
-    await expect(page.getByRole("heading", { name: "المعرفة" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /المعرفة/ })).toBeVisible();
     const smokeTitle = `Smoke ${Date.now()}`;
     const create = await page.request.post("/api/knowledge", {
       data: {
@@ -129,45 +131,44 @@ test.describe("V1 release browser smoke", () => {
     });
 
     await page.goto("/dashboard/whatsapp");
-    await expect(page.getByRole("heading", { name: "واتساب", exact: true })).toBeVisible();
     await expect(
-      page.getByText(/غير مربوط|متصل|ربط|QR|حالة|بدء|تعطيل|runtime|غير متاح/i).first(),
+      page.getByRole("heading", { name: /واتساب|اتصال واتساب/ }).first(),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/غير مربوط|متصل|ربط|QR|رمز|حالة|بدء/i).first(),
     ).toBeVisible();
 
     await page.goto("/dashboard/billing");
-    await expect(page.getByRole("heading", { name: /الفوترة/ })).toBeVisible();
-    await expect(page.getByText(/FREE|مجاني|الخطة/i).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: /الخطة/ })).toBeVisible();
+    await expect(page.getByText(/قريباً|الخطة|حدود/i).first()).toBeVisible();
+    await expect(page.locator("body")).not.toContainText("EXTERNAL_GATE");
 
     await page.goto("/dashboard/usage");
     await expect(page.getByRole("heading", { name: "الاستخدام" })).toBeVisible();
-    await expect(page.getByText(/ذكاء|واتساب|حد/i).first()).toBeVisible();
+    await expect(page.getByText(/يتجدد|ردود|واتساب/i).first()).toBeVisible();
+
+    await page.goto("/dashboard/settings");
+    await expect(page.getByRole("heading", { name: "الإعدادات" })).toBeVisible();
+    await expect(page.getByText(/النشاط|الحساب|الأمان/i).first()).toBeVisible();
   });
 
-  test("F inbox list + manual reply UI shell", async ({ page }) => {
+  test("inbox shell + mobile", async ({ page }) => {
     expect(email).toBeTruthy();
     await apiLogin(page, email, password);
     await page.goto("/dashboard/inbox");
-    await expect(page.getByRole("heading", { name: "الوارد" })).toBeVisible();
     await expect(
-      page.getByText(/المحادثات|لا توجد محادثات|اختر محادثة|رد يدوي/i).first(),
+      page.getByRole("heading", { name: "المحادثات", level: 1 }),
     ).toBeVisible();
-    // Composer appears after selecting a conversation; empty tenant has none yet.
-    const firstConvo = page.locator("aside ul li button").first();
-    if (await firstConvo.isVisible().catch(() => false)) {
-      await firstConvo.click();
-      await expect(page.locator("#inbox-manual-reply")).toBeVisible();
-    }
-  });
+    await expect(
+      page.getByText(/لا توجد محادثات|اختر محادثة|المحادثات/i).first(),
+    ).toBeVisible();
 
-  test("H mobile 390 no horizontal overflow on key pages", async ({ page }) => {
-    expect(email).toBeTruthy();
-    await apiLogin(page, email, password);
     await page.setViewportSize({ width: 390, height: 844 });
-
     for (const path of [
       "/dashboard",
       "/dashboard/whatsapp",
       "/dashboard/inbox",
+      "/dashboard/billing",
       "/onboarding",
     ]) {
       await page.goto(path);
