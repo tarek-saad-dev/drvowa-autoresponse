@@ -1,10 +1,10 @@
 # PRODUCT_FINISH_REPORT
 
-## DRVOWA_PRODUCT_FINISH_V1: NOT_READY
+## DRVOWA_PRODUCT_FINISH_V1: READY
 
-**BRANCH:** `feature/product-finish-v1`  
+**BRANCH:** `feature/product-finish-v1`
 
-**SHA:** branch tip (`git rev-parse origin/feature/product-finish-v1`) — product gap-closer commit `9ab2efa`  
+**SHA:** branch tip (`git rev-parse HEAD` / `origin/feature/product-finish-v1`)
 
 **Base main:** `8daf6c5` (untouched — no deploy / no merge)
 
@@ -27,20 +27,23 @@
 
 | Case | Status |
 |------|--------|
-| agent edit/save | IMPLEMENTED — blocked by local Chromium launch |
-| knowledge CRUD/state | IMPLEMENTED — blocked by local Chromium launch |
-| WhatsApp states | IMPLEMENTED (mocked routes) — blocked by local Chromium launch |
-| inbox manual reply | IMPLEMENTED (mocked) — blocked by local Chromium launch |
-| human takeover | IMPLEMENTED — blocked by local Chromium launch |
-| resume AI | IMPLEMENTED — blocked by local Chromium launch |
-| safety paused | IMPLEMENTED — blocked by local Chromium launch |
-| mobile | IMPLEMENTED — blocked by local Chromium launch |
+| signup | PASS |
+| onboarding | PASS |
+| dashboard | PASS |
+| agent edit/save | PASS |
+| knowledge create/edit/disable/enable | PASS |
+| WhatsApp states (mocked) | PASS |
+| inbox conversation selection | PASS |
+| manual reply (mocked) | PASS |
+| HUMAN_PAUSED takeover | PASS |
+| resume AI | PASS |
+| ambiguous / SAFETY_PAUSED | PASS |
+| usage / billing | PASS |
+| settings | PASS |
+| mobile inbox | PASS |
+| mobile onboarding overflow | PASS |
 
-**Environment issue (genuine):** Playwright cannot launch Chromium on this Windows host:
-
-`Your computer has run out of resources` / desktop-heap (`0x36B7`).
-
-Partial earlier run in the same branch session did pass the previous 3-test smoke before suites expanded and the machine exhausted window resources. Re-run after Windows sign-out/reboot.
+Local Playwright Chromium launched successfully after Windows reboot. No real WhatsApp calls (route mocks).
 
 ### COPY
 
@@ -54,7 +57,7 @@ Partial earlier run in the same branch session did pass the previous 3-test smok
 
 | Viewport | Status |
 |----------|--------|
-| 390×844 | PASS (layout + prior overflow e2e) |
+| 390×844 | PASS (layout + overflow e2e) |
 | 768×1024 | PASS (layout) |
 | 1366×768 | PASS (layout) |
 | 1440×900 | PASS (layout) |
@@ -66,7 +69,7 @@ See `docs/PRODUCT_FINISH_VISUAL_REVIEW.md`.
 | Gate | Status |
 |------|--------|
 | npm test | PASS (226) |
-| e2e | FAIL — Windows Chromium resource exhaustion (not product assertion failures) |
+| e2e | PASS (7/7) |
 | typecheck | PASS |
 | lint | PASS |
 | build | PASS |
@@ -84,19 +87,16 @@ See `docs/PRODUCT_FINISH_VISUAL_REVIEW.md`.
 
 These are **not** product engineering blockers.
 
-### Gap-closer changes in this pass
+### Verification-pass fixes
 
-1. Knowledge: remove RAG copy; Arabic category labels; enable/disable with confirm; X من Y quota.
-2. Agent: receptionist wording; save success; char count; dirty/beforeunload; delete confirm.
-3. AI readiness: WhatsApp + agent gates; knowledge empty warning; no auto-enable.
-4. `mapUserFacingError` + API `handleApiError` Arabic normalization.
-5. WhatsApp: human titles/explanations/QR steps for all UI states.
-6. Expanded Playwright product flows (inbox mocked, WA mocked, agent/knowledge mutations).
+1. E2E inbox mocks: fulfill `**/api/inbox/**` (no fall-through to real API).
+2. Unique desktop/mobile composer IDs; visible locators for dual-pane DOM.
+3. Agent/knowledge/locations form submit: capture `formEl` before `await` (React FormEvent).
+4. Playwright: prefer `E2E_USE_DEV=1` for HTTP cookie-safe local smoke.
 
 ### FINAL
 
-**PRODUCT_V1_COMPLETE: NO**
+**PRODUCT_V1_COMPLETE: YES**
 
-Genuine blocker:
-
-- Local `npm run test:e2e` cannot launch Chromium due to Windows desktop-heap / resource exhaustion. Product assertions were not reached after the environment failure. Re-run e2e after freeing Windows resources (sign out / reboot) to flip this gate to YES.
+DRVOWA V1 product implementation is complete.
+Only owner/external launch gates remain.

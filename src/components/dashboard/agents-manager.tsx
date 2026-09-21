@@ -41,7 +41,9 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
   }, [dirty]);
 
   function beginEdit(agent: Agent) {
-    if (dirty) {
+    // Only confirm when abandoning another in-progress edit.
+    // An empty create draft must not block opening an existing receptionist.
+    if (dirty && editing && editing.agentId !== agent.agentId) {
       const ok = window.confirm(
         "لديك تعديلات غير محفوظة. هل تريد فتح سجل آخر؟",
       );
@@ -61,10 +63,11 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formEl = event.currentTarget;
     setPending(true);
     setError(null);
     setSuccess(null);
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(formEl);
     const payload = {
       name: String(form.get("name") ?? ""),
       roleTitle: String(form.get("roleTitle") ?? ""),
@@ -95,7 +98,7 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
       }
       setDirty(false);
       setEditing(null);
-      event.currentTarget.reset();
+      formEl.reset();
       setSuccess("تم حفظ شخصية موظف الاستقبال.");
       router.refresh();
     } catch {
@@ -250,7 +253,11 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
               </p>
             </div>
             <div className="flex gap-2">
-              <Button type="submit" disabled={pending}>
+              <Button
+                type="submit"
+                disabled={pending}
+                data-testid={editing ? "agent-save-edit" : "agent-create"}
+              >
                 {pending
                   ? "جارٍ الحفظ..."
                   : editing
@@ -299,8 +306,10 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
                 ) : null}
                 <div className="flex gap-2">
                   <Button
+                    type="button"
                     size="sm"
                     variant="outline"
+                    data-testid="agent-edit"
                     onClick={() => beginEdit(agent)}
                   >
                     تعديل

@@ -25,9 +25,10 @@ export function LocationsManager({ locations }: { locations: Location[] }) {
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formEl = event.currentTarget;
     setPending(true);
     setError(null);
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(formEl);
     const payload = {
       name: String(form.get("name") ?? ""),
       code: String(form.get("code") ?? "") || null,
@@ -56,7 +57,7 @@ export function LocationsManager({ locations }: { locations: Location[] }) {
         return;
       }
       setEditing(null);
-      event.currentTarget.reset();
+      formEl.reset();
       router.refresh();
     } catch {
       setError("حدث خطأ في الاتصال");

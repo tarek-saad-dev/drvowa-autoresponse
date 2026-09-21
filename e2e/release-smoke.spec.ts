@@ -82,12 +82,15 @@ type InboxFixtureState = {
     textContent: string | null;
     contentType: string;
     createdAtUtc: string;
+    receivedAtUtc: string;
+    providerTimestampUtc: string | null;
   }>;
   nextSend: "SENT" | "AMBIGUOUS" | "FAILED";
   draftEcho: string | null;
 };
 
 function makeInboxState(): InboxFixtureState {
+  const inboundAt = new Date(Date.now() - 60_000).toISOString();
   return {
     aiMode: "AUTO",
     messages: [
@@ -96,7 +99,9 @@ function makeInboxState(): InboxFixtureState {
         direction: "INBOUND",
         textContent: "مرحبا، ما مواعيدكم؟",
         contentType: "text",
-        createdAtUtc: new Date(Date.now() - 60_000).toISOString(),
+        createdAtUtc: inboundAt,
+        receivedAtUtc: inboundAt,
+        providerTimestampUtc: inboundAt,
       },
     ],
     nextSend: "SENT",
@@ -105,15 +110,13 @@ function makeInboxState(): InboxFixtureState {
 }
 
 async function installInboxMocks(page: Page, state: InboxFixtureState) {
-  await page.route("**/api/inbox/conversations**", async (route: Route) => {
+  await page.route("**/api/inbox/**", async (route: Route) => {
     const req = route.request();
     const url = new URL(req.url());
     const method = req.method();
+    const path = url.pathname;
 
-    if (
-      method === "GET"
-      && url.pathname.endsWith("/api/inbox/conversations")
-    ) {
+    if (method === "GET" && /\/api\/inbox\/conversations\/?$/.test(path)) {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -129,7 +132,8 @@ async function installInboxMocks(page: Page, state: InboxFixtureState) {
                 ?? state.messages[state.messages.length - 1]?.textContent
                 ?? "—",
               lastMessageDirection:
-                state.messages[state.messages.length - 1]?.direction ?? "INBOUND",
+                state.messages[state.messages.length - 1]?.direction
+                ?? "INBOUND",
               lastMessageAtUtc: new Date().toISOString(),
               status: "OPEN",
               aiMode: state.aiMode,
@@ -148,7 +152,7 @@ async function installInboxMocks(page: Page, state: InboxFixtureState) {
 
     if (
       method === "GET"
-      && url.pathname.includes(`/conversations/${CONV_ID}/messages`)
+      && path.includes(`/conversations/${CONV_ID}/messages`)
     ) {
       await route.fulfill({
         status: 200,
@@ -163,9 +167,16 @@ async function installInboxMocks(page: Page, state: InboxFixtureState) {
 
     if (
       method === "POST"
-      && url.pathname.includes(`/conversations/${CONV_ID}/messages`)
+      && path.includes(`/conversations/${CONV_ID}/messages`)
     ) {
-      const body = req.postDataJSON() as { text?: string };
+      let text = "";
+      try {
+        const raw = req.postData();
+        const parsed = raw ? (JSON.parse(raw) as { text?: string }) : {};
+        text = parsed.text ?? "";
+      } catch {
+        text = "";
+      }
       if (state.nextSend === "AMBIGUOUS") {
         await route.fulfill({
           status: 202,
@@ -191,9 +202,9 @@ async function installInboxMocks(page: Page, state: InboxFixtureState) {
         });
         return;
       }
-      const text = body.text ?? "";
       state.draftEcho = text;
       state.aiMode = "HUMAN_PAUSED";
+      const outAt = new Date().toISOString();
       state.messages = [
         ...state.messages,
         {
@@ -201,7 +212,9 @@ async function installInboxMocks(page: Page, state: InboxFixtureState) {
           direction: "OUTBOUND",
           textContent: text,
           contentType: "text",
-          createdAtUtc: new Date().toISOString(),
+          createdAtUtc: outAt,
+          receivedAtUtc: outAt,
+          providerTimestampUtc: outAt,
         },
       ];
       await route.fulfill({
@@ -220,7 +233,7 @@ async function installInboxMocks(page: Page, state: InboxFixtureState) {
 
     if (
       method === "POST"
-      && url.pathname.includes(`/conversations/${CONV_ID}/ai/resume`)
+      && path.includes(`/conversations/${CONV_ID}/ai/resume`)
     ) {
       state.aiMode = "AUTO";
       await route.fulfill({
@@ -233,7 +246,11 @@ async function installInboxMocks(page: Page, state: InboxFixtureState) {
       return;
     }
 
-    await route.continue();
+    await route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "mock route not matched", path, method }),
+    });
   });
 }
 
@@ -305,26 +322,32 @@ test.describe("V1 product finish smoke", () => {
   test("4 agent edit/save persists", async ({ page }) => {
     expect(email).toBeTruthy();
     await apiLogin(page, email, password);
-    await page.addInitScript(() => {
-      window.addEventListener("beforeunload", (e) => {
-        e.stopImmediatePropagation();
-      });
-    });
-    await page.goto("/dashboard/agent");
+    page.on("dialog", (dialog) => void dialog.accept());
+    await page.goto("/dashboard/agent", { waitUntil: "domcontentloaded" });
     await expect(
       page.getByRole("heading", { name: "موظف الاستقبال", level: 1 }),
     ).toBeVisible();
 
-    await page.getByRole("button", { name: "تعديل" }).first().click();
+    await page.getByTestId("agent-edit").click();
+    await expect(page.getByTestId("agent-save-edit")).toBeVisible({
+      timeout: 15_000,
+    });
     await expect(
-      page.getByRole("button", { name: "حفظ التعديل" }),
-    ).toBeVisible({ timeout: 15_000 });
+      page.getByRole("heading", { name: "تعديل موظف الاستقبال" }),
+    ).toBeVisible();
 
     const tone = `نبرة-${Date.now()}`;
     await page.locator("#tone").fill(tone);
-    await page.getByRole("button", { name: "حفظ التعديل" }).click();
+    const saveResponse = page.waitForResponse(
+      (res) =>
+        res.url().includes("/api/agents/")
+        && res.request().method() === "PATCH",
+    );
+    await page.getByTestId("agent-save-edit").click();
+    const patchRes = await saveResponse;
+    expect(patchRes.ok(), await patchRes.text()).toBeTruthy();
     await expect(page.getByText(/تم حفظ/)).toBeVisible({ timeout: 20_000 });
-    await page.reload();
+    await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.getByText(tone).first()).toBeVisible({ timeout: 20_000 });
     await expect(page.locator("main")).not.toContainText("AI Agent");
     await expect(page.locator("main")).not.toContainText("EXTERNAL_GATE");
@@ -452,20 +475,35 @@ test.describe("V1 product finish smoke", () => {
     await expect(page.getByText("عميل تجريبي").first()).toBeVisible();
 
     await page.getByText("عميل تجريبي").first().click();
-    await expect(page.getByText("مرحبا، ما مواعيدكم؟")).toBeVisible();
+    await expect(
+      page.getByRole("paragraph").filter({ hasText: "مرحبا، ما مواعيدكم؟" }).first(),
+    ).toBeVisible();
 
-    const composer = page.locator("#inbox-manual-reply");
+    const composer = page.locator("#inbox-manual-reply-desktop");
     await expect(composer).toBeVisible();
     await composer.fill("رد يدوي للاختبار");
-    await page.getByRole("button", { name: /إرسال/ }).click();
+    const sendBtn = page
+      .locator("#inbox-manual-reply-desktop")
+      .locator("xpath=ancestor::div[contains(@class,'border-t')][1]")
+      .getByRole("button", { name: /^إرسال$/ });
+    const sendResponse = page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST"
+        && r.url().includes(`/api/inbox/conversations/${CONV_ID}/messages`),
+    );
+    await sendBtn.click();
+    const posted = await sendResponse;
+    expect(posted.status(), await posted.text()).toBe(200);
 
-    await expect(page.getByText(/الرد الآلي متوقف/)).toBeVisible({
+    await expect(page.getByText(/الرد الآلي متوقف/).first()).toBeVisible({
       timeout: 15_000,
     });
     await expect(composer).toHaveValue("");
-    await expect(page.getByText("رد يدوي للاختبار").last()).toBeVisible();
+    await expect(
+      page.getByRole("paragraph").filter({ hasText: "رد يدوي للاختبار" }).first(),
+    ).toBeVisible();
 
-    await page.getByRole("button", { name: /استئناف الرد الآلي/ }).click();
+    await page.getByRole("button", { name: /استئناف الرد الآلي/ }).first().click();
     await expect(page.getByText(/الرد الآلي متوقف/)).toHaveCount(0, {
       timeout: 15_000,
     });
@@ -473,8 +511,14 @@ test.describe("V1 product finish smoke", () => {
     // Ambiguous send — draft preserved
     state.nextSend = "AMBIGUOUS";
     await composer.fill("رسالة غامضة");
-    await page.getByRole("button", { name: /إرسال/ }).click();
-    await expect(page.getByText(/غير مؤكدة|لا تعِد الإرسال/)).toBeVisible();
+    const ambiguousResponse = page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST"
+        && r.url().includes(`/api/inbox/conversations/${CONV_ID}/messages`),
+    );
+    await sendBtn.click();
+    expect((await ambiguousResponse).status()).toBe(202);
+    await expect(page.getByText(/غير مؤكدة|لا تعِد الإرسال/).first()).toBeVisible();
     await expect(composer).toHaveValue("رسالة غامضة");
 
     // SAFETY_PAUSED warning
@@ -514,13 +558,27 @@ test.describe("V1 product finish smoke", () => {
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/dashboard/inbox");
-    await expect(page.getByText("عميل تجريبي").first()).toBeVisible();
-    await page.getByText("عميل تجريبي").first().click();
-    await expect(page.getByText("مرحبا، ما مواعيدكم؟")).toBeVisible();
-    const back = page.getByRole("button", { name: /رجوع|المحادثات|خلف/i });
+    const mobileContact = page
+      .getByText("عميل تجريبي")
+      .filter({ visible: true })
+      .first();
+    await expect(mobileContact).toBeVisible();
+    await mobileContact.click();
+    await expect(
+      page
+        .getByRole("paragraph")
+        .filter({ hasText: "مرحبا، ما مواعيدكم؟" })
+        .filter({ visible: true })
+        .first(),
+    ).toBeVisible();
+    const back = page
+      .getByRole("button", { name: /رجوع|المحادثات|خلف/i })
+      .filter({ visible: true });
     if (await back.count()) {
       await back.first().click();
-      await expect(page.getByText("عميل تجريبي").first()).toBeVisible();
+      await expect(
+        page.getByText("عميل تجريبي").filter({ visible: true }).first(),
+      ).toBeVisible();
     }
 
     for (const path of [

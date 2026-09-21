@@ -48,17 +48,22 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  // Prefer existing local `next dev` (Next 16 blocks a second dev for same dir).
-  // Set E2E_START_SERVER=1 to spawn webServer (requires no other next dev).
+  // Prefer production server for e2e stability (no HMR remounts).
+  // Set E2E_START_SERVER=1. Build first with `npm run build` when using start.
   webServer: process.env.E2E_START_SERVER
     ? {
-        command: `npx next dev -p ${PORT}`,
+        command:
+          process.env.E2E_USE_DEV === "1"
+            ? `npx next dev -p ${PORT}`
+            : `npx next start -p ${PORT}`,
         url: `${BASE}/api/health`,
-        reuseExistingServer: true,
+        reuseExistingServer: false,
         timeout: 180_000,
         env: {
           ...process.env,
           PORT: String(PORT),
+          NODE_ENV:
+            process.env.E2E_USE_DEV === "1" ? "development" : "production",
         },
       }
     : undefined,

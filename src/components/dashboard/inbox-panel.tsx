@@ -440,7 +440,7 @@ export function InboxPanel({
     </aside>
   );
 
-  const threadPane = (
+  const threadPane = (composerId: string) => (
     <section className="flex min-h-[24rem] flex-1 flex-col">
       <div className="border-b border-border px-4 py-3">
         {selected ? (
@@ -567,11 +567,11 @@ export function InboxPanel({
 
       {selectedId ? (
         <div className="border-t border-border p-3">
-          <label className="sr-only" htmlFor="inbox-manual-reply">
+          <label className="sr-only" htmlFor={composerId}>
             رسالة يدوية
           </label>
           <Textarea
-            id="inbox-manual-reply"
+            id={composerId}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             rows={2}
@@ -606,10 +606,12 @@ export function InboxPanel({
     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
       <div className="hidden min-h-[32rem] md:grid md:grid-cols-[minmax(16rem,22rem)_1fr]">
         {listPane}
-        {threadPane}
+        {threadPane("inbox-manual-reply-desktop")}
       </div>
       <div className="md:hidden">
-        {mobileShowThread && selectedId ? threadPane : listPane}
+        {mobileShowThread && selectedId
+          ? threadPane("inbox-manual-reply-mobile")
+          : listPane}
       </div>
     </div>
   );

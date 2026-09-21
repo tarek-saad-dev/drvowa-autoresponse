@@ -58,41 +58,42 @@ export function KnowledgeManager({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPending(true);
-    setError(null);
-    setSuccess(null);
-    const form = new FormData(event.currentTarget);
-    const payload = {
-      category: String(form.get("category") ?? KNOWLEDGE_CATEGORIES.CUSTOM),
-      title: String(form.get("title") ?? ""),
-      content: String(form.get("content") ?? ""),
-    };
-
-    try {
-      const response = await fetch(
-        editing
-          ? `/api/knowledge/${editing.knowledgeItemId}`
-          : "/api/knowledge",
-        {
-          method: editing ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        },
-      );
-      const data = (await response.json().catch(() => ({}))) as {
-        error?: string;
-        code?: string;
+      const formEl = event.currentTarget;
+      setPending(true);
+      setError(null);
+      setSuccess(null);
+      const form = new FormData(formEl);
+      const payload = {
+        category: String(form.get("category") ?? KNOWLEDGE_CATEGORIES.CUSTOM),
+        title: String(form.get("title") ?? ""),
+        content: String(form.get("content") ?? ""),
       };
-      if (!response.ok) {
-        setError(
-          mapUserFacingError(data, "تعذر حفظ المعلومة. حاول مرة أخرى."),
+
+      try {
+        const response = await fetch(
+          editing
+            ? `/api/knowledge/${editing.knowledgeItemId}`
+            : "/api/knowledge",
+          {
+            method: editing ? "PATCH" : "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          },
         );
-        return;
-      }
-      setEditing(null);
-      event.currentTarget.reset();
-      setSuccess(editing ? "تم حفظ التعديل." : "تمت إضافة المعلومة.");
-      router.refresh();
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          code?: string;
+        };
+        if (!response.ok) {
+          setError(
+            mapUserFacingError(data, "تعذر حفظ المعلومة. حاول مرة أخرى."),
+          );
+          return;
+        }
+        setEditing(null);
+        formEl.reset();
+        setSuccess(editing ? "تم حفظ التعديل." : "تمت إضافة المعلومة.");
+        router.refresh();
     } catch {
       setError("حدث خطأ في الاتصال. تحقق من الشبكة ثم أعد المحاولة.");
     } finally {
