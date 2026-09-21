@@ -24,3 +24,21 @@ export class NotFoundError extends Error {
     this.name = "NotFoundError";
   }
 }
+
+export class ValidationError extends Error {
+  readonly statusCode = 400;
+
+  constructor(message = "Invalid request") {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
+
+export class ConflictError extends Error {
+  readonly statusCode = 409;
+
+  constructor(message = "Conflict") {
+    super(message);
+    this.name = "ConflictError";
+  }
+}

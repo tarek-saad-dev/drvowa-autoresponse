@@ -5,8 +5,10 @@ import { DbError } from "@/lib/db";
 import { RateLimitError } from "@/lib/security/rate-limit";
 import {
   AuthError,
+  ConflictError,
   ForbiddenError,
   NotFoundError,
+  ValidationError,
 } from "@/lib/tenancy/errors";
 import {
   isPlanEntitlementError,
@@ -95,6 +97,18 @@ export function handleApiError(error: unknown): NextResponse {
     return jsonError(
       mapUserFacingError({ error: error.message }, "لا تملك صلاحية تنفيذ هذا الإجراء."),
       403,
+    );
+  }
+  if (error instanceof ValidationError) {
+    return jsonError(
+      mapUserFacingError({ error: error.message }, "تحقق من البيانات المدخلة."),
+      400,
+    );
+  }
+  if (error instanceof ConflictError) {
+    return jsonError(
+      mapUserFacingError({ error: error.message }, "تعذر إكمال العملية بسبب تعارض."),
+      409,
     );
   }
   if (error instanceof NotFoundError) {
