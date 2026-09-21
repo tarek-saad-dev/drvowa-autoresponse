@@ -32,9 +32,10 @@ export default async function InboxPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">الوارد</h1>
+        <h1 className="text-2xl font-bold tracking-tight">المحادثات</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          محادثات واتساب — رد آلي أو يدوي مع تحكم كامل للموظف.
+          محادثات واتساب — رد آلي أو يدوي مع إمكانية إيقاف واستئناف الرد الآلي
+          لكل محادثة.
         </p>
       </div>
       <InboxPanel initialConversations={initialConversations} />
