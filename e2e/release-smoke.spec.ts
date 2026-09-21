@@ -545,8 +545,12 @@ test.describe("V1 product finish smoke", () => {
     await expect(page.getByTestId("plan-card-BUSINESS")).toContainText("1999");
 
     await page.getByTestId("plan-card-STARTER").getByRole("button", { name: "اختيار الباقة" }).click();
-    await expect(page.getByText(/حوّل المبلغ التالي عبر InstaPay/).first()).toBeVisible();
-    await expect(page.getByText(/499 EGP/).first()).toBeVisible();
+    await expect(page.getByText(/حوّل المبلغ التالي عبر InstaPay/).first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByTestId("drv-payment-reference")).toBeVisible();
+    await expect(page.getByTestId("drv-payment-reference")).toContainText(/DRV-/);
+    await expect(page.getByTestId("pay-amount")).toContainText("499");
     await page.getByRole("button", { name: "لقد حوّلت المبلغ" }).click();
     await page.locator("#payerName").fill("مختبر الإطلاق");
     await page.locator("#transferReference").fill("E2E-TX-1");
@@ -554,7 +558,7 @@ test.describe("V1 product finish smoke", () => {
     await expect(page.getByText(/طلب الدفع قيد المراجعة/)).toBeVisible({
       timeout: 15_000,
     });
-    await expect(page.getByText(/DRV-/)).toBeVisible();
+    await expect(page.getByText(/DRV-/).first()).toBeVisible();
 
     await page.goto("/dashboard/usage");
     await expect(page.getByRole("heading", { name: "الاستخدام" })).toBeVisible();

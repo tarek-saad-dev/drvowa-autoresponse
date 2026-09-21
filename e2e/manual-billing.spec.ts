@@ -2,7 +2,10 @@ import { expect, test, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 
 import { approveManualPayment } from "../src/modules/billing/manual-payment-service";
-import { findPendingByBusinessId } from "../src/modules/billing/manual-payment-repository";
+import {
+  findOpenByBusinessId,
+  findPendingByBusinessId,
+} from "../src/modules/billing/manual-payment-repository";
 import { upsertPlatformAdmin } from "../src/modules/platform-admin/service";
 import { closePool } from "../src/lib/db";
 
@@ -71,7 +74,9 @@ test.describe.serial("manual instapay billing e2e", () => {
     await closePool().catch(() => undefined);
   });
 
-  test("customer submit → admin approve → STARTER active", async ({ page }) => {
+  test("customer: DRV before transfer → confirm → admin approve STARTER", async ({
+    page,
+  }) => {
     process.env.MANUAL_INSTAPAY_ENABLED = "1";
     const password = "BillingE2E!23456";
     const customerEmail = uniqueEmail("pay_cust");
@@ -85,9 +90,25 @@ test.describe.serial("manual instapay billing e2e", () => {
       .getByTestId("plan-card-STARTER")
       .getByRole("button", { name: "اختيار الباقة" })
       .click();
+
     await expect(
       page.getByRole("heading", { name: "الدفع عبر InstaPay" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("drv-payment-reference")).toBeVisible();
+    const drvRef = (await page.getByTestId("drv-payment-reference").innerText()).trim();
+    expect(drvRef).toMatch(/^DRV-/);
+    await expect(page.getByTestId("pay-amount")).toContainText("499");
+    await expect(
+      page.getByText("اكتب مرجع DRVOWA في وصف التحويل"),
     ).toBeVisible();
+
+    const mePre = await page.request.get("/api/auth/me");
+    const mePreJson = (await mePre.json()) as { activeBusinessId: string };
+    const openIntent = await findOpenByBusinessId(mePreJson.activeBusinessId);
+    expect(openIntent?.status).toBe("AWAITING_TRANSFER");
+    expect(openIntent?.paymentReference).toBe(drvRef);
+    expect(await findPendingByBusinessId(mePreJson.activeBusinessId)).toBeNull();
+
     await page.getByRole("button", { name: "لقد حوّلت المبلغ" }).click();
     await page.locator("#payerName").fill("عميل تجريبي");
     await page.getByRole("button", { name: "إرسال تأكيد الدفع" }).click();
@@ -95,10 +116,9 @@ test.describe.serial("manual instapay billing e2e", () => {
       timeout: 15_000,
     });
 
-    const me = await page.request.get("/api/auth/me");
-    const meJson = (await me.json()) as { activeBusinessId: string };
-    const pending = await findPendingByBusinessId(meJson.activeBusinessId);
+    const pending = await findPendingByBusinessId(mePreJson.activeBusinessId);
     expect(pending).toBeTruthy();
+    expect(pending!.paymentReference).toBe(drvRef);
 
     const adminSignup = await apiSignup(page, adminEmail, password);
     await upsertPlatformAdmin({
@@ -121,7 +141,6 @@ test.describe.serial("manual instapay billing e2e", () => {
       page.getByText(pending!.paymentReference).filter({ visible: true }),
     ).toHaveCount(0, { timeout: 15_000 });
 
-    // Idempotent service check
     const again = await approveManualPayment({
       paymentRequestId: pending!.paymentRequestId,
       reviewerUserId: adminSignup.user.userId,
@@ -152,6 +171,9 @@ test.describe.serial("manual instapay billing e2e", () => {
       .getByTestId("plan-card-PRO")
       .getByRole("button", { name: "اختيار الباقة" })
       .click();
+    await expect(page.getByTestId("drv-payment-reference")).toBeVisible({
+      timeout: 15_000,
+    });
     await page.getByRole("button", { name: "لقد حوّلت المبلغ" }).click();
     await page.locator("#payerName").fill("مرفوض");
     await page.getByRole("button", { name: "إرسال تأكيد الدفع" }).click();

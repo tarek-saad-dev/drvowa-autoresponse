@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { query, sql } from "@/lib/db";
+import { query, sql, type TransactionClient } from "@/lib/db";
 import { normalizeNullableUuid } from "@/lib/ids/uuid";
 import type { AuditEvent } from "@/types/domain";
 
@@ -44,20 +44,37 @@ export function sanitizeAuditMetadata(
   return Object.keys(cleaned).length > 0 ? cleaned : null;
 }
 
-export async function writeAuditEvent(params: {
-  businessId?: string | null;
-  actorUserId?: string | null;
-  action: string;
-  entityType: string;
-  entityId?: string | null;
-  metadata?: Record<string, unknown>;
-}): Promise<AuditEvent> {
+function db(trx?: TransactionClient) {
+  return { query: trx?.query.bind(trx) ?? query };
+}
+
+/**
+ * Persist an audit event. When `trx` is provided, the INSERT participates in
+ * the caller's transaction (required for billing approval/rejection/submit).
+ *
+ * Test hook: set DRVOWA_TEST_AUDIT_FAIL=1 to force failure (integration tests).
+ */
+export async function writeAuditEvent(
+  params: {
+    businessId?: string | null;
+    actorUserId?: string | null;
+    action: string;
+    entityType: string;
+    entityId?: string | null;
+    metadata?: Record<string, unknown>;
+  },
+  trx?: TransactionClient,
+): Promise<AuditEvent> {
+  if (process.env.DRVOWA_TEST_AUDIT_FAIL === "1") {
+    throw new Error("forced audit failure");
+  }
+
   const auditEventId = randomUUID();
   const occurredAtUtc = new Date();
   const safeMetadata = sanitizeAuditMetadata(params.metadata);
   const metadataJson = safeMetadata ? JSON.stringify(safeMetadata) : null;
 
-  await query(
+  await db(trx).query(
     `INSERT INTO TblAuditEvent (
       AuditEventID, BusinessID, ActorUserID, Action, EntityType, EntityID,
       OccurredAtUtc, MetadataJson

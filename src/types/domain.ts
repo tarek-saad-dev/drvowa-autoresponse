@@ -318,6 +318,7 @@ export type PlatformAdmin = {
 };
 
 export type ManualPaymentStatus =
+  | "AWAITING_TRANSFER"
   | "PENDING"
   | "APPROVED"
   | "REJECTED"
@@ -329,6 +330,8 @@ export type ManualPaymentRequest = {
   paymentRequestId: string;
   businessId: string;
   requestedPlanId: string;
+  requestedPlanCode: string;
+  requestedPlanDisplayName: string;
   paymentMethod: ManualPaymentMethod;
   currencyCode: string;
   amount: number;
@@ -337,8 +340,9 @@ export type ManualPaymentRequest = {
   transferReference: string | null;
   customerNote: string | null;
   status: ManualPaymentStatus;
-  submittedByUserId: string;
-  submittedAtUtc: Date;
+  createdByUserId: string;
+  submittedByUserId: string | null;
+  submittedAtUtc: Date | null;
   reviewedByUserId: string | null;
   reviewedAtUtc: Date | null;
   reviewNote: string | null;

@@ -24,6 +24,7 @@ import {
   USAGE_EVENT_WHATSAPP_OUTBOUND,
   type UsagePeriodWindow,
 } from "./period";
+import { ensureCurrentSubscriptionEntitlements } from "./subscription-entitlement-lifecycle";
 
 export type PlanLimits = {
   maxWhatsAppConnections: number | null;
@@ -221,29 +222,6 @@ export async function getLatestSubscription(
   return row ? mapSubscription(row) : null;
 }
 
-async function lockCurrentSubscription(
-  businessId: string,
-  trx: TransactionClient,
-): Promise<Subscription | null> {
-  const result = await trx.query<SubscriptionRow>(
-    `SELECT TOP 1 SubscriptionID, BusinessID, PlanID, Status,
-            PeriodStartUtc, PeriodEndUtc, CreatedAtUtc, UpdatedAtUtc
-     FROM TblSubscription WITH (UPDLOCK, HOLDLOCK, ROWLOCK)
-     WHERE BusinessID = @businessId
-       AND Status IN (N'ACTIVE', N'TRIALING', N'PAST_DUE')
-     ORDER BY CreatedAtUtc DESC`,
-    [
-      {
-        name: "businessId",
-        type: sql.UniqueIdentifier,
-        value: businessId,
-      },
-    ],
-  );
-  const row = result.recordset[0];
-  return row ? mapSubscription(row) : null;
-}
-
 function assertCanAct(
   subscription: Subscription | null,
   plan: (Plan & PlanLimits) | null,
@@ -344,24 +322,20 @@ export async function countWhatsAppConnections(
 export async function getEntitlementSnapshot(
   businessId: string,
 ): Promise<EntitlementSnapshot> {
-  // Paid period expiry → FREE entitlements (data retained; creation gated by FREE limits).
-  const { reconcileExpiredPaidSubscription } = await import(
-    "./manual-payment-service"
-  );
-  await reconcileExpiredPaidSubscription(businessId);
+  const { subscription: current } =
+    await ensureCurrentSubscriptionEntitlements(businessId);
 
   const usagePeriod = resolveUtcMonthPeriod();
-  const current = await getCurrentSubscription(businessId);
   const subscription = current ?? (await getLatestSubscription(businessId));
-  const plan = subscription
+  const resolvedPlan = subscription
     ? await getPlanById(subscription.planId)
     : null;
 
   const canAct = Boolean(
     current
     && USABLE_STATUSES.has(current.status)
-    && plan
-    && plan.status === "ACTIVE",
+    && resolvedPlan
+    && resolvedPlan.status === "ACTIVE",
   );
 
   let blockReason: string | null = null;
@@ -392,7 +366,7 @@ export async function getEntitlementSnapshot(
 
   return {
     subscription,
-    plan,
+    plan: resolvedPlan,
     usagePeriod,
     aiUsed,
     whatsappOutboundUsed,
@@ -460,7 +434,10 @@ export async function reserveQuota(params: {
   const period = resolveUtcMonthPeriod();
 
   return withTransaction(async (trx) => {
-    const subscription = await lockCurrentSubscription(params.businessId, trx);
+    const { subscription } = await ensureCurrentSubscriptionEntitlements(
+      params.businessId,
+      trx,
+    );
     const plan = subscription
       ? await getPlanById(subscription.planId, trx)
       : null;
@@ -952,7 +929,10 @@ export async function withResourceLimitGate<T>(params: {
 }): Promise<T> {
   const delta = params.delta ?? 1;
   return withTransaction(async (trx) => {
-    const subscription = await lockCurrentSubscription(params.businessId, trx);
+    const { subscription } = await ensureCurrentSubscriptionEntitlements(
+      params.businessId,
+      trx,
+    );
     const plan = subscription
       ? await getPlanById(subscription.planId, trx)
       : null;
@@ -965,15 +945,15 @@ export async function withResourceLimitGate<T>(params: {
 
     if (params.kind === "agent") {
       used = await countAgents(params.businessId, trx);
-      limit = plan!.maxAgents;
+      limit = plan!.maxAgents ?? null;
       errorCode = PLAN_ERROR_CODES.AGENT_LIMIT;
     } else if (params.kind === "knowledge_active") {
       used = await countActiveKnowledge(params.businessId, trx);
-      limit = plan!.maxActiveKnowledgeItems;
+      limit = plan!.maxActiveKnowledgeItems ?? null;
       errorCode = PLAN_ERROR_CODES.KNOWLEDGE_LIMIT;
     } else {
       used = await countWhatsAppConnections(params.businessId, trx);
-      limit = plan!.maxWhatsAppConnections;
+      limit = plan!.maxWhatsAppConnections ?? null;
       errorCode = PLAN_ERROR_CODES.WHATSAPP_CONNECTION_LIMIT;
     }
 

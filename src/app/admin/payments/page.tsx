@@ -54,18 +54,21 @@ export default async function AdminPaymentsPage({ searchParams }: PageProps) {
           submitterEmail: p.submitterEmail,
           submitterName: p.submitterName,
           currentPlanName: p.currentPlanName,
-          requestedPlanName: p.requestedPlanName,
+          requestedPlanName: p.requestedPlanDisplayName,
+          liveRequestedPlanPrice: p.liveRequestedPlanPrice,
           amount: p.amount,
           currencyCode: p.currencyCode,
           payerName: p.payerName,
           transferReference: p.transferReference,
           customerNote: p.customerNote,
           status: p.status,
-          submittedAtLabel: new Intl.DateTimeFormat("en-GB", {
-            dateStyle: "short",
-            timeStyle: "short",
-            timeZone: "UTC",
-          }).format(p.submittedAtUtc),
+          submittedAtLabel: p.submittedAtUtc
+            ? new Intl.DateTimeFormat("en-GB", {
+                dateStyle: "short",
+                timeStyle: "short",
+                timeZone: "UTC",
+              }).format(p.submittedAtUtc)
+            : "—",
           reviewNote: p.reviewNote,
         }))}
       />

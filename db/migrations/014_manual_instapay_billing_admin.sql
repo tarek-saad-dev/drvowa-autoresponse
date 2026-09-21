@@ -192,6 +192,8 @@ GO
 
 -- ---------------------------------------------------------------------------
 -- Manual payment requests (InstaPay)
+-- Lifecycle: AWAITING_TRANSFER → PENDING → APPROVED | REJECTED | CANCELED
+-- Amount/Currency are snapshotted at intent creation and immutable thereafter.
 -- ---------------------------------------------------------------------------
 IF OBJECT_ID(N'dbo.TblManualPaymentRequest', N'U') IS NULL
 BEGIN
@@ -200,6 +202,8 @@ BEGIN
       CONSTRAINT DF_TblManualPaymentRequest_ID DEFAULT NEWSEQUENTIALID(),
     BusinessID UNIQUEIDENTIFIER NOT NULL,
     RequestedPlanID UNIQUEIDENTIFIER NOT NULL,
+    RequestedPlanCode NVARCHAR(64) NOT NULL,
+    RequestedPlanDisplayName NVARCHAR(120) NOT NULL,
     PaymentMethod NVARCHAR(32) NOT NULL,
     CurrencyCode NVARCHAR(3) NOT NULL,
     Amount DECIMAL(12,2) NOT NULL,
@@ -208,8 +212,9 @@ BEGIN
     TransferReference NVARCHAR(160) NULL,
     CustomerNote NVARCHAR(1000) NULL,
     Status NVARCHAR(32) NOT NULL,
-    SubmittedByUserID UNIQUEIDENTIFIER NOT NULL,
-    SubmittedAtUtc DATETIME2 NOT NULL,
+    CreatedByUserID UNIQUEIDENTIFIER NOT NULL,
+    SubmittedByUserID UNIQUEIDENTIFIER NULL,
+    SubmittedAtUtc DATETIME2 NULL,
     ReviewedByUserID UNIQUEIDENTIFIER NULL,
     ReviewedAtUtc DATETIME2 NULL,
     ReviewNote NVARCHAR(1000) NULL,
@@ -224,6 +229,8 @@ BEGIN
       FOREIGN KEY (BusinessID) REFERENCES dbo.TblBusiness (BusinessID),
     CONSTRAINT FK_TblManualPaymentRequest_Plan
       FOREIGN KEY (RequestedPlanID) REFERENCES dbo.TblPlan (PlanID),
+    CONSTRAINT FK_TblManualPaymentRequest_CreatedBy
+      FOREIGN KEY (CreatedByUserID) REFERENCES dbo.TblUser (UserID),
     CONSTRAINT FK_TblManualPaymentRequest_SubmittedBy
       FOREIGN KEY (SubmittedByUserID) REFERENCES dbo.TblUser (UserID),
     CONSTRAINT FK_TblManualPaymentRequest_ReviewedBy
@@ -234,28 +241,173 @@ BEGIN
       PaymentMethod IN (N'INSTAPAY')
     ),
     CONSTRAINT CK_TblManualPaymentRequest_Status CHECK (
-      Status IN (N'PENDING', N'APPROVED', N'REJECTED', N'CANCELED')
+      Status IN (N'AWAITING_TRANSFER', N'PENDING', N'APPROVED', N'REJECTED', N'CANCELED')
     ),
     CONSTRAINT CK_TblManualPaymentRequest_Amount CHECK (Amount > 0)
   );
 
   CREATE INDEX IX_TblManualPaymentRequest_Business_Status
-    ON dbo.TblManualPaymentRequest (BusinessID, Status, SubmittedAtUtc DESC);
+    ON dbo.TblManualPaymentRequest (BusinessID, Status, CreatedAtUtc DESC);
 
   CREATE INDEX IX_TblManualPaymentRequest_Status_Submitted
     ON dbo.TblManualPaymentRequest (Status, SubmittedAtUtc DESC);
 END;
 GO
 
--- At most one PENDING request per business
-IF NOT EXISTS (
+-- Upgrade path when an earlier 014 draft already created the table.
+IF OBJECT_ID(N'dbo.TblManualPaymentRequest', N'U') IS NOT NULL
+BEGIN
+  IF COL_LENGTH(N'dbo.TblManualPaymentRequest', N'RequestedPlanCode') IS NULL
+  BEGIN
+    ALTER TABLE dbo.TblManualPaymentRequest ADD RequestedPlanCode NVARCHAR(64) NULL;
+  END;
+
+  IF COL_LENGTH(N'dbo.TblManualPaymentRequest', N'RequestedPlanDisplayName') IS NULL
+  BEGIN
+    ALTER TABLE dbo.TblManualPaymentRequest ADD RequestedPlanDisplayName NVARCHAR(120) NULL;
+  END;
+
+  IF COL_LENGTH(N'dbo.TblManualPaymentRequest', N'CreatedByUserID') IS NULL
+  BEGIN
+    ALTER TABLE dbo.TblManualPaymentRequest ADD CreatedByUserID UNIQUEIDENTIFIER NULL;
+  END;
+END;
+GO
+
+IF OBJECT_ID(N'dbo.TblManualPaymentRequest', N'U') IS NOT NULL
+BEGIN
+  UPDATE p
+  SET RequestedPlanCode = COALESCE(p.RequestedPlanCode, pl.Code),
+      RequestedPlanDisplayName = COALESCE(p.RequestedPlanDisplayName, pl.DisplayName),
+      CreatedByUserID = COALESCE(p.CreatedByUserID, p.SubmittedByUserID),
+      UpdatedAtUtc = SYSUTCDATETIME()
+  FROM dbo.TblManualPaymentRequest p
+  INNER JOIN dbo.TblPlan pl ON pl.PlanID = p.RequestedPlanID
+  WHERE p.RequestedPlanCode IS NULL
+     OR p.RequestedPlanDisplayName IS NULL
+     OR p.CreatedByUserID IS NULL;
+END;
+GO
+
+IF OBJECT_ID(N'dbo.TblManualPaymentRequest', N'U') IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID(N'dbo.TblManualPaymentRequest')
+      AND name = N'RequestedPlanCode'
+      AND is_nullable = 1
+  )
+BEGIN
+  ALTER TABLE dbo.TblManualPaymentRequest ALTER COLUMN RequestedPlanCode NVARCHAR(64) NOT NULL;
+END;
+GO
+
+IF OBJECT_ID(N'dbo.TblManualPaymentRequest', N'U') IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID(N'dbo.TblManualPaymentRequest')
+      AND name = N'RequestedPlanDisplayName'
+      AND is_nullable = 1
+  )
+BEGIN
+  ALTER TABLE dbo.TblManualPaymentRequest ALTER COLUMN RequestedPlanDisplayName NVARCHAR(120) NOT NULL;
+END;
+GO
+
+IF OBJECT_ID(N'dbo.TblManualPaymentRequest', N'U') IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID(N'dbo.TblManualPaymentRequest')
+      AND name = N'CreatedByUserID'
+      AND is_nullable = 1
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM dbo.TblManualPaymentRequest WHERE CreatedByUserID IS NULL
+  )
+BEGIN
+  ALTER TABLE dbo.TblManualPaymentRequest ALTER COLUMN CreatedByUserID UNIQUEIDENTIFIER NOT NULL;
+END;
+GO
+
+-- Allow NULL SubmittedAtUtc / SubmittedByUserID for AWAITING_TRANSFER
+IF OBJECT_ID(N'dbo.TblManualPaymentRequest', N'U') IS NOT NULL
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID(N'dbo.TblManualPaymentRequest')
+      AND name = N'SubmittedAtUtc'
+      AND is_nullable = 0
+  )
+  BEGIN
+    ALTER TABLE dbo.TblManualPaymentRequest ALTER COLUMN SubmittedAtUtc DATETIME2 NULL;
+  END;
+
+  IF EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID(N'dbo.TblManualPaymentRequest')
+      AND name = N'SubmittedByUserID'
+      AND is_nullable = 0
+  )
+  BEGIN
+    ALTER TABLE dbo.TblManualPaymentRequest ALTER COLUMN SubmittedByUserID UNIQUEIDENTIFIER NULL;
+  END;
+
+  IF EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID(N'dbo.TblManualPaymentRequest')
+      AND name = N'PayerName'
+      AND is_nullable = 0
+  )
+  BEGIN
+    ALTER TABLE dbo.TblManualPaymentRequest ALTER COLUMN PayerName NVARCHAR(160) NULL;
+  END;
+END;
+GO
+
+-- Expand status check to include AWAITING_TRANSFER
+IF EXISTS (
+  SELECT 1 FROM sys.check_constraints
+  WHERE name = N'CK_TblManualPaymentRequest_Status'
+    AND parent_object_id = OBJECT_ID(N'dbo.TblManualPaymentRequest')
+)
+BEGIN
+  ALTER TABLE dbo.TblManualPaymentRequest DROP CONSTRAINT CK_TblManualPaymentRequest_Status;
+END;
+GO
+
+IF OBJECT_ID(N'dbo.TblManualPaymentRequest', N'U') IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM sys.check_constraints
+    WHERE name = N'CK_TblManualPaymentRequest_Status'
+      AND parent_object_id = OBJECT_ID(N'dbo.TblManualPaymentRequest')
+  )
+BEGIN
+  ALTER TABLE dbo.TblManualPaymentRequest WITH NOCHECK
+    ADD CONSTRAINT CK_TblManualPaymentRequest_Status CHECK (
+      Status IN (N'AWAITING_TRANSFER', N'PENDING', N'APPROVED', N'REJECTED', N'CANCELED')
+    );
+END;
+GO
+
+-- Replace pending-only unique with open-intent unique (AWAITING_TRANSFER + PENDING)
+IF EXISTS (
   SELECT 1 FROM sys.indexes
   WHERE name = N'UQ_TblManualPaymentRequest_Business_Pending'
     AND object_id = OBJECT_ID(N'dbo.TblManualPaymentRequest')
 )
 BEGIN
-  CREATE UNIQUE INDEX UQ_TblManualPaymentRequest_Business_Pending
+  DROP INDEX UQ_TblManualPaymentRequest_Business_Pending
+    ON dbo.TblManualPaymentRequest;
+END;
+GO
+
+IF NOT EXISTS (
+  SELECT 1 FROM sys.indexes
+  WHERE name = N'UQ_TblManualPaymentRequest_Business_Open'
+    AND object_id = OBJECT_ID(N'dbo.TblManualPaymentRequest')
+)
+BEGIN
+  CREATE UNIQUE INDEX UQ_TblManualPaymentRequest_Business_Open
     ON dbo.TblManualPaymentRequest (BusinessID)
-    WHERE Status = N'PENDING';
+    WHERE Status IN (N'AWAITING_TRANSFER', N'PENDING');
 END;
 GO

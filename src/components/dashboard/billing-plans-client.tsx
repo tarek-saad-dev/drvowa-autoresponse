@@ -27,11 +27,21 @@ type Instructions = {
   instructions: string;
 };
 
+type IntentState = {
+  paymentRequestId: string;
+  paymentReference: string;
+  amount: number;
+  currencyCode: string;
+  planDisplayName: string;
+  planCode: string;
+};
+
 type Props = {
   plans: PlanCard[];
   currentPlanCode: string | null;
   instructions: Instructions | null;
   enabled: boolean;
+  initialOpenIntent?: IntentState | null;
 };
 
 function formatLimit(value: number | null | undefined): string {
@@ -42,7 +52,7 @@ function formatLimit(value: number | null | undefined): string {
 function formatPrice(amount: number | null | undefined, currency: string | null): string {
   if (amount == null) return "—";
   if (amount === 0) return "مجاناً";
-  return `${amount} ${currency ?? "EGP"} / شهر`;
+  return `${amount} ${currency ?? "EGP"}`;
 }
 
 export function BillingPlansClient({
@@ -50,21 +60,77 @@ export function BillingPlansClient({
   currentPlanCode,
   instructions,
   enabled,
+  initialOpenIntent = null,
 }: Props) {
   const router = useRouter();
-  const [selectedCode, setSelectedCode] = useState<string | null>(null);
-  const [step, setStep] = useState<"plans" | "pay" | "confirm" | "done">("plans");
+  const [selectedCode, setSelectedCode] = useState<string | null>(
+    initialOpenIntent?.planCode ?? null,
+  );
+  const [step, setStep] = useState<"plans" | "pay" | "confirm" | "done">(
+    initialOpenIntent ? "pay" : "plans",
+  );
+  const [intent, setIntent] = useState<IntentState | null>(initialOpenIntent);
   const [payerName, setPayerName] = useState("");
   const [transferReference, setTransferReference] = useState("");
   const [customerNote, setCustomerNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [paymentReference, setPaymentReference] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
-  const selected = plans.find((p) => p.code === selectedCode) ?? null;
+  async function choosePlan(planCode: string) {
+    setSelectedCode(planCode);
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/billing/manual-payment", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ planCode }),
+      });
+      const data = (await res.json()) as IntentState & {
+        error?: string;
+        status?: string;
+      };
+      if (!res.ok) {
+        throw new Error(mapUserFacingError(data, "تعذر تجهيز طلب الدفع"));
+      }
+      if (data.status === "PENDING") {
+        setIntent({
+          paymentRequestId: data.paymentRequestId,
+          paymentReference: data.paymentReference,
+          amount: data.amount,
+          currencyCode: data.currencyCode,
+          planDisplayName: data.planDisplayName,
+          planCode: data.planCode,
+        });
+        setStep("done");
+        router.refresh();
+        return;
+      }
+      setSelectedCode(planCode);
+      setIntent({
+        paymentRequestId: data.paymentRequestId,
+        paymentReference: data.paymentReference,
+        amount: data.amount,
+        currencyCode: data.currencyCode,
+        planDisplayName: data.planDisplayName,
+        planCode: data.planCode,
+      });
+      setStep("pay");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "تعذر تجهيز طلب الدفع");
+    } finally {
+      setCreating(false);
+    }
+  }
 
-  async function submitPayment() {
-    if (!selected) return;
+  async function submitConfirmation() {
+    if (!intent) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -76,7 +142,8 @@ export function BillingPlansClient({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          planCode: selected.code,
+          action: "confirm_transfer",
+          paymentRequestId: intent.paymentRequestId,
           payerName,
           transferReference: transferReference || null,
           customerNote: customerNote || null,
@@ -85,29 +152,27 @@ export function BillingPlansClient({
       const data = (await res.json()) as {
         paymentReference?: string;
         error?: string;
-        code?: string;
       };
       if (!res.ok) {
-        throw new Error(mapUserFacingError(data, "تعذر إرسال طلب الدفع"));
+        throw new Error(mapUserFacingError(data, "تعذر إرسال تأكيد الدفع"));
       }
-      setPaymentReference(data.paymentReference ?? null);
       setStep("done");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر إرسال طلب الدفع");
+      setError(err instanceof Error ? err.message : "تعذر إرسال تأكيد الدفع");
     } finally {
       setSubmitting(false);
     }
   }
 
-  if (step === "done" && paymentReference) {
+  if (step === "done" && intent) {
     return (
       <Alert variant="success" title="طلب الدفع قيد المراجعة">
         <p className="mt-1">
-          تم استلام تأكيدك. سيتم تفعيل الاشتراك بعد مراجعة التحويل.
+          تم استلام تأكيدك. سيتم تفعيل الاشتراك بعد مراجعة التحويل يدوياً — لا يوجد تحقق تلقائي.
         </p>
         <p className="mt-3 text-sm font-semibold">
-          مرجع الدفع: <span className="font-mono">{paymentReference}</span>
+          مرجع DRVOWA: <span className="font-mono">{intent.paymentReference}</span>
         </p>
         <Button
           className="mt-4"
@@ -116,7 +181,7 @@ export function BillingPlansClient({
           onClick={() => {
             setStep("plans");
             setSelectedCode(null);
-            setPaymentReference(null);
+            setIntent(null);
           }}
         >
           العودة للخطط
@@ -125,14 +190,14 @@ export function BillingPlansClient({
     );
   }
 
-  if ((step === "pay" || step === "confirm") && selected) {
+  if ((step === "pay" || step === "confirm") && intent) {
     return (
       <section className="space-y-5 rounded-xl border border-border bg-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">الدفع عبر InstaPay</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {selected.displayName} — {formatPrice(selected.monthlyPriceAmount, selected.currencyCode)}
+              {intent.planDisplayName} — {formatPrice(intent.amount, intent.currencyCode)}
             </p>
           </div>
           <Button
@@ -143,21 +208,27 @@ export function BillingPlansClient({
               setError(null);
             }}
           >
-            إلغاء
+            رجوع
           </Button>
         </div>
 
         <Alert variant="info" title="حوّل المبلغ التالي عبر InstaPay">
           <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-muted-foreground">المبلغ</dt>
-              <dd className="font-semibold">
-                {formatPrice(selected.monthlyPriceAmount, selected.currencyCode)}
+              <dt className="text-muted-foreground">الباقة</dt>
+              <dd className="font-semibold" data-testid="pay-plan-name">
+                {intent.planDisplayName}
               </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">المدة</dt>
-              <dd className="font-semibold">شهر</dd>
+              <dt className="text-muted-foreground">المبلغ</dt>
+              <dd className="font-semibold" data-testid="pay-amount">
+                {formatPrice(intent.amount, intent.currencyCode)} جنيه
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">الدفع عبر</dt>
+              <dd className="font-semibold">InstaPay</dd>
             </div>
             <div>
               <dt className="text-muted-foreground">المستلم</dt>
@@ -167,11 +238,27 @@ export function BillingPlansClient({
               <dt className="text-muted-foreground">معرّف InstaPay</dt>
               <dd className="font-mono font-semibold">{instructions?.handle ?? "—"}</dd>
             </div>
+            <div>
+              <dt className="text-muted-foreground">مرجع DRVOWA</dt>
+              <dd
+                className="font-mono font-semibold text-primary"
+                data-testid="drv-payment-reference"
+              >
+                {intent.paymentReference}
+              </dd>
+            </div>
           </dl>
-          <p className="mt-3 text-sm">{instructions?.instructions}</p>
-          <p className="mt-2 text-sm font-medium">
-            بعد التحويل أرسل بيانات العملية، وسيتم تفعيل الاشتراك بعد المراجعة.
+          <p className="mt-3 text-sm">
+            اكتب مرجع DRVOWA في وصف التحويل إذا كان التطبيق يسمح بذلك.
           </p>
+          <p className="mt-2 text-sm font-medium">
+            بعد التحويل اضغط لقد حوّلت المبلغ وأدخل بيانات العملية.
+          </p>
+          {instructions?.instructions ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              {instructions.instructions}
+            </p>
+          ) : null}
         </Alert>
 
         {step === "pay" ? (
@@ -181,7 +268,7 @@ export function BillingPlansClient({
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
-              void submitPayment();
+              void submitConfirmation();
             }}
           >
             <div>
@@ -239,6 +326,11 @@ export function BillingPlansClient({
   return (
     <section className="space-y-4">
       <h2 className="text-lg font-semibold">الباقات المتاحة</h2>
+      {error ? (
+        <p className="text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {plans.map((plan) => {
           const isCurrent = plan.code === currentPlanCode;
@@ -263,6 +355,7 @@ export function BillingPlansClient({
               </div>
               <p className="mt-2 text-2xl font-bold tracking-tight">
                 {formatPrice(plan.monthlyPriceAmount, plan.currencyCode)}
+                {(plan.monthlyPriceAmount ?? 0) > 0 ? " / شهر" : ""}
               </p>
               <ul className="mt-4 flex-1 space-y-1.5 text-sm text-muted-foreground">
                 <li>واتساب: {formatLimit(plan.maxWhatsAppConnections)}</li>
@@ -274,13 +367,12 @@ export function BillingPlansClient({
               {isPaid && enabled && !isCurrent ? (
                 <Button
                   className="mt-5 w-full"
-                  onClick={() => {
-                    setSelectedCode(plan.code);
-                    setStep("pay");
-                    setError(null);
-                  }}
+                  disabled={creating}
+                  onClick={() => void choosePlan(plan.code)}
                 >
-                  اختيار الباقة
+                  {creating && selectedCode === plan.code
+                    ? "جاري التجهيز…"
+                    : "اختيار الباقة"}
                 </Button>
               ) : null}
               {isPaid && !enabled ? (

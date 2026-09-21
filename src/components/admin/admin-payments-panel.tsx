@@ -14,6 +14,7 @@ type PaymentItem = {
   submitterName: string;
   currentPlanName: string | null;
   requestedPlanName: string;
+  liveRequestedPlanPrice: number | null;
   amount: number;
   currencyCode: string;
   payerName: string | null;
@@ -174,11 +175,19 @@ export function AdminPaymentsPanel({
                 <dd>{selected.requestedPlanName}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">المبلغ المتوقع</dt>
+                <dt className="text-slate-400">المبلغ المتفق عليه (لقطة)</dt>
                 <dd>
                   {selected.amount} {selected.currencyCode}
                 </dd>
               </div>
+              {selected.liveRequestedPlanPrice != null
+              && Number(selected.liveRequestedPlanPrice) !== Number(selected.amount) ? (
+                <div className="rounded-md border border-amber-700/60 bg-amber-950/40 p-2 text-amber-200">
+                  تنبيه: سعر الخطة الحالي ({selected.liveRequestedPlanPrice}{" "}
+                  {selected.currencyCode}) يختلف عن لقطة الطلب. الاعتماد يطبّق
+                  المبلغ المثبت في الطلب.
+                </div>
+              ) : null}
               <div>
                 <dt className="text-slate-400">اسم المحوّل</dt>
                 <dd>{selected.payerName ?? "—"}</dd>

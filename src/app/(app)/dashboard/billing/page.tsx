@@ -27,6 +27,7 @@ function formatDate(value: Date | null | undefined): string {
 }
 
 function paymentStatusLabel(status: string): string {
+  if (status === "AWAITING_TRANSFER") return "بانتظار التحويل";
   if (status === "PENDING") return "قيد المراجعة";
   if (status === "APPROVED") return "تم اعتماد الدفع وتفعيل الباقة";
   if (status === "REJECTED") return "تعذر اعتماد الدفع";
@@ -86,6 +87,11 @@ export default async function BillingPage() {
           ) : null}
           {latest.status === "REJECTED" && latest.reviewNote ? (
             <p className="mt-1 text-sm">{latest.reviewNote}</p>
+          ) : null}
+          {latest.status === "AWAITING_TRANSFER" ? (
+            <p className="mt-1 text-sm">
+              أكمل التحويل عبر InstaPay ثم أكّد العملية من شاشة الدفع أدناه.
+            </p>
           ) : null}
           {latest.status === "PENDING" ? (
             <p className="mt-1 text-sm">
@@ -158,6 +164,18 @@ export default async function BillingPage() {
         enabled={manualEnabled}
         currentPlanCode={plan?.code ?? null}
         instructions={instructions}
+        initialOpenIntent={
+          paymentStatus.open?.status === "AWAITING_TRANSFER"
+            ? {
+                paymentRequestId: paymentStatus.open.paymentRequestId,
+                paymentReference: paymentStatus.open.paymentReference,
+                amount: paymentStatus.open.amount,
+                currencyCode: paymentStatus.open.currencyCode,
+                planDisplayName: paymentStatus.open.requestedPlanDisplayName,
+                planCode: paymentStatus.open.requestedPlanCode,
+              }
+            : null
+        }
         plans={availablePlans.map((p) => ({
           code: p.code,
           displayName: p.displayName,

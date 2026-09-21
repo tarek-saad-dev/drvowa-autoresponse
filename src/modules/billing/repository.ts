@@ -117,6 +117,18 @@ export async function getPlanByCode(
   return row ? mapPlan(row) : null;
 }
 
+export async function getPlanById(
+  planId: string,
+  trx?: TransactionClient,
+): Promise<Plan | null> {
+  const result = await db(trx).query<PlanRow>(
+    `SELECT ${PLAN_SELECT} FROM TblPlan WHERE PlanID = @planId`,
+    [{ name: "planId", type: sql.UniqueIdentifier, value: planId }],
+  );
+  const row = result.recordset[0];
+  return row ? mapPlan(row) : null;
+}
+
 export async function listActivePlans(
   trx?: TransactionClient,
 ): Promise<Plan[]> {

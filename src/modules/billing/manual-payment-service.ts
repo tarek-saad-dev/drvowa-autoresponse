@@ -1,4 +1,4 @@
-import { DEFAULT_BOOTSTRAP_PLAN_CODE, isPaidPlanCode } from "@/constants/billing";
+import { isPaidPlanCode } from "@/constants/billing";
 import {
   isUniqueViolationError,
   sql,
@@ -27,6 +27,7 @@ import {
   computePaidSubscriptionPeriod,
   isSubscriptionPeriodExpired,
 } from "./subscription-period";
+import { reconcileExpiredPaidSubscription } from "./subscription-entitlement-lifecycle";
 
 function trimOrNull(value: string | null | undefined, max: number): string | null {
   if (value == null) return null;
@@ -51,28 +52,31 @@ export async function getBusinessPaymentStatus(params: {
 }): Promise<{
   latest: ManualPaymentRequest | null;
   pending: ManualPaymentRequest | null;
+  open: ManualPaymentRequest | null;
   requestedPlan: Plan | null;
 }> {
-  const pending = await paymentRepo.findPendingByBusinessId(params.businessId);
+  const open = await paymentRepo.findOpenByBusinessId(params.businessId);
+  const pending =
+    open?.status === "PENDING"
+      ? open
+      : await paymentRepo.findPendingByBusinessId(params.businessId);
   const latest =
-    pending ?? (await paymentRepo.getLatestByBusinessId(params.businessId));
+    open ?? pending ?? (await paymentRepo.getLatestByBusinessId(params.businessId));
   const requestedPlan = latest
     ? await getPlanById(latest.requestedPlanId)
     : null;
-  return { latest, pending, requestedPlan };
+  return { latest, pending, open, requestedPlan };
 }
 
 /**
- * Customer submits InstaPay confirmation for a paid plan.
- * Amount and plan are resolved server-side — never trust client amount.
+ * Create/reserve a payment intent BEFORE transfer.
+ * Snapshots plan id/code/name + amount/currency server-side.
+ * Returns existing open intent for the same plan (idempotent resume).
  */
-export async function submitManualPaymentRequest(params: {
+export async function createManualPaymentIntent(params: {
   businessId: string;
   userId: string;
   planCode: string;
-  payerName?: string | null;
-  transferReference?: string | null;
-  customerNote?: string | null;
 }): Promise<ManualPaymentRequest> {
   assertManualBillingEnabled();
 
@@ -89,60 +93,79 @@ export async function submitManualPaymentRequest(params: {
     throw new ValidationError("سعر الخطة غير مُعدّ");
   }
 
-  const existingPending = await paymentRepo.findPendingByBusinessId(
-    params.businessId,
-  );
-  if (existingPending) {
-    throw new ConflictError(
-      "لديك طلب دفع قيد المراجعة بالفعل. انتظر النتيجة قبل إرسال طلب جديد.",
-    );
-  }
-
-  const payerName = trimOrNull(params.payerName, 160);
-  if (!payerName) {
-    throw new ValidationError("اسم المحوّل مطلوب");
+  const existingOpen = await paymentRepo.findOpenByBusinessId(params.businessId);
+  if (existingOpen) {
+    if (existingOpen.status === "PENDING") {
+      throw new ConflictError(
+        "لديك طلب دفع قيد المراجعة بالفعل. انتظر النتيجة قبل إرسال طلب جديد.",
+      );
+    }
+    if (existingOpen.requestedPlanId === plan.planId) {
+      return existingOpen;
+    }
+    // Different plan while AWAITING_TRANSFER — cancel then create new.
+    await withTransaction(async (trx) => {
+      const locked = await paymentRepo.lockPaymentRequest(
+        existingOpen.paymentRequestId,
+        trx,
+      );
+      if (locked?.status === "AWAITING_TRANSFER") {
+        await paymentRepo.markPaymentCanceled(locked.paymentRequestId, trx);
+      }
+    });
   }
 
   let lastError: unknown;
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const paymentReference = generatePaymentReference();
     try {
-      const created = await paymentRepo.insertPaymentRequest({
-        businessId: params.businessId,
-        requestedPlanId: plan.planId,
-        paymentMethod: "INSTAPAY",
-        currencyCode: plan.currencyCode ?? "EGP",
-        amount: plan.monthlyPriceAmount,
-        paymentReference,
-        payerName,
-        transferReference: trimOrNull(params.transferReference, 160),
-        customerNote: trimOrNull(params.customerNote, 1000),
-        submittedByUserId: params.userId,
-      });
+      return await withTransaction(async (trx) => {
+        const raced = await paymentRepo.findOpenByBusinessId(
+          params.businessId,
+          trx,
+        );
+        if (raced) {
+          if (raced.status === "PENDING") {
+            throw new ConflictError(
+              "لديك طلب دفع قيد المراجعة بالفعل. انتظر النتيجة قبل إرسال طلب جديد.",
+            );
+          }
+          if (raced.requestedPlanId === plan.planId) {
+            return raced;
+          }
+          throw new ConflictError(
+            "لديك طلب دفع قيد المراجعة بالفعل. انتظر النتيجة قبل إرسال طلب جديد.",
+          );
+        }
 
-      await writeAuditEvent({
-        businessId: params.businessId,
-        actorUserId: params.userId,
-        action: "MANUAL_PAYMENT_SUBMITTED",
-        entityType: "ManualPaymentRequest",
-        entityId: created.paymentRequestId,
-        metadata: {
-          paymentReference: created.paymentReference,
-          planCode: plan.code,
-          amount: created.amount,
-          currencyCode: created.currencyCode,
-        },
+        return paymentRepo.insertAwaitingTransfer(
+          {
+            businessId: params.businessId,
+            requestedPlanId: plan.planId,
+            requestedPlanCode: plan.code,
+            requestedPlanDisplayName: plan.displayName,
+            paymentMethod: "INSTAPAY",
+            currencyCode: plan.currencyCode ?? "EGP",
+            amount: plan.monthlyPriceAmount!,
+            paymentReference,
+            createdByUserId: params.userId,
+          },
+          trx,
+        );
       });
-
-      return created;
     } catch (error) {
       lastError = error;
       if (isUniqueViolationError(error)) {
-        // Reference collision or duplicate pending — retry or re-check pending
-        const raced = await paymentRepo.findPendingByBusinessId(
-          params.businessId,
-        );
+        const raced = await paymentRepo.findOpenByBusinessId(params.businessId);
         if (raced) {
+          if (raced.status === "PENDING") {
+            throw new ConflictError(
+              "لديك طلب دفع قيد المراجعة بالفعل. انتظر النتيجة قبل إرسال طلب جديد.",
+            );
+          }
+          if (raced.requestedPlanId === plan.planId) {
+            return raced;
+          }
           throw new ConflictError(
             "لديك طلب دفع قيد المراجعة بالفعل. انتظر النتيجة قبل إرسال طلب جديد.",
           );
@@ -157,16 +180,113 @@ export async function submitManualPaymentRequest(params: {
     : new Error("تعذر إنشاء طلب الدفع");
 }
 
+/**
+ * Customer confirms transfer was sent. Moves AWAITING_TRANSFER → PENDING
+ * with MANUAL_PAYMENT_SUBMITTED audit in the same transaction.
+ */
+export async function confirmManualPaymentTransfer(params: {
+  businessId: string;
+  userId: string;
+  paymentRequestId: string;
+  payerName?: string | null;
+  transferReference?: string | null;
+  customerNote?: string | null;
+}): Promise<ManualPaymentRequest> {
+  assertManualBillingEnabled();
+
+  const payerName = trimOrNull(params.payerName, 160);
+  if (!payerName) {
+    throw new ValidationError("اسم المحوّل مطلوب");
+  }
+
+  return withTransaction(async (trx) => {
+    const locked = await paymentRepo.lockPaymentRequest(
+      params.paymentRequestId,
+      trx,
+    );
+    if (!locked || locked.businessId !== params.businessId) {
+      throw new NotFoundError("طلب الدفع غير موجود");
+    }
+
+    if (locked.status === "PENDING") {
+      return locked;
+    }
+    if (locked.status !== "AWAITING_TRANSFER") {
+      throw new ConflictError("لا يمكن تأكيد هذا الطلب");
+    }
+
+    await paymentRepo.markPaymentPending(
+      {
+        paymentRequestId: locked.paymentRequestId,
+        submittedByUserId: params.userId,
+        payerName,
+        transferReference: trimOrNull(params.transferReference, 160),
+        customerNote: trimOrNull(params.customerNote, 1000),
+      },
+      trx,
+    );
+
+    await writeAuditEvent(
+      {
+        businessId: locked.businessId,
+        actorUserId: params.userId,
+        action: "MANUAL_PAYMENT_SUBMITTED",
+        entityType: "ManualPaymentRequest",
+        entityId: locked.paymentRequestId,
+        metadata: {
+          paymentReference: locked.paymentReference,
+          planCode: locked.requestedPlanCode,
+          amount: locked.amount,
+          currencyCode: locked.currencyCode,
+        },
+      },
+      trx,
+    );
+
+    const updated =
+      (await paymentRepo.getPaymentRequestById(locked.paymentRequestId, trx))
+      ?? locked;
+    return { ...updated, status: "PENDING" as const };
+  });
+}
+
+/**
+ * @deprecated Prefer createManualPaymentIntent + confirmManualPaymentTransfer.
+ * Kept only for transitional callers — creates intent then immediately confirms.
+ */
+export async function submitManualPaymentRequest(params: {
+  businessId: string;
+  userId: string;
+  planCode: string;
+  payerName?: string | null;
+  transferReference?: string | null;
+  customerNote?: string | null;
+}): Promise<ManualPaymentRequest> {
+  const intent = await createManualPaymentIntent({
+    businessId: params.businessId,
+    userId: params.userId,
+    planCode: params.planCode,
+  });
+  return confirmManualPaymentTransfer({
+    businessId: params.businessId,
+    userId: params.userId,
+    paymentRequestId: intent.paymentRequestId,
+    payerName: params.payerName,
+    transferReference: params.transferReference,
+    customerNote: params.customerNote,
+  });
+}
+
 export type ApproveResult = {
   payment: ManualPaymentRequest;
   subscription: Subscription;
   alreadyApproved: boolean;
+  priceChangedWarning: boolean;
 };
 
 /**
  * Idempotent approval with row lock.
- * Same-plan renewal extends from existing PeriodEndUtc when still active.
- * Different-plan upgrade starts a fresh month from approval time.
+ * Snapshotted Amount/Currency are authoritative — live plan price may differ.
  */
 export async function approveManualPayment(params: {
   paymentRequestId: string;
@@ -221,6 +341,7 @@ export async function approveManualPayment(params: {
               updatedAtUtc: existingSub.UpdatedAtUtc,
             },
             alreadyApproved: true,
+            priceChangedWarning: false,
           };
         }
       }
@@ -232,6 +353,7 @@ export async function approveManualPayment(params: {
         payment: locked,
         subscription: fallback,
         alreadyApproved: true,
+        priceChangedWarning: false,
       };
     }
 
@@ -240,20 +362,16 @@ export async function approveManualPayment(params: {
     }
 
     const requestedPlan = await getPlanById(locked.requestedPlanId, trx);
-    if (!requestedPlan || requestedPlan.status !== "ACTIVE") {
-      throw new ValidationError("الخطة المطلوبة غير متاحة");
+    if (!requestedPlan) {
+      throw new ValidationError("الخطة المطلوبة غير موجودة");
     }
     if (!isPaidPlanCode(requestedPlan.code)) {
       throw new ValidationError("لا يمكن اعتماد خطة غير مدفوعة");
     }
-    if (
+
+    const priceChangedWarning =
       requestedPlan.monthlyPriceAmount == null
-      || Number(requestedPlan.monthlyPriceAmount) !== Number(locked.amount)
-    ) {
-      throw new ConflictError(
-        "مبلغ الطلب لا يطابق سعر الخطة الحالي — ارفض الطلب واطلب إعادة الإرسال",
-      );
-    }
+      || Number(requestedPlan.monthlyPriceAmount) !== Number(locked.amount);
 
     const current = await getCurrentSubscription(locked.businessId, trx);
     let currentPlan: Plan | null = null;
@@ -264,7 +382,7 @@ export async function approveManualPayment(params: {
     const samePlanRenewal = Boolean(
       current
       && currentPlan
-      && currentPlan.code === requestedPlan.code
+      && currentPlan.code === locked.requestedPlanCode
       && !isSubscriptionPeriodExpired({ periodEndUtc: current.periodEndUtc }),
     );
 
@@ -273,7 +391,6 @@ export async function approveManualPayment(params: {
       currentPeriodEndUtc: current?.periodEndUtc,
     });
 
-    // Terminate previous current subscription to preserve unique invariant.
     if (current) {
       await billingRepo.updateSubscriptionBillingFields(
         {
@@ -288,7 +405,7 @@ export async function approveManualPayment(params: {
     const subscription = await billingRepo.insertSubscription(
       {
         businessId: locked.businessId,
-        planId: requestedPlan.planId,
+        planId: locked.requestedPlanId,
         status: "ACTIVE",
         periodStartUtc,
         periodEndUtc,
@@ -313,39 +430,50 @@ export async function approveManualPayment(params: {
         trx,
       )) ?? locked;
 
-    await writeAuditEvent({
-      businessId: locked.businessId,
-      actorUserId: params.reviewerUserId,
-      action: "MANUAL_PAYMENT_APPROVED",
-      entityType: "ManualPaymentRequest",
-      entityId: locked.paymentRequestId,
-      metadata: {
-        paymentReference: locked.paymentReference,
-        planCode: requestedPlan.code,
-        amount: locked.amount,
-        subscriptionId: subscription.subscriptionId,
-        samePlanRenewal,
+    await writeAuditEvent(
+      {
+        businessId: locked.businessId,
+        actorUserId: params.reviewerUserId,
+        action: "MANUAL_PAYMENT_APPROVED",
+        entityType: "ManualPaymentRequest",
+        entityId: locked.paymentRequestId,
+        metadata: {
+          paymentReference: locked.paymentReference,
+          planCode: locked.requestedPlanCode,
+          amount: locked.amount,
+          currencyCode: locked.currencyCode,
+          subscriptionId: subscription.subscriptionId,
+          samePlanRenewal,
+          priceChangedWarning,
+          currentPlanPrice: requestedPlan.monthlyPriceAmount,
+        },
       },
-    });
+      trx,
+    );
 
-    await writeAuditEvent({
-      businessId: locked.businessId,
-      actorUserId: params.reviewerUserId,
-      action: "SUBSCRIPTION_MANUAL_ACTIVATED",
-      entityType: "Subscription",
-      entityId: subscription.subscriptionId,
-      metadata: {
-        planCode: requestedPlan.code,
-        periodStartUtc: periodStartUtc.toISOString(),
-        periodEndUtc: periodEndUtc.toISOString(),
-        paymentRequestId: locked.paymentRequestId,
+    await writeAuditEvent(
+      {
+        businessId: locked.businessId,
+        actorUserId: params.reviewerUserId,
+        action: "SUBSCRIPTION_MANUAL_ACTIVATED",
+        entityType: "Subscription",
+        entityId: subscription.subscriptionId,
+        metadata: {
+          planCode: locked.requestedPlanCode,
+          periodStartUtc: periodStartUtc.toISOString(),
+          periodEndUtc: periodEndUtc.toISOString(),
+          paymentRequestId: locked.paymentRequestId,
+          amount: locked.amount,
+        },
       },
-    });
+      trx,
+    );
 
     return {
       payment: { ...approved, status: "APPROVED" },
       subscription,
       alreadyApproved: false,
+      priceChangedWarning,
     };
   });
 }
@@ -379,18 +507,21 @@ export async function rejectManualPayment(params: {
       trx,
     );
 
-    await writeAuditEvent({
-      businessId: locked.businessId,
-      actorUserId: params.reviewerUserId,
-      action: "MANUAL_PAYMENT_REJECTED",
-      entityType: "ManualPaymentRequest",
-      entityId: locked.paymentRequestId,
-      metadata: {
-        paymentReference: locked.paymentReference,
-        amount: locked.amount,
-        hasCustomerNote: Boolean(trimOrNull(params.reviewNote, 1000)),
+    await writeAuditEvent(
+      {
+        businessId: locked.businessId,
+        actorUserId: params.reviewerUserId,
+        action: "MANUAL_PAYMENT_REJECTED",
+        entityType: "ManualPaymentRequest",
+        entityId: locked.paymentRequestId,
+        metadata: {
+          paymentReference: locked.paymentReference,
+          amount: locked.amount,
+          hasCustomerNote: Boolean(trimOrNull(params.reviewNote, 1000)),
+        },
       },
-    });
+      trx,
+    );
 
     return {
       ...locked,
@@ -402,65 +533,7 @@ export async function rejectManualPayment(params: {
   });
 }
 
-/**
- * When a paid subscription's PeriodEndUtc has passed, mark it EXPIRED and
- * ensure a FREE subscription is current. Does not delete excess resources.
- */
-export async function reconcileExpiredPaidSubscription(
-  businessId: string,
-): Promise<Subscription | null> {
-  const current = await getCurrentSubscription(businessId);
-  if (!current) {
-    return null;
-  }
-  if (!isSubscriptionPeriodExpired({ periodEndUtc: current.periodEndUtc })) {
-    return current;
-  }
-
-  const plan = await getPlanById(current.planId);
-  if (!plan || plan.code === DEFAULT_BOOTSTRAP_PLAN_CODE) {
-    return current;
-  }
-  if (!isPaidPlanCode(plan.code)) {
-    return current;
-  }
-
-  await withTransaction(async (trx) => {
-    const locked = await getCurrentSubscription(businessId, trx);
-    if (!locked) return;
-    if (
-      locked.subscriptionId !== current.subscriptionId
-      || !isSubscriptionPeriodExpired({ periodEndUtc: locked.periodEndUtc })
-    ) {
-      return;
-    }
-
-    await billingRepo.updateSubscriptionBillingFields(
-      {
-        subscriptionId: locked.subscriptionId,
-        status: "EXPIRED",
-      },
-      trx,
-    );
-
-    const freePlan = await getPlanByCode(DEFAULT_BOOTSTRAP_PLAN_CODE, trx);
-    if (!freePlan) {
-      throw new NotFoundError("FREE plan is not configured");
-    }
-
-    await billingRepo.insertSubscription(
-      {
-        businessId,
-        planId: freePlan.planId,
-        status: "ACTIVE",
-        periodEndUtc: null,
-      },
-      trx,
-    );
-  });
-
-  return getCurrentSubscription(businessId);
-}
+export { reconcileExpiredPaidSubscription };
 
 export {
   getAdminOverviewCounts,

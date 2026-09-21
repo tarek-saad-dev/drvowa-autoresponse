@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 
 import {
-  isUniqueViolationError,
   query,
   sql,
   type QueryInput,
@@ -18,6 +17,8 @@ type PaymentRow = {
   PaymentRequestID: string;
   BusinessID: string;
   RequestedPlanID: string;
+  RequestedPlanCode: string;
+  RequestedPlanDisplayName: string;
   PaymentMethod: string;
   CurrencyCode: string;
   Amount: number;
@@ -26,8 +27,9 @@ type PaymentRow = {
   TransferReference: string | null;
   CustomerNote: string | null;
   Status: string;
-  SubmittedByUserID: string;
-  SubmittedAtUtc: Date;
+  CreatedByUserID: string;
+  SubmittedByUserID: string | null;
+  SubmittedAtUtc: Date | null;
   ReviewedByUserID: string | null;
   ReviewedAtUtc: Date | null;
   ReviewNote: string | null;
@@ -45,6 +47,8 @@ function mapPayment(row: PaymentRow): ManualPaymentRequest {
     paymentRequestId: normalizeUuid(row.PaymentRequestID),
     businessId: normalizeUuid(row.BusinessID),
     requestedPlanId: normalizeUuid(row.RequestedPlanID),
+    requestedPlanCode: row.RequestedPlanCode,
+    requestedPlanDisplayName: row.RequestedPlanDisplayName,
     paymentMethod: row.PaymentMethod as ManualPaymentMethod,
     currencyCode: row.CurrencyCode,
     amount: Number(row.Amount),
@@ -53,7 +57,8 @@ function mapPayment(row: PaymentRow): ManualPaymentRequest {
     transferReference: row.TransferReference,
     customerNote: row.CustomerNote,
     status: row.Status as ManualPaymentStatus,
-    submittedByUserId: normalizeUuid(row.SubmittedByUserID),
+    createdByUserId: normalizeUuid(row.CreatedByUserID),
+    submittedByUserId: normalizeNullableUuid(row.SubmittedByUserID),
     submittedAtUtc: row.SubmittedAtUtc,
     reviewedByUserId: normalizeNullableUuid(row.ReviewedByUserID),
     reviewedAtUtc: row.ReviewedAtUtc,
@@ -65,10 +70,11 @@ function mapPayment(row: PaymentRow): ManualPaymentRequest {
 }
 
 const PAYMENT_SELECT = `
-  PaymentRequestID, BusinessID, RequestedPlanID, PaymentMethod, CurrencyCode,
-  Amount, PaymentReference, PayerName, TransferReference, CustomerNote, Status,
-  SubmittedByUserID, SubmittedAtUtc, ReviewedByUserID, ReviewedAtUtc, ReviewNote,
-  ApprovedSubscriptionID, CreatedAtUtc, UpdatedAtUtc`;
+  PaymentRequestID, BusinessID, RequestedPlanID, RequestedPlanCode, RequestedPlanDisplayName,
+  PaymentMethod, CurrencyCode, Amount, PaymentReference, PayerName, TransferReference,
+  CustomerNote, Status, CreatedByUserID, SubmittedByUserID, SubmittedAtUtc,
+  ReviewedByUserID, ReviewedAtUtc, ReviewNote, ApprovedSubscriptionID,
+  CreatedAtUtc, UpdatedAtUtc`;
 
 export async function getPaymentRequestById(
   paymentRequestId: string,
@@ -109,6 +115,29 @@ export async function lockPaymentRequest(
   return row ? mapPayment(row) : null;
 }
 
+/** Open intent = AWAITING_TRANSFER or PENDING (blocks a second open request). */
+export async function findOpenByBusinessId(
+  businessId: string,
+  trx?: TransactionClient,
+): Promise<ManualPaymentRequest | null> {
+  const result = await db(trx).query<PaymentRow>(
+    `SELECT TOP 1 ${PAYMENT_SELECT}
+     FROM TblManualPaymentRequest
+     WHERE BusinessID = @businessId
+       AND Status IN (N'AWAITING_TRANSFER', N'PENDING')
+     ORDER BY CreatedAtUtc DESC`,
+    [
+      {
+        name: "businessId",
+        type: sql.UniqueIdentifier,
+        value: businessId,
+      },
+    ],
+  );
+  const row = result.recordset[0];
+  return row ? mapPayment(row) : null;
+}
+
 export async function findPendingByBusinessId(
   businessId: string,
   trx?: TransactionClient,
@@ -137,7 +166,7 @@ export async function getLatestByBusinessId(
     `SELECT TOP 1 ${PAYMENT_SELECT}
      FROM TblManualPaymentRequest
      WHERE BusinessID = @businessId
-     ORDER BY SubmittedAtUtc DESC`,
+     ORDER BY CreatedAtUtc DESC`,
     [
       {
         name: "businessId",
@@ -150,113 +179,102 @@ export async function getLatestByBusinessId(
   return row ? mapPayment(row) : null;
 }
 
-export async function insertPaymentRequest(
+export async function insertAwaitingTransfer(
   params: {
     businessId: string;
     requestedPlanId: string;
+    requestedPlanCode: string;
+    requestedPlanDisplayName: string;
     paymentMethod: ManualPaymentMethod;
     currencyCode: string;
     amount: number;
     paymentReference: string;
-    payerName: string | null;
-    transferReference: string | null;
-    customerNote: string | null;
-    submittedByUserId: string;
+    createdByUserId: string;
   },
   trx?: TransactionClient,
 ): Promise<ManualPaymentRequest> {
   const paymentRequestId = randomUUID();
   const now = new Date();
 
-  try {
-    await db(trx).query(
-      `INSERT INTO TblManualPaymentRequest (
-        PaymentRequestID, BusinessID, RequestedPlanID, PaymentMethod, CurrencyCode,
-        Amount, PaymentReference, PayerName, TransferReference, CustomerNote, Status,
-        SubmittedByUserID, SubmittedAtUtc, CreatedAtUtc, UpdatedAtUtc
-      ) VALUES (
-        @paymentRequestId, @businessId, @requestedPlanId, @paymentMethod, @currencyCode,
-        @amount, @paymentReference, @payerName, @transferReference, @customerNote, N'PENDING',
-        @submittedByUserId, @submittedAtUtc, @createdAtUtc, @updatedAtUtc
-      )`,
-      [
-        {
-          name: "paymentRequestId",
-          type: sql.UniqueIdentifier,
-          value: paymentRequestId,
-        },
-        {
-          name: "businessId",
-          type: sql.UniqueIdentifier,
-          value: params.businessId,
-        },
-        {
-          name: "requestedPlanId",
-          type: sql.UniqueIdentifier,
-          value: params.requestedPlanId,
-        },
-        {
-          name: "paymentMethod",
-          type: sql.NVarChar(32),
-          value: params.paymentMethod,
-        },
-        {
-          name: "currencyCode",
-          type: sql.NVarChar(3),
-          value: params.currencyCode,
-        },
-        { name: "amount", type: sql.Decimal(12, 2), value: params.amount },
-        {
-          name: "paymentReference",
-          type: sql.NVarChar(64),
-          value: params.paymentReference,
-        },
-        {
-          name: "payerName",
-          type: sql.NVarChar(160),
-          value: params.payerName,
-        },
-        {
-          name: "transferReference",
-          type: sql.NVarChar(160),
-          value: params.transferReference,
-        },
-        {
-          name: "customerNote",
-          type: sql.NVarChar(1000),
-          value: params.customerNote,
-        },
-        {
-          name: "submittedByUserId",
-          type: sql.UniqueIdentifier,
-          value: params.submittedByUserId,
-        },
-        { name: "submittedAtUtc", type: sql.DateTime2, value: now },
-        { name: "createdAtUtc", type: sql.DateTime2, value: now },
-        { name: "updatedAtUtc", type: sql.DateTime2, value: now },
-      ],
-    );
-  } catch (error) {
-    if (isUniqueViolationError(error)) {
-      throw error;
-    }
-    throw error;
-  }
+  await db(trx).query(
+    `INSERT INTO TblManualPaymentRequest (
+      PaymentRequestID, BusinessID, RequestedPlanID, RequestedPlanCode, RequestedPlanDisplayName,
+      PaymentMethod, CurrencyCode, Amount, PaymentReference, Status,
+      CreatedByUserID, CreatedAtUtc, UpdatedAtUtc
+    ) VALUES (
+      @paymentRequestId, @businessId, @requestedPlanId, @requestedPlanCode, @requestedPlanDisplayName,
+      @paymentMethod, @currencyCode, @amount, @paymentReference, N'AWAITING_TRANSFER',
+      @createdByUserId, @createdAtUtc, @updatedAtUtc
+    )`,
+    [
+      {
+        name: "paymentRequestId",
+        type: sql.UniqueIdentifier,
+        value: paymentRequestId,
+      },
+      {
+        name: "businessId",
+        type: sql.UniqueIdentifier,
+        value: params.businessId,
+      },
+      {
+        name: "requestedPlanId",
+        type: sql.UniqueIdentifier,
+        value: params.requestedPlanId,
+      },
+      {
+        name: "requestedPlanCode",
+        type: sql.NVarChar(64),
+        value: params.requestedPlanCode,
+      },
+      {
+        name: "requestedPlanDisplayName",
+        type: sql.NVarChar(120),
+        value: params.requestedPlanDisplayName,
+      },
+      {
+        name: "paymentMethod",
+        type: sql.NVarChar(32),
+        value: params.paymentMethod,
+      },
+      {
+        name: "currencyCode",
+        type: sql.NVarChar(3),
+        value: params.currencyCode,
+      },
+      { name: "amount", type: sql.Decimal(12, 2), value: params.amount },
+      {
+        name: "paymentReference",
+        type: sql.NVarChar(64),
+        value: params.paymentReference,
+      },
+      {
+        name: "createdByUserId",
+        type: sql.UniqueIdentifier,
+        value: params.createdByUserId,
+      },
+      { name: "createdAtUtc", type: sql.DateTime2, value: now },
+      { name: "updatedAtUtc", type: sql.DateTime2, value: now },
+    ],
+  );
 
   return {
     paymentRequestId,
     businessId: params.businessId,
     requestedPlanId: params.requestedPlanId,
+    requestedPlanCode: params.requestedPlanCode,
+    requestedPlanDisplayName: params.requestedPlanDisplayName,
     paymentMethod: params.paymentMethod,
     currencyCode: params.currencyCode,
     amount: params.amount,
     paymentReference: params.paymentReference,
-    payerName: params.payerName,
-    transferReference: params.transferReference,
-    customerNote: params.customerNote,
-    status: "PENDING",
-    submittedByUserId: params.submittedByUserId,
-    submittedAtUtc: now,
+    payerName: null,
+    transferReference: null,
+    customerNote: null,
+    status: "AWAITING_TRANSFER",
+    createdByUserId: params.createdByUserId,
+    submittedByUserId: null,
+    submittedAtUtc: null,
     reviewedByUserId: null,
     reviewedAtUtc: null,
     reviewNote: null,
@@ -264,6 +282,79 @@ export async function insertPaymentRequest(
     createdAtUtc: now,
     updatedAtUtc: now,
   };
+}
+
+export async function markPaymentCanceled(
+  paymentRequestId: string,
+  trx: TransactionClient,
+): Promise<void> {
+  await trx.query(
+    `UPDATE TblManualPaymentRequest
+     SET Status = N'CANCELED', UpdatedAtUtc = SYSUTCDATETIME()
+     WHERE PaymentRequestID = @paymentRequestId
+       AND Status = N'AWAITING_TRANSFER'`,
+    [
+      {
+        name: "paymentRequestId",
+        type: sql.UniqueIdentifier,
+        value: paymentRequestId,
+      },
+    ],
+  );
+}
+
+export async function markPaymentPending(
+  params: {
+    paymentRequestId: string;
+    submittedByUserId: string;
+    payerName: string;
+    transferReference: string | null;
+    customerNote: string | null;
+  },
+  trx: TransactionClient,
+): Promise<void> {
+  const now = new Date();
+  await trx.query(
+    `UPDATE TblManualPaymentRequest
+     SET Status = N'PENDING',
+         PayerName = @payerName,
+         TransferReference = @transferReference,
+         CustomerNote = @customerNote,
+         SubmittedByUserID = @submittedByUserId,
+         SubmittedAtUtc = @submittedAtUtc,
+         UpdatedAtUtc = @updatedAtUtc
+     WHERE PaymentRequestID = @paymentRequestId
+       AND Status = N'AWAITING_TRANSFER'`,
+    [
+      {
+        name: "paymentRequestId",
+        type: sql.UniqueIdentifier,
+        value: params.paymentRequestId,
+      },
+      {
+        name: "payerName",
+        type: sql.NVarChar(160),
+        value: params.payerName,
+      },
+      {
+        name: "transferReference",
+        type: sql.NVarChar(160),
+        value: params.transferReference,
+      },
+      {
+        name: "customerNote",
+        type: sql.NVarChar(1000),
+        value: params.customerNote,
+      },
+      {
+        name: "submittedByUserId",
+        type: sql.UniqueIdentifier,
+        value: params.submittedByUserId,
+      },
+      { name: "submittedAtUtc", type: sql.DateTime2, value: now },
+      { name: "updatedAtUtc", type: sql.DateTime2, value: now },
+    ],
+  );
 }
 
 export async function markPaymentApproved(
@@ -357,10 +448,10 @@ export type AdminPaymentListItem = ManualPaymentRequest & {
   businessName: string;
   submitterEmail: string;
   submitterName: string;
-  requestedPlanCode: string;
-  requestedPlanName: string;
   currentPlanCode: string | null;
   currentPlanName: string | null;
+  /** Live monthly price of the *requested* plan (may differ from snapshot). */
+  liveRequestedPlanPrice: number | null;
 };
 
 export async function listPaymentsForAdmin(params: {
@@ -371,8 +462,12 @@ export async function listPaymentsForAdmin(params: {
   const inputs: QueryInput[] = [
     { name: "limit", type: sql.Int, value: limit },
   ];
-  let statusClause = "";
-  if (params.status && params.status !== "ALL") {
+  let statusClause = "AND p.Status = N'PENDING'";
+  if (params.status === "ALL") {
+    // Review queue diagnostics may include terminal states, but never AWAITING_TRANSFER.
+    statusClause =
+      "AND p.Status IN (N'PENDING', N'APPROVED', N'REJECTED', N'CANCELED')";
+  } else if (params.status) {
     statusClause = "AND p.Status = @status";
     inputs.push({
       name: "status",
@@ -386,28 +481,28 @@ export async function listPaymentsForAdmin(params: {
       BusinessName: string;
       SubmitterEmail: string;
       SubmitterName: string;
-      RequestedPlanCode: string;
-      RequestedPlanName: string;
       CurrentPlanCode: string | null;
       CurrentPlanName: string | null;
+      LiveRequestedPlanPrice: number | null;
     }
   >(
     `SELECT TOP (@limit)
-        p.PaymentRequestID, p.BusinessID, p.RequestedPlanID, p.PaymentMethod, p.CurrencyCode,
-        p.Amount, p.PaymentReference, p.PayerName, p.TransferReference, p.CustomerNote, p.Status,
-        p.SubmittedByUserID, p.SubmittedAtUtc, p.ReviewedByUserID, p.ReviewedAtUtc, p.ReviewNote,
-        p.ApprovedSubscriptionID, p.CreatedAtUtc, p.UpdatedAtUtc,
+        p.PaymentRequestID, p.BusinessID, p.RequestedPlanID, p.RequestedPlanCode, p.RequestedPlanDisplayName,
+        p.PaymentMethod, p.CurrencyCode, p.Amount, p.PaymentReference, p.PayerName, p.TransferReference,
+        p.CustomerNote, p.Status, p.CreatedByUserID, p.SubmittedByUserID, p.SubmittedAtUtc,
+        p.ReviewedByUserID, p.ReviewedAtUtc, p.ReviewNote, p.ApprovedSubscriptionID,
+        p.CreatedAtUtc, p.UpdatedAtUtc,
         b.Name AS BusinessName,
-        u.Email AS SubmitterEmail,
-        u.FullName AS SubmitterName,
-        pl.Code AS RequestedPlanCode,
-        pl.DisplayName AS RequestedPlanName,
+        COALESCE(u.Email, cu.Email) AS SubmitterEmail,
+        COALESCE(u.FullName, cu.FullName) AS SubmitterName,
         curPl.Code AS CurrentPlanCode,
-        curPl.DisplayName AS CurrentPlanName
+        curPl.DisplayName AS CurrentPlanName,
+        reqPl.MonthlyPriceAmount AS LiveRequestedPlanPrice
      FROM TblManualPaymentRequest p
      INNER JOIN TblBusiness b ON b.BusinessID = p.BusinessID
-     INNER JOIN TblUser u ON u.UserID = p.SubmittedByUserID
-     INNER JOIN TblPlan pl ON pl.PlanID = p.RequestedPlanID
+     INNER JOIN TblUser cu ON cu.UserID = p.CreatedByUserID
+     LEFT JOIN TblUser u ON u.UserID = p.SubmittedByUserID
+     INNER JOIN TblPlan reqPl ON reqPl.PlanID = p.RequestedPlanID
      OUTER APPLY (
        SELECT TOP 1 s.PlanID
        FROM TblSubscription s
@@ -419,7 +514,7 @@ export async function listPaymentsForAdmin(params: {
      WHERE 1=1 ${statusClause}
      ORDER BY
        CASE p.Status WHEN N'PENDING' THEN 0 ELSE 1 END,
-       p.SubmittedAtUtc DESC`,
+       COALESCE(p.SubmittedAtUtc, p.CreatedAtUtc) DESC`,
     inputs,
   );
 
@@ -428,10 +523,12 @@ export async function listPaymentsForAdmin(params: {
     businessName: row.BusinessName,
     submitterEmail: row.SubmitterEmail,
     submitterName: row.SubmitterName,
-    requestedPlanCode: row.RequestedPlanCode,
-    requestedPlanName: row.RequestedPlanName,
     currentPlanCode: row.CurrentPlanCode,
     currentPlanName: row.CurrentPlanName,
+    liveRequestedPlanPrice:
+      row.LiveRequestedPlanPrice == null
+        ? null
+        : Number(row.LiveRequestedPlanPrice),
   }));
 }
 
