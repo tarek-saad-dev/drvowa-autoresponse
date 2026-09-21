@@ -28,7 +28,7 @@ type KnowledgeDraft = {
 const STEPS = [
   "بيانات النشاط",
   "الموقع (اختياري)",
-  "الوكيل الذكي",
+  "موظف الاستقبال",
   "المعرفة الأولية",
 ] as const;
 
@@ -79,7 +79,7 @@ const defaultDraft = (): DraftState => ({
   },
   agent: {
     name: "موظف الاستقبال",
-    roleTitle: "AI receptionist",
+    roleTitle: "موظف استقبال",
     language: "ar",
     dialect: "",
     tone: "مهني وودود",
@@ -227,7 +227,7 @@ export function OnboardingWizard() {
       } catch {
         // ignore
       }
-      router.push("/dashboard?next=whatsapp");
+      router.push("/dashboard/whatsapp");
       router.refresh();
     } catch {
       setError("حدث خطأ في الاتصال. حاول مرة أخرى.");

@@ -100,8 +100,8 @@ export async function completeOnboarding(
 
   const agent = await createAgent({
     businessId: business.businessId,
-    name: input.agent.name.trim() || "AI receptionist",
-    roleTitle: input.agent.roleTitle?.trim() || "AI receptionist",
+    name: input.agent.name.trim() || "موظف الاستقبال",
+    roleTitle: input.agent.roleTitle?.trim() || "موظف استقبال",
     language: input.agent.language?.trim() || "ar",
     dialect: input.agent.dialect ?? null,
     tone: input.agent.tone ?? null,
@@ -116,13 +116,14 @@ export async function completeOnboarding(
       : [
           {
             category: KNOWLEDGE_CATEGORIES.ABOUT,
-            title: "About the business",
-            content: `${business.name} uses DRVOWA AutoResponse as an AI receptionist.`,
+            title: "عن النشاط",
+            content: `${business.name} يستخدم DRVOWA كموظف استقبال ذكي عبر واتساب.`,
           },
           {
             category: KNOWLEDGE_CATEGORIES.FAQ,
-            title: "Working hours",
-            content: "Share your opening hours here so the receptionist can answer customers.",
+            title: "ساعات العمل",
+            content:
+              "أضف هنا ساعات العمل ليتمكن موظف الاستقبال من إجابة العملاء.",
           },
         ];
 

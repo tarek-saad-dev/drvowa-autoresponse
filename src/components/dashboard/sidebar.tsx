@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { Badge } from "@/components/ui/badge";
 import { DASHBOARD_NAV } from "@/constants/nav";
 import { APP_NAME } from "@/constants/app";
 import { cn } from "@/lib/utils/cn";
@@ -36,11 +35,6 @@ export function DashboardSidebar() {
               )}
             >
               <span>{item.label}</span>
-              {"deferred" in item && item.deferred ? (
-                <Badge variant="muted" className="bg-white/10 text-[10px] text-sidebar-muted">
-                  خارج V1
-                </Badge>
-              ) : null}
             </Link>
           );
         })}
