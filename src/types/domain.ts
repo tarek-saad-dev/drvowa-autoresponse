@@ -308,6 +308,9 @@ export type Subscription = {
   status: SubscriptionStatus;
   periodStartUtc: Date | null;
   periodEndUtc: Date | null;
+  providerName?: string | null;
+  externalCustomerId?: string | null;
+  externalSubscriptionId?: string | null;
   createdAtUtc: Date;
   updatedAtUtc: Date;
 };

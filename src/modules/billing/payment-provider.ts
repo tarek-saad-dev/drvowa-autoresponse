@@ -1,7 +1,8 @@
 /**
  * Generic payment provider boundary.
  * No merchant credentials — EXTERNAL_GATE_PAYMENT_PROVIDER / PRICING.
- * Subscription lifecycle remains in billing modules; providers attach here later.
+ * Real Stripe/Paymob adapters attach here later; subscription lifecycle stays
+ * in billing modules and must not hardcode a vendor.
  */
 
 export type CheckoutSessionInput = {
@@ -25,11 +26,25 @@ export type PortalSessionResult = {
   portalUrl: string;
 };
 
+export type MappedSubscriptionStatus =
+  | "ACTIVE"
+  | "TRIALING"
+  | "PAST_DUE"
+  | "CANCELED"
+  | "INACTIVE"
+  | "EXPIRED";
+
 export type WebhookVerificationResult = {
   ok: boolean;
   eventType?: string;
   externalSubscriptionId?: string;
-  mappedStatus?: "ACTIVE" | "TRIALING" | "PAST_DUE" | "CANCELED" | "INACTIVE";
+  mappedStatus?: MappedSubscriptionStatus;
+  businessId?: string;
+  planCode?: string;
+  externalCustomerId?: string;
+  periodStartUtc?: Date | string;
+  periodEndUtc?: Date | string;
+  providerEventId?: string;
 };
 
 export interface PaymentProvider {
@@ -42,15 +57,17 @@ export interface PaymentProvider {
   ): Promise<WebhookVerificationResult>;
 }
 
+export const PAYMENT_GATE_ERROR = "EXTERNAL_GATE_PAYMENT_PROVIDER";
+
 export class UnconfiguredPaymentProvider implements PaymentProvider {
   readonly name = "unconfigured";
 
   async createCheckout(): Promise<CheckoutSessionResult> {
-    throw new Error("EXTERNAL_GATE_PAYMENT_PROVIDER");
+    throw new Error(PAYMENT_GATE_ERROR);
   }
 
   async createPortal(): Promise<PortalSessionResult> {
-    throw new Error("EXTERNAL_GATE_PAYMENT_PROVIDER");
+    throw new Error(PAYMENT_GATE_ERROR);
   }
 
   async verifyWebhook(): Promise<WebhookVerificationResult> {
@@ -58,6 +75,32 @@ export class UnconfiguredPaymentProvider implements PaymentProvider {
   }
 }
 
+/**
+ * Future adapters (stripe / paymob) register by PAYMENT_PROVIDER name.
+ * Until an adapter exists and credentials are present, checkout stays disabled.
+ */
+function readPaymentProviderName(): string {
+  return (process.env.PAYMENT_PROVIDER ?? "").trim().toLowerCase();
+}
+
+/**
+ * True only when a real checkout adapter is selected AND credentials exist.
+ * No real adapters are wired yet — always false (including explicit unconfigured).
+ */
+export function isPaymentCheckoutEnabled(): boolean {
+  const name = readPaymentProviderName();
+  if (!name || name === "unconfigured") {
+    return false;
+  }
+  // Structure reserved for stripe/paymob credential checks once adapters ship.
+  void name;
+  return false;
+}
+
 export function getPaymentProvider(): PaymentProvider {
+  const name = readPaymentProviderName();
+  // Future: if (name === "stripe" && hasStripeCreds()) return new StripePaymentProvider();
+  // Future: if (name === "paymob" && hasPaymobCreds()) return new PaymobPaymentProvider();
+  void name;
   return new UnconfiguredPaymentProvider();
 }

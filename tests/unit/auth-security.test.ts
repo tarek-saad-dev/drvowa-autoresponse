@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, afterEach } from "vitest";
 
 import {
   RATE_LIMITS,
@@ -14,7 +14,12 @@ import { hashResetToken } from "@/modules/auth/password-reset";
 import {
   LocalDevEmailProvider,
   GatedProductionEmailProvider,
+  ResendEmailProvider,
+  SmtpEmailProvider,
+  getEmailProvider,
   isEmailDeliveryEnabled,
+  hasResendCredentials,
+  hasSmtpCredentials,
 } from "@/modules/auth/email-provider";
 
 describe("rate limit", () => {
@@ -51,6 +56,35 @@ describe("password reset token hash", () => {
 });
 
 describe("email provider adapters", () => {
+  const emailEnvKeys = [
+    "EMAIL_PROVIDER",
+    "EMAIL_FROM",
+    "RESEND_API_KEY",
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "SMTP_USER",
+    "SMTP_PASS",
+    "SMTP_SECURE",
+  ] as const;
+
+  let snapshot: Record<string, string | undefined>;
+
+  beforeEach(() => {
+    snapshot = {};
+    for (const key of emailEnvKeys) {
+      snapshot[key] = process.env[key];
+      delete process.env[key];
+    }
+  });
+
+  afterEach(() => {
+    for (const key of emailEnvKeys) {
+      const prev = snapshot[key];
+      if (prev === undefined) delete process.env[key];
+      else process.env[key] = prev;
+    }
+  });
+
   it("local adapter queues without external send", async () => {
     const p = new LocalDevEmailProvider();
     const result = await p.send({
@@ -74,27 +108,60 @@ describe("email provider adapters", () => {
     }
   });
 
-  it("reports email delivery disabled until a real provider is wired", () => {
+  it("reports email delivery disabled without credentials", () => {
     expect(isEmailDeliveryEnabled()).toBe(false);
   });
 
   it("production provider selection prefers gated when EMAIL_PROVIDER unset", async () => {
-    const prevProvider = process.env.EMAIL_PROVIDER;
-    delete process.env.EMAIL_PROVIDER;
-    try {
-      // In this repo's production path, unset EMAIL_PROVIDER must not imply delivery.
-      // getEmailProvider still depends on NODE_ENV; assert gated adapter directly.
-      const gated = new GatedProductionEmailProvider();
-      const result = await gated.send({
-        to: "user@example.com",
-        subject: "test",
-        textBody: "hello",
-      });
-      expect(result.status).toBe("DISABLED");
-      expect(isEmailDeliveryEnabled()).toBe(false);
-    } finally {
-      if (prevProvider === undefined) delete process.env.EMAIL_PROVIDER;
-      else process.env.EMAIL_PROVIDER = prevProvider;
-    }
+    const gated = new GatedProductionEmailProvider();
+    const result = await gated.send({
+      to: "user@example.com",
+      subject: "test",
+      textBody: "hello",
+    });
+    expect(result.status).toBe("DISABLED");
+    expect(isEmailDeliveryEnabled()).toBe(false);
+  });
+
+  it("resend/smtp without credentials stay gated and delivery disabled", () => {
+    process.env.EMAIL_PROVIDER = "resend";
+    expect(hasResendCredentials()).toBe(false);
+    expect(getEmailProvider()).toBeInstanceOf(GatedProductionEmailProvider);
+    expect(isEmailDeliveryEnabled()).toBe(false);
+
+    process.env.EMAIL_PROVIDER = "smtp";
+    expect(hasSmtpCredentials()).toBe(false);
+    expect(getEmailProvider()).toBeInstanceOf(GatedProductionEmailProvider);
+    expect(isEmailDeliveryEnabled()).toBe(false);
+  });
+
+  it("resend credentials enable delivery flag and select Resend provider", () => {
+    process.env.EMAIL_PROVIDER = "resend";
+    process.env.RESEND_API_KEY = "re_test_key";
+    process.env.EMAIL_FROM = "noreply@example.com";
+    expect(hasResendCredentials()).toBe(true);
+    expect(isEmailDeliveryEnabled()).toBe(true);
+    expect(getEmailProvider()).toBeInstanceOf(ResendEmailProvider);
+  });
+
+  it("smtp credentials enable delivery flag and select Smtp provider", () => {
+    process.env.EMAIL_PROVIDER = "smtp";
+    process.env.SMTP_HOST = "smtp.example.com";
+    process.env.SMTP_PORT = "587";
+    process.env.SMTP_USER = "user";
+    process.env.SMTP_PASS = "pass";
+    process.env.SMTP_SECURE = "false";
+    process.env.EMAIL_FROM = "noreply@example.com";
+    expect(hasSmtpCredentials()).toBe(true);
+    expect(isEmailDeliveryEnabled()).toBe(true);
+    expect(getEmailProvider()).toBeInstanceOf(SmtpEmailProvider);
+  });
+
+  it("explicit local/dev never reports delivery enabled", () => {
+    process.env.EMAIL_PROVIDER = "local";
+    process.env.RESEND_API_KEY = "re_test_key";
+    process.env.EMAIL_FROM = "noreply@example.com";
+    expect(getEmailProvider()).toBeInstanceOf(LocalDevEmailProvider);
+    expect(isEmailDeliveryEnabled()).toBe(false);
   });
 });

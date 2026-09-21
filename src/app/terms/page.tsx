@@ -35,10 +35,34 @@ export default function TermsPage() {
             </p>
           </section>
           <section>
+            <h2 className="text-lg font-semibold">الخطط والحصص</h2>
+            <p className="mt-2 text-muted-foreground">
+              تُطبَّق حدود الخطة (اتصالات، وكلاء، معرفة، ردود AI، رسائل صادرة)
+              على أساس شهري UTC ما لم يُنص على خلاف ذلك. الأسعار والتعبئة النهائية
+              تخضع لمراجعة المالك (EXTERNAL_GATE_PRICING).
+            </p>
+          </section>
+          <section>
+            <h2 className="text-lg font-semibold">الدفع والاشتراكات</h2>
+            <p className="mt-2 text-muted-foreground">
+              عند تفعيل بوابة دفع معتمدة، تُدار عمليات الشراء والتجديد والإلغاء
+              عبر مزوّد الدفع. حتى ذلك الحين قد تعمل المنصة في وضع مجاني/تجريبي
+              دون شراء إلكتروني.
+            </p>
+          </section>
+          <section>
             <h2 className="text-lg font-semibold">إخلاء مسؤولية واتساب</h2>
             <p className="mt-2 text-muted-foreground">
               لسنا شريكاً رسمياً لواتساب/Meta. استخدام واجهات غير رسمية قد يعرّض
               الرقم لقيود من واتساب. لا نضمن عدم الحظر أو الاستمرارية المطلقة.
+            </p>
+          </section>
+          <section>
+            <h2 className="text-lg font-semibold">إخلاء مسؤولية عام</h2>
+            <p className="mt-2 text-muted-foreground">
+              تُقدَّم الخدمة «كما هي» ضمن الحدود المعقولة للتشغيل. المسؤولية عن
+              قرارات العمل الناتجة عن ردود الذكاء الاصطناعي تقع على عاتق
+              النشاط التجاري المستخدم.
             </p>
           </section>
         </div>

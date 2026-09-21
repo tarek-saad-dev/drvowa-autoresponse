@@ -1,6 +1,10 @@
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
-import { getBillingOverview } from "@/modules/billing/service";
+import { isPaymentCheckoutEnabled } from "@/modules/billing/payment-provider";
+import {
+  getBillingOverview,
+  listActivePlans,
+} from "@/modules/billing/service";
 import { listUsageEvents } from "@/modules/usage/service";
 import { redirect } from "next/navigation";
 
@@ -21,9 +25,12 @@ export default async function BillingPage() {
   );
   if (!businessId) redirect("/onboarding");
 
-  const [overview, events] = await Promise.all([
+  const paymentsConfigured = isPaymentCheckoutEnabled();
+
+  const [overview, events, availablePlans] = await Promise.all([
     getBillingOverview({ businessId }),
     listUsageEvents({ businessId, limit: 20 }),
+    listActivePlans(),
   ]);
 
   const plan = overview.plan;
@@ -34,9 +41,24 @@ export default async function BillingPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">الفوترة والاستخدام</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          خطة الاشتراك وحدود الاستخدام للشهر الحالي (UTC). الدفع الإلكتروني مؤجل.
+          خطة الاشتراك وحدود الاستخدام للشهر الحالي (UTC). تُصفَّر عدّادات
+          الاستخدام الشهرية مع بداية كل شهر تقويمي UTC.
         </p>
       </div>
+
+      {!paymentsConfigured ? (
+        <div
+          className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm"
+          role="status"
+        >
+          <p className="font-medium">الدفع الإلكتروني غير مفعّل حالياً</p>
+          <p className="mt-1 text-muted-foreground">
+            الوضع التجريبي/المجاني فقط — بوابة الدفع غير مهيأة (
+            EXTERNAL_GATE_PAYMENT_PROVIDER). لا يوجد زر شراء حتى يتم اختيار مزوّد
+            الدفع وإعداد بيانات الاعتماد.
+          </p>
+        </div>
+      ) : null}
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">الاشتراك</h2>
@@ -64,10 +86,62 @@ export default async function BillingPage() {
             <dd className="font-medium">
               {overview.canAct
                 ? "مسموح"
-                : `محظور${overview.blockReason ? ` (${overview.blockReason})` : ""}`}
+                : `محظور${overview.blockReason ? ` — ${overview.blockReason}` : ""}`}
             </dd>
           </div>
+          {!overview.canAct && overview.blockReason ? (
+            <div className="sm:col-span-2">
+              <dt className="text-muted-foreground">سبب الحظر</dt>
+              <dd className="font-medium text-destructive">
+                {overview.blockReason}
+              </dd>
+            </div>
+          ) : null}
         </dl>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">الخطط المتاحة (عرض فقط)</h2>
+        <p className="text-sm text-muted-foreground">
+          حدود تقنية للخطط النشطة. الأسعار غير معروضة (
+          EXTERNAL_GATE_PRICING).
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[32rem] text-sm">
+            <thead>
+              <tr className="border-b text-left text-muted-foreground">
+                <th className="py-2 pr-4 font-medium">الخطة</th>
+                <th className="py-2 pr-4 font-medium">واتساب</th>
+                <th className="py-2 pr-4 font-medium">وكلاء</th>
+                <th className="py-2 pr-4 font-medium">معرفة</th>
+                <th className="py-2 pr-4 font-medium">AI / شهر</th>
+                <th className="py-2 font-medium">صادر / شهر</th>
+              </tr>
+            </thead>
+            <tbody>
+              {availablePlans.map((p) => (
+                <tr key={p.planId} className="border-b">
+                  <td className="py-2 pr-4 font-medium">
+                    {p.displayName} ({p.code})
+                  </td>
+                  <td className="py-2 pr-4">
+                    {formatLimit(p.maxWhatsAppConnections)}
+                  </td>
+                  <td className="py-2 pr-4">{formatLimit(p.maxAgents)}</td>
+                  <td className="py-2 pr-4">
+                    {formatLimit(p.maxActiveKnowledgeItems)}
+                  </td>
+                  <td className="py-2 pr-4">
+                    {formatLimit(p.monthlyAiReplies)}
+                  </td>
+                  <td className="py-2">
+                    {formatLimit(p.monthlyWhatsAppOutbound)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="space-y-3">

@@ -1,6 +1,7 @@
+import { DEFAULT_BOOTSTRAP_PLAN_CODE } from "@/constants/billing";
 import { isUniqueViolationError } from "@/lib/db";
 import { NotFoundError } from "@/lib/tenancy/errors";
-import type { Subscription } from "@/types/domain";
+import type { Plan, Subscription } from "@/types/domain";
 
 import {
   getCurrentSubscription,
@@ -26,8 +27,12 @@ export async function getBillingOverview(params: {
   return getEntitlementSnapshot(params.businessId);
 }
 
+export async function listActivePlans(): Promise<Plan[]> {
+  return repo.listActivePlans();
+}
+
 /**
- * Ensures the business has a current FREE subscription.
+ * Ensures the business has a current bootstrap (FREE) subscription.
  * Concurrency-safe: filtered unique index + unique-violation re-read.
  */
 export async function ensureDefaultSubscription(params: {
@@ -38,9 +43,11 @@ export async function ensureDefaultSubscription(params: {
     return existing;
   }
 
-  const freePlan = await getPlanByCode("FREE");
+  const freePlan = await getPlanByCode(DEFAULT_BOOTSTRAP_PLAN_CODE);
   if (!freePlan || freePlan.status !== "ACTIVE") {
-    throw new NotFoundError("FREE plan is not configured");
+    throw new NotFoundError(
+      `${DEFAULT_BOOTSTRAP_PLAN_CODE} plan is not configured`,
+    );
   }
 
   try {

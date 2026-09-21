@@ -13,7 +13,6 @@ import {
   resetRateLimitBucketsForTests,
 } from "@/lib/security/rate-limit";
 import { hashResetToken } from "@/modules/auth/password-reset";
-import { getPaymentProvider } from "@/modules/billing/payment-provider";
 
 /**
  * Release-candidate flow contracts (mocked / unit level).
@@ -66,6 +65,11 @@ describe("prelaunch release flow contracts", () => {
   });
 
   it("payment provider remains gated (EXTERNAL_GATE)", async () => {
+    const {
+      getPaymentProvider,
+      isPaymentCheckoutEnabled,
+    } = await import("@/modules/billing/payment-provider");
+    expect(isPaymentCheckoutEnabled()).toBe(false);
     const provider = getPaymentProvider();
     await expect(
       provider.createCheckout({

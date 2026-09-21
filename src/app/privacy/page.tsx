@@ -35,10 +35,33 @@ export default function PrivacyPage() {
             </p>
           </section>
           <section>
+            <h2 className="text-lg font-semibold">المعالجة بواسطة أطراف ثالثة</h2>
+            <p className="mt-2 text-muted-foreground">
+              قد تُعالَج بعض البيانات عبر مزوّدي الاستضافة والبريد والذكاء
+              الاصطناعي وبوابات الدفع عند تفعيلها — وفق عقودهم وسياساتهم. قائمة
+              المعالجين النهائية تُحدَّث بعد المراجعة القانونية.
+            </p>
+          </section>
+          <section>
             <h2 className="text-lg font-semibold">الاحتفاظ والأمان</h2>
             <p className="mt-2 text-muted-foreground">
               نقيّد الوصول حسب عضوية النشاط، ونخزّن جلسات المصادقة بشكل آمن،
               ونتجنب تسجيل كلمات المرور أو رموز الجلسة في السجلات العادية.
+            </p>
+          </section>
+          <section>
+            <h2 className="text-lg font-semibold">حقوقك وطلبات الحذف</h2>
+            <p className="mt-2 text-muted-foreground">
+              يمكنك طلب الوصول أو التصحيح أو حذف بيانات الحساب عبر{" "}
+              {SUPPORT_EMAIL}. قد نحتفظ بسجلات محدودة للامتثال أو منع الاحتيال
+              وفق ما يقرّه المستشار القانوني.
+            </p>
+          </section>
+          <section>
+            <h2 className="text-lg font-semibold">التحديثات</h2>
+            <p className="mt-2 text-muted-foreground">
+              قد نحدّث هذه الصفحة. النسخة المعتمدة قانونياً ستُنشر بعد إغلاق
+              EXTERNAL_GATE_LEGAL_REVIEW.
             </p>
           </section>
         </div>
