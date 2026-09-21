@@ -4,7 +4,7 @@
 
 **BRANCH:** `feature/product-finish-v1`  
 
-**SHA:** `9f6c227fd718e2f5b7cd65464b49855c96d872ad`  
+**SHA:** branch tip (`git rev-parse origin/feature/product-finish-v1`) — product gap-closer commit `9ab2efa`  
 
 **Base main:** `8daf6c5` (untouched — no deploy / no merge)
 
