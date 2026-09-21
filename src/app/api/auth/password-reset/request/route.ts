@@ -6,6 +6,7 @@ import {
   assertRateLimit,
   clientIpFromRequest,
 } from "@/lib/security/rate-limit";
+import { isEmailDeliveryEnabled } from "@/modules/auth/email-provider";
 import { requestPasswordReset } from "@/modules/auth/password-reset";
 
 const schema = z.object({
@@ -27,10 +28,13 @@ export async function POST(request: Request) {
       RATE_LIMITS.passwordReset,
     );
     await requestPasswordReset({ email: input.email, requestIp: ip });
+    const deliveryEnabled = isEmailDeliveryEnabled();
     return jsonOk({
       accepted: true,
-      message:
-        "If an account exists for this email, password reset instructions were sent.",
+      emailDeliveryConfigured: deliveryEnabled,
+      message: deliveryEnabled
+        ? "If an account exists for this email, password reset instructions were sent."
+        : "If an account exists for this email, the reset request was recorded. Email delivery is not configured yet.",
     });
   } catch (error) {
     return handleApiError(error);

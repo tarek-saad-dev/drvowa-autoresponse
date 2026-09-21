@@ -56,17 +56,25 @@ export class GatedProductionEmailProvider implements EmailProvider {
 }
 
 export function getEmailProvider(): EmailProvider {
-  const mode = (process.env.EMAIL_PROVIDER ?? "local").toLowerCase();
-  if (mode === "local" || mode === "dev" || process.env.NODE_ENV !== "production") {
+  const mode = (process.env.EMAIL_PROVIDER ?? "").toLowerCase();
+  // Non-production defaults to local logging adapter.
+  if (process.env.NODE_ENV !== "production") {
     return new LocalDevEmailProvider();
   }
-  // No real credentials wired yet — keep gated.
+  // Production: explicit local/dev still logs only (ops override).
+  if (mode === "local" || mode === "dev") {
+    return new LocalDevEmailProvider();
+  }
+  // No real SMTP/Resend/SES adapter wired yet — refuse external send.
   return new GatedProductionEmailProvider();
 }
 
+/**
+ * True only when a real external email provider would deliver mail.
+ * Local/dev adapters log only and must not be presented as delivery.
+ */
 export function isEmailDeliveryEnabled(): boolean {
-  const mode = (process.env.EMAIL_PROVIDER ?? "local").toLowerCase();
-  if (mode === "local" || mode === "dev") return true;
-  // Real providers not yet configured.
+  void (process.env.EMAIL_PROVIDER ?? "");
+  // Real provider adapters are not implemented yet (EXTERNAL_GATE_EMAIL_PROVIDER).
   return false;
 }

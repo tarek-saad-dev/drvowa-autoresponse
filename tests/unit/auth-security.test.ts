@@ -14,6 +14,8 @@ import { hashResetToken } from "@/modules/auth/password-reset";
 import {
   LocalDevEmailProvider,
   GatedProductionEmailProvider,
+  getEmailProvider,
+  isEmailDeliveryEnabled,
 } from "@/modules/auth/email-provider";
 
 describe("rate limit", () => {
@@ -70,6 +72,21 @@ describe("email provider adapters", () => {
     expect(result.status).toBe("DISABLED");
     if (result.status === "DISABLED") {
       expect(result.reason).toBe("EXTERNAL_GATE_EMAIL_PROVIDER");
+    }
+  });
+
+  it("production without real provider stays gated and reports delivery disabled", () => {
+    const prevNode = process.env.NODE_ENV;
+    const prevProvider = process.env.EMAIL_PROVIDER;
+    process.env.NODE_ENV = "production";
+    delete process.env.EMAIL_PROVIDER;
+    try {
+      expect(getEmailProvider().name).toBe("gated-production");
+      expect(isEmailDeliveryEnabled()).toBe(false);
+    } finally {
+      process.env.NODE_ENV = prevNode;
+      if (prevProvider === undefined) delete process.env.EMAIL_PROVIDER;
+      else process.env.EMAIL_PROVIDER = prevProvider;
     }
   });
 });

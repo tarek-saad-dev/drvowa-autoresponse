@@ -19,6 +19,7 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [pending, setPending] = useState(false);
+  const [deliveryConfigured, setDeliveryConfigured] = useState(true);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -34,11 +35,13 @@ export default function ForgotPasswordPage() {
       });
       const data = (await response.json().catch(() => ({}))) as {
         error?: string;
+        emailDeliveryConfigured?: boolean;
       };
       if (!response.ok) {
         setError(data.error ?? "تعذر إرسال الطلب");
         return;
       }
+      setDeliveryConfigured(data.emailDeliveryConfigured !== false);
       setDone(true);
     } catch {
       setError("حدث خطأ في الاتصال. حاول مرة أخرى.");
@@ -58,8 +61,10 @@ export default function ForgotPasswordPage() {
       <CardContent>
         {done ? (
           <div className="space-y-4">
-            <Alert variant="success">
-              إن وُجد حساب بهذا البريد، ستصل تعليمات إعادة التعيين قريباً.
+            <Alert variant={deliveryConfigured ? "success" : "warning"}>
+              {deliveryConfigured
+                ? "إن وُجد حساب بهذا البريد، ستصل تعليمات إعادة التعيين قريباً."
+                : "إن وُجد حساب بهذا البريد، تم تسجيل طلب الاستعادة. إرسال البريد غير مفعّل حالياً — تواصل مع الدعم إن احتجت مساعدة لتسجيل الدخول."}
             </Alert>
             <p className="text-center text-sm">
               <Link href="/login" className="font-medium text-primary">
