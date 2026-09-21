@@ -14,6 +14,9 @@ type PlanRow = {
   MaxActiveKnowledgeItems: number | null;
   MonthlyAiReplies: number | null;
   MonthlyWhatsAppOutbound: number | null;
+  MonthlyPriceAmount: number | null;
+  CurrencyCode: string | null;
+  BillingInterval: string | null;
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
@@ -63,6 +66,11 @@ function mapPlan(row: PlanRow): Plan {
       row.MonthlyWhatsAppOutbound == null
         ? null
         : Number(row.MonthlyWhatsAppOutbound),
+    monthlyPriceAmount:
+      row.MonthlyPriceAmount == null ? null : Number(row.MonthlyPriceAmount),
+    currencyCode: row.CurrencyCode,
+    billingInterval:
+      row.BillingInterval === "MONTHLY" ? "MONTHLY" : null,
     createdAtUtc: row.CreatedAtUtc,
     updatedAtUtc: row.UpdatedAtUtc,
   };
@@ -88,6 +96,7 @@ const PLAN_SELECT = `
   PlanID, Code, DisplayName, Status,
   MaxWhatsAppConnections, MaxAgents, MaxActiveKnowledgeItems,
   MonthlyAiReplies, MonthlyWhatsAppOutbound,
+  MonthlyPriceAmount, CurrencyCode, BillingInterval,
   CreatedAtUtc, UpdatedAtUtc`;
 
 const SUBSCRIPTION_SELECT = `
@@ -172,20 +181,29 @@ export async function insertSubscription(
     businessId: string;
     planId: string;
     status?: SubscriptionStatus;
+    periodStartUtc?: Date;
+    periodEndUtc?: Date | null;
+    providerName?: string | null;
   },
   trx?: TransactionClient,
 ): Promise<Subscription> {
   const subscriptionId = randomUUID();
   const now = new Date();
   const status = params.status ?? "ACTIVE";
+  const periodStartUtc = params.periodStartUtc ?? now;
+  const periodEndUtc =
+    params.periodEndUtc === undefined ? null : params.periodEndUtc;
+  const providerName = params.providerName ?? null;
 
   await db(trx).query(
     `INSERT INTO TblSubscription (
       SubscriptionID, BusinessID, PlanID, Status,
-      PeriodStartUtc, PeriodEndUtc, CreatedAtUtc, UpdatedAtUtc
+      PeriodStartUtc, PeriodEndUtc, ProviderName,
+      CreatedAtUtc, UpdatedAtUtc
     ) VALUES (
       @subscriptionId, @businessId, @planId, @status,
-      @periodStartUtc, NULL, @createdAtUtc, @updatedAtUtc
+      @periodStartUtc, @periodEndUtc, @providerName,
+      @createdAtUtc, @updatedAtUtc
     )`,
     [
       {
@@ -200,7 +218,9 @@ export async function insertSubscription(
       },
       { name: "planId", type: sql.UniqueIdentifier, value: params.planId },
       { name: "status", type: sql.NVarChar(32), value: status },
-      { name: "periodStartUtc", type: sql.DateTime2, value: now },
+      { name: "periodStartUtc", type: sql.DateTime2, value: periodStartUtc },
+      { name: "periodEndUtc", type: sql.DateTime2, value: periodEndUtc },
+      { name: "providerName", type: sql.NVarChar(64), value: providerName },
       { name: "createdAtUtc", type: sql.DateTime2, value: now },
       { name: "updatedAtUtc", type: sql.DateTime2, value: now },
     ],
@@ -211,9 +231,9 @@ export async function insertSubscription(
     businessId: params.businessId,
     planId: params.planId,
     status,
-    periodStartUtc: now,
-    periodEndUtc: null,
-    providerName: null,
+    periodStartUtc,
+    periodEndUtc,
+    providerName,
     externalCustomerId: null,
     externalSubscriptionId: null,
     createdAtUtc: now,
@@ -221,16 +241,19 @@ export async function insertSubscription(
   };
 }
 
-export async function updateSubscriptionBillingFields(params: {
-  subscriptionId: string;
-  status?: SubscriptionStatus;
-  planId?: string;
-  providerName?: string | null;
-  externalCustomerId?: string | null;
-  externalSubscriptionId?: string | null;
-  periodStartUtc?: Date | null;
-  periodEndUtc?: Date | null;
-}): Promise<void> {
+export async function updateSubscriptionBillingFields(
+  params: {
+    subscriptionId: string;
+    status?: SubscriptionStatus;
+    planId?: string;
+    providerName?: string | null;
+    externalCustomerId?: string | null;
+    externalSubscriptionId?: string | null;
+    periodStartUtc?: Date | null;
+    periodEndUtc?: Date | null;
+  },
+  trx?: TransactionClient,
+): Promise<void> {
   const sets: string[] = ["UpdatedAtUtc = @updatedAtUtc"];
   const values: QueryInput[] = [
     {
@@ -294,7 +317,7 @@ export async function updateSubscriptionBillingFields(params: {
     });
   }
 
-  await query(
+  await db(trx).query(
     `UPDATE TblSubscription SET ${sets.join(", ")} WHERE SubscriptionID = @subscriptionId`,
     values,
   );

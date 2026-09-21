@@ -287,6 +287,8 @@ export type UsageEvent = {
   usageKey?: string | null;
 };
 
+export type PlanBillingInterval = "MONTHLY";
+
 export type Plan = {
   planId: string;
   code: string;
@@ -297,6 +299,50 @@ export type Plan = {
   maxActiveKnowledgeItems?: number | null;
   monthlyAiReplies?: number | null;
   monthlyWhatsAppOutbound?: number | null;
+  monthlyPriceAmount?: number | null;
+  currencyCode?: string | null;
+  billingInterval?: PlanBillingInterval | null;
+  createdAtUtc: Date;
+  updatedAtUtc: Date;
+};
+
+export type PlatformAdminRole = "SUPER_ADMIN" | "BILLING_ADMIN";
+
+export type PlatformAdmin = {
+  platformAdminId: string;
+  userId: string;
+  role: PlatformAdminRole;
+  isActive: boolean;
+  createdAtUtc: Date;
+  updatedAtUtc: Date;
+};
+
+export type ManualPaymentStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED"
+  | "CANCELED";
+
+export type ManualPaymentMethod = "INSTAPAY";
+
+export type ManualPaymentRequest = {
+  paymentRequestId: string;
+  businessId: string;
+  requestedPlanId: string;
+  paymentMethod: ManualPaymentMethod;
+  currencyCode: string;
+  amount: number;
+  paymentReference: string;
+  payerName: string | null;
+  transferReference: string | null;
+  customerNote: string | null;
+  status: ManualPaymentStatus;
+  submittedByUserId: string;
+  submittedAtUtc: Date;
+  reviewedByUserId: string | null;
+  reviewedAtUtc: Date | null;
+  reviewNote: string | null;
+  approvedSubscriptionId: string | null;
   createdAtUtc: Date;
   updatedAtUtc: Date;
 };
