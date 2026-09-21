@@ -91,9 +91,10 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
     <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
       <Card>
         <CardHeader>
-          <CardTitle>{editing ? "تعديل الوكيل" : "إنشاء وكيل"}</CardTitle>
+          <CardTitle>{editing ? "تعديل موظف الاستقبال" : "شخصية موظف الاستقبال"}</CardTitle>
           <CardDescription>
-            إعداد موظف الاستقبال دون تشغيل نماذج الذكاء الاصطناعي بعد.
+            عرّف كيف يتحدث مع عملائك. التغييرات تُطبَّق على الردود الجديدة بعد
+            الحفظ.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -114,7 +115,7 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
                 id="roleTitle"
                 name="roleTitle"
                 required
-                defaultValue={editing?.roleTitle ?? "AI receptionist"}
+                defaultValue={editing?.roleTitle ?? "موظف استقبال"}
               />
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
@@ -140,10 +141,16 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
               </div>
             </div>
             <div>
-              <Label htmlFor="instructions">التعليمات</Label>
+              <Label htmlFor="instructions">تعليمات السلوك</Label>
+              <p className="mb-1.5 text-xs text-muted-foreground">
+                مثال: رحّب بالعميل، اسأل عن الخدمة المطلوبة، لا تعد بمواعيد دون
+                تأكيد، ووجّه للطوارئ لرقم المحل.
+              </p>
               <Textarea
                 id="instructions"
                 name="instructions"
+                rows={5}
+                placeholder="اكتب كيف يجب أن يتصرف موظف الاستقبال مع العملاء…"
                 defaultValue={editing?.instructions ?? ""}
               />
             </div>

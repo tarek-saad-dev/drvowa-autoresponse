@@ -230,8 +230,8 @@ export function WhatsAppConnectionPanel({
             <Badge variant={badgeVariant(state)}>{stateLabel(state)}</Badge>
           </div>
           <CardDescription>
-            اربط رقم واتساب بمساحة العمل عبر رمز QR. الجلسة تُحفظ في محرك
-            التشغيل — وليست في قاعدة بيانات DRVOWA.
+            اربط رقم واتساب بنشاطك عبر رمز QR. افتح واتساب على هاتفك ← الأجهزة
+            المرتبطة ← ربط جهاز، ثم امسح الرمز الظاهر هنا.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -318,8 +318,8 @@ export function WhatsAppConnectionPanel({
 
           {state === "RUNTIME_DISABLED" ? (
             <Alert variant="warning">
-              محرك واتساب متعدد الحسابات غير مفعّل حالياً على الخادم. مساحة
-              العمل محفوظة ويمكن المحاولة لاحقاً دون فقدان البيانات.
+              ربط واتساب غير متاح مؤقتاً. بيانات مساحتك محفوظة ويمكنك المحاولة
+              مرة أخرى بعد قليل دون فقدان الإعدادات.
             </Alert>
           ) : null}
 

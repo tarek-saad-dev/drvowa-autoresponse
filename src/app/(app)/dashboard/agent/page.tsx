@@ -24,9 +24,10 @@ export default async function AgentPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">الوكيل الذكي</h1>
+        <h1 className="text-2xl font-bold tracking-tight">موظف الاستقبال</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          إعداد وكيل الاستقبال والرد الآلي على واتساب للرسائل الجديدة فقط.
+          شخصية الرد الآلي على واتساب — الاسم، النبرة، والتعليمات التي يتبعها مع
+          العملاء.
         </p>
       </div>
       <AiAutoReplyPanel

@@ -163,7 +163,8 @@ export function KnowledgeManager({ items }: { items: KnowledgeItem[] }) {
         {items.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="py-8 text-sm text-muted-foreground">
-              لا توجد عناصر معرفة بعد.
+              لا توجد معرفة بعد. أضف أسئلة وأجوبة أو ساعات العمل أو الخدمات
+              والأسعار لتعليم موظف الاستقبال كيف يرد.
             </CardContent>
           </Card>
         ) : (
