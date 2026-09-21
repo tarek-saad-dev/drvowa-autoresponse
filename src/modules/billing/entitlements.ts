@@ -56,6 +56,9 @@ type PlanRow = {
   MaxActiveKnowledgeItems: number | null;
   MonthlyAiReplies: number | null;
   MonthlyWhatsAppOutbound: number | null;
+  MonthlyPriceAmount: number | null;
+  CurrencyCode: string | null;
+  BillingInterval: string | null;
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
@@ -117,6 +120,11 @@ function mapPlan(row: PlanRow): Plan & PlanLimits {
       row.MonthlyWhatsAppOutbound == null
         ? null
         : Number(row.MonthlyWhatsAppOutbound),
+    monthlyPriceAmount:
+      row.MonthlyPriceAmount == null ? null : Number(row.MonthlyPriceAmount),
+    currencyCode: row.CurrencyCode,
+    billingInterval:
+      row.BillingInterval === "MONTHLY" ? "MONTHLY" : null,
     createdAtUtc: row.CreatedAtUtc,
     updatedAtUtc: row.UpdatedAtUtc,
   };
@@ -139,6 +147,7 @@ const PLAN_SELECT = `
   PlanID, Code, DisplayName, Status,
   MaxWhatsAppConnections, MaxAgents, MaxActiveKnowledgeItems,
   MonthlyAiReplies, MonthlyWhatsAppOutbound,
+  MonthlyPriceAmount, CurrencyCode, BillingInterval,
   CreatedAtUtc, UpdatedAtUtc`;
 
 export async function getPlanByCode(
@@ -335,6 +344,12 @@ export async function countWhatsAppConnections(
 export async function getEntitlementSnapshot(
   businessId: string,
 ): Promise<EntitlementSnapshot> {
+  // Paid period expiry → FREE entitlements (data retained; creation gated by FREE limits).
+  const { reconcileExpiredPaidSubscription } = await import(
+    "./manual-payment-service"
+  );
+  await reconcileExpiredPaidSubscription(businessId);
+
   const usagePeriod = resolveUtcMonthPeriod();
   const current = await getCurrentSubscription(businessId);
   const subscription = current ?? (await getLatestSubscription(businessId));
