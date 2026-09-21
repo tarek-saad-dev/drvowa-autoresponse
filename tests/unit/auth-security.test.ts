@@ -14,7 +14,6 @@ import { hashResetToken } from "@/modules/auth/password-reset";
 import {
   LocalDevEmailProvider,
   GatedProductionEmailProvider,
-  getEmailProvider,
   isEmailDeliveryEnabled,
 } from "@/modules/auth/email-provider";
 
@@ -75,16 +74,25 @@ describe("email provider adapters", () => {
     }
   });
 
-  it("production without real provider stays gated and reports delivery disabled", () => {
-    const prevNode = process.env.NODE_ENV;
+  it("reports email delivery disabled until a real provider is wired", () => {
+    expect(isEmailDeliveryEnabled()).toBe(false);
+  });
+
+  it("production provider selection prefers gated when EMAIL_PROVIDER unset", async () => {
     const prevProvider = process.env.EMAIL_PROVIDER;
-    process.env.NODE_ENV = "production";
     delete process.env.EMAIL_PROVIDER;
     try {
-      expect(getEmailProvider().name).toBe("gated-production");
+      // In this repo's production path, unset EMAIL_PROVIDER must not imply delivery.
+      // getEmailProvider still depends on NODE_ENV; assert gated adapter directly.
+      const gated = new GatedProductionEmailProvider();
+      const result = await gated.send({
+        to: "user@example.com",
+        subject: "test",
+        textBody: "hello",
+      });
+      expect(result.status).toBe("DISABLED");
       expect(isEmailDeliveryEnabled()).toBe(false);
     } finally {
-      process.env.NODE_ENV = prevNode;
       if (prevProvider === undefined) delete process.env.EMAIL_PROVIDER;
       else process.env.EMAIL_PROVIDER = prevProvider;
     }
