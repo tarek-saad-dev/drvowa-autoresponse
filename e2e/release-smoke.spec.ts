@@ -531,14 +531,30 @@ test.describe("V1 product finish smoke", () => {
     ).toBeVisible({ timeout: 15_000 });
   });
 
-  test("12-13 usage billing settings", async ({ page }) => {
+  test("12-13 usage billing settings + manual payment", async ({ page }) => {
     expect(email).toBeTruthy();
     await apiLogin(page, email, password);
 
     await page.goto("/dashboard/billing");
     await expect(page.getByRole("heading", { name: /الخطة/ })).toBeVisible();
-    await expect(page.getByText(/قريباً|الخطة|حدود/i).first()).toBeVisible();
     await expect(page.locator("body")).not.toContainText("EXTERNAL_GATE");
+    await expect(page.locator("body")).not.toContainText("الترقية قريباً");
+    await expect(page.getByTestId("plan-card-STARTER")).toBeVisible();
+    await expect(page.getByTestId("plan-card-STARTER")).toContainText("499");
+    await expect(page.getByTestId("plan-card-PRO")).toContainText("999");
+    await expect(page.getByTestId("plan-card-BUSINESS")).toContainText("1999");
+
+    await page.getByTestId("plan-card-STARTER").getByRole("button", { name: "اختيار الباقة" }).click();
+    await expect(page.getByText(/حوّل المبلغ التالي عبر InstaPay/).first()).toBeVisible();
+    await expect(page.getByText(/499 EGP/).first()).toBeVisible();
+    await page.getByRole("button", { name: "لقد حوّلت المبلغ" }).click();
+    await page.locator("#payerName").fill("مختبر الإطلاق");
+    await page.locator("#transferReference").fill("E2E-TX-1");
+    await page.getByRole("button", { name: "إرسال تأكيد الدفع" }).click();
+    await expect(page.getByText(/طلب الدفع قيد المراجعة/)).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByText(/DRV-/)).toBeVisible();
 
     await page.goto("/dashboard/usage");
     await expect(page.getByRole("heading", { name: "الاستخدام" })).toBeVisible();

@@ -62,6 +62,11 @@ export default defineConfig({
         env: {
           ...process.env,
           PORT: String(PORT),
+          MANUAL_INSTAPAY_ENABLED: "1",
+          INSTAPAY_PAYMENT_DISPLAY_NAME:
+            process.env.INSTAPAY_PAYMENT_DISPLAY_NAME ?? "DRVOWA Test",
+          INSTAPAY_PAYMENT_HANDLE:
+            process.env.INSTAPAY_PAYMENT_HANDLE ?? "instapay@drvowa-test",
           NODE_ENV:
             process.env.E2E_USE_DEV === "1" ? "development" : "production",
         },
