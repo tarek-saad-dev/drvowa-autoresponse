@@ -1,44 +1,58 @@
 # Host security — port audit
 
+**Audit date (UTC):** 2026-09-21 (operator `casher` on `srv1921542` / `187.77.83.120`)  
 **Scope:** documentation and remediation plan only.  
-**Do not** apply firewall/iptables/ufw changes from an agent without explicit
-sudo authorization. On the current host (`casher`), firewall management often
-**lacks passwordless sudo** — treat firewall changes as a human ops task.
+Firewall / `mssql.conf` changes were **not** applied (no passwordless sudo for
+`ufw` / `iptables` / `firewall-cmd` / reading `/var/opt/mssql/mssql.conf`).
 
-## Ports of interest
+## Observed listeners (selected)
 
-| Port | Typical service | Risk if public |
-|------|-----------------|----------------|
-| 22 | SSH | Brute force / exposure |
-| 80 | HTTP | Expected for redirect → TLS |
-| 443 | HTTPS | Expected for app |
-| 1433 | SQL Server | **Critical** if bound on `0.0.0.0` |
-| 25 | SMTP | Open relay / abuse |
-| 21 | FTP | Cleartext credentials |
-| 8080 | Alt HTTP | Accidental admin UIs |
-| 8443 | Alt HTTPS | Accidental admin UIs |
-| 3306 | MySQL/MariaDB | DB exposure |
+| Port | Bind | Active unit (where known) | Notes |
+|------|------|---------------------------|--------|
+| 22 | `0.0.0.0` + `[::]` | SSH | Expected for ops |
+| 80 | `0.0.0.0` + `[::]` | `nginx.service` active | Expected |
+| 443 | `0.0.0.0` + `[::]` | `nginx.service` active | Expected |
+| **1433** | **`0.0.0.0` + `*`** | `mssql-server.service` active | **Public SQL — critical** |
+| 25 | `0.0.0.0` + `[::]` | `postfix.service` active | Mail MTA |
+| 21 | `0.0.0.0` | FTP daemon listening; vsftpd/pure-ftpd inactive | Investigate owner |
+| 8080 | `0.0.0.0` + `[::]` | Likely panel/proxy | Confirm CloudPanel / apps |
+| 8443 | `0.0.0.0` + `[::]` | Likely panel TLS | Confirm |
+| 3306 / 33060 | `*` | MySQL/Percona present on host | Also public-facing bind |
+| 3001 | `*` | Separate runtime (not DRVOWA `:3100`) | Confirm whatsapp/other |
 
-## SQL Server (1433) public bind
+DRVOWA app binds **`127.0.0.1:3100` only** (good). AI worker has no public port.
 
-If `ss`/`netstat` shows `0.0.0.0:1433` or `*:1433`, SQL is reachable from the
-internet. Prefer:
+Process owners for most sockets were not visible without elevated `ss -p` / root.
 
-1. Bind SQL to `127.0.0.1` only (or private VPC IP), **or**
-2. Host firewall allowlist (office/VPN IPs only)
+## SQL Server (1433) — finding
 
-App and migrations should use localhost/private connectivity.
+SQL Server is listening on all interfaces. Unless an upstream firewall/security
+group already drops 1433, the database is internet-reachable. There is **no**
+documented operational requirement for public SQL in DRVOWA docs.
 
-## Remediation plan (ops)
+**Goal:** SQL Server must not be publicly reachable.
 
-1. Run `scripts/_port_audit_remote.sh` (or equivalent) and capture listeners.
-2. Confirm owners: nginx, mssql, sshd, mail, ftp.
-3. For 1433: change `mssql.conf` network bind **or** firewall DROP except allowlist.
-4. Disable unused 21/25/8080/8443/3306 listeners.
-5. Keep 22 behind key auth + optional allowlist; keep 80/443 for the app.
+## Remediation plan (owner / ops — do not lock out SSH)
+
+Preserve: SSH (`22`), existing nginx sites (`80`/`443`), localhost app/runtime
+(`127.0.0.1:3100`, WhatsApp runtime on loopback where applicable).
+
+Preferred order:
+
+1. **Confirm cloud security group / Hostinger firewall** already blocks 1433
+   from the internet. If yes, document that as the control.
+2. Else **bind SQL to `127.0.0.1` only** via `mssql.conf` (`network` /
+   `ipaddress` / `tcpport` per Microsoft docs) and restart `mssql-server`
+   in a maintenance window after verifying app `DB_SERVER=127.0.0.1`.
+3. Else **host firewall allowlist**: DROP/REJECT `1433/tcp` from WAN; allow
+   only localhost (and VPN jump hosts if any).
+4. Review **3306**, **21**, **25**, **8080**, **8443** for the same pattern —
+   disable unused services or restrict to localhost/VPN.
+5. Keep **22** key-only; optional source allowlist after confirming operator IPs.
 
 ## Explicit non-actions for agents
 
 - Do **not** run `ufw` / `iptables` / `firewall-cmd` without sudo approval.
 - Do **not** change DNS, nginx TLS, or production secrets from this checklist alone.
-- Note: `casher` may reject `sudo -n` for firewall — escalate to a human with sudo.
+- `casher` currently rejects `sudo -n` for firewall and `mssql.conf` reads —
+  escalate to a human with sudo.
