@@ -2,8 +2,12 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { query, sql } from "@/lib/db";
 import { normalizeUuid } from "@/lib/ids/uuid";
+import { structuredLog } from "@/lib/observability/logger";
 
-import { getEmailProvider } from "./email-provider";
+import {
+  getEmailProvider,
+  isEmailDeliveryEnabled,
+} from "./email-provider";
 import { hashPassword } from "./password";
 import { revokeAllSessionsForUser } from "./session";
 
@@ -18,12 +22,86 @@ export function hashResetToken(rawToken: string): string {
   return createHash("sha256").update(rawToken, "utf8").digest("hex");
 }
 
-function appBaseUrl(): string {
+/**
+ * Public origin for customer-facing links (password reset).
+ * Prefer APP_BASE_URL; fall back to NEXT_PUBLIC_APP_URL.
+ */
+export function resolveAppBaseUrl(): string {
   const fromEnv =
     process.env.APP_BASE_URL?.trim()
     || process.env.NEXT_PUBLIC_APP_URL?.trim();
   if (fromEnv) return fromEnv.replace(/\/$/, "");
   return "http://localhost:3000";
+}
+
+/** Production emails must use HTTPS public host — never localhost. */
+export function isProductionSafeAppBaseUrl(url: string): boolean {
+  if (process.env.NODE_ENV !== "production") return true;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return false;
+    const host = parsed.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function buildPasswordResetEmail(resetUrl: string): {
+  subject: string;
+  textBody: string;
+  htmlBody: string;
+} {
+  const subject = "إعادة تعيين كلمة المرور — DRVOWA";
+  const textBody = [
+    "DRVOWA AutoResponse",
+    "",
+    "طلبت إعادة تعيين كلمة المرور لحسابك.",
+    "",
+    "افتح الرابط التالي خلال ساعة واحدة",
+    resetUrl,
+    "",
+    "إذا لم تطلب ذلك، يمكنك تجاهل هذه الرسالة بأمان.",
+    "",
+    "— فريق DRVOWA",
+  ].join("\n");
+
+  const safeUrl = resetUrl
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  const htmlBody = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /></head>
+<body style="margin:0;padding:24px;background:#f8fafc;font-family:Tahoma,Arial,sans-serif;color:#0f172a;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;">
+    <tr>
+      <td style="padding:24px 28px 8px;">
+        <p style="margin:0;font-size:13px;letter-spacing:0.04em;color:#b45309;font-weight:700;">DRVOWA</p>
+        <h1 style="margin:8px 0 0;font-size:20px;line-height:1.4;">إعادة تعيين كلمة المرور</h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:8px 28px 24px;font-size:15px;line-height:1.7;color:#334155;">
+        <p style="margin:0 0 16px;">طلبت إعادة تعيين كلمة المرور لحساب DRVOWA AutoResponse.</p>
+        <p style="margin:0 0 20px;">الرابط صالح لمدة ساعة واحدة.</p>
+        <p style="margin:0 0 24px;">
+          <a href="${safeUrl}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:600;">تعيين كلمة مرور جديدة</a>
+        </p>
+        <p style="margin:0 0 12px;font-size:13px;color:#64748b;word-break:break-all;">أو افتح الرابط مباشرة:<br />${safeUrl}</p>
+        <p style="margin:0;font-size:13px;color:#64748b;">إذا لم تطلب ذلك، تجاهل هذه الرسالة.</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  return { subject, textBody, htmlBody };
 }
 
 /**
@@ -86,20 +164,52 @@ export async function requestPasswordReset(params: {
     ],
   );
 
-  const resetUrl = `${appBaseUrl()}/reset-password?token=${encodeURIComponent(rawToken)}`;
+  const baseUrl = resolveAppBaseUrl();
+  const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
+  const toDomain = email.includes("@") ? email.split("@")[1]! : "unknown";
+
+  if (!isEmailDeliveryEnabled()) {
+    structuredLog("auth", "password_reset.email_skipped", {
+      reason: "EMAIL_PROVIDER_NOT_CONFIGURED",
+      toDomain,
+    });
+    return { accepted: true };
+  }
+
+  if (!isProductionSafeAppBaseUrl(baseUrl)) {
+    structuredLog("auth", "password_reset.email_skipped", {
+      reason: "UNSAFE_APP_BASE_URL",
+      toDomain,
+    });
+    return { accepted: true };
+  }
+
+  const content = buildPasswordResetEmail(resetUrl);
   const provider = getEmailProvider();
-  await provider.send({
-    to: email,
-    subject: "إعادة تعيين كلمة المرور — DRVOWA",
-    textBody: [
-      "طلبت إعادة تعيين كلمة المرور لحساب DRVOWA AutoResponse.",
-      "",
-      `افتح الرابط خلال ساعة واحدة`,
-      resetUrl,
-      "",
-      "إذا لم تطلب ذلك، تجاهل هذه الرسالة.",
-    ].join("\n"),
-  });
+  try {
+    const result = await provider.send({
+      to: email,
+      subject: content.subject,
+      textBody: content.textBody,
+      htmlBody: content.htmlBody,
+    });
+    structuredLog("auth", "password_reset.email_result", {
+      status: result.status,
+      provider: provider.name,
+      toDomain,
+      ...(result.status === "SENT" && result.providerMessageId
+        ? { providerMessageId: result.providerMessageId }
+        : {}),
+      ...(result.status !== "SENT" ? { reason: result.reason } : {}),
+    });
+  } catch (error) {
+    // Preserve non-enumeration: never fail the HTTP contract on provider errors.
+    structuredLog("auth", "password_reset.email_failed", {
+      provider: provider.name,
+      toDomain,
+      error: error instanceof Error ? error.message : "send_failed",
+    });
+  }
 
   return { accepted: true };
 }

@@ -10,6 +10,8 @@ export type EmailMessage = {
   to: string;
   subject: string;
   textBody: string;
+  /** Optional HTML alternative (Resend + SMTP multipart). */
+  htmlBody?: string;
 };
 
 export type EmailSendResult =
@@ -101,11 +103,13 @@ export class ResendEmailProvider implements EmailProvider {
         to: [message.to],
         subject: message.subject,
         text: message.textBody,
+        ...(message.htmlBody ? { html: message.htmlBody } : {}),
       }),
     });
 
     if (!response.ok) {
       const status = response.status;
+      // Never include response body (may contain recipient/provider detail).
       throw new Error(`Resend send failed (HTTP ${status})`);
     }
 
@@ -128,8 +132,16 @@ function encodeSmtpAuth(user: string, pass: string): string {
   return Buffer.from(`\0${user}\0${pass}`, "utf8").toString("base64");
 }
 
+/** Extract bare address from `Name <user@domain>` or plain `user@domain`. */
+export function extractEmailAddress(from: string): string {
+  const angled = from.match(/<([^<>\s]+@[^<>\s]+)>/);
+  if (angled?.[1]) return angled[1].trim();
+  const plain = from.match(/([^\s<>]+@[^\s<>]+)/);
+  return (plain?.[1] ?? from).replace(/[<>\r\n]/g, "").trim();
+}
+
 function quoteSmtpAddress(address: string): string {
-  return `<${address.replace(/[<>\r\n]/g, "")}>`;
+  return `<${extractEmailAddress(address)}>`;
 }
 
 /**
@@ -171,6 +183,7 @@ export class SmtpEmailProvider implements EmailProvider {
       to: message.to,
       subject: message.subject,
       textBody: message.textBody,
+      htmlBody: message.htmlBody,
     });
 
     return { status: "SENT" };
@@ -187,6 +200,7 @@ async function sendViaSmtp(params: {
   to: string;
   subject: string;
   textBody: string;
+  htmlBody?: string;
 }): Promise<void> {
   let socket: SmtpSocket = await connectSocket(params.host, params.port, params.secure);
   try {
@@ -212,14 +226,37 @@ async function sendViaSmtp(params: {
     await writeLine(socket, "DATA");
     await expectCode(socket, 354);
 
+    const subject = params.subject.replace(/[\r\n]/g, "");
+    const text = params.textBody.replace(/^\./gm, "..");
+    const html = params.htmlBody?.replace(/^\./gm, "..");
+    let bodyBlock: string;
+    if (html) {
+      const boundary = `drvowa_${Date.now().toString(36)}`;
+      bodyBlock = [
+        `Content-Type: multipart/alternative; boundary="${boundary}"`,
+        "",
+        `--${boundary}`,
+        "Content-Type: text/plain; charset=utf-8",
+        "",
+        text,
+        `--${boundary}`,
+        "Content-Type: text/html; charset=utf-8",
+        "",
+        html,
+        `--${boundary}--`,
+      ].join("\r\n");
+    } else {
+      bodyBlock = ["Content-Type: text/plain; charset=utf-8", "", text].join(
+        "\r\n",
+      );
+    }
+
     const headers = [
       `From: ${params.from}`,
       `To: ${params.to}`,
-      `Subject: ${params.subject.replace(/[\r\n]/g, "")}`,
+      `Subject: ${subject}`,
       "MIME-Version: 1.0",
-      "Content-Type: text/plain; charset=utf-8",
-      "",
-      params.textBody.replace(/^\./gm, ".."),
+      bodyBlock,
       ".",
     ].join("\r\n");
     await writeRaw(socket, headers + "\r\n");

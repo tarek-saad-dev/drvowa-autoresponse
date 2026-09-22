@@ -36,12 +36,14 @@ export default function ForgotPasswordPage() {
       const data = (await response.json().catch(() => ({}))) as {
         error?: string;
         emailDeliveryConfigured?: boolean;
+        message?: string;
       };
       if (!response.ok) {
         setError(data.error ?? "تعذر إرسال الطلب");
         return;
       }
-      setDeliveryConfigured(data.emailDeliveryConfigured !== false);
+      // Server reports whether a real provider would deliver; never claim email sent otherwise.
+      setDeliveryConfigured(data.emailDeliveryConfigured === true);
       setDone(true);
     } catch {
       setError("حدث خطأ في الاتصال. حاول مرة أخرى.");
