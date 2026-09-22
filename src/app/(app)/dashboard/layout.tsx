@@ -8,6 +8,7 @@ import { AuthError } from "@/lib/tenancy/errors";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import { listBusinessesForUser } from "@/modules/businesses/service";
+import { isPlatformAdminUser } from "@/modules/platform-admin/service";
 
 export default async function DashboardLayout({
   children,
@@ -33,11 +34,12 @@ export default async function DashboardLayout({
     user.userId,
     user.activeBusinessId,
   );
+  const showPlatformAdminLink = await isPlatformAdminUser(user.userId);
 
   return (
     <div className="flex min-h-full flex-1 bg-background">
       <div className="hidden md:flex">
-        <DashboardSidebar />
+        <DashboardSidebar showPlatformAdminLink={showPlatformAdminLink} />
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         <DashboardTopbar
@@ -46,7 +48,7 @@ export default async function DashboardLayout({
           activeBusinessId={activeBusinessId}
         />
         <div className="border-b border-border bg-card px-4 py-2 md:hidden">
-          <MobileNav />
+          <MobileNav showPlatformAdminLink={showPlatformAdminLink} />
         </div>
         <main className="flex-1 overflow-auto p-4 sm:p-6">{children}</main>
       </div>

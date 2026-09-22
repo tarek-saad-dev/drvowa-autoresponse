@@ -7,7 +7,11 @@ import { DASHBOARD_NAV } from "@/constants/nav";
 import { APP_NAME } from "@/constants/app";
 import { cn } from "@/lib/utils/cn";
 
-export function DashboardSidebar() {
+export function DashboardSidebar({
+  showPlatformAdminLink = false,
+}: {
+  showPlatformAdminLink?: boolean;
+}) {
   const pathname = usePathname();
 
   return (
@@ -38,6 +42,14 @@ export function DashboardSidebar() {
             </Link>
           );
         })}
+        {showPlatformAdminLink ? (
+          <Link
+            href="/admin"
+            className="mt-3 flex items-center justify-between rounded-lg border border-amber-500/30 px-3 py-2.5 text-sm text-amber-200/90 transition-colors hover:bg-amber-500/10"
+          >
+            <span>إدارة المنصة</span>
+          </Link>
+        ) : null}
       </nav>
     </aside>
   );

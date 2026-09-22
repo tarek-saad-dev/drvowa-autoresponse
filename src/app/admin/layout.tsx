@@ -2,7 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { AdminLogoutButton } from "@/components/admin/admin-logout-button";
 import { AuthError, ForbiddenError } from "@/lib/tenancy/errors";
+import { listBusinessesForUser } from "@/modules/businesses/service";
 import { requirePlatformAdmin } from "@/modules/platform-admin/service";
 
 export default async function AdminLayout({
@@ -10,8 +12,9 @@ export default async function AdminLayout({
 }: {
   children: ReactNode;
 }) {
+  let adminCtx;
   try {
-    await requirePlatformAdmin();
+    adminCtx = await requirePlatformAdmin();
   } catch (error) {
     if (error instanceof AuthError) {
       redirect("/login");
@@ -21,6 +24,9 @@ export default async function AdminLayout({
     }
     throw error;
   }
+
+  const businesses = await listBusinessesForUser(adminCtx.userId);
+  const hasWorkspace = businesses.length > 0;
 
   return (
     <div className="min-h-full bg-slate-950 text-slate-50">
@@ -45,12 +51,15 @@ export default async function AdminLayout({
             >
               طلبات الدفع
             </Link>
-            <Link
-              href="/dashboard"
-              className="rounded-md px-3 py-1.5 text-slate-400 hover:bg-slate-800"
-            >
-              مساحة العمل
-            </Link>
+            {hasWorkspace ? (
+              <Link
+                href="/dashboard"
+                className="rounded-md px-3 py-1.5 text-slate-400 hover:bg-slate-800"
+              >
+                مساحة العمل
+              </Link>
+            ) : null}
+            <AdminLogoutButton />
           </nav>
         </div>
       </header>

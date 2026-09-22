@@ -35,6 +35,7 @@ export default function LoginPage() {
       const data = (await response.json().catch(() => ({}))) as {
         error?: string;
         message?: string;
+        redirectTo?: string;
       };
 
       if (!response.ok) {
@@ -42,19 +43,15 @@ export default function LoginPage() {
         return;
       }
 
-      const businessesRes = await fetch("/api/businesses");
-      if (businessesRes.ok) {
-        const businessesData = (await businessesRes.json()) as {
-          businesses?: unknown[];
-        };
-        if (!businessesData.businesses?.length) {
-          router.push("/onboarding");
-          router.refresh();
-          return;
-        }
-      }
+      // Server computes redirectTo from TblPlatformAdmin + businesses (not client-trusted).
+      const redirectTo =
+        data.redirectTo === "/admin"
+        || data.redirectTo === "/dashboard"
+        || data.redirectTo === "/onboarding"
+          ? data.redirectTo
+          : "/dashboard";
 
-      router.push("/dashboard");
+      router.push(redirectTo);
       router.refresh();
     } catch {
       setError("حدث خطأ في الاتصال. حاول مرة أخرى.");
