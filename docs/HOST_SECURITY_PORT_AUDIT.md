@@ -1,58 +1,42 @@
-# Host security — port audit
+# Host security — port audit (V1 final launch)
 
-**Audit date (UTC):** 2026-09-21 (operator `casher` on `srv1921542` / `187.77.83.120`)  
-**Scope:** documentation and remediation plan only.  
-Firewall / `mssql.conf` changes were **not** applied (no passwordless sudo for
-`ufw` / `iptables` / `firewall-cmd` / reading `/var/opt/mssql/mssql.conf`).
+**Audit date (UTC):** 2026-09-22  
+**Host:** `187.77.83.120` (`app.drvotech.com`)  
+**Method:** local `ss -tlnH` (casher SSH) + external `Test-NetConnection` from operator workstation.
 
-## Observed listeners (selected)
+## External reachability (authoritative for launch)
 
-| Port | Bind | Active unit (where known) | Notes |
-|------|------|---------------------------|--------|
-| 22 | `0.0.0.0` + `[::]` | SSH | Expected for ops |
-| 80 | `0.0.0.0` + `[::]` | `nginx.service` active | Expected |
-| 443 | `0.0.0.0` + `[::]` | `nginx.service` active | Expected |
-| **1433** | **`0.0.0.0` + `*`** | `mssql-server.service` active | **Public SQL — critical** |
-| 25 | `0.0.0.0` + `[::]` | `postfix.service` active | Mail MTA |
-| 21 | `0.0.0.0` | FTP daemon listening; vsftpd/pure-ftpd inactive | Investigate owner |
-| 8080 | `0.0.0.0` + `[::]` | Likely panel/proxy | Confirm CloudPanel / apps |
-| 8443 | `0.0.0.0` + `[::]` | Likely panel TLS | Confirm |
-| 3306 / 33060 | `*` | MySQL/Percona present on host | Also public-facing bind |
-| 3001 | `*` | Separate runtime (not DRVOWA `:3100`) | Confirm whatsapp/other |
+| Port | Listener bind (host) | External from internet | Launch assessment |
+|------|----------------------|------------------------|-------------------|
+| 22 | `0.0.0.0` / `[::]` | **OPEN** | Expected ops SSH |
+| 80 | `0.0.0.0` / `[::]` | **OPEN** | Expected HTTP→HTTPS |
+| 443 | `0.0.0.0` / `[::]` | **OPEN** | Expected HTTPS |
+| **1433** | `0.0.0.0` / `*` | **CLOSED** | **PASS** — Hostinger/provider firewall blocks public SQL |
+| **3306** | `*` | **CLOSED** | **PASS** |
+| **33060** | `*` | **CLOSED** | **PASS** |
+| **3001** | `*` | **CLOSED** | **PASS** — WhatsApp runtime not internet-reachable |
+| 21 | `0.0.0.0` | **CLOSED** | PASS (FTP not public) |
+| 25 | `0.0.0.0` / `[::]` | **CLOSED** | PASS (SMTP not public; postfix may still listen locally) |
+| 8080 | `0.0.0.0` / `[::]` | **CLOSED** | PASS |
+| **8443** | `0.0.0.0` / `[::]` | **OPEN** | CloudPanel / management TLS — **not** SQL/customer DB; review panel auth / IP allowlist as hardening (non-blocking if panel secured) |
 
-DRVOWA app binds **`127.0.0.1:3100` only** (good). AI worker has no public port.
+**Critical public exposure (1433 / 3306 / 3001):** none observed from internet.
 
-Process owners for most sockets were not visible without elevated `ss -p` / root.
+DRVOWA app remains on **`127.0.0.1:3100`** only.
 
-## SQL Server (1433) — finding
+## Process owners
 
-SQL Server is listening on all interfaces. Unless an upstream firewall/security
-group already drops 1433, the database is internet-reachable. There is **no**
-documented operational requirement for public SQL in DRVOWA docs.
+`casher` has **no passwordless sudo** (`sudo -n` fails). Elevated `ss -p` / reading `/home/drvowa/app` env was **not** available in this audit. Listener ownership inferred from prior audits + systemd units (`nginx`, `mssql-server`, `drvowa.service`).
 
-**Goal:** SQL Server must not be publicly reachable.
+## Explicit non-actions
 
-## Remediation plan (owner / ops — do not lock out SSH)
+- No firewall commands were applied.
+- No `mssql.conf` bind changes.
+- Do not lock out SSH.
+- Do not break CloudPanel (8443), nginx, DRVOWA, WhatsApp runtime, or local SQL for apps.
 
-Preserve: SSH (`22`), existing nginx sites (`80`/`443`), localhost app/runtime
-(`127.0.0.1:3100`, WhatsApp runtime on loopback where applicable).
+## Residual hardening (optional, owner)
 
-Preferred order:
-
-1. **Confirm cloud security group / Hostinger firewall** already blocks 1433
-   from the internet. If yes, document that as the control.
-2. Else **bind SQL to `127.0.0.1` only** via `mssql.conf` (`network` /
-   `ipaddress` / `tcpport` per Microsoft docs) and restart `mssql-server`
-   in a maintenance window after verifying app `DB_SERVER=127.0.0.1`.
-3. Else **host firewall allowlist**: DROP/REJECT `1433/tcp` from WAN; allow
-   only localhost (and VPN jump hosts if any).
-4. Review **3306**, **21**, **25**, **8080**, **8443** for the same pattern —
-   disable unused services or restrict to localhost/VPN.
-5. Keep **22** key-only; optional source allowlist after confirming operator IPs.
-
-## Explicit non-actions for agents
-
-- Do **not** run `ufw` / `iptables` / `firewall-cmd` without sudo approval.
-- Do **not** change DNS, nginx TLS, or production secrets from this checklist alone.
-- `casher` currently rejects `sudo -n` for firewall and `mssql.conf` reads —
-  escalate to a human with sudo.
+1. Restrict CloudPanel `8443` to operator IPs if Hostinger firewall supports it.
+2. Prefer binding SQL/MySQL to localhost when maintenance window allows (defense in depth; already blocked externally).
+3. Confirm FTP daemon on 21 is unused and disabled if not required.

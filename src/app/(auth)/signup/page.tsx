@@ -90,6 +90,27 @@ export default function SignupPage() {
               className="text-start"
             />
           </div>
+          <p className="text-center text-xs leading-5 text-muted-foreground">
+            بإنشاء الحساب، أنت توافق على{" "}
+            <Link
+              href="/terms"
+              className="font-medium text-primary hover:underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              شروط الاستخدام
+            </Link>{" "}
+            و
+            <Link
+              href="/privacy"
+              className="font-medium text-primary hover:underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              سياسة الخصوصية
+            </Link>
+            .
+          </p>
           <Button type="submit" className="w-full" disabled={pending}>
             {pending ? "جارٍ الإنشاء..." : "إنشاء الحساب"}
           </Button>

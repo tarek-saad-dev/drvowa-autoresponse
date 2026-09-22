@@ -25,7 +25,9 @@ function loadDotEnv(): void {
 loadDotEnv();
 
 const PORT = Number(process.env.E2E_PORT ?? "3000");
-const BASE = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${PORT}`;
+// Use localhost (not 127.0.0.1): Chromium accepts Secure cookies on http://localhost
+// when e2e runs `next start` with NODE_ENV=production.
+const BASE = process.env.E2E_BASE_URL ?? `http://localhost:${PORT}`;
 
 export default defineConfig({
   testDir: "e2e",
