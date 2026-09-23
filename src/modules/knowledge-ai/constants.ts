@@ -5,11 +5,20 @@ export const KNOWLEDGE_INGEST_INPUT_MAX = 60_000;
 export const KNOWLEDGE_INGEST_SESSION_SOURCE_MAX = 120_000;
 export const KNOWLEDGE_INGEST_CHUNK_SIZE = 14_000;
 export const KNOWLEDGE_INGEST_CHUNK_OVERLAP = 400;
+/** Floor size when adaptively splitting a dense truncated chunk. */
+export const KNOWLEDGE_INGEST_MIN_ADAPTIVE_CHUNK = 1_500;
+/** Max recursive adaptive splits for a single dense chunk (depth). */
+export const KNOWLEDGE_INGEST_ADAPTIVE_SPLIT_MAX_DEPTH = 3;
 export const KNOWLEDGE_INGEST_MAX_FACTS = 200;
 export const KNOWLEDGE_INGEST_MAX_CANDIDATES = 8;
 /** Same-category fallback when lexical score is weak (still bounded). */
 export const KNOWLEDGE_INGEST_FALLBACK_CANDIDATES = 3;
 export const KNOWLEDGE_INGEST_GEMINI_TIMEOUT_MS = 45_000;
+/** Cap structured JSON output tokens to reduce truncation. */
+export const KNOWLEDGE_INGEST_MAX_OUTPUT_TOKENS = 8_192;
+/** Bounded retries per provider call (attempt 1 + 1 retry = 2). */
+export const KNOWLEDGE_INGEST_PROVIDER_MAX_ATTEMPTS = 2;
+export const KNOWLEDGE_INGEST_PROVIDER_RETRY_BASE_MS = 400;
 
 export const INGEST_SESSION_STATUSES = [
   "DRAFT",

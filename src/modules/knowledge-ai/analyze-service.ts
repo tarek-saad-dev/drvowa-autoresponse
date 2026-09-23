@@ -7,14 +7,16 @@ import { AiProviderError } from "@/modules/ai/gemini-provider";
 import { listItems } from "@/modules/knowledge/service";
 
 import { buildCandidatesByFact } from "./candidate-retrieval";
-import { chunkText } from "./chunk";
+import { chunkText, splitDenseChunk } from "./chunk";
 import {
+  KNOWLEDGE_INGEST_ADAPTIVE_SPLIT_MAX_DEPTH,
   KNOWLEDGE_INGEST_INPUT_MAX,
   KNOWLEDGE_INGEST_MAX_FACTS,
   KNOWLEDGE_INGEST_SESSION_SOURCE_MAX,
 } from "./constants";
 import type { KnowledgeExtractProvider } from "./gemini-knowledge-provider";
 import { createGeminiKnowledgeProvider } from "./gemini-knowledge-provider";
+import type { ExtractionResponse } from "./extract-schema";
 import {
   clampContent,
   clampTitle,
@@ -88,7 +90,49 @@ function totalUserSourceChars(conversation: ConversationTurn[]): number {
     .reduce((sum, t) => sum + t.text.length, 0);
 }
 
-async function extractAllFacts(
+function isTruncationError(error: unknown): boolean {
+  return (
+    error instanceof AiProviderError && error.code === "GEMINI_TRUNCATED"
+  );
+}
+
+/**
+ * Extract one chunk; on truncation, adaptively split and retry with a hard depth bound.
+ * Exported for unit tests.
+ */
+export async function extractChunkAdaptive(
+  provider: KnowledgeExtractProvider,
+  chunk: string,
+  depth = 0,
+): Promise<ExtractionResponse> {
+  try {
+    return await provider.extractFacts(chunk);
+  } catch (error) {
+    if (!isTruncationError(error) || depth >= KNOWLEDGE_INGEST_ADAPTIVE_SPLIT_MAX_DEPTH) {
+      throw error;
+    }
+    const parts = splitDenseChunk(chunk);
+    if (!parts) throw error;
+    structuredLog("knowledge-ai", "knowledge_ingest.adaptive_split", {
+      depth,
+      chunkLength: chunk.length,
+      leftLength: parts[0].length,
+      rightLength: parts[1].length,
+    });
+    const left = await extractChunkAdaptive(provider, parts[0], depth + 1);
+    const right = await extractChunkAdaptive(provider, parts[1], depth + 1);
+    return {
+      facts: [...left.facts, ...right.facts],
+      clarifications: [...left.clarifications, ...right.clarifications],
+    };
+  }
+}
+
+/**
+ * Multi-chunk extraction with adaptive split on truncation.
+ * Exported for unit tests.
+ */
+export async function extractAllFacts(
   provider: KnowledgeExtractProvider,
   text: string,
 ): Promise<{ facts: ExtractedFact[]; clarifications: string[] }> {
@@ -97,7 +141,7 @@ async function extractAllFacts(
   const clarifications: string[] = [];
 
   for (const [index, chunk] of chunks.entries()) {
-    const result = await provider.extractFacts(chunk);
+    const result = await extractChunkAdaptive(provider, chunk);
     clarifications.push(...result.clarifications);
     for (const [fi, fact] of result.facts.entries()) {
       all.push({
@@ -202,7 +246,10 @@ async function beginAnalysis(params: {
 }): Promise<{
   session: KnowledgeIngestSession;
   analysisVersion: number;
-  conversation: ConversationTurn[];
+  /** Committed conversation only (no pending user turn). */
+  committedConversation: ConversationTurn[];
+  pendingUserText: string;
+  pendingUserAt: string;
 }> {
   return withTransaction(async (trx) => {
     const nowIso = new Date().toISOString();
@@ -234,7 +281,7 @@ async function beginAnalysis(params: {
       if (locked.status === "ANALYZING") {
         throw new KnowledgeIngestError(
           "ANALYSIS_IN_PROGRESS",
-          "جارٍ تحليل هذه الجلسة الآن. انتظر ثم حاول مرة أخرى.",
+          "جارٍ تحليل هذه الجلسة الآن. انتظر ثم أعد المحاولة.",
           409,
         );
       }
@@ -248,19 +295,15 @@ async function beginAnalysis(params: {
         );
       }
 
-      const conversation: ConversationTurn[] = [
-        ...locked.conversation,
-        { role: "user", text: params.text, at: nowIso },
-      ];
       const analysisVersion = locked.analysisVersion + 1;
 
+      // Pending source only — do NOT append user turn until analysis succeeds.
       await repo.updateSession(
         {
           businessId: params.businessId,
           sessionId: locked.sessionId,
           status: "ANALYZING",
           rawInput: params.text,
-          conversation,
           inputHash: hashInput(params.text),
           inputLength: params.text.length,
           model: params.model,
@@ -274,7 +317,13 @@ async function beginAnalysis(params: {
         { businessId: params.businessId, sessionId: locked.sessionId },
         trx,
       );
-      return { session: session!, analysisVersion, conversation };
+      return {
+        session: session!,
+        analysisVersion,
+        committedConversation: locked.conversation,
+        pendingUserText: params.text,
+        pendingUserAt: nowIso,
+      };
     }
 
     if (params.text.length > KNOWLEDGE_INGEST_SESSION_SOURCE_MAX) {
@@ -285,15 +334,13 @@ async function beginAnalysis(params: {
       );
     }
 
-    const conversation: ConversationTurn[] = [
-      { role: "user", text: params.text, at: nowIso },
-    ];
+    // Brand-new session: ConversationJson stays [] until first successful finalize.
     const session = await repo.createSession(
       {
         businessId: params.businessId,
         createdByUserId: params.userId,
         rawInput: params.text,
-        conversation,
+        conversation: [],
         inputHash: hashInput(params.text),
         inputLength: params.text.length,
         model: params.model,
@@ -302,7 +349,13 @@ async function beginAnalysis(params: {
       },
       trx,
     );
-    return { session, analysisVersion: 1, conversation };
+    return {
+      session,
+      analysisVersion: 1,
+      committedConversation: [],
+      pendingUserText: params.text,
+      pendingUserAt: nowIso,
+    };
   });
 }
 
@@ -417,6 +470,8 @@ async function markAnalysisFailed(params: {
         sessionId: params.sessionId,
         status: "FAILED",
         errorCode: params.errorCode,
+        // Clear pending paste; keep committed ConversationJson unchanged.
+        clearRawInput: true,
       },
       trx,
     );
@@ -450,6 +505,7 @@ export async function analyzeKnowledgeIngest(params: {
   const started = Date.now();
   let sessionId: string | null = null;
   let analysisVersion = 0;
+  let failurePhase: "begin" | "extraction" | "dedup" | "finalize" = "begin";
 
   try {
     const begun = await beginAnalysis({
@@ -461,13 +517,23 @@ export async function analyzeKnowledgeIngest(params: {
     });
     sessionId = begun.session.sessionId;
     analysisVersion = begun.analysisVersion;
-    let conversation = begun.conversation;
 
-    const composite = conversation
+    const pendingUserTurn: ConversationTurn = {
+      role: "user",
+      text: begun.pendingUserText,
+      at: begun.pendingUserAt,
+    };
+    const workingConversation: ConversationTurn[] = [
+      ...begun.committedConversation,
+      pendingUserTurn,
+    ];
+
+    const composite = workingConversation
       .filter((t) => t.role === "user")
       .map((t) => t.text)
       .join("\n\n");
 
+    failurePhase = "extraction";
     const { facts, clarifications } = await extractAllFacts(provider, composite);
 
     if (facts.length === 0) {
@@ -477,14 +543,15 @@ export async function analyzeKnowledgeIngest(params: {
           ? clarifications
           : ["لم أجد معلومات واضحة يمكن إضافتها. جرّب نصاً أوضح."],
       );
-      conversation = [
-        ...conversation,
+      const conversation: ConversationTurn[] = [
+        ...workingConversation,
         {
           role: "assistant",
           text: "لم أستطع استخراج معلومات واضحة من النص.",
           at: new Date().toISOString(),
         },
       ];
+      failurePhase = "finalize";
       const finalized = await finalizeAnalysis({
         businessId: params.businessId,
         userId: params.userId,
@@ -516,6 +583,7 @@ export async function analyzeKnowledgeIngest(params: {
     });
     const candidatesByFact = buildCandidatesByFact(facts, existingItems);
 
+    failurePhase = "dedup";
     const dedup = await resolveDedupSafely({
       provider,
       facts,
@@ -606,11 +674,12 @@ export async function analyzeKnowledgeIngest(params: {
       `${summary.conflict} تحتاج مراجعة`,
     ].join("\n");
 
-    conversation = [
-      ...conversation,
+    const conversation: ConversationTurn[] = [
+      ...workingConversation,
       { role: "assistant", text: assistantText, at: new Date().toISOString() },
     ];
 
+    failurePhase = "finalize";
     const finalized = await finalizeAnalysis({
       businessId: params.businessId,
       userId: params.userId,
@@ -638,6 +707,12 @@ export async function analyzeKnowledgeIngest(params: {
     return finalized;
   } catch (error) {
     const mapped = friendlyProviderMessage(error);
+    const providerCode =
+      error instanceof AiProviderError
+        ? error.code
+        : error instanceof KnowledgeIngestError
+          ? error.code
+          : null;
     if (sessionId && analysisVersion > 0) {
       await markAnalysisFailed({
         businessId: params.businessId,
@@ -650,7 +725,11 @@ export async function analyzeKnowledgeIngest(params: {
       businessId: params.businessId,
       sessionId,
       errorCode: mapped.code,
+      providerCode,
+      phase: failurePhase,
       latencyMs: Date.now() - started,
+      model: provider.model,
+      inputLength: text.length,
     });
     throw mapped;
   }

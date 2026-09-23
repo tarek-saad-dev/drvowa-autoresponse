@@ -1,6 +1,7 @@
 import {
   KNOWLEDGE_INGEST_CHUNK_OVERLAP,
   KNOWLEDGE_INGEST_CHUNK_SIZE,
+  KNOWLEDGE_INGEST_MIN_ADAPTIVE_CHUNK,
 } from "./constants";
 
 /**
@@ -35,4 +36,33 @@ export function chunkText(
     start = Math.max(0, end - overlap);
   }
   return chunks;
+}
+
+/**
+ * Split a dense chunk roughly in half on a paragraph/newline boundary when possible.
+ * Returns null when the chunk is too small to split usefully.
+ */
+export function splitDenseChunk(
+  text: string,
+  minSize = KNOWLEDGE_INGEST_MIN_ADAPTIVE_CHUNK,
+): [string, string] | null {
+  const trimmed = text.trim();
+  if (trimmed.length < minSize * 2) return null;
+
+  const mid = Math.floor(trimmed.length / 2);
+  const window = trimmed.slice(0, mid);
+  const paraBreak = Math.max(
+    window.lastIndexOf("\n\n"),
+    window.lastIndexOf("\n"),
+  );
+  const cut =
+    paraBreak > trimmed.length * 0.3
+      ? paraBreak
+      : mid;
+
+  const left = trimmed.slice(0, cut).trim();
+  const right = trimmed.slice(cut).trim();
+  if (!left || !right) return null;
+  if (left.length < minSize || right.length < minSize) return null;
+  return [left, right];
 }

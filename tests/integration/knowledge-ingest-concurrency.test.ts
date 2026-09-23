@@ -612,3 +612,151 @@ describe("knowledge AI ingest concurrency / privacy", () => {
     expect(Number(active.recordset[0]?.Cnt ?? 0)).toBeLessThanOrEqual(50);
   });
 });
+
+describe("knowledge ingest failed conversation hygiene", () => {
+  let businessId = "";
+  let userId = "";
+
+  beforeAll(async () => {
+    if (!dbEnvOk) return;
+    try {
+      await getPool();
+    } catch (error) {
+      rethrowDbBootstrapFailure(error);
+    }
+    const tenant = await onboardTenant(`fc-${randomUUID().slice(0, 6)}`);
+    businessId = tenant.businessId;
+    userId = tenant.userId;
+    await ensureDefaultKnowledgeBase({ businessId });
+  });
+
+  afterAll(async () => {
+    if (!dbEnvOk) return;
+    await closePool().catch(() => undefined);
+  }, 30_000);
+
+  it("failed new analysis does not commit user conversation and clears RawInput", async ({
+    skip,
+  }) => {
+    requireDb(skip);
+    const failing: ReturnType<typeof createMockKnowledgeProvider> = {
+      model: "fail-extract",
+      async extractFacts() {
+        throw new Error("boom-extract");
+      },
+      async resolveDedup() {
+        return { decisions: [] };
+      },
+    };
+
+    await expect(
+      analyzeKnowledgeIngest({
+        businessId,
+        userId,
+        text: "فرع جليم سياسة جديدة للحجز قبلها بربع ساعة",
+        provider: failing,
+        useHeuristicDedup: true,
+      }),
+    ).rejects.toBeTruthy();
+
+    const failed = await query<{
+      Status: string;
+      ErrorCode: string | null;
+      RawInput: string | null;
+      ConversationJson: string | null;
+      KnowledgeIngestSessionID: string;
+    }>(
+      `SELECT TOP 1 KnowledgeIngestSessionID, Status, ErrorCode, RawInput, ConversationJson
+       FROM TblKnowledgeIngestSession
+       WHERE BusinessID = @businessId
+       ORDER BY UpdatedAtUtc DESC`,
+      [{ name: "businessId", type: sql.UniqueIdentifier, value: businessId }],
+    );
+    const row = failed.recordset[0]!;
+    const sessionId = String(row.KnowledgeIngestSessionID);
+    expect(row.Status).toBe("FAILED");
+    expect(row.RawInput).toBeNull();
+    expect(row.ConversationJson === null || row.ConversationJson === "[]").toBe(
+      true,
+    );
+
+    const ok = await analyzeKnowledgeIngest({
+      businessId,
+      userId,
+      sessionId,
+      text: "فرع جليم في سابا باشا. المواعيد يومياً من 11 صباحاً إلى 2 صباحاً.",
+      provider: createMockKnowledgeProvider(),
+      useHeuristicDedup: true,
+    });
+    expect(ok.session.status).toBe("REVIEW");
+    expect(ok.session.conversation.filter((t) => t.role === "user")).toHaveLength(
+      1,
+    );
+    expect(
+      ok.session.conversation.filter((t) => t.role === "assistant"),
+    ).toHaveLength(1);
+  });
+
+  it("failed follow-up does not append user turn; retry adds once", async ({
+    skip,
+  }) => {
+    requireDb(skip);
+    const first = await analyzeKnowledgeIngest({
+      businessId,
+      userId,
+      text: "فرع جليم في سابا باشا. المواعيد يومياً من 11 صباحاً إلى 2 صباحاً.",
+      provider: createMockKnowledgeProvider(),
+      useHeuristicDedup: true,
+    });
+    expect(first.session.conversation.filter((t) => t.role === "user")).toHaveLength(
+      1,
+    );
+
+    const failing: ReturnType<typeof createMockKnowledgeProvider> = {
+      model: "fail-followup",
+      async extractFacts() {
+        throw new Error("boom-followup");
+      },
+      async resolveDedup() {
+        return { decisions: [] };
+      },
+    };
+
+    await expect(
+      analyzeKnowledgeIngest({
+        businessId,
+        userId,
+        sessionId: first.session.sessionId,
+        text: "Google Maps: https://maps.example/gleem-follow",
+        provider: failing,
+        useHeuristicDedup: true,
+      }),
+    ).rejects.toBeTruthy();
+
+    const afterFail = await ingestRepo.getSession({
+      businessId,
+      sessionId: first.session.sessionId,
+    });
+    expect(afterFail?.status).toBe("FAILED");
+    expect(afterFail?.rawInput).toBeNull();
+    expect(afterFail?.conversation.filter((t) => t.role === "user")).toHaveLength(
+      1,
+    );
+
+    const retried = await analyzeKnowledgeIngest({
+      businessId,
+      userId,
+      sessionId: first.session.sessionId,
+      text: "Google Maps: https://maps.example/gleem-follow",
+      provider: createMockKnowledgeProvider(),
+      useHeuristicDedup: true,
+    });
+    expect(retried.session.status).toBe("REVIEW");
+    expect(retried.session.conversation.filter((t) => t.role === "user")).toHaveLength(
+      2,
+    );
+    expect(
+      retried.session.conversation.filter((t) => t.role === "assistant"),
+    ).toHaveLength(2);
+  });
+});
