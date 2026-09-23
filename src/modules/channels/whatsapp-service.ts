@@ -41,6 +41,18 @@ export type InboundDeliveryView = {
   lastDeliveryAt: string | null;
   lastErrorCode: string | null;
   health: InboundReceiveHealth;
+  /** Optional Baileys capture health (safe counters only). */
+  capture?: {
+    rawUpsert: number;
+    captured: number;
+    unresolvedLid: number;
+    decryptFailed: number;
+    emptyContent: number;
+    quarantined: number;
+    pendingLid: number;
+    listening: boolean;
+    lastEventAt: string | null;
+  } | null;
 };
 
 export type WhatsAppConnectionView = {
@@ -73,11 +85,24 @@ const INBOUND_CONFIG_ERROR_CODES = new Set([
  */
 export function assessInboundDeliveryHealth(
   inbound: RuntimeInboundDelivery | null | undefined,
+  capture?: RuntimeAccountStatus["inboundCapture"] | null,
 ): InboundReceiveHealth {
   if (!inbound) return "unknown";
   if (!inbound.running) return "degraded";
   const code = inbound.lastErrorCode?.trim() || null;
   if (code && INBOUND_CONFIG_ERROR_CODES.has(code)) return "degraded";
+  // Capture stall: Baileys saw upserts but messages were quarantined / stuck on LID / decrypt.
+  if (capture) {
+    if ((capture.quarantined ?? 0) > 0 && (capture.rawUpsert ?? 0) > (capture.captured ?? 0)) {
+      return "degraded";
+    }
+    if ((capture.decryptFailed ?? 0) > 0 && (capture.rawUpsert ?? 0) > (capture.captured ?? 0)) {
+      return "degraded";
+    }
+    if ((capture.pendingLid ?? 0) > 0 && (capture.listening === false)) {
+      return "degraded";
+    }
+  }
   return "healthy";
 }
 
@@ -99,8 +124,22 @@ export function inboundErrorCodeLabelAr(code: string | null | undefined): string
 
 function sanitizeInboundDeliveryView(
   inbound: RuntimeInboundDelivery | null | undefined,
+  capture?: RuntimeAccountStatus["inboundCapture"] | null,
 ): InboundDeliveryView | null {
   if (!inbound) return null;
+  const safeCapture = capture
+    ? {
+        rawUpsert: Number(capture.rawUpsert) || 0,
+        captured: Number(capture.captured) || 0,
+        unresolvedLid: Number(capture.unresolvedLid) || 0,
+        decryptFailed: Number(capture.decryptFailed) || 0,
+        emptyContent: Number(capture.emptyContent) || 0,
+        quarantined: Number(capture.quarantined) || 0,
+        pendingLid: Number(capture.pendingLid) || 0,
+        listening: Boolean(capture.listening),
+        lastEventAt: capture.lastEventAt ?? null,
+      }
+    : null;
   return {
     running: Boolean(inbound.running),
     pending: Number(inbound.pending) || 0,
@@ -108,7 +147,8 @@ function sanitizeInboundDeliveryView(
     lastDeliveryAt: inbound.lastDeliveryAt ?? null,
     // Safe code only — UI maps to Arabic; never expose HTTP bodies/tokens.
     lastErrorCode: inbound.lastErrorCode ?? null,
-    health: assessInboundDeliveryHealth(inbound),
+    health: assessInboundDeliveryHealth(inbound, capture),
+    capture: safeCapture,
   };
 }
 
@@ -221,7 +261,10 @@ function sanitizeRuntimeView(
     lastDisconnectCode: runtime.lastDisconnectCode,
     lastErrorCode: runtime.lastErrorCode,
     reconnectAttempts: runtime.reconnectAttempts,
-    inboundDelivery: sanitizeInboundDeliveryView(runtime.inboundDelivery),
+    inboundDelivery: sanitizeInboundDeliveryView(
+      runtime.inboundDelivery,
+      runtime.inboundCapture,
+    ),
   };
 }
 

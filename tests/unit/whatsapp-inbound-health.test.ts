@@ -152,6 +152,62 @@ describe("inbound delivery health assessment", () => {
     expect(assessInboundDeliveryHealth(undefined)).toBe("unknown");
   });
 
+  it("READY + capture quarantine stall → degraded", () => {
+    expect(
+      assessInboundDeliveryHealth(
+        {
+          running: true,
+          pending: 0,
+          delivered: 1,
+          failed: 0,
+          quarantined: 0,
+          inFlight: false,
+          lastDeliveryAt: "2026-09-23T05:21:13.197Z",
+          lastErrorCode: null,
+        },
+        {
+          rawUpsert: 4,
+          captured: 1,
+          unresolvedLid: 3,
+          decryptFailed: 0,
+          emptyContent: 0,
+          quarantined: 3,
+          pendingLid: 0,
+          listening: true,
+          lastEventAt: "2026-09-23T05:52:00.000Z",
+        },
+      ),
+    ).toBe("degraded");
+  });
+
+  it("READY + decryptFailed stall → degraded", () => {
+    expect(
+      assessInboundDeliveryHealth(
+        {
+          running: true,
+          pending: 0,
+          delivered: 1,
+          failed: 0,
+          quarantined: 0,
+          inFlight: false,
+          lastDeliveryAt: null,
+          lastErrorCode: null,
+        },
+        {
+          rawUpsert: 2,
+          captured: 0,
+          unresolvedLid: 0,
+          decryptFailed: 2,
+          emptyContent: 0,
+          quarantined: 0,
+          pendingLid: 0,
+          listening: true,
+          lastEventAt: null,
+        },
+      ),
+    ).toBe("degraded");
+  });
+
   it("maps config codes to Arabic without leaking internals", () => {
     expect(inboundErrorCodeLabelAr("AUTH_CONFIG")).toMatch(/مصادقة/);
     expect(inboundErrorCodeLabelAr("MAPPING_CONFIG")).toMatch(/ربط/);

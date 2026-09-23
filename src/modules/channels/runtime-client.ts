@@ -15,6 +15,19 @@ export type RuntimeInboundDelivery = {
   lastErrorCode: string | null;
 };
 
+/** Safe Baileys capture counters (no phone/accountKey/body). */
+export type RuntimeInboundCapture = {
+  rawUpsert: number;
+  captured: number;
+  unresolvedLid: number;
+  decryptFailed: number;
+  emptyContent: number;
+  quarantined: number;
+  pendingLid: number;
+  listening: boolean;
+  lastEventAt: string | null;
+};
+
 export type RuntimeAccountStatus = {
   accountKey: string;
   state: string;
@@ -27,6 +40,7 @@ export type RuntimeAccountStatus = {
   reconnectAttempts: number;
   /** Present on current whatsapp-bot managed status; may be absent on older runtimes. */
   inboundDelivery?: RuntimeInboundDelivery | null;
+  inboundCapture?: RuntimeInboundCapture | null;
 };
 
 export class WhatsAppRuntimeError extends Error {
