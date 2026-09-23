@@ -280,6 +280,17 @@ async function fulfillWhatsAppState(
         ready: uiState === "READY",
         qrAvailable: uiState === "QR_REQUIRED",
         lastErrorCode: uiState === "ERROR" ? "MOCK" : null,
+        inboundDelivery:
+          uiState === "READY"
+            ? {
+                running: true,
+                pending: 0,
+                quarantined: 0,
+                lastDeliveryAt: new Date().toISOString(),
+                lastErrorCode: null,
+                health: "healthy",
+              }
+            : null,
       },
       ...extras,
     }),
@@ -428,7 +439,8 @@ test.describe("V1 product finish smoke", () => {
         qr: true,
       },
       { uiState: "CONNECTING", expectText: /جارٍ تأكيد|جارٍ الاتصال|تجهيز/ },
-      { uiState: "READY", expectText: /متصل|جاهز/ },
+      { uiState: "READY", expectText: /متصل|جاهز|استقبال الرسائل/ },
+      { uiState: "DISCONNECTED", expectText: /غير متصل|انقطع|إعادة ربط/ },
       { uiState: "LOGGED_OUT", expectText: /إعادة ربط|انتهت الجلسة/ },
       { uiState: "ERROR", expectText: /إعادة المحاولة|خطأ/ },
     ];

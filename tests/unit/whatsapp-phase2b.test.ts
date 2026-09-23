@@ -27,6 +27,9 @@ const runtimeMocks = vi.hoisted(() => ({
 
 vi.mock("@/modules/channels/repository", () => repoMocks);
 vi.mock("@/modules/channels/runtime-client", () => runtimeMocks);
+vi.mock("@/modules/locations/service", () => ({
+  listLocations: vi.fn(async () => []),
+}));
 vi.mock("qrcode", () => ({
   default: {
     toDataURL: vi.fn(async () => "data:image/png;base64,TEST_QR"),

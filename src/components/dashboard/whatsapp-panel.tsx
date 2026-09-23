@@ -25,6 +25,15 @@ type UiState =
   | "ERROR"
   | "RUNTIME_DISABLED";
 
+type InboundDeliveryPayload = {
+  running: boolean;
+  pending: number;
+  quarantined: number;
+  lastDeliveryAt: string | null;
+  lastErrorCode: string | null;
+  health: "healthy" | "degraded" | "unknown";
+};
+
 type ConnectionPayload = {
   uiState: UiState;
   message?: string | null;
@@ -40,6 +49,7 @@ type ConnectionPayload = {
     ready: boolean;
     qrAvailable: boolean;
     lastErrorCode: string | null;
+    inboundDelivery?: InboundDeliveryPayload | null;
   } | null;
 };
 
@@ -99,9 +109,41 @@ function stateExplanation(state: UiState): string {
   }
 }
 
+function inboundErrorLabelAr(code: string | null | undefined): string | null {
+  if (!code?.trim()) return null;
+  switch (code.trim()) {
+    case "CONFIG_MISSING":
+      return "إعدادات استقبال الرسائل غير مكتملة";
+    case "AUTH_CONFIG":
+      return "مشكلة مصادقة مع خادم الاستقبال";
+    case "MAPPING_CONFIG":
+      return "ربط رقم واتساب غير متطابق";
+    case "NETWORK_ERROR":
+      return "مشكلة شبكة مؤقتة أثناء التسليم";
+    default:
+      return null;
+  }
+}
+
+function formatRelativeAr(iso: string | null | undefined, nowMs: number): string | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  const diffSec = Math.max(0, Math.floor((nowMs - t) / 1000));
+  if (diffSec < 60) return "الآن";
+  const mins = Math.floor(diffSec / 60);
+  if (mins < 60) return `منذ ${mins} دقيقة`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `منذ ${hours} ساعة`;
+  const days = Math.floor(hours / 24);
+  return `منذ ${days} يوم`;
+}
+
 function badgeVariant(
   state: UiState,
+  inboundDegraded: boolean,
 ): "default" | "success" | "warning" | "muted" {
+  if (state === "READY" && inboundDegraded) return "warning";
   if (state === "READY") return "success";
   if (state === "QR_REQUIRED" || state === "STARTING" || state === "CONNECTING") {
     return "warning";
@@ -124,6 +166,7 @@ export function WhatsAppConnectionPanel({
   const [qrImageDataUrl, setQrImageDataUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -131,6 +174,11 @@ export function WhatsAppConnectionPanel({
     return () => {
       mounted.current = false;
     };
+  }, []);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(id);
   }, []);
 
   const refreshStatus = useCallback(async () => {
@@ -278,6 +326,21 @@ export function WhatsAppConnectionPanel({
 
   const state = view.uiState;
   const panelMessage = sanitizePanelMessage(view.message);
+  const inbound = view.runtime?.inboundDelivery ?? null;
+  const socketConnected = state === "READY";
+  const inboundDegraded = socketConnected && inbound?.health === "degraded";
+  const inboundLabel = (() => {
+    if (!socketConnected) return null;
+    if (!inbound || inbound.health === "unknown") return "يعمل";
+    return inbound.health === "healthy" ? "يعمل" : "توجد مشكلة";
+  })();
+  const inboundDetail = inboundDegraded
+    ? inboundErrorLabelAr(inbound?.lastErrorCode)
+    : null;
+  const lastDeliveryRelative = formatRelativeAr(
+    inbound?.lastDeliveryAt ?? null,
+    nowMs,
+  );
 
   return (
     <div className="space-y-4">
@@ -285,9 +348,15 @@ export function WhatsAppConnectionPanel({
         <CardHeader>
           <div className="flex flex-wrap items-center gap-2">
             <CardTitle>اتصال واتساب</CardTitle>
-            <Badge variant={badgeVariant(state)}>{stateLabel(state)}</Badge>
+            <Badge variant={badgeVariant(state, inboundDegraded)}>
+              {stateLabel(state)}
+            </Badge>
           </div>
-          <CardDescription>{stateExplanation(state)}</CardDescription>
+          <CardDescription>
+            {inboundDegraded
+              ? "واتساب متصل، لكن استقبال الرسائل يحتاج مراجعة."
+              : stateExplanation(state)}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {error ? (
@@ -299,6 +368,57 @@ export function WhatsAppConnectionPanel({
             <Alert variant={state === "RUNTIME_DISABLED" ? "warning" : "error"}>
               {panelMessage}
             </Alert>
+          ) : null}
+
+          {view.connection?.maskedPhone ? (
+            <div className="space-y-1 text-sm" dir="rtl">
+              <p className="text-muted-foreground">رقم واتساب المتصل</p>
+              <p className="font-medium tracking-wide" dir="ltr">
+                {view.connection.maskedPhone}
+              </p>
+            </div>
+          ) : null}
+
+          {state === "READY" || state === "DISCONNECTED" || state === "LOGGED_OUT" ? (
+            <div className="space-y-2 text-sm" dir="rtl">
+              <p>
+                اتصال واتساب:{" "}
+                <span
+                  className={
+                    socketConnected
+                      ? "font-medium text-emerald-700"
+                      : "font-medium text-amber-800"
+                  }
+                >
+                  {socketConnected ? "متصل" : "غير متصل"}
+                </span>
+              </p>
+              {inboundLabel ? (
+                <p>
+                  استقبال الرسائل:{" "}
+                  <span
+                    className={
+                      inboundDegraded
+                        ? "font-medium text-amber-700"
+                        : "font-medium text-emerald-700"
+                    }
+                  >
+                    {inboundLabel}
+                  </span>
+                </p>
+              ) : null}
+              {inboundDegraded ? (
+                <Alert variant="warning">
+                  واتساب متصل، لكن استقبال الرسائل يحتاج مراجعة.
+                  {inboundDetail ? ` ${inboundDetail}.` : null}
+                </Alert>
+              ) : null}
+              {socketConnected && lastDeliveryRelative ? (
+                <p className="text-muted-foreground">
+                  آخر رسالة مستلمة: {lastDeliveryRelative}
+                </p>
+              ) : null}
+            </div>
           ) : null}
 
           {state === "NOT_CONNECTED" || state === "DISCONNECTED" ? (
@@ -314,20 +434,13 @@ export function WhatsAppConnectionPanel({
           ) : null}
 
           {state === "STARTING" || state === "CONNECTING" ? (
-            <p className="text-sm text-muted-foreground" aria-live="polite">
-              {stateExplanation(state)}
-            </p>
+            <p className="text-sm text-muted-foreground">{stateExplanation(state)}</p>
           ) : null}
 
           {state === "QR_REQUIRED" ? (
-            <div className="space-y-4">
-              <ol className="list-decimal space-y-1 pe-5 text-sm leading-7 text-foreground">
-                <li>افتح واتساب على هاتفك</li>
-                <li>الإعدادات ← الأجهزة المرتبطة</li>
-                <li>اضغط «ربط جهاز»</li>
-                <li>امسح الرمز الظاهر أدناه</li>
-              </ol>
-              <p className="text-xs text-muted-foreground">
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                افتح واتساب على هاتفك ← الأجهزة المرتبطة ← ربط جهاز، ثم امسح الرمز.
                 إذا انتهت صلاحية الرمز سيظهر رمز جديد تلقائياً — لا تغلق هذه
                 الصفحة أثناء المسح.
               </p>
@@ -355,11 +468,8 @@ export function WhatsAppConnectionPanel({
 
           {state === "READY" ? (
             <div className="space-y-3">
-              <Alert variant="success">واتساب متصل وجاهز لهذه المساحة.</Alert>
-              {view.connection?.maskedPhone ? (
-                <p className="text-sm text-muted-foreground">
-                  الرقم: {view.connection.maskedPhone}
-                </p>
+              {!inboundDegraded ? (
+                <Alert variant="success">واتساب متصل وجاهز لهذه المساحة.</Alert>
               ) : null}
               <Button
                 variant="outline"

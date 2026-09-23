@@ -1,9 +1,14 @@
 import QRCode from "qrcode";
 
 import { withResourceLimitGate } from "@/modules/billing/entitlements";
+import { listLocations } from "@/modules/locations/service";
 import type { ChannelConnection, ChannelConnectionStatus } from "@/types/domain";
 
 import { generateWhatsAppAccountKey } from "./account-key";
+import {
+  assertMaskedPhoneIsSafe,
+  maskWhatsAppPhoneForDisplay,
+} from "./phone-mask";
 import * as repo from "./repository";
 import {
   getAccountQr,
@@ -12,6 +17,7 @@ import {
   stopAccount,
   WhatsAppRuntimeError,
   type RuntimeAccountStatus,
+  type RuntimeInboundDelivery,
 } from "./runtime-client";
 
 export type WhatsAppUiState =
@@ -25,6 +31,18 @@ export type WhatsAppUiState =
   | "ERROR"
   | "RUNTIME_DISABLED";
 
+/** Socket can be READY while inbound delivery is unhealthy — surface separately. */
+export type InboundReceiveHealth = "healthy" | "degraded" | "unknown";
+
+export type InboundDeliveryView = {
+  running: boolean;
+  pending: number;
+  quarantined: number;
+  lastDeliveryAt: string | null;
+  lastErrorCode: string | null;
+  health: InboundReceiveHealth;
+};
+
 export type WhatsAppConnectionView = {
   connection: ChannelConnection | null;
   uiState: WhatsAppUiState;
@@ -37,10 +55,93 @@ export type WhatsAppConnectionView = {
     lastDisconnectCode: number | null;
     lastErrorCode: string | null;
     reconnectAttempts: number;
+    inboundDelivery: InboundDeliveryView | null;
   } | null;
   /** Never include tokens or accountKey in browser responses from higher layers when not needed */
   message?: string;
 };
+
+const INBOUND_CONFIG_ERROR_CODES = new Set([
+  "CONFIG_MISSING",
+  "AUTH_CONFIG",
+  "MAPPING_CONFIG",
+]);
+
+/**
+ * READY socket ≠ healthy inbound. Degrade when the delivery worker is stopped
+ * or last error is a durable config/auth/mapping failure.
+ */
+export function assessInboundDeliveryHealth(
+  inbound: RuntimeInboundDelivery | null | undefined,
+): InboundReceiveHealth {
+  if (!inbound) return "unknown";
+  if (!inbound.running) return "degraded";
+  const code = inbound.lastErrorCode?.trim() || null;
+  if (code && INBOUND_CONFIG_ERROR_CODES.has(code)) return "degraded";
+  return "healthy";
+}
+
+export function inboundErrorCodeLabelAr(code: string | null | undefined): string | null {
+  if (!code?.trim()) return null;
+  switch (code.trim()) {
+    case "CONFIG_MISSING":
+      return "إعدادات استقبال الرسائل غير مكتملة";
+    case "AUTH_CONFIG":
+      return "مشكلة مصادقة مع خادم الاستقبال";
+    case "MAPPING_CONFIG":
+      return "ربط رقم واتساب غير متطابق";
+    case "NETWORK_ERROR":
+      return "مشكلة شبكة مؤقتة أثناء التسليم";
+    default:
+      return "استقبال الرسائل يحتاج مراجعة";
+  }
+}
+
+function sanitizeInboundDeliveryView(
+  inbound: RuntimeInboundDelivery | null | undefined,
+): InboundDeliveryView | null {
+  if (!inbound) return null;
+  return {
+    running: Boolean(inbound.running),
+    pending: Number(inbound.pending) || 0,
+    quarantined: Number(inbound.quarantined) || 0,
+    lastDeliveryAt: inbound.lastDeliveryAt ?? null,
+    // Safe code only — UI maps to Arabic; never expose HTTP bodies/tokens.
+    lastErrorCode: inbound.lastErrorCode ?? null,
+    health: assessInboundDeliveryHealth(inbound),
+  };
+}
+
+/**
+ * Prefer stored MaskedPhone; otherwise derive a display mask from a business
+ * location phone and persist the mask (never the raw number).
+ */
+export async function resolveWhatsAppMaskedPhone(params: {
+  businessId: string;
+  connection: ChannelConnection;
+}): Promise<ChannelConnection> {
+  const existing = params.connection.maskedPhone?.trim() || null;
+  if (existing && assertMaskedPhoneIsSafe(existing)) {
+    return params.connection;
+  }
+
+  const locations = await listLocations({ businessId: params.businessId });
+  const rawPhone =
+    locations.find((l) => l.isActive && l.phone?.trim())?.phone
+    ?? locations.find((l) => l.phone?.trim())?.phone
+    ?? null;
+  const masked = maskWhatsAppPhoneForDisplay(rawPhone);
+  if (!masked || !assertMaskedPhoneIsSafe(masked)) {
+    return params.connection;
+  }
+
+  const updated = await repo.updateChannelConnection({
+    businessId: params.businessId,
+    channelConnectionId: params.connection.channelConnectionId,
+    maskedPhone: masked,
+  });
+  return updated ?? { ...params.connection, maskedPhone: masked };
+}
 
 function mapDbStatusFromRuntime(state: string): {
   status: ChannelConnectionStatus;
@@ -120,6 +221,7 @@ function sanitizeRuntimeView(
     lastDisconnectCode: runtime.lastDisconnectCode,
     lastErrorCode: runtime.lastErrorCode,
     reconnectAttempts: runtime.reconnectAttempts,
+    inboundDelivery: sanitizeInboundDeliveryView(runtime.inboundDelivery),
   };
 }
 
@@ -205,16 +307,24 @@ export async function getWhatsAppConnectionView(params: {
       connection,
       runtime,
     });
-    return {
+    const withPhone = await resolveWhatsAppMaskedPhone({
+      businessId: params.businessId,
       connection: synced,
-      uiState: mapUiState(synced, runtime, null),
+    });
+    return {
+      connection: withPhone,
+      uiState: mapUiState(withPhone, runtime, null),
       runtime: sanitizeRuntimeView(runtime),
     };
   } catch (error) {
     if (error instanceof WhatsAppRuntimeError) {
-      return {
+      const withPhone = await resolveWhatsAppMaskedPhone({
+        businessId: params.businessId,
         connection,
-        uiState: mapUiState(connection, null, error),
+      });
+      return {
+        connection: withPhone,
+        uiState: mapUiState(withPhone, null, error),
         runtime: null,
         message: error.message,
       };
@@ -241,9 +351,13 @@ export async function startWhatsAppPairing(params: {
       connection,
       runtime,
     });
-    return {
+    const withPhone = await resolveWhatsAppMaskedPhone({
+      businessId: params.businessId,
       connection: synced,
-      uiState: mapUiState(synced, runtime, null),
+    });
+    return {
+      connection: withPhone,
+      uiState: mapUiState(withPhone, runtime, null),
       runtime: sanitizeRuntimeView(runtime),
     };
   } catch (error) {
@@ -281,9 +395,13 @@ export async function stopWhatsAppRuntime(params: {
       connection,
       runtime,
     });
-    return {
+    const withPhone = await resolveWhatsAppMaskedPhone({
+      businessId: params.businessId,
       connection: synced,
-      uiState: mapUiState(synced, runtime, null),
+    });
+    return {
+      connection: withPhone,
+      uiState: mapUiState(withPhone, runtime, null),
       runtime: sanitizeRuntimeView(runtime),
     };
   } catch (error) {

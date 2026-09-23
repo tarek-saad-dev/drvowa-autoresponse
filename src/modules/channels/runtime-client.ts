@@ -3,6 +3,18 @@
  * Never expose DRVOWA_RUNTIME_TOKEN to the browser.
  */
 
+/** Safe inbound delivery counters from the managed WhatsApp runtime (no tokens/paths). */
+export type RuntimeInboundDelivery = {
+  running: boolean;
+  pending: number;
+  delivered: number;
+  failed: number;
+  quarantined: number;
+  inFlight: boolean;
+  lastDeliveryAt: string | null;
+  lastErrorCode: string | null;
+};
+
 export type RuntimeAccountStatus = {
   accountKey: string;
   state: string;
@@ -13,6 +25,8 @@ export type RuntimeAccountStatus = {
   lastDisconnectCode: number | null;
   lastErrorCode: string | null;
   reconnectAttempts: number;
+  /** Present on current whatsapp-bot managed status; may be absent on older runtimes. */
+  inboundDelivery?: RuntimeInboundDelivery | null;
 };
 
 export class WhatsAppRuntimeError extends Error {
