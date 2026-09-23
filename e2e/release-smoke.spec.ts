@@ -360,6 +360,7 @@ test.describe("V1 product finish smoke", () => {
     await expect(
       page.getByRole("heading", { name: /المعرفة/, level: 1 }),
     ).toBeVisible();
+    await page.getByRole("button", { name: "إضافة يدويًا" }).click();
     await expect(page.getByText(/من .* معلومة نشطة/)).toBeVisible();
     await expect(page.locator("body")).not.toContainText("RAG");
     await expect(page.locator("#category")).toContainText("سؤال وإجابة");
@@ -367,7 +368,7 @@ test.describe("V1 product finish smoke", () => {
     const title = `معرفة-${Date.now()}`;
     await page.locator("#title").fill(title);
     await page.locator("#content").fill("محتوى اختبار المنتج");
-    await page.getByRole("button", { name: "إضافة" }).click();
+    await page.getByRole("button", { name: "إضافة", exact: true }).click();
     await expect(page.getByText(title).first()).toBeVisible({ timeout: 20_000 });
 
     await page

@@ -1,4 +1,4 @@
-import { KnowledgeManager } from "@/components/dashboard/knowledge-manager";
+import { KnowledgePageClient } from "@/components/dashboard/knowledge-page-client";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import { getBillingOverview } from "@/modules/billing/service";
@@ -26,10 +26,11 @@ export default async function KnowledgePage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">قاعدة المعرفة</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          المعلومات التي يعتمد عليها موظف الاستقبال في الرد على العملاء.
+          أضف معلومات نشاطك بالذكاء أو يدوياً — المعلومات النشطة هي ما يعتمد عليه
+          موظف الاستقبال في الرد.
         </p>
       </div>
-      <KnowledgeManager
+      <KnowledgePageClient
         items={items}
         activeCount={activeCount}
         activeLimit={activeLimit}

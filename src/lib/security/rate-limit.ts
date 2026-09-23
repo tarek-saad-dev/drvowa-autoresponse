@@ -8,6 +8,7 @@
  * - auth.password_reset: 5 / 60 min per IP+email
  * - inbox.manual_send: 30 / 5 min per business
  * - whatsapp.connect: 20 / 15 min per business
+ * - knowledge.ingest_analyze: 20 / 60 min per business
  */
 
 export class RateLimitError extends Error {
@@ -51,6 +52,7 @@ export const RATE_LIMITS = {
   passwordReset: { limit: 5, windowMs: 60 * 60 * 1000 },
   manualSend: { limit: 30, windowMs: 5 * 60 * 1000 },
   whatsappConnect: { limit: 20, windowMs: 15 * 60 * 1000 },
+  knowledgeIngestAnalyze: { limit: 20, windowMs: 60 * 60 * 1000 },
 } as const satisfies Record<string, RateLimitPolicy>;
 
 /**

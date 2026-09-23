@@ -15,6 +15,7 @@ import {
   type PlanErrorCode,
 } from "@/modules/billing/errors";
 import { WhatsAppRuntimeError } from "@/modules/channels/runtime-client";
+import { KnowledgeIngestError } from "@/modules/knowledge-ai/analyze-service";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
 
 export function jsonOk<T>(
@@ -115,6 +116,16 @@ export function handleApiError(error: unknown): NextResponse {
     return jsonError(
       mapUserFacingError({ error: error.message }, "العنصر غير موجود أو لم يعد متاحاً."),
       404,
+    );
+  }
+  if (error instanceof KnowledgeIngestError) {
+    return jsonError(
+      mapUserFacingError(
+        { code: error.code, error: error.message },
+        error.message,
+      ),
+      error.statusCode,
+      { code: error.code },
     );
   }
   if (error instanceof ZodError) {

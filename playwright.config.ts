@@ -69,6 +69,7 @@ export default defineConfig({
             process.env.INSTAPAY_PAYMENT_DISPLAY_NAME ?? "DRVOWA Test",
           INSTAPAY_PAYMENT_HANDLE:
             process.env.INSTAPAY_PAYMENT_HANDLE ?? "instapay@drvowa-test",
+          E2E_KNOWLEDGE_INGEST_MOCK: "1",
           NODE_ENV:
             process.env.E2E_USE_DEV === "1" ? "development" : "production",
         },
