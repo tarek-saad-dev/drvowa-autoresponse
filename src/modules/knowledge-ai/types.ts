@@ -36,6 +36,7 @@ export type KnowledgeIngestSession = {
   model: string | null;
   summary: IngestSummary | null;
   errorCode: string | null;
+  analysisVersion: number;
   createdAtUtc: Date;
   updatedAtUtc: Date;
   appliedAtUtc: Date | null;

@@ -14,6 +14,7 @@ BEGIN
     Model NVARCHAR(128) NULL,
     SummaryJson NVARCHAR(MAX) NULL,
     ErrorCode NVARCHAR(64) NULL,
+    AnalysisVersion BIGINT NOT NULL CONSTRAINT DF_TblKnowledgeIngestSession_AnalysisVersion DEFAULT (0),
     CreatedAtUtc DATETIME2 NOT NULL,
     UpdatedAtUtc DATETIME2 NOT NULL,
     AppliedAtUtc DATETIME2 NULL,
@@ -25,6 +26,14 @@ BEGIN
       Status IN (N'DRAFT', N'ANALYZING', N'REVIEW', N'APPLIED', N'FAILED', N'CANCELED')
     )
   );
+END;
+GO
+
+IF COL_LENGTH(N'dbo.TblKnowledgeIngestSession', N'AnalysisVersion') IS NULL
+BEGIN
+  ALTER TABLE dbo.TblKnowledgeIngestSession
+    ADD AnalysisVersion BIGINT NOT NULL
+      CONSTRAINT DF_TblKnowledgeIngestSession_AnalysisVersion DEFAULT (0);
 END;
 GO
 

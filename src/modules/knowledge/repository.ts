@@ -57,10 +57,13 @@ function mapItem(row: KnowledgeItemRow): KnowledgeItem {
   };
 }
 
-export async function findDefaultKnowledgeBase(params: {
-  businessId: string;
-}): Promise<KnowledgeBase | null> {
-  const result = await query<KnowledgeBaseRow>(
+export async function findDefaultKnowledgeBase(
+  params: {
+    businessId: string;
+  },
+  trx?: TransactionClient,
+): Promise<KnowledgeBase | null> {
+  const result = await db(trx).query<KnowledgeBaseRow>(
     `SELECT TOP 1 KnowledgeBaseID, BusinessID, Name, IsActive, CreatedAtUtc, UpdatedAtUtc
      FROM TblKnowledgeBase
      WHERE BusinessID = @businessId
@@ -77,14 +80,17 @@ export async function findDefaultKnowledgeBase(params: {
   return row ? mapBase(row) : null;
 }
 
-export async function createKnowledgeBase(params: {
-  businessId: string;
-  name: string;
-}): Promise<KnowledgeBase> {
+export async function createKnowledgeBase(
+  params: {
+    businessId: string;
+    name: string;
+  },
+  trx?: TransactionClient,
+): Promise<KnowledgeBase> {
   const knowledgeBaseId = randomUUID();
   const now = new Date();
 
-  await query(
+  await db(trx).query(
     `INSERT INTO TblKnowledgeBase (
       KnowledgeBaseID, BusinessID, Name, IsActive, CreatedAtUtc, UpdatedAtUtc
     ) VALUES (
@@ -117,12 +123,15 @@ export async function createKnowledgeBase(params: {
   };
 }
 
-export async function listKnowledgeItems(params: {
-  businessId: string;
-  includeInactive?: boolean;
-}): Promise<KnowledgeItem[]> {
+export async function listKnowledgeItems(
+  params: {
+    businessId: string;
+    includeInactive?: boolean;
+  },
+  trx?: TransactionClient,
+): Promise<KnowledgeItem[]> {
   const includeInactive = params.includeInactive ?? false;
-  const result = await query<KnowledgeItemRow>(
+  const result = await db(trx).query<KnowledgeItemRow>(
     `SELECT KnowledgeItemID, KnowledgeBaseID, BusinessID, Category, Title, Content,
             IsActive, CreatedAtUtc, UpdatedAtUtc
      FROM TblKnowledgeItem
@@ -141,14 +150,47 @@ export async function listKnowledgeItems(params: {
   return result.recordset.map(mapItem);
 }
 
-export async function getKnowledgeItem(params: {
-  businessId: string;
-  knowledgeItemId: string;
-}): Promise<KnowledgeItem | null> {
-  const result = await query<KnowledgeItemRow>(
+export async function getKnowledgeItem(
+  params: {
+    businessId: string;
+    knowledgeItemId: string;
+  },
+  trx?: TransactionClient,
+): Promise<KnowledgeItem | null> {
+  const result = await db(trx).query<KnowledgeItemRow>(
     `SELECT KnowledgeItemID, KnowledgeBaseID, BusinessID, Category, Title, Content,
             IsActive, CreatedAtUtc, UpdatedAtUtc
      FROM TblKnowledgeItem
+     WHERE BusinessID = @businessId AND KnowledgeItemID = @knowledgeItemId`,
+    [
+      {
+        name: "businessId",
+        type: sql.UniqueIdentifier,
+        value: params.businessId,
+      },
+      {
+        name: "knowledgeItemId",
+        type: sql.UniqueIdentifier,
+        value: params.knowledgeItemId,
+      },
+    ],
+  );
+  const row = result.recordset[0];
+  return row ? mapItem(row) : null;
+}
+
+/** Lock a knowledge row for stale-safe MERGE/CONFLICT apply. */
+export async function lockKnowledgeItemForUpdate(
+  params: {
+    businessId: string;
+    knowledgeItemId: string;
+  },
+  trx: TransactionClient,
+): Promise<KnowledgeItem | null> {
+  const result = await trx.query<KnowledgeItemRow>(
+    `SELECT KnowledgeItemID, KnowledgeBaseID, BusinessID, Category, Title, Content,
+            IsActive, CreatedAtUtc, UpdatedAtUtc
+     FROM TblKnowledgeItem WITH (UPDLOCK, HOLDLOCK, ROWLOCK)
      WHERE BusinessID = @businessId AND KnowledgeItemID = @knowledgeItemId`,
     [
       {
@@ -243,10 +285,13 @@ export async function updateKnowledgeItem(
   },
   trx?: TransactionClient,
 ): Promise<KnowledgeItem | null> {
-  const existing = await getKnowledgeItem({
-    businessId: params.businessId,
-    knowledgeItemId: params.knowledgeItemId,
-  });
+  const existing = await getKnowledgeItem(
+    {
+      businessId: params.businessId,
+      knowledgeItemId: params.knowledgeItemId,
+    },
+    trx,
+  );
   if (!existing) {
     return null;
   }

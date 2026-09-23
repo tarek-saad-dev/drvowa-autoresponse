@@ -1,13 +1,16 @@
-import { withTransaction } from "@/lib/db";
+import { withTransaction, type TransactionClient } from "@/lib/db";
 import { structuredLog } from "@/lib/observability/logger";
 import { writeAuditEvent } from "@/modules/audit/service";
 import {
   countActiveKnowledge,
-  getEntitlementSnapshot,
+  requireUsablePlanInTransaction,
 } from "@/modules/billing/entitlements";
 import { PlanEntitlementError, PLAN_ERROR_CODES } from "@/modules/billing/errors";
 import * as knowledgeRepo from "@/modules/knowledge/repository";
-import { ensureDefaultKnowledgeBase, listItems } from "@/modules/knowledge/service";
+import {
+  ensureDefaultKnowledgeBase,
+  listItems,
+} from "@/modules/knowledge/service";
 
 import { KnowledgeIngestError } from "./analyze-service";
 import { findCandidatesForFact } from "./candidate-retrieval";
@@ -110,13 +113,56 @@ export async function updateProposalSelection(params: {
   return updated;
 }
 
+async function assertLockedNotStale(
+  params: {
+    businessId: string;
+    proposal: KnowledgeIngestProposal;
+  },
+  trx: TransactionClient,
+): Promise<NonNullable<Awaited<ReturnType<typeof knowledgeRepo.lockKnowledgeItemForUpdate>>>> {
+  const p = params.proposal;
+  if (!p.existingKnowledgeItemId) {
+    throw new KnowledgeIngestError(
+      "STALE_PROPOSAL",
+      "تغيرت المعرفة الحالية. أعد التحليل ثم اعتمد من جديد.",
+      409,
+    );
+  }
+  const current = await knowledgeRepo.lockKnowledgeItemForUpdate(
+    {
+      businessId: params.businessId,
+      knowledgeItemId: p.existingKnowledgeItemId,
+    },
+    trx,
+  );
+  if (!current || isStale(p, current.updatedAtUtc)) {
+    await repo.updateProposal(
+      {
+        businessId: params.businessId,
+        proposalId: p.proposalId,
+        status: "STALE",
+        selected: false,
+      },
+      trx,
+    );
+    throw new KnowledgeIngestError(
+      "STALE_PROPOSAL",
+      "تغيرت المعرفة الحالية. أعد التحليل ثم اعتمد من جديد.",
+      409,
+    );
+  }
+  return current;
+}
+
 export async function applyKnowledgeIngest(params: {
   businessId: string;
   userId: string;
   sessionId: string;
   proposalIds?: string[];
 }): Promise<ApplyResult> {
-  return withTransaction(async (trx) => {
+  const result = await withTransaction(async (trx) => {
+    await repo.acquireKnowledgeIngestAppLock(params.businessId, trx);
+
     const session = await repo.lockSession(
       { businessId: params.businessId, sessionId: params.sessionId },
       trx,
@@ -125,13 +171,17 @@ export async function applyKnowledgeIngest(params: {
       throw new KnowledgeIngestError("SESSION_NOT_FOUND", "الجلسة غير موجودة.", 404);
     }
 
+    const { plan } = await requireUsablePlanInTransaction(
+      params.businessId,
+      trx,
+    );
+    const limit = plan.maxActiveKnowledgeItems ?? null;
+
     if (session.status === "APPLIED") {
-      const snap = await getEntitlementSnapshot(params.businessId);
-      const used = snap.activeKnowledgeUsed;
-      const limit = snap.plan?.maxActiveKnowledgeItems ?? null;
+      const used = await countActiveKnowledge(params.businessId, trx);
       return {
         sessionId: session.sessionId,
-        status: "ALREADY_APPLIED",
+        status: "ALREADY_APPLIED" as const,
         applied: { created: 0, merged: 0, skipped: 0, conflictsResolved: 0 },
         remainingKnowledgeSlots:
           limit == null ? null : Math.max(0, limit - used),
@@ -176,15 +226,8 @@ export async function applyKnowledgeIngest(params: {
       }
     }
 
-    const snapGate = await getEntitlementSnapshot(params.businessId);
-    if (!snapGate.canAct) {
-      throw new PlanEntitlementError(PLAN_ERROR_CODES.SUBSCRIPTION_INACTIVE);
-    }
-    const plan = snapGate.plan;
-
     const createCandidates = selected.filter((p) => p.action === "CREATE");
     const used = await countActiveKnowledge(params.businessId, trx);
-    const limit = plan?.maxActiveKnowledgeItems ?? null;
     if (limit != null && used + createCandidates.length > limit) {
       const remaining = Math.max(0, limit - used);
       throw new KnowledgeIngestError(
@@ -193,26 +236,17 @@ export async function applyKnowledgeIngest(params: {
       );
     }
 
+    // Preflight locked stale checks for MERGE/CONFLICT targets
     for (const p of selected) {
       if (!p.existingKnowledgeItemId) continue;
-      const current = await knowledgeRepo.getKnowledgeItem({
-        businessId: params.businessId,
-        knowledgeItemId: p.existingKnowledgeItemId,
-      });
-      if (!current || isStale(p, current.updatedAtUtc)) {
-        await repo.updateProposal(
-          {
-            businessId: params.businessId,
-            proposalId: p.proposalId,
-            status: "STALE",
-            selected: false,
-          },
+      if (
+        p.action === "MERGE"
+        || (p.action === "CONFLICT"
+          && (p.resolution === "USE_NEW" || p.resolution === "MANUAL"))
+      ) {
+        await assertLockedNotStale(
+          { businessId: params.businessId, proposal: p },
           trx,
-        );
-        throw new KnowledgeIngestError(
-          "STALE_PROPOSAL",
-          "تغيرت المعرفة الحالية. أعد التحليل ثم اعتمد من جديد.",
-          409,
         );
       }
     }
@@ -222,14 +256,18 @@ export async function applyKnowledgeIngest(params: {
     let skipped = 0;
     let conflictsResolved = 0;
 
-    const existingForDup = await listItems({
-      businessId: params.businessId,
-      includeInactive: true,
-    });
+    const existingForDup = await listItems(
+      {
+        businessId: params.businessId,
+        includeInactive: true,
+      },
+      trx,
+    );
 
-    const base = await ensureDefaultKnowledgeBase({
-      businessId: params.businessId,
-    });
+    const base = await ensureDefaultKnowledgeBase(
+      { businessId: params.businessId },
+      trx,
+    );
 
     for (const p of selected) {
       if (p.action === "CREATE") {
@@ -285,7 +323,6 @@ export async function applyKnowledgeIngest(params: {
           continue;
         }
 
-        // Re-check limit after skips
         const usedNow = await countActiveKnowledge(params.businessId, trx);
         if (limit != null && usedNow + 1 > limit) {
           throw new PlanEntitlementError(PLAN_ERROR_CODES.KNOWLEDGE_LIMIT);
@@ -324,17 +361,11 @@ export async function applyKnowledgeIngest(params: {
           skipped += 1;
           continue;
         }
-        const current = await knowledgeRepo.getKnowledgeItem({
-          businessId: params.businessId,
-          knowledgeItemId: p.existingKnowledgeItemId,
-        });
-        if (!current || isStale(p, current.updatedAtUtc)) {
-          throw new KnowledgeIngestError(
-            "STALE_PROPOSAL",
-            "تغيرت المعرفة الحالية. أعد التحليل ثم اعتمد من جديد.",
-            409,
-          );
-        }
+
+        const current = await assertLockedNotStale(
+          { businessId: params.businessId, proposal: p },
+          trx,
+        );
 
         const nextContent =
           p.action === "MERGE"
@@ -392,20 +423,12 @@ export async function applyKnowledgeIngest(params: {
         status: "APPLIED",
         appliedAtUtc: new Date(),
         clearRawInput: true,
+        clearConversation: true,
       },
       trx,
     );
 
     const usedAfter = await countActiveKnowledge(params.businessId, trx);
-
-    structuredLog("knowledge-ai", "knowledge_ingest.applied", {
-      businessId: params.businessId,
-      sessionId: session.sessionId,
-      createCount: created,
-      mergeCount: merged,
-      skippedCount: skipped,
-      conflictResolvedCount: conflictsResolved,
-    });
 
     await writeAuditEvent(
       {
@@ -426,7 +449,7 @@ export async function applyKnowledgeIngest(params: {
 
     return {
       sessionId: session.sessionId,
-      status: "APPLIED",
+      status: "APPLIED" as const,
       applied: {
         created,
         merged,
@@ -437,4 +460,18 @@ export async function applyKnowledgeIngest(params: {
         limit == null ? null : Math.max(0, limit - usedAfter),
     };
   });
+
+  // Only reached after successful COMMIT.
+  if (result.status === "APPLIED") {
+    structuredLog("knowledge-ai", "knowledge_ingest.applied", {
+      businessId: params.businessId,
+      sessionId: result.sessionId,
+      createCount: result.applied.created,
+      mergeCount: result.applied.merged,
+      skippedCount: result.applied.skipped,
+      conflictResolvedCount: result.applied.conflictsResolved,
+    });
+  }
+
+  return result;
 }

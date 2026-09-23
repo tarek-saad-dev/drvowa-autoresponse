@@ -29,6 +29,7 @@ type SessionRow = {
   Model: string | null;
   SummaryJson: string | null;
   ErrorCode: string | null;
+  AnalysisVersion: number | bigint;
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
   AppliedAtUtc: Date | null;
@@ -54,6 +55,10 @@ type ProposalRow = {
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
+
+const SESSION_SELECT = `KnowledgeIngestSessionID, BusinessID, CreatedByUserID, Status,
+            RawInput, ConversationJson, InputHash, InputLength, Model,
+            SummaryJson, ErrorCode, AnalysisVersion, CreatedAtUtc, UpdatedAtUtc, AppliedAtUtc`;
 
 function db(trx?: TransactionClient) {
   return { query: trx?.query.bind(trx) ?? query };
@@ -91,6 +96,7 @@ function mapSession(row: SessionRow): KnowledgeIngestSession {
     model: row.Model,
     summary: parseSummary(row.SummaryJson),
     errorCode: row.ErrorCode,
+    analysisVersion: Number(row.AnalysisVersion ?? 0),
     createdAtUtc: row.CreatedAtUtc,
     updatedAtUtc: row.UpdatedAtUtc,
     appliedAtUtc: row.AppliedAtUtc,
@@ -132,18 +138,20 @@ export async function createSession(params: {
   inputLength: number;
   model?: string | null;
   status?: IngestSessionStatus;
+  analysisVersion?: number;
 }, trx?: TransactionClient): Promise<KnowledgeIngestSession> {
   const now = new Date();
   const sessionId = randomUUID();
+  const analysisVersion = params.analysisVersion ?? 1;
   await db(trx).query(
     `INSERT INTO TblKnowledgeIngestSession (
       KnowledgeIngestSessionID, BusinessID, CreatedByUserID, Status,
       RawInput, ConversationJson, InputHash, InputLength, Model,
-      SummaryJson, ErrorCode, CreatedAtUtc, UpdatedAtUtc, AppliedAtUtc
+      SummaryJson, ErrorCode, AnalysisVersion, CreatedAtUtc, UpdatedAtUtc, AppliedAtUtc
     ) VALUES (
       @sessionId, @businessId, @userId, @status,
       @rawInput, @conversationJson, @inputHash, @inputLength, @model,
-      NULL, NULL, @createdAtUtc, @updatedAtUtc, NULL
+      NULL, NULL, @analysisVersion, @createdAtUtc, @updatedAtUtc, NULL
     )`,
     [
       { name: "sessionId", type: sql.UniqueIdentifier, value: sessionId },
@@ -159,6 +167,7 @@ export async function createSession(params: {
       { name: "inputHash", type: sql.NVarChar(64), value: params.inputHash },
       { name: "inputLength", type: sql.Int, value: params.inputLength },
       { name: "model", type: sql.NVarChar(128), value: params.model ?? null },
+      { name: "analysisVersion", type: sql.BigInt, value: analysisVersion },
       { name: "createdAtUtc", type: sql.DateTime2, value: now },
       { name: "updatedAtUtc", type: sql.DateTime2, value: now },
     ],
@@ -176,9 +185,7 @@ export async function getSession(params: {
   sessionId: string;
 }, trx?: TransactionClient): Promise<KnowledgeIngestSession | null> {
   const result = await db(trx).query<SessionRow>(
-    `SELECT KnowledgeIngestSessionID, BusinessID, CreatedByUserID, Status,
-            RawInput, ConversationJson, InputHash, InputLength, Model,
-            SummaryJson, ErrorCode, CreatedAtUtc, UpdatedAtUtc, AppliedAtUtc
+    `SELECT ${SESSION_SELECT}
      FROM TblKnowledgeIngestSession
      WHERE KnowledgeIngestSessionID = @sessionId AND BusinessID = @businessId`,
     [
@@ -195,10 +202,8 @@ export async function lockSession(params: {
   sessionId: string;
 }, trx: TransactionClient): Promise<KnowledgeIngestSession | null> {
   const result = await trx.query<SessionRow>(
-    `SELECT KnowledgeIngestSessionID, BusinessID, CreatedByUserID, Status,
-            RawInput, ConversationJson, InputHash, InputLength, Model,
-            SummaryJson, ErrorCode, CreatedAtUtc, UpdatedAtUtc, AppliedAtUtc
-     FROM TblKnowledgeIngestSession WITH (UPDLOCK, ROWLOCK)
+    `SELECT ${SESSION_SELECT}
+     FROM TblKnowledgeIngestSession WITH (UPDLOCK, HOLDLOCK, ROWLOCK)
      WHERE KnowledgeIngestSessionID = @sessionId AND BusinessID = @businessId`,
     [
       { name: "sessionId", type: sql.UniqueIdentifier, value: params.sessionId },
@@ -221,6 +226,8 @@ export async function updateSession(params: {
   summary?: IngestSummary | null;
   errorCode?: string | null;
   clearRawInput?: boolean;
+  clearConversation?: boolean;
+  analysisVersion?: number;
   appliedAtUtc?: Date | null;
 }, trx?: TransactionClient): Promise<void> {
   const now = new Date();
@@ -228,12 +235,17 @@ export async function updateSession(params: {
     `UPDATE TblKnowledgeIngestSession
      SET Status = COALESCE(@status, Status),
          RawInput = CASE WHEN @clearRawInput = 1 THEN NULL ELSE COALESCE(@rawInput, RawInput) END,
-         ConversationJson = COALESCE(@conversationJson, ConversationJson),
+         ConversationJson = CASE
+           WHEN @clearConversation = 1 THEN N'[]'
+           WHEN @conversationJson IS NOT NULL THEN @conversationJson
+           ELSE ConversationJson
+         END,
          InputHash = COALESCE(@inputHash, InputHash),
          InputLength = COALESCE(@inputLength, InputLength),
          Model = COALESCE(@model, Model),
          SummaryJson = COALESCE(@summaryJson, SummaryJson),
          ErrorCode = CASE WHEN @setError = 1 THEN @errorCode ELSE ErrorCode END,
+         AnalysisVersion = COALESCE(@analysisVersion, AnalysisVersion),
          AppliedAtUtc = COALESCE(@appliedAtUtc, AppliedAtUtc),
          UpdatedAtUtc = @updatedAtUtc
      WHERE KnowledgeIngestSessionID = @sessionId AND BusinessID = @businessId`,
@@ -245,6 +257,11 @@ export async function updateSession(params: {
         name: "clearRawInput",
         type: sql.Bit,
         value: params.clearRawInput ? 1 : 0,
+      },
+      {
+        name: "clearConversation",
+        type: sql.Bit,
+        value: params.clearConversation ? 1 : 0,
       },
       {
         name: "rawInput",
@@ -285,6 +302,11 @@ export async function updateSession(params: {
         value: params.errorCode ?? null,
       },
       {
+        name: "analysisVersion",
+        type: sql.BigInt,
+        value: params.analysisVersion ?? null,
+      },
+      {
         name: "appliedAtUtc",
         type: sql.DateTime2,
         value: params.appliedAtUtc ?? null,
@@ -292,6 +314,28 @@ export async function updateSession(params: {
       { name: "updatedAtUtc", type: sql.DateTime2, value: now },
     ],
   );
+}
+
+/** Acquire exclusive business-scoped apply lock (SQL Server applock). */
+export async function acquireKnowledgeIngestAppLock(
+  businessId: string,
+  trx: TransactionClient,
+): Promise<void> {
+  const resource = `drvowa:knowledge-ingest:${businessId}`.slice(0, 255);
+  const result = await trx.query<{ LockResult: number }>(
+    `DECLARE @result INT;
+     EXEC @result = sp_getapplock
+       @Resource = @resource,
+       @LockMode = N'Exclusive',
+       @LockOwner = N'Transaction',
+       @LockTimeout = 30000;
+     SELECT @result AS LockResult;`,
+    [{ name: "resource", type: sql.NVarChar(255), value: resource }],
+  );
+  const code = Number(result.recordset[0]?.LockResult ?? -999);
+  if (code < 0) {
+    throw new Error(`knowledge ingest applock failed (${code})`);
+  }
 }
 
 export async function deleteProposalsForSession(params: {
@@ -385,7 +429,6 @@ export async function listProposals(params: {
   sessionId: string;
   businessId: string;
 }, trx?: TransactionClient): Promise<KnowledgeIngestProposal[]> {
-  // Join session to enforce tenant scope
   const result = await db(trx).query<ProposalRow>(
     `SELECT p.KnowledgeIngestProposalID, p.SessionID, p.Sequence, p.Action, p.Category,
             p.ProposedTitle, p.ProposedContent, p.ExistingKnowledgeItemID,

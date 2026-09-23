@@ -234,6 +234,28 @@ function assertCanAct(
   }
 }
 
+/**
+ * Resolve usable subscription + plan inside an existing transaction.
+ * Applies paid-expiry lifecycle without opening a nested transaction.
+ */
+export async function requireUsablePlanInTransaction(
+  businessId: string,
+  trx: TransactionClient,
+): Promise<{
+  subscription: Subscription;
+  plan: Plan & PlanLimits;
+}> {
+  const { subscription } = await ensureCurrentSubscriptionEntitlements(
+    businessId,
+    trx,
+  );
+  const plan = subscription
+    ? await getPlanById(subscription.planId, trx)
+    : null;
+  assertCanAct(subscription, plan);
+  return { subscription: subscription!, plan: plan! };
+}
+
 async function getCounterQuantity(
   params: {
     businessId: string;

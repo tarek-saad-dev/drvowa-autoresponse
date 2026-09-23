@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { withTransaction } from "@/lib/db";
 import { structuredLog } from "@/lib/observability/logger";
 import { writeAuditEvent } from "@/modules/audit/service";
 import { AiProviderError } from "@/modules/ai/gemini-provider";
@@ -10,6 +11,7 @@ import { chunkText } from "./chunk";
 import {
   KNOWLEDGE_INGEST_INPUT_MAX,
   KNOWLEDGE_INGEST_MAX_FACTS,
+  KNOWLEDGE_INGEST_SESSION_SOURCE_MAX,
 } from "./constants";
 import type { KnowledgeExtractProvider } from "./gemini-knowledge-provider";
 import { createGeminiKnowledgeProvider } from "./gemini-knowledge-provider";
@@ -47,6 +49,9 @@ export type AnalyzeResult = {
   proposals: KnowledgeIngestProposal[];
 };
 
+const DEDUP_RETRY_MESSAGE =
+  "تعذر مراجعة المعلومات الحالية الآن. حاول مرة أخرى.";
+
 function friendlyProviderMessage(error: unknown): KnowledgeIngestError {
   if (error instanceof KnowledgeIngestError) return error;
   if (error instanceof AiProviderError) {
@@ -75,6 +80,12 @@ function friendlyProviderMessage(error: unknown): KnowledgeIngestError {
     "تعذر تحليل المعلومات الآن. حاول مرة أخرى.",
     500,
   );
+}
+
+function totalUserSourceChars(conversation: ConversationTurn[]): number {
+  return conversation
+    .filter((t) => t.role === "user")
+    .reduce((sum, t) => sum + t.text.length, 0);
 }
 
 async function extractAllFacts(
@@ -133,6 +144,285 @@ function buildSummary(
   };
 }
 
+function hasAmbiguousCandidates(
+  facts: ExtractedFact[],
+  candidatesByFact: Record<string, Array<unknown>>,
+): boolean {
+  return facts.some((f) => (candidatesByFact[f.tempId] ?? []).length > 0);
+}
+
+/**
+ * Production: semantic resolver required when candidates exist.
+ * Tests/mock: explicit heuristic via useHeuristicDedup.
+ * Never silently MERGE on semantic failure when candidates exist.
+ */
+export async function resolveDedupSafely(params: {
+  provider: KnowledgeExtractProvider;
+  facts: ExtractedFact[];
+  candidatesByFact: Record<
+    string,
+    import("./types").CandidateAlias[]
+  >;
+  useHeuristicDedup?: boolean;
+}): Promise<ReturnType<typeof heuristicResolveDedup>> {
+  if (params.useHeuristicDedup) {
+    return heuristicResolveDedup({
+      facts: params.facts,
+      candidatesByFact: params.candidatesByFact,
+    });
+  }
+
+  try {
+    return await params.provider.resolveDedup({
+      facts: params.facts,
+      candidatesByFact: params.candidatesByFact,
+    });
+  } catch {
+    if (hasAmbiguousCandidates(params.facts, params.candidatesByFact)) {
+      throw new KnowledgeIngestError(
+        "DEDUP_UNAVAILABLE",
+        DEDUP_RETRY_MESSAGE,
+        502,
+      );
+    }
+    // No candidates → CREATE-only is safe via deterministic heuristic
+    return heuristicResolveDedup({
+      facts: params.facts,
+      candidatesByFact: params.candidatesByFact,
+    });
+  }
+}
+
+async function beginAnalysis(params: {
+  businessId: string;
+  userId: string;
+  text: string;
+  sessionId?: string | null;
+  model: string;
+}): Promise<{
+  session: KnowledgeIngestSession;
+  analysisVersion: number;
+  conversation: ConversationTurn[];
+}> {
+  return withTransaction(async (trx) => {
+    const nowIso = new Date().toISOString();
+
+    if (params.sessionId) {
+      const locked = await repo.lockSession(
+        { businessId: params.businessId, sessionId: params.sessionId },
+        trx,
+      );
+      if (!locked) {
+        throw new KnowledgeIngestError(
+          "SESSION_NOT_FOUND",
+          "الجلسة غير موجودة.",
+          404,
+        );
+      }
+      if (locked.status === "APPLIED") {
+        throw new KnowledgeIngestError(
+          "SESSION_APPLIED",
+          "تم اعتماد هذه الجلسة مسبقاً. ابدأ تحليلاً جديداً.",
+        );
+      }
+      if (locked.status === "CANCELED") {
+        throw new KnowledgeIngestError(
+          "SESSION_CANCELED",
+          "هذه الجلسة ملغاة. ابدأ تحليلاً جديداً.",
+        );
+      }
+      if (locked.status === "ANALYZING") {
+        throw new KnowledgeIngestError(
+          "ANALYSIS_IN_PROGRESS",
+          "جارٍ تحليل هذه الجلسة الآن. انتظر ثم حاول مرة أخرى.",
+          409,
+        );
+      }
+
+      const priorChars = totalUserSourceChars(locked.conversation);
+      if (priorChars + params.text.length > KNOWLEDGE_INGEST_SESSION_SOURCE_MAX) {
+        throw new KnowledgeIngestError(
+          "SESSION_TOO_LARGE",
+          "المعلومات في هذه الجلسة أصبحت كبيرة جداً. اعتمد التغييرات الحالية أو ابدأ جلسة جديدة.",
+          400,
+        );
+      }
+
+      const conversation: ConversationTurn[] = [
+        ...locked.conversation,
+        { role: "user", text: params.text, at: nowIso },
+      ];
+      const analysisVersion = locked.analysisVersion + 1;
+
+      await repo.updateSession(
+        {
+          businessId: params.businessId,
+          sessionId: locked.sessionId,
+          status: "ANALYZING",
+          rawInput: params.text,
+          conversation,
+          inputHash: hashInput(params.text),
+          inputLength: params.text.length,
+          model: params.model,
+          errorCode: null,
+          analysisVersion,
+        },
+        trx,
+      );
+
+      const session = await repo.getSession(
+        { businessId: params.businessId, sessionId: locked.sessionId },
+        trx,
+      );
+      return { session: session!, analysisVersion, conversation };
+    }
+
+    if (params.text.length > KNOWLEDGE_INGEST_SESSION_SOURCE_MAX) {
+      throw new KnowledgeIngestError(
+        "SESSION_TOO_LARGE",
+        "المعلومات في هذه الجلسة أصبحت كبيرة جداً. اعتمد التغييرات الحالية أو ابدأ جلسة جديدة.",
+        400,
+      );
+    }
+
+    const conversation: ConversationTurn[] = [
+      { role: "user", text: params.text, at: nowIso },
+    ];
+    const session = await repo.createSession(
+      {
+        businessId: params.businessId,
+        createdByUserId: params.userId,
+        rawInput: params.text,
+        conversation,
+        inputHash: hashInput(params.text),
+        inputLength: params.text.length,
+        model: params.model,
+        status: "ANALYZING",
+        analysisVersion: 1,
+      },
+      trx,
+    );
+    return { session, analysisVersion: 1, conversation };
+  });
+}
+
+async function finalizeAnalysis(params: {
+  businessId: string;
+  userId: string;
+  sessionId: string;
+  analysisVersion: number;
+  conversation: ConversationTurn[];
+  summary: IngestSummary;
+  model: string;
+  proposalRows: Parameters<typeof repo.insertProposals>[0];
+}): Promise<{
+  session: KnowledgeIngestSession;
+  proposals: KnowledgeIngestProposal[];
+}> {
+  return withTransaction(async (trx) => {
+    const locked = await repo.lockSession(
+      { businessId: params.businessId, sessionId: params.sessionId },
+      trx,
+    );
+    if (!locked) {
+      throw new KnowledgeIngestError(
+        "SESSION_NOT_FOUND",
+        "الجلسة غير موجودة.",
+        404,
+      );
+    }
+    if (
+      locked.analysisVersion !== params.analysisVersion
+      || locked.status !== "ANALYZING"
+    ) {
+      throw new KnowledgeIngestError(
+        "ANALYSIS_SUPERSEDED",
+        "تم تحديث التحليل بطلب أحدث. حاول مرة أخرى.",
+        409,
+      );
+    }
+
+    await repo.deleteProposalsForSession(
+      { sessionId: params.sessionId },
+      trx,
+    );
+    await repo.insertProposals(params.proposalRows, trx);
+
+    await repo.updateSession(
+      {
+        businessId: params.businessId,
+        sessionId: params.sessionId,
+        status: "REVIEW",
+        conversation: params.conversation,
+        summary: params.summary,
+        model: params.model,
+        errorCode: null,
+      },
+      trx,
+    );
+
+    await writeAuditEvent(
+      {
+        businessId: params.businessId,
+        actorUserId: params.userId,
+        action: "KNOWLEDGE_INGEST_ANALYZED",
+        entityType: "KnowledgeIngestSession",
+        entityId: params.sessionId,
+        metadata: {
+          factCount: params.summary.total,
+          createCount: params.summary.create,
+          mergeCount: params.summary.merge,
+          noopCount: params.summary.noop,
+          conflictCount: params.summary.conflict,
+          model: params.model,
+          analysisVersion: params.analysisVersion,
+        },
+      },
+      trx,
+    );
+
+    const session = await repo.getSession(
+      { businessId: params.businessId, sessionId: params.sessionId },
+      trx,
+    );
+    const proposals = await repo.listProposals(
+      { businessId: params.businessId, sessionId: params.sessionId },
+      trx,
+    );
+    return { session: session!, proposals };
+  });
+}
+
+async function markAnalysisFailed(params: {
+  businessId: string;
+  sessionId: string;
+  analysisVersion: number;
+  errorCode: string;
+}): Promise<void> {
+  await withTransaction(async (trx) => {
+    const locked = await repo.lockSession(
+      { businessId: params.businessId, sessionId: params.sessionId },
+      trx,
+    );
+    if (
+      !locked
+      || locked.analysisVersion !== params.analysisVersion
+      || locked.status !== "ANALYZING"
+    ) {
+      return;
+    }
+    await repo.updateSession(
+      {
+        businessId: params.businessId,
+        sessionId: params.sessionId,
+        status: "FAILED",
+        errorCode: params.errorCode,
+      },
+      trx,
+    );
+  }).catch(() => undefined);
+}
+
 export async function analyzeKnowledgeIngest(params: {
   businessId: string;
   userId: string;
@@ -158,66 +448,35 @@ export async function analyzeKnowledgeIngest(params: {
     ?? createGeminiKnowledgeProvider();
 
   const started = Date.now();
-  let session: KnowledgeIngestSession | null = null;
+  let sessionId: string | null = null;
+  let analysisVersion = 0;
 
   try {
-    const nowIso = new Date().toISOString();
-    let conversation: ConversationTurn[] = [];
+    const begun = await beginAnalysis({
+      businessId: params.businessId,
+      userId: params.userId,
+      text,
+      sessionId: params.sessionId,
+      model: provider.model,
+    });
+    sessionId = begun.session.sessionId;
+    analysisVersion = begun.analysisVersion;
+    let conversation = begun.conversation;
 
-    if (params.sessionId) {
-      session = await repo.getSession({
-        businessId: params.businessId,
-        sessionId: params.sessionId,
-      });
-      if (!session) {
-        throw new KnowledgeIngestError("SESSION_NOT_FOUND", "الجلسة غير موجودة.", 404);
-      }
-      if (session.status === "APPLIED") {
-        throw new KnowledgeIngestError(
-          "SESSION_APPLIED",
-          "تم اعتماد هذه الجلسة مسبقاً. ابدأ تحليلاً جديداً.",
-        );
-      }
-      conversation = [
-        ...session.conversation,
-        { role: "user", text, at: nowIso },
-      ];
-      await repo.updateSession({
-        businessId: params.businessId,
-        sessionId: session.sessionId,
-        status: "ANALYZING",
-        rawInput: text,
-        conversation,
-        inputHash: hashInput(text),
-        inputLength: text.length,
-        model: provider.model,
-        errorCode: null,
-      });
-    } else {
-      conversation = [{ role: "user", text, at: nowIso }];
-      session = await repo.createSession({
-        businessId: params.businessId,
-        createdByUserId: params.userId,
-        rawInput: text,
-        conversation,
-        inputHash: hashInput(text),
-        inputLength: text.length,
-        model: provider.model,
-        status: "ANALYZING",
-      });
-    }
-
-    // Composite text for multi-turn: join user turns
     const composite = conversation
       .filter((t) => t.role === "user")
       .map((t) => t.text)
       .join("\n\n");
 
     const { facts, clarifications } = await extractAllFacts(provider, composite);
+
     if (facts.length === 0) {
-      const emptySummary = buildSummary([], clarifications.length
-        ? clarifications
-        : ["لم أجد معلومات واضحة يمكن إضافتها. جرّب نصاً أوضح."]);
+      const emptySummary = buildSummary(
+        [],
+        clarifications.length
+          ? clarifications
+          : ["لم أجد معلومات واضحة يمكن إضافتها. جرّب نصاً أوضح."],
+      );
       conversation = [
         ...conversation,
         {
@@ -226,20 +485,29 @@ export async function analyzeKnowledgeIngest(params: {
           at: new Date().toISOString(),
         },
       ];
-      await repo.deleteProposalsForSession({ sessionId: session.sessionId });
-      await repo.updateSession({
+      const finalized = await finalizeAnalysis({
         businessId: params.businessId,
-        sessionId: session.sessionId,
-        status: "REVIEW",
+        userId: params.userId,
+        sessionId,
+        analysisVersion,
         conversation,
         summary: emptySummary,
         model: provider.model,
+        proposalRows: [],
       });
-      const refreshed = await repo.getSession({
+      structuredLog("knowledge-ai", "knowledge_ingest.analyzed", {
         businessId: params.businessId,
-        sessionId: session.sessionId,
+        sessionId,
+        inputLength: text.length,
+        factCount: 0,
+        createCount: 0,
+        mergeCount: 0,
+        noopCount: 0,
+        conflictCount: 0,
+        latencyMs: Date.now() - started,
+        model: provider.model,
       });
-      return { session: refreshed!, proposals: [] };
+      return finalized;
     }
 
     const existingItems = await listItems({
@@ -248,13 +516,13 @@ export async function analyzeKnowledgeIngest(params: {
     });
     const candidatesByFact = buildCandidatesByFact(facts, existingItems);
 
-    const dedup = params.useHeuristicDedup
-      ? heuristicResolveDedup({ facts, candidatesByFact })
-      : await provider
-          .resolveDedup({ facts, candidatesByFact })
-          .catch(() => heuristicResolveDedup({ facts, candidatesByFact }));
+    const dedup = await resolveDedupSafely({
+      provider,
+      facts,
+      candidatesByFact,
+      useHeuristicDedup: params.useHeuristicDedup,
+    });
 
-    // Validate aliases map only to provided candidates
     const proposalRows: Parameters<typeof repo.insertProposals>[0] = [];
     let sequence = 0;
     for (const fact of facts) {
@@ -275,26 +543,44 @@ export async function analyzeKnowledgeIngest(params: {
           ? aliasMap.get(decision.candidateAlias)!
           : null;
 
-      if ((action === "MERGE" || action === "NOOP" || action === "CONFLICT") && !matched) {
-        // Fallback to heuristic for this fact
-        const local = heuristicResolveDedup({
-          facts: [fact],
-          candidatesByFact: { [fact.tempId]: candidates },
-        }).decisions[0]!;
-        action = local.action;
-        matched =
-          local.candidateAlias && aliasMap.has(local.candidateAlias)
-            ? aliasMap.get(local.candidateAlias)!
-            : null;
-        if ((action === "MERGE" || action === "NOOP" || action === "CONFLICT") && !matched) {
+      // Invalid alias for non-CREATE → treat as CREATE only when no candidates;
+      // with candidates, fall back to heuristic for this fact (deterministic).
+      if (
+        (action === "MERGE" || action === "NOOP" || action === "CONFLICT")
+        && !matched
+      ) {
+        if (candidates.length === 0) {
           action = "CREATE";
+        } else if (params.useHeuristicDedup) {
+          const local = heuristicResolveDedup({
+            facts: [fact],
+            candidatesByFact: { [fact.tempId]: candidates },
+          }).decisions[0]!;
+          action = local.action;
+          matched =
+            local.candidateAlias && aliasMap.has(local.candidateAlias)
+              ? aliasMap.get(local.candidateAlias)!
+              : null;
+          if (
+            (action === "MERGE" || action === "NOOP" || action === "CONFLICT")
+            && !matched
+          ) {
+            action = "CREATE";
+          }
+        } else {
+          // Production semantic path returned unusable alias — fail safe
+          throw new KnowledgeIngestError(
+            "DEDUP_UNAVAILABLE",
+            DEDUP_RETRY_MESSAGE,
+            502,
+          );
         }
       }
 
       sequence += 1;
       const selected = action === "CREATE" || action === "MERGE";
       proposalRows.push({
-        sessionId: session.sessionId,
+        sessionId,
         sequence,
         action,
         category: fact.category,
@@ -311,9 +597,6 @@ export async function analyzeKnowledgeIngest(params: {
       });
     }
 
-    await repo.deleteProposalsForSession({ sessionId: session.sessionId });
-    await repo.insertProposals(proposalRows);
-
     const summary = buildSummary(proposalRows, clarifications);
     const assistantText = [
       `حللت المعلومات ووجدت ${summary.total} معلومة.`,
@@ -328,19 +611,20 @@ export async function analyzeKnowledgeIngest(params: {
       { role: "assistant", text: assistantText, at: new Date().toISOString() },
     ];
 
-    await repo.updateSession({
+    const finalized = await finalizeAnalysis({
       businessId: params.businessId,
-      sessionId: session.sessionId,
-      status: "REVIEW",
+      userId: params.userId,
+      sessionId,
+      analysisVersion,
       conversation,
       summary,
       model: provider.model,
-      errorCode: null,
+      proposalRows,
     });
 
     structuredLog("knowledge-ai", "knowledge_ingest.analyzed", {
       businessId: params.businessId,
-      sessionId: session.sessionId,
+      sessionId,
       inputLength: text.length,
       factCount: summary.total,
       createCount: summary.create,
@@ -351,47 +635,20 @@ export async function analyzeKnowledgeIngest(params: {
       model: provider.model,
     });
 
-    await writeAuditEvent({
-      businessId: params.businessId,
-      actorUserId: params.userId,
-      action: "KNOWLEDGE_INGEST_ANALYZED",
-      entityType: "KnowledgeIngestSession",
-      entityId: session.sessionId,
-      metadata: {
-        factCount: summary.total,
-        createCount: summary.create,
-        mergeCount: summary.merge,
-        noopCount: summary.noop,
-        conflictCount: summary.conflict,
-        model: provider.model,
-      },
-    });
-
-    const [refreshed, proposals] = await Promise.all([
-      repo.getSession({
-        businessId: params.businessId,
-        sessionId: session.sessionId,
-      }),
-      repo.listProposals({
-        businessId: params.businessId,
-        sessionId: session.sessionId,
-      }),
-    ]);
-
-    return { session: refreshed!, proposals };
+    return finalized;
   } catch (error) {
     const mapped = friendlyProviderMessage(error);
-    if (session) {
-      await repo.updateSession({
+    if (sessionId && analysisVersion > 0) {
+      await markAnalysisFailed({
         businessId: params.businessId,
-        sessionId: session.sessionId,
-        status: "FAILED",
+        sessionId,
+        analysisVersion,
         errorCode: mapped.code,
-      }).catch(() => undefined);
+      });
     }
     structuredLog("knowledge-ai", "knowledge_ingest.analyze_failed", {
       businessId: params.businessId,
-      sessionId: session?.sessionId ?? null,
+      sessionId,
       errorCode: mapped.code,
       latencyMs: Date.now() - started,
     });
@@ -409,6 +666,40 @@ export async function getIngestSessionView(params: {
   }
   const proposals = await repo.listProposals(params);
   return { session, proposals };
+}
+
+export async function cancelIngestSession(params: {
+  businessId: string;
+  sessionId: string;
+}): Promise<KnowledgeIngestSession> {
+  return withTransaction(async (trx) => {
+    const locked = await repo.lockSession(params, trx);
+    if (!locked) {
+      throw new KnowledgeIngestError(
+        "SESSION_NOT_FOUND",
+        "الجلسة غير موجودة.",
+        404,
+      );
+    }
+    if (locked.status === "APPLIED") {
+      throw new KnowledgeIngestError(
+        "SESSION_APPLIED",
+        "تم اعتماد هذه الجلسة مسبقاً.",
+      );
+    }
+    await repo.updateSession(
+      {
+        businessId: params.businessId,
+        sessionId: params.sessionId,
+        status: "CANCELED",
+        clearRawInput: true,
+        clearConversation: true,
+      },
+      trx,
+    );
+    const session = await repo.getSession(params, trx);
+    return session!;
+  });
 }
 
 /** Test helper — unique temp ids */

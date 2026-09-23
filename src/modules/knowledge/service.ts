@@ -1,35 +1,51 @@
 import type { KnowledgeCategory } from "@/constants/knowledge";
+import type { TransactionClient } from "@/lib/db";
 import { NotFoundError } from "@/lib/tenancy/errors";
 import { withResourceLimitGate } from "@/modules/billing/entitlements";
 import type { KnowledgeBase, KnowledgeItem } from "@/types/domain";
 
 import * as repo from "./repository";
 
-export async function ensureDefaultKnowledgeBase(params: {
-  businessId: string;
-  name?: string;
-}): Promise<KnowledgeBase> {
-  const existing = await repo.findDefaultKnowledgeBase({
-    businessId: params.businessId,
-  });
+export async function ensureDefaultKnowledgeBase(
+  params: {
+    businessId: string;
+    name?: string;
+  },
+  trx?: TransactionClient,
+): Promise<KnowledgeBase> {
+  const existing = await repo.findDefaultKnowledgeBase(
+    {
+      businessId: params.businessId,
+    },
+    trx,
+  );
   if (existing) {
     return existing;
   }
 
-  return repo.createKnowledgeBase({
-    businessId: params.businessId,
-    name: params.name?.trim() || "Default",
-  });
+  return repo.createKnowledgeBase(
+    {
+      businessId: params.businessId,
+      name: params.name?.trim() || "Default",
+    },
+    trx,
+  );
 }
 
-export async function listItems(params: {
-  businessId: string;
-  includeInactive?: boolean;
-}): Promise<KnowledgeItem[]> {
-  return repo.listKnowledgeItems({
-    businessId: params.businessId,
-    includeInactive: params.includeInactive,
-  });
+export async function listItems(
+  params: {
+    businessId: string;
+    includeInactive?: boolean;
+  },
+  trx?: TransactionClient,
+): Promise<KnowledgeItem[]> {
+  return repo.listKnowledgeItems(
+    {
+      businessId: params.businessId,
+      includeInactive: params.includeInactive,
+    },
+    trx,
+  );
 }
 
 export async function createItem(params: {
