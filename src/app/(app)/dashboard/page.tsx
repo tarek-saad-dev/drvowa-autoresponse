@@ -235,9 +235,17 @@ export default async function DashboardOverviewPage({
           </CardHeader>
           <CardContent className="space-y-2">
             {conversations.length === 0 ? (
-              <Link href="/dashboard/whatsapp">
-                <Button size="sm">ربط واتساب أولاً</Button>
-              </Link>
+              waActive ? (
+                <Link href="/dashboard/inbox">
+                  <Button variant="outline" size="sm">
+                    فتح الوارد
+                  </Button>
+                </Link>
+              ) : (
+                <Link href="/dashboard/whatsapp">
+                  <Button size="sm">ربط واتساب أولاً</Button>
+                </Link>
+              )
             ) : (
               <>
                 <ul className="space-y-2 text-sm">
