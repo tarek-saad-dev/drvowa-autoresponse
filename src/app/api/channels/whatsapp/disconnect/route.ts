@@ -15,6 +15,8 @@ export async function POST() {
             channelConnectionId: view.connection.channelConnectionId,
             status: view.connection.status,
             isActive: view.connection.isActive,
+            displayName: view.connection.displayName,
+            maskedPhone: view.connection.maskedPhone,
           }
         : null,
     });
