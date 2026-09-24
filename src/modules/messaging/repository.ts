@@ -28,6 +28,7 @@ type ChannelRow = {
   MaskedPhone: string | null;
   Status: string;
   IsActive: boolean | number;
+  RuntimeEngine?: string | null;
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
@@ -94,6 +95,7 @@ function mapChannel(row: ChannelRow): ChannelConnection {
     maskedPhone: row.MaskedPhone,
     status: row.Status as ChannelConnection["status"],
     isActive: Boolean(row.IsActive),
+    runtimeEngine: row.RuntimeEngine === "BAILEYS_V7" ? "BAILEYS_V7" : "BAILEYS_V6",
     createdAtUtc: row.CreatedAtUtc,
     updatedAtUtc: row.UpdatedAtUtc,
   };
@@ -161,6 +163,7 @@ export async function resolveChannelByExternalAccountKey(
   const result = await query<ChannelRow>(
     `SELECT ChannelConnectionID, BusinessID, LocationID, Channel, Provider,
             ExternalAccountKey, DisplayName, MaskedPhone, Status, IsActive,
+            ISNULL(RuntimeEngine, N'BAILEYS_V6') AS RuntimeEngine,
             CreatedAtUtc, UpdatedAtUtc
      FROM TblChannelConnection
      WHERE Channel = N'WHATSAPP'
