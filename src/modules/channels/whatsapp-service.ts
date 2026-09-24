@@ -2,9 +2,13 @@ import QRCode from "qrcode";
 
 import { withResourceLimitGate } from "@/modules/billing/entitlements";
 import { listLocations } from "@/modules/locations/service";
-import type { ChannelConnection, ChannelConnectionStatus } from "@/types/domain";
+import type {
+  ChannelConnection,
+  ChannelConnectionStatus,
+} from "@/types/domain";
 
 import { generateWhatsAppAccountKey } from "./account-key";
+import { mapDbStatusFromRuntime } from "./connection-lifecycle";
 import {
   assertMaskedPhoneIsSafe,
   maskWhatsAppPhoneForDisplay,
@@ -183,27 +187,6 @@ export async function resolveWhatsAppMaskedPhone(params: {
   return updated ?? { ...params.connection, maskedPhone: masked };
 }
 
-function mapDbStatusFromRuntime(state: string): {
-  status: ChannelConnectionStatus;
-  isActive: boolean;
-} {
-  switch (state) {
-    case "READY":
-      return { status: "ACTIVE", isActive: true };
-    case "LOGGED_OUT":
-      return { status: "DISCONNECTED", isActive: false };
-    case "ERROR":
-      return { status: "ERROR", isActive: false };
-    case "DISCONNECTED":
-      return { status: "DISCONNECTED", isActive: false };
-    case "QR_REQUIRED":
-    case "STARTING":
-    case "CONNECTING":
-      return { status: "PENDING", isActive: false };
-    default:
-      return { status: "PENDING", isActive: false };
-  }
-}
 
 function mapUiState(
   connection: ChannelConnection | null,
@@ -318,7 +301,10 @@ async function syncConnectionFromRuntime(params: {
   connection: ChannelConnection;
   runtime: RuntimeAccountStatus;
 }): Promise<ChannelConnection> {
-  const mapped = mapDbStatusFromRuntime(params.runtime.state);
+  const mapped = mapDbStatusFromRuntime(params.runtime.state, {
+    status: params.connection.status,
+    isActive: params.connection.isActive,
+  });
   const updated = await repo.updateChannelConnection({
     businessId: params.businessId,
     channelConnectionId: params.connection.channelConnectionId,
@@ -388,7 +374,9 @@ export async function startWhatsAppPairing(params: {
   }
 
   try {
-    const runtime = await startAccount(accountKey);
+    const runtime = await startAccount(accountKey, {
+      runtimeEngine: connection.runtimeEngine,
+    });
     const synced = await syncConnectionFromRuntime({
       businessId: params.businessId,
       connection,

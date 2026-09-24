@@ -5,6 +5,7 @@ import { normalizeNullableUuid, normalizeUuid } from "@/lib/ids/uuid";
 import type {
   ChannelConnection,
   ChannelConnectionStatus,
+  WhatsAppRuntimeEngine,
 } from "@/types/domain";
 
 type ChannelRow = {
@@ -18,9 +19,19 @@ type ChannelRow = {
   MaskedPhone: string | null;
   Status: string;
   IsActive: boolean;
+  RuntimeEngine?: string | null;
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
+
+const CONNECTION_SELECT = `ChannelConnectionID, BusinessID, LocationID, Channel, Provider,
+            ExternalAccountKey, DisplayName, MaskedPhone, Status, IsActive,
+            ISNULL(RuntimeEngine, N'BAILEYS_V6') AS RuntimeEngine,
+            CreatedAtUtc, UpdatedAtUtc`;
+
+function normalizeRuntimeEngine(value: string | null | undefined): WhatsAppRuntimeEngine {
+  return value === "BAILEYS_V7" ? "BAILEYS_V7" : "BAILEYS_V6";
+}
 
 function db(trx?: TransactionClient) {
   return {
@@ -40,6 +51,7 @@ function mapConnection(row: ChannelRow): ChannelConnection {
     maskedPhone: row.MaskedPhone,
     status: row.Status as ChannelConnectionStatus,
     isActive: Boolean(row.IsActive),
+    runtimeEngine: normalizeRuntimeEngine(row.RuntimeEngine),
     createdAtUtc: row.CreatedAtUtc,
     updatedAtUtc: row.UpdatedAtUtc,
   };
@@ -49,9 +61,7 @@ export async function listChannelConnections(params: {
   businessId: string;
 }): Promise<ChannelConnection[]> {
   const result = await query<ChannelRow>(
-    `SELECT ChannelConnectionID, BusinessID, LocationID, Channel, Provider,
-            ExternalAccountKey, DisplayName, MaskedPhone, Status, IsActive,
-            CreatedAtUtc, UpdatedAtUtc
+    `SELECT ${CONNECTION_SELECT}
      FROM TblChannelConnection
      WHERE BusinessID = @businessId
      ORDER BY CreatedAtUtc DESC`,
@@ -70,9 +80,7 @@ export async function findWhatsAppConnection(params: {
   businessId: string;
 }): Promise<ChannelConnection | null> {
   const result = await query<ChannelRow>(
-    `SELECT TOP 1 ChannelConnectionID, BusinessID, LocationID, Channel, Provider,
-            ExternalAccountKey, DisplayName, MaskedPhone, Status, IsActive,
-            CreatedAtUtc, UpdatedAtUtc
+    `SELECT TOP 1 ${CONNECTION_SELECT}
      FROM TblChannelConnection
      WHERE BusinessID = @businessId
        AND Channel = N'WHATSAPP'
@@ -95,9 +103,7 @@ export async function getChannelConnection(params: {
   channelConnectionId: string;
 }): Promise<ChannelConnection | null> {
   const result = await query<ChannelRow>(
-    `SELECT ChannelConnectionID, BusinessID, LocationID, Channel, Provider,
-            ExternalAccountKey, DisplayName, MaskedPhone, Status, IsActive,
-            CreatedAtUtc, UpdatedAtUtc
+    `SELECT TOP 1 ${CONNECTION_SELECT}
      FROM TblChannelConnection
      WHERE BusinessID = @businessId AND ChannelConnectionID = @channelConnectionId`,
     [
@@ -141,15 +147,17 @@ export async function createChannelConnectionShell(
   const isActive = params.isActive ?? false;
   const externalAccountKey = params.externalAccountKey ?? null;
 
+  const runtimeEngine: WhatsAppRuntimeEngine = "BAILEYS_V6";
+
   await db(trx).query(
     `INSERT INTO TblChannelConnection (
       ChannelConnectionID, BusinessID, LocationID, Channel, Provider,
       ExternalAccountKey, DisplayName, MaskedPhone, Status, IsActive,
-      CreatedAtUtc, UpdatedAtUtc
+      RuntimeEngine, CreatedAtUtc, UpdatedAtUtc
     ) VALUES (
       @channelConnectionId, @businessId, @locationId, @channel, @provider,
       @externalAccountKey, @displayName, NULL, @status, @isActive,
-      @createdAtUtc, @updatedAtUtc
+      @runtimeEngine, @createdAtUtc, @updatedAtUtc
     )`,
     [
       {
@@ -181,6 +189,7 @@ export async function createChannelConnectionShell(
       },
       { name: "status", type: sql.NVarChar(32), value: status },
       { name: "isActive", type: sql.Bit, value: isActive },
+      { name: "runtimeEngine", type: sql.NVarChar(32), value: runtimeEngine },
       { name: "createdAtUtc", type: sql.DateTime2, value: now },
       { name: "updatedAtUtc", type: sql.DateTime2, value: now },
     ],
@@ -197,6 +206,7 @@ export async function createChannelConnectionShell(
     maskedPhone: null,
     status,
     isActive,
+    runtimeEngine,
     createdAtUtc: now,
     updatedAtUtc: now,
   };

@@ -86,7 +86,7 @@ function sanitizeRuntimeMessage(message: string): string {
 async function runtimeFetch<T>(
   method: string,
   path: string,
-  init?: { timeoutMs?: number },
+  init?: { timeoutMs?: number; body?: unknown },
 ): Promise<T> {
   const baseUrl = getBaseUrl();
   const token = getToken();
@@ -102,6 +102,7 @@ async function runtimeFetch<T>(
         Accept: "application/json",
         "Content-Type": "application/json",
       },
+      body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
       signal: controller.signal,
       cache: "no-store",
     });
@@ -150,10 +151,16 @@ async function runtimeFetch<T>(
 
 export async function startAccount(
   accountKey: string,
+  options?: { runtimeEngine?: "BAILEYS_V6" | "BAILEYS_V7" },
 ): Promise<RuntimeAccountStatus> {
   const result = await runtimeFetch<{ status: RuntimeAccountStatus }>(
     "POST",
     `/api/accounts/${encodeURIComponent(accountKey)}/start`,
+    {
+      body: {
+        runtimeEngine: options?.runtimeEngine === "BAILEYS_V7" ? "BAILEYS_V7" : "BAILEYS_V6",
+      },
+    },
   );
   return result.status;
 }
