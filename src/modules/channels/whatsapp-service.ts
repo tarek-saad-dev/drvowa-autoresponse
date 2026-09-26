@@ -5,9 +5,17 @@ import { listLocations } from "@/modules/locations/service";
 import type {
   ChannelConnection,
   ChannelConnectionStatus,
+  CompatibilityStatus,
+  WhatsAppRuntimeEngine,
 } from "@/types/domain";
 
 import { generateWhatsAppAccountKey } from "./account-key";
+import {
+  buildCryptoHealthFromRuntime,
+  classifyCompatibility,
+  customerCompatibilityMessageAr,
+  recommendRuntimeEngine,
+} from "./compatibility";
 import { mapDbStatusFromRuntime } from "./connection-lifecycle";
 import {
   assertMaskedPhoneIsSafe,
@@ -73,9 +81,165 @@ export type WhatsAppConnectionView = {
     reconnectAttempts: number;
     inboundDelivery: InboundDeliveryView | null;
   } | null;
+  /**
+   * Customer-safe compatibility signal only (no Baileys jargon / counters).
+   * Admin diagnostics use a separate admin API.
+   */
+  compatibility?: {
+    status: CompatibilityStatus | null;
+    messageAr: string | null;
+  };
   /** Never include tokens or accountKey in browser responses from higher layers when not needed */
   message?: string;
 };
+
+/** Debounce compatibility DB writes per connection (ms). */
+const COMPAT_PERSIST_MIN_INTERVAL_MS = 30_000;
+const compatPersistMemory = new Map<
+  string,
+  { at: number; status: string; reason: string | null; recommended: string | null }
+>();
+
+function deriveCompatibilityFromRuntime(
+  connection: ChannelConnection,
+  runtime: RuntimeAccountStatus,
+): {
+  status: CompatibilityStatus;
+  reason: string;
+  recommended: WhatsAppRuntimeEngine;
+  crypto: ReturnType<typeof buildCryptoHealthFromRuntime>;
+} {
+  const engine: WhatsAppRuntimeEngine =
+    runtime.runtimeEngine === "BAILEYS_V7" ||
+    connection.runtimeEngine === "BAILEYS_V7"
+      ? "BAILEYS_V7"
+      : "BAILEYS_V6";
+
+  let crypto = buildCryptoHealthFromRuntime(runtime.cryptoHealth);
+  if (
+    !runtime.cryptoHealth &&
+    runtime.inboundCapture &&
+    (runtime.inboundCapture.captured > 0 ||
+      runtime.inboundCapture.decryptFailed > 0)
+  ) {
+    crypto = buildCryptoHealthFromRuntime({
+      plaintextInboundCount: runtime.inboundCapture.captured,
+      decryptFailureCount: runtime.inboundCapture.decryptFailed,
+      messageAbsentFromNodeCount:
+        runtime.inboundCapture.messageAbsentFromNodeCount ?? 0,
+      distinctDecryptFailureMessageIds:
+        runtime.inboundCapture.distinctDecryptFailureMessageIds ?? 0,
+      lastPlaintextInboundAt:
+        runtime.inboundCapture.lastPlaintextInboundAt ??
+        runtime.inboundCapture.lastEventAt,
+      lastDecryptFailureAt: runtime.inboundCapture.lastDecryptFailureAt ?? null,
+      activeFailureStreak: runtime.inboundCapture.activeFailureStreak ?? 0,
+      activeFailureDistinctIds:
+        runtime.inboundCapture.activeFailureDistinctIds ?? 0,
+      failureEpisodeStartedAt:
+        runtime.inboundCapture.failureEpisodeStartedAt ?? null,
+      status: runtime.compatibilityStatus ?? undefined,
+    });
+  }
+
+  const classified = classifyCompatibility({
+    plaintextInboundCount: crypto.plaintextInboundCount,
+    decryptFailureCount: crypto.decryptFailureCount,
+    distinctDecryptFailureMessageIds: crypto.distinctDecryptFailureMessageIds,
+    activeFailureStreak: crypto.activeFailureStreak,
+    activeFailureDistinctIds: crypto.activeFailureDistinctIds,
+    failureEpisodeStartedAt: crypto.failureEpisodeStartedAt,
+    lastPlaintextInboundAt: crypto.lastPlaintextInboundAt,
+    lastDecryptFailureAt: crypto.lastDecryptFailureAt,
+    socketReady: runtime.ready,
+  });
+
+  // Prefer live runtime status when it matches episode reclassification.
+  const fromRuntimeStatus = runtime.compatibilityStatus;
+  const status =
+    fromRuntimeStatus === classified.status
+      ? classified.status
+      : classified.status;
+  const reason =
+    runtime.compatibilityReason && fromRuntimeStatus === classified.status
+      ? runtime.compatibilityReason
+      : classified.reason;
+
+  const recommended =
+    (runtime.recommendedRuntimeEngine === "BAILEYS_V6" ||
+    runtime.recommendedRuntimeEngine === "BAILEYS_V7"
+      ? runtime.recommendedRuntimeEngine
+      : null) ??
+    recommendRuntimeEngine({
+      compatibilityStatus: status,
+      runtimeEngine: engine,
+    });
+
+  return {
+    status,
+    reason,
+    recommended,
+    crypto,
+  };
+}
+
+/**
+ * Persist compatibility observation with debounce / change detection.
+ * Never writes counters. Never mutates RuntimeEngine.
+ */
+async function maybePersistCompatibility(params: {
+  businessId: string;
+  connection: ChannelConnection;
+  runtime: RuntimeAccountStatus;
+}): Promise<ChannelConnection> {
+  const derived = deriveCompatibilityFromRuntime(
+    params.connection,
+    params.runtime,
+  );
+  const key = params.connection.channelConnectionId;
+  const prev = compatPersistMemory.get(key);
+  const now = Date.now();
+  const unchanged =
+    prev &&
+    prev.status === derived.status &&
+    prev.reason === derived.reason &&
+    prev.recommended === derived.recommended;
+  const recentlyWritten =
+    prev && now - prev.at < COMPAT_PERSIST_MIN_INTERVAL_MS;
+
+  const dbUnchanged =
+    params.connection.compatibilityStatus === derived.status &&
+    params.connection.compatibilityReason === derived.reason &&
+    params.connection.recommendedRuntimeEngine === derived.recommended;
+
+  if (dbUnchanged && (unchanged || recentlyWritten)) {
+    return params.connection;
+  }
+  if (unchanged && recentlyWritten) {
+    return params.connection;
+  }
+
+  const updated = await repo.updateCompatibilityObservation({
+    businessId: params.businessId,
+    channelConnectionId: params.connection.channelConnectionId,
+    compatibilityStatus: derived.status,
+    compatibilityReason: derived.reason,
+    recommendedRuntimeEngine: derived.recommended,
+  });
+  compatPersistMemory.set(key, {
+    at: now,
+    status: derived.status,
+    reason: derived.reason,
+    recommended: derived.recommended,
+  });
+  return updated ?? {
+    ...params.connection,
+    compatibilityStatus: derived.status,
+    compatibilityReason: derived.reason,
+    recommendedRuntimeEngine: derived.recommended,
+    compatibilityUpdatedAt: new Date(),
+  };
+}
 
 const INBOUND_CONFIG_ERROR_CODES = new Set([
   "CONFIG_MISSING",
@@ -311,7 +475,34 @@ async function syncConnectionFromRuntime(params: {
     status: mapped.status,
     isActive: mapped.isActive,
   });
-  return updated ?? params.connection;
+  const base = updated ?? params.connection;
+  // Observation-only: persist compatibility with debounce. Never switches engine.
+  return maybePersistCompatibility({
+    businessId: params.businessId,
+    connection: base,
+    runtime: params.runtime,
+  });
+}
+
+function customerCompatibilitySlice(
+  connection: ChannelConnection | null,
+  uiState: WhatsAppUiState,
+): WhatsAppConnectionView["compatibility"] {
+  const ready = uiState === "READY";
+  const status = connection?.compatibilityStatus ?? null;
+  return {
+    status,
+    messageAr: customerCompatibilityMessageAr(status, ready),
+  };
+}
+
+function withCustomerCompatibility(
+  view: Omit<WhatsAppConnectionView, "compatibility">,
+): WhatsAppConnectionView {
+  return {
+    ...view,
+    compatibility: customerCompatibilitySlice(view.connection, view.uiState),
+  };
 }
 
 export async function getWhatsAppConnectionView(params: {
@@ -322,11 +513,11 @@ export async function getWhatsAppConnectionView(params: {
   });
 
   if (!connection?.externalAccountKey) {
-    return {
+    return withCustomerCompatibility({
       connection,
       uiState: "NOT_CONNECTED",
       runtime: null,
-    };
+    });
   }
 
   try {
@@ -340,23 +531,24 @@ export async function getWhatsAppConnectionView(params: {
       businessId: params.businessId,
       connection: synced,
     });
-    return {
+    const uiState = mapUiState(withPhone, runtime, null);
+    return withCustomerCompatibility({
       connection: withPhone,
-      uiState: mapUiState(withPhone, runtime, null),
+      uiState,
       runtime: sanitizeRuntimeView(runtime),
-    };
+    });
   } catch (error) {
     if (error instanceof WhatsAppRuntimeError) {
       const withPhone = await resolveWhatsAppMaskedPhone({
         businessId: params.businessId,
         connection,
       });
-      return {
+      return withCustomerCompatibility({
         connection: withPhone,
         uiState: mapUiState(withPhone, null, error),
         runtime: null,
         message: error.message,
-      };
+      });
     }
     throw error;
   }
@@ -386,20 +578,20 @@ export async function startWhatsAppPairing(params: {
       businessId: params.businessId,
       connection: synced,
     });
-    return {
+    return withCustomerCompatibility({
       connection: withPhone,
       uiState: mapUiState(withPhone, runtime, null),
       runtime: sanitizeRuntimeView(runtime),
-    };
+    });
   } catch (error) {
     if (error instanceof WhatsAppRuntimeError) {
       // Do not corrupt ChannelConnection on runtime-disabled.
-      return {
+      return withCustomerCompatibility({
         connection,
         uiState: mapUiState(connection, null, error),
         runtime: null,
         message: error.message,
-      };
+      });
     }
     throw error;
   }
@@ -412,11 +604,11 @@ export async function stopWhatsAppRuntime(params: {
     businessId: params.businessId,
   });
   if (!connection?.externalAccountKey) {
-    return {
+    return withCustomerCompatibility({
       connection,
       uiState: "NOT_CONNECTED",
       runtime: null,
-    };
+    });
   }
 
   try {
@@ -430,19 +622,19 @@ export async function stopWhatsAppRuntime(params: {
       businessId: params.businessId,
       connection: synced,
     });
-    return {
+    return withCustomerCompatibility({
       connection: withPhone,
       uiState: mapUiState(withPhone, runtime, null),
       runtime: sanitizeRuntimeView(runtime),
-    };
+    });
   } catch (error) {
     if (error instanceof WhatsAppRuntimeError) {
-      return {
+      return withCustomerCompatibility({
         connection,
         uiState: mapUiState(connection, null, error),
         runtime: null,
         message: error.message,
-      };
+      });
     }
     throw error;
   }

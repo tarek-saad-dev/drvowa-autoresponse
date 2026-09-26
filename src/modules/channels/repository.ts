@@ -5,6 +5,7 @@ import { normalizeNullableUuid, normalizeUuid } from "@/lib/ids/uuid";
 import type {
   ChannelConnection,
   ChannelConnectionStatus,
+  CompatibilityStatus,
   WhatsAppRuntimeEngine,
 } from "@/types/domain";
 
@@ -20,6 +21,10 @@ type ChannelRow = {
   Status: string;
   IsActive: boolean;
   RuntimeEngine?: string | null;
+  CompatibilityStatus?: string | null;
+  CompatibilityReason?: string | null;
+  CompatibilityUpdatedAt?: Date | null;
+  RecommendedRuntimeEngine?: string | null;
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
@@ -27,10 +32,33 @@ type ChannelRow = {
 const CONNECTION_SELECT = `ChannelConnectionID, BusinessID, LocationID, Channel, Provider,
             ExternalAccountKey, DisplayName, MaskedPhone, Status, IsActive,
             ISNULL(RuntimeEngine, N'BAILEYS_V6') AS RuntimeEngine,
+            CompatibilityStatus, CompatibilityReason, CompatibilityUpdatedAt,
+            RecommendedRuntimeEngine,
             CreatedAtUtc, UpdatedAtUtc`;
 
 function normalizeRuntimeEngine(value: string | null | undefined): WhatsAppRuntimeEngine {
   return value === "BAILEYS_V7" ? "BAILEYS_V7" : "BAILEYS_V6";
+}
+
+function normalizeCompatibilityStatus(
+  value: string | null | undefined,
+): CompatibilityStatus | null {
+  switch (value) {
+    case "UNKNOWN":
+    case "HEALTHY":
+    case "SUSPECT":
+    case "DEGRADED_CRYPTO":
+      return value;
+    default:
+      return null;
+  }
+}
+
+function normalizeRecommendedEngine(
+  value: string | null | undefined,
+): WhatsAppRuntimeEngine | null {
+  if (value === "BAILEYS_V7" || value === "BAILEYS_V6") return value;
+  return null;
 }
 
 function db(trx?: TransactionClient) {
@@ -52,6 +80,12 @@ function mapConnection(row: ChannelRow): ChannelConnection {
     status: row.Status as ChannelConnectionStatus,
     isActive: Boolean(row.IsActive),
     runtimeEngine: normalizeRuntimeEngine(row.RuntimeEngine),
+    compatibilityStatus: normalizeCompatibilityStatus(row.CompatibilityStatus),
+    compatibilityReason: row.CompatibilityReason ?? null,
+    compatibilityUpdatedAt: row.CompatibilityUpdatedAt ?? null,
+    recommendedRuntimeEngine: normalizeRecommendedEngine(
+      row.RecommendedRuntimeEngine,
+    ),
     createdAtUtc: row.CreatedAtUtc,
     updatedAtUtc: row.UpdatedAtUtc,
   };
@@ -207,6 +241,10 @@ export async function createChannelConnectionShell(
     status,
     isActive,
     runtimeEngine,
+    compatibilityStatus: null,
+    compatibilityReason: null,
+    compatibilityUpdatedAt: null,
+    recommendedRuntimeEngine: null,
     createdAtUtc: now,
     updatedAtUtc: now,
   };
@@ -289,4 +327,98 @@ export async function updateChannelConnection(params: {
     ...next,
     updatedAtUtc: now,
   };
+}
+
+/**
+ * Persist Phase 1 compatibility observation only.
+ * Never writes high-frequency crypto counters. Never mutates RuntimeEngine.
+ */
+export async function updateCompatibilityObservation(params: {
+  businessId: string;
+  channelConnectionId: string;
+  compatibilityStatus: CompatibilityStatus;
+  compatibilityReason: string | null;
+  recommendedRuntimeEngine: WhatsAppRuntimeEngine;
+}): Promise<ChannelConnection | null> {
+  const existing = await getChannelConnection({
+    businessId: params.businessId,
+    channelConnectionId: params.channelConnectionId,
+  });
+  if (!existing) return null;
+
+  const now = new Date();
+  await query(
+    `UPDATE TblChannelConnection
+     SET CompatibilityStatus = @compatibilityStatus,
+         CompatibilityReason = @compatibilityReason,
+         CompatibilityUpdatedAt = @compatibilityUpdatedAt,
+         RecommendedRuntimeEngine = @recommendedRuntimeEngine,
+         UpdatedAtUtc = @updatedAtUtc
+     WHERE BusinessID = @businessId AND ChannelConnectionID = @channelConnectionId`,
+    [
+      {
+        name: "businessId",
+        type: sql.UniqueIdentifier,
+        value: params.businessId,
+      },
+      {
+        name: "channelConnectionId",
+        type: sql.UniqueIdentifier,
+        value: params.channelConnectionId,
+      },
+      {
+        name: "compatibilityStatus",
+        type: sql.NVarChar(32),
+        value: params.compatibilityStatus,
+      },
+      {
+        name: "compatibilityReason",
+        type: sql.NVarChar(128),
+        value: params.compatibilityReason,
+      },
+      {
+        name: "compatibilityUpdatedAt",
+        type: sql.DateTime2,
+        value: now,
+      },
+      {
+        name: "recommendedRuntimeEngine",
+        type: sql.NVarChar(32),
+        value: params.recommendedRuntimeEngine,
+      },
+      { name: "updatedAtUtc", type: sql.DateTime2, value: now },
+    ],
+  );
+
+  return {
+    ...existing,
+    compatibilityStatus: params.compatibilityStatus,
+    compatibilityReason: params.compatibilityReason,
+    compatibilityUpdatedAt: now,
+    recommendedRuntimeEngine: params.recommendedRuntimeEngine,
+    updatedAtUtc: now,
+  };
+}
+
+/** Platform-admin: list all WhatsApp channel connections (no tenant filter). */
+export async function listAllWhatsAppConnections(): Promise<
+  Array<ChannelConnection & { businessName?: string | null }>
+> {
+  const result = await query<ChannelRow & { BusinessName?: string | null }>(
+    `SELECT c.ChannelConnectionID, c.BusinessID, c.LocationID, c.Channel, c.Provider,
+            c.ExternalAccountKey, c.DisplayName, c.MaskedPhone, c.Status, c.IsActive,
+            ISNULL(c.RuntimeEngine, N'BAILEYS_V6') AS RuntimeEngine,
+            c.CompatibilityStatus, c.CompatibilityReason, c.CompatibilityUpdatedAt,
+            c.RecommendedRuntimeEngine,
+            c.CreatedAtUtc, c.UpdatedAtUtc,
+            b.Name AS BusinessName
+     FROM TblChannelConnection c
+     LEFT JOIN TblBusiness b ON b.BusinessID = c.BusinessID
+     WHERE c.Channel = N'WHATSAPP' AND c.Provider = N'BAILEYS'
+     ORDER BY c.UpdatedAtUtc DESC`,
+  );
+  return result.recordset.map((row) => ({
+    ...mapConnection(row),
+    businessName: row.BusinessName ?? null,
+  }));
 }

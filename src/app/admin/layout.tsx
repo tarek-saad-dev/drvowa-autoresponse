@@ -51,6 +51,12 @@ export default async function AdminLayout({
             >
               طلبات الدفع
             </Link>
+            <Link
+              href="/admin/whatsapp"
+              className="rounded-md px-3 py-1.5 hover:bg-slate-800"
+            >
+              واتساب
+            </Link>
             {hasWorkspace ? (
               <Link
                 href="/dashboard"

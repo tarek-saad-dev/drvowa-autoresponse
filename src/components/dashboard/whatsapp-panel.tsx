@@ -51,6 +51,11 @@ type ConnectionPayload = {
     lastErrorCode: string | null;
     inboundDelivery?: InboundDeliveryPayload | null;
   } | null;
+  /** Customer-safe only — never includes Baileys technical counters. */
+  compatibility?: {
+    status: "UNKNOWN" | "HEALTHY" | "SUSPECT" | "DEGRADED_CRYPTO" | null;
+    messageAr: string | null;
+  } | null;
 };
 
 const ACTIVE_POLL_STATES: UiState[] = [
@@ -84,7 +89,13 @@ function stateLabel(state: UiState): string {
   }
 }
 
-function stateExplanation(state: UiState): string {
+function stateExplanation(
+  state: UiState,
+  compatibilityMessageAr?: string | null,
+): string {
+  if (state === "READY" && compatibilityMessageAr) {
+    return compatibilityMessageAr;
+  }
   switch (state) {
     case "NOT_CONNECTED":
       return "لم يتم ربط رقم واتساب بعد لهذه المساحة.";
@@ -341,6 +352,8 @@ export function WhatsAppConnectionPanel({
     inbound?.lastDeliveryAt ?? null,
     nowMs,
   );
+  const compatibilityMessageAr = view.compatibility?.messageAr ?? null;
+  const explanation = stateExplanation(state, compatibilityMessageAr);
 
   return (
     <div className="space-y-4">
@@ -353,9 +366,9 @@ export function WhatsAppConnectionPanel({
             </Badge>
           </div>
           <CardDescription>
-            {inboundDegraded
+            {inboundDegraded && !compatibilityMessageAr
               ? "واتساب متصل، لكن استقبال الرسائل يحتاج مراجعة."
-              : stateExplanation(state)}
+              : explanation}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -434,7 +447,7 @@ export function WhatsAppConnectionPanel({
           ) : null}
 
           {state === "STARTING" || state === "CONNECTING" ? (
-            <p className="text-sm text-muted-foreground">{stateExplanation(state)}</p>
+            <p className="text-sm text-muted-foreground">{explanation}</p>
           ) : null}
 
           {state === "QR_REQUIRED" ? (
@@ -483,7 +496,7 @@ export function WhatsAppConnectionPanel({
 
           {state === "LOGGED_OUT" ? (
             <div className="space-y-3">
-              <Alert variant="error">{stateExplanation(state)}</Alert>
+              <Alert variant="error">{explanation}</Alert>
               <Button onClick={() => void connect()} disabled={busy}>
                 إعادة ربط واتساب
               </Button>
@@ -491,12 +504,12 @@ export function WhatsAppConnectionPanel({
           ) : null}
 
           {state === "RUNTIME_DISABLED" ? (
-            <Alert variant="warning">{stateExplanation(state)}</Alert>
+            <Alert variant="warning">{explanation}</Alert>
           ) : null}
 
           {state === "ERROR" ? (
             <div className="space-y-3">
-              <Alert variant="error">{stateExplanation(state)}</Alert>
+              <Alert variant="error">{explanation}</Alert>
               <Button onClick={() => void connect()} disabled={busy}>
                 إعادة المحاولة
               </Button>

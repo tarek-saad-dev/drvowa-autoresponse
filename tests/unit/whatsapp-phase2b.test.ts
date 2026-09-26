@@ -4,6 +4,25 @@ const repoMocks = vi.hoisted(() => ({
   findWhatsAppConnection: vi.fn(),
   createChannelConnectionShell: vi.fn(),
   updateChannelConnection: vi.fn(),
+  updateCompatibilityObservation: vi.fn(async (params) => ({
+    channelConnectionId: params.channelConnectionId,
+    businessId: params.businessId,
+    locationId: null,
+    channel: "WHATSAPP",
+    provider: "BAILEYS",
+    externalAccountKey: "wa_abc123def456abc123def456",
+    displayName: "WhatsApp",
+    maskedPhone: null,
+    status: "ACTIVE",
+    isActive: true,
+    runtimeEngine: "BAILEYS_V6",
+    compatibilityStatus: params.compatibilityStatus,
+    compatibilityReason: params.compatibilityReason,
+    compatibilityUpdatedAt: new Date(),
+    recommendedRuntimeEngine: params.recommendedRuntimeEngine,
+    createdAtUtc: new Date(),
+    updatedAtUtc: new Date(),
+  })),
   getChannelConnection: vi.fn(),
   listChannelConnections: vi.fn(),
 }));
@@ -62,6 +81,11 @@ function connection(overrides: Record<string, unknown> = {}) {
     maskedPhone: null,
     status: "PENDING",
     isActive: false,
+    runtimeEngine: "BAILEYS_V6",
+    compatibilityStatus: null,
+    compatibilityReason: null,
+    compatibilityUpdatedAt: null,
+    recommendedRuntimeEngine: null,
     createdAtUtc: new Date(),
     updatedAtUtc: new Date(),
     ...overrides,
@@ -138,6 +162,7 @@ describe("Phase 2B WhatsApp control plane", () => {
     expect(repoMocks.createChannelConnectionShell).not.toHaveBeenCalled();
     expect(runtimeMocks.startAccount).toHaveBeenCalledWith(
       existing.externalAccountKey,
+      { runtimeEngine: "BAILEYS_V6" },
     );
     expect(runtimeMocks.startAccount).toHaveBeenCalledTimes(2);
   });
@@ -163,6 +188,7 @@ describe("Phase 2B WhatsApp control plane", () => {
     await startWhatsAppPairing({ businessId: existing.businessId });
     expect(runtimeMocks.startAccount).toHaveBeenCalledWith(
       "wa_dbowneddbowneddbowneddb01",
+      { runtimeEngine: "BAILEYS_V6" },
     );
   });
 

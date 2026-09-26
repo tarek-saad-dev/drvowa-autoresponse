@@ -96,6 +96,10 @@ function mapChannel(row: ChannelRow): ChannelConnection {
     status: row.Status as ChannelConnection["status"],
     isActive: Boolean(row.IsActive),
     runtimeEngine: row.RuntimeEngine === "BAILEYS_V7" ? "BAILEYS_V7" : "BAILEYS_V6",
+    compatibilityStatus: null,
+    compatibilityReason: null,
+    compatibilityUpdatedAt: null,
+    recommendedRuntimeEngine: null,
     createdAtUtc: row.CreatedAtUtc,
     updatedAtUtc: row.UpdatedAtUtc,
   };

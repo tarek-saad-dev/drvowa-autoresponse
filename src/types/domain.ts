@@ -12,6 +12,13 @@ export type ChannelConnectionStatus =
   | "DISCONNECTED";
 /** Selective WhatsApp runtime engine. Default BAILEYS_V6 for existing accounts. */
 export type WhatsAppRuntimeEngine = "BAILEYS_V6" | "BAILEYS_V7";
+
+/** Phase 1 compatibility observation (diagnostics only — no auto switch). */
+export type CompatibilityStatus =
+  | "UNKNOWN"
+  | "HEALTHY"
+  | "SUSPECT"
+  | "DEGRADED_CRYPTO";
 export type IntegrationStatus = "PENDING" | "ACTIVE" | "INACTIVE" | "ERROR";
 export type PlanStatus = "ACTIVE" | "INACTIVE";
 export type SubscriptionStatus =
@@ -125,6 +132,10 @@ export type ChannelConnection = {
   status: ChannelConnectionStatus;
   isActive: boolean;
   runtimeEngine: WhatsAppRuntimeEngine;
+  compatibilityStatus: CompatibilityStatus | null;
+  compatibilityReason: string | null;
+  compatibilityUpdatedAt: Date | null;
+  recommendedRuntimeEngine: WhatsAppRuntimeEngine | null;
   createdAtUtc: Date;
   updatedAtUtc: Date;
 };

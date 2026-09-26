@@ -17,11 +17,13 @@ export default async function WhatsAppPage() {
         connection: null,
         runtime: null,
         message: null,
+        compatibility: null,
       };
 
   const initial = {
     uiState: view.uiState,
     message: view.message ?? null,
+    compatibility: view.compatibility ?? null,
     connection: view.connection
       ? {
           channelConnectionId: view.connection.channelConnectionId,

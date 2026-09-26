@@ -10,6 +10,7 @@ export async function GET() {
       uiState: view.uiState,
       message: view.message ?? null,
       runtime: view.runtime,
+      compatibility: view.compatibility ?? null,
       connection: view.connection
         ? {
             channelConnectionId: view.connection.channelConnectionId,

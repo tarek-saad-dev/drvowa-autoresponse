@@ -26,6 +26,28 @@ export type RuntimeInboundCapture = {
   pendingLid: number;
   listening: boolean;
   lastEventAt: string | null;
+  lastPlaintextInboundAt?: string | null;
+  lastDecryptFailureAt?: string | null;
+  distinctDecryptFailureMessageIds?: number;
+  messageAbsentFromNodeCount?: number;
+  activeFailureStreak?: number;
+  activeFailureDistinctIds?: number;
+  failureEpisodeStartedAt?: string | null;
+};
+
+/** Normalized crypto health (V6 + V7). */
+export type RuntimeCryptoHealth = {
+  status: string;
+  plaintextInboundCount: number;
+  decryptFailureCount: number;
+  messageAbsentFromNodeCount: number;
+  lastPlaintextInboundAt: string | null;
+  lastDecryptFailureAt: string | null;
+  distinctDecryptFailureMessageIds?: number;
+  activeFailureStreak?: number;
+  activeFailureDistinctIds?: number;
+  failureEpisodeStartedAt?: string | null;
+  cryptoHealth?: string;
 };
 
 export type RuntimeAccountStatus = {
@@ -38,6 +60,11 @@ export type RuntimeAccountStatus = {
   lastDisconnectCode: number | null;
   lastErrorCode: string | null;
   reconnectAttempts: number;
+  runtimeEngine?: "BAILEYS_V6" | "BAILEYS_V7";
+  cryptoHealth?: RuntimeCryptoHealth | null;
+  compatibilityStatus?: string | null;
+  compatibilityReason?: string | null;
+  recommendedRuntimeEngine?: "BAILEYS_V6" | "BAILEYS_V7" | null;
   /** Present on current whatsapp-bot managed status; may be absent on older runtimes. */
   inboundDelivery?: RuntimeInboundDelivery | null;
   inboundCapture?: RuntimeInboundCapture | null;
