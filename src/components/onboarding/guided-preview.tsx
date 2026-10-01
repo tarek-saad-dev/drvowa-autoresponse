@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ function cx(...values: Array<string | false | null | undefined>) {
 }
 
 export function GuidedOnboardingPreview() {
+  const router = useRouter();
   const [step, setStep] = useState<Step>("WELCOME");
   const [mockState, setMockState] = useState<MockState>("default");
   const [businessQuestion, setBusinessQuestion] = useState(0);
@@ -76,6 +78,15 @@ export function GuidedOnboardingPreview() {
     currentBusinessQuestion.key === "link" || currentBusinessValue.length > 0;
 
   useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("drvowa_guided_onboarding_step_v1") as Step | null;
+      if (saved && FLOW.some((item) => item.key === saved)) {
+        setStep(saved);
+      }
+    } catch {
+      // Local resume is best-effort only.
+    }
+
     void (async () => {
       try {
         const response = await fetch("/api/businesses", { cache: "no-store" });
@@ -93,6 +104,14 @@ export function GuidedOnboardingPreview() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("drvowa_guided_onboarding_step_v1", step);
+    } catch {
+      // Local resume is best-effort only.
+    }
+  }, [step]);
 
   useEffect(() => {
     if (step !== "WHATSAPP" || !workspaceReady) return;
@@ -201,6 +220,21 @@ export function GuidedOnboardingPreview() {
 
   async function ensureWorkspace() {
     if (workspaceReady) return;
+
+    const existingResponse = await fetch("/api/businesses", { cache: "no-store" });
+    const existingData = await existingResponse.json().catch(() => ({}));
+    if (existingResponse.ok
+      && Array.isArray(existingData.businesses)
+      && existingData.businesses.length > 0) {
+      setWorkspaceReady(true);
+      const agentsResponse = await fetch("/api/agents", { cache: "no-store" });
+      const agentsData = await agentsResponse.json().catch(() => ({}));
+      const existingAgent = agentsData?.agents?.find((item: { isActive?: boolean }) => item.isActive)
+        ?? agentsData?.agents?.[0];
+      if (existingAgent?.agentId) setAgentId(existingAgent.agentId);
+      return;
+    }
+
     const summary = [
       `اسم البيزنس: ${business.name || "غير محدد"}`,
       `النشاط: ${business.type || "عام"}`,
@@ -373,6 +407,16 @@ export function GuidedOnboardingPreview() {
   ]);
 
   async function next() {
+    if (step === "COMPLETED") {
+      try {
+        window.localStorage.removeItem("drvowa_guided_onboarding_step_v1");
+      } catch {
+        // Ignore storage failures.
+      }
+      router.push("/dashboard");
+      router.refresh();
+      return;
+    }
     if (step === "BUSINESS" && !businessCanContinue) return;
     if (step === "BUSINESS" && businessQuestion < businessQuestions.length - 1) {
       setBusinessQuestion((value) => value + 1);
@@ -452,8 +496,14 @@ export function GuidedOnboardingPreview() {
                   <button
                     key={item.key}
                     type="button"
-                    onClick={() => jump(item.key)}
-                    className="group flex flex-col items-center gap-2"
+                    onClick={() => {
+                      if (itemIndex <= index) jump(item.key);
+                    }}
+                    disabled={itemIndex > index}
+                    className={cx(
+                      "group flex flex-col items-center gap-2",
+                      itemIndex > index && "cursor-default",
+                    )}
                     aria-current={active ? "step" : undefined}
                   >
                     <span
