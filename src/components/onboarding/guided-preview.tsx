@@ -138,7 +138,7 @@ export function GuidedOnboardingPreview() {
             <div className="absolute left-[6%] right-[6%] top-5 h-1 rounded-full bg-white/80 shadow-inner" />
             <div
               className="absolute right-[6%] top-5 h-1 rounded-full bg-primary transition-[width] duration-700 ease-out"
-              style={{ width: `calc(${progress}% * .88)` }}
+              style={{ width: `${progress * 0.88}%` }}
             />
             <div className="relative grid grid-cols-8 gap-1">
               {FLOW.map((item, itemIndex) => {
