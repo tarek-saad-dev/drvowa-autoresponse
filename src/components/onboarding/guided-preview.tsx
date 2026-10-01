@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,12 +34,19 @@ const FLOW: Array<{ key: Step; label: string; short: string }> = [
 const businessQuestions = [
   { key: "name", label: "اسم البيزنس إيه؟", placeholder: "مثال: CUT SALON", kind: "text" },
   { key: "type", label: "نشاطك إيه؟", placeholder: "", kind: "type" },
+  { key: "countryCode", label: "البيزنس موجود فين؟", placeholder: "", kind: "country" },
   { key: "branches", label: "عندك كام فرع؟", placeholder: "", kind: "branches" },
   { key: "hours", label: "مواعيد العمل إيه؟", placeholder: "مثال: يوميًا من 11 ص إلى 2 ص", kind: "text" },
   { key: "link", label: "عندك موقع أو Instagram؟", placeholder: "اختياري", kind: "text" },
 ] as const;
 
 const businessTypeChoices = ["صالون", "عيادة", "مطعم", "متجر", "خدمات", "أخرى"];
+const countryChoices = [
+  { code: "EG", label: "مصر", locale: "ar-EG", timezone: "Africa/Cairo" },
+  { code: "SA", label: "السعودية", locale: "ar-SA", timezone: "Asia/Riyadh" },
+  { code: "AE", label: "الإمارات", locale: "ar-AE", timezone: "Asia/Dubai" },
+  { code: "KW", label: "الكويت", locale: "ar-KW", timezone: "Asia/Kuwait" },
+] as const;
 const branchChoices = ["فرع واحد", "فرعين", "3 فروع", "4+", "لسه ببدأ"];
 
 const knowledgeChips = ["الخدمات", "الأسعار", "المواعيد", "الفروع", "السياسات", "العروض"];
@@ -46,13 +55,33 @@ function cx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
 }
 
-export function GuidedOnboardingPreview() {
+export function GuidedOnboardingPreview({
+  storageKey = "drvowa_guided_onboarding_draft_v1_preview",
+}: {
+  storageKey?: string;
+}) {
+  const router = useRouter();
   const [step, setStep] = useState<Step>("WELCOME");
   const [mockState, setMockState] = useState<MockState>("default");
   const [businessQuestion, setBusinessQuestion] = useState(0);
   const [business, setBusiness] = useState<Record<string, string>>({});
   const [knowledge, setKnowledge] = useState("");
   const [chatCount, setChatCount] = useState(0);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  const [agentId, setAgentId] = useState<string | null>(null);
+  const [knowledgeCount, setKnowledgeCount] = useState(0);
+  const [knowledgeSummary, setKnowledgeSummary] = useState<Record<string, number>>({});
+  const [knowledgeApplied, setKnowledgeApplied] = useState(false);
+  const [previewQuestion, setPreviewQuestion] = useState("مواعيدكم إيه؟");
+  const [previewReply, setPreviewReply] = useState("لسه مجربناش الرد الحقيقي.");
+  const [qrImageDataUrl, setQrImageDataUrl] = useState<string | null>(null);
+  const [waReady, setWaReady] = useState(false);
+  const [firstMessageStage, setFirstMessageStage] = useState(0);
+  const [testConversationId, setTestConversationId] = useState<string | null>(null);
+  const [humanTakeoverDone, setHumanTakeoverDone] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const firstMessageStartedAt = useRef<string | null>(null);
 
   const index = FLOW.findIndex((item) => item.key === step);
   const progress = Math.max(0, Math.round((index / (FLOW.length - 1)) * 100));
@@ -62,6 +91,383 @@ export function GuidedOnboardingPreview() {
   const businessCanContinue =
     currentBusinessQuestion.key === "link" || currentBusinessValue.length > 0;
 
+  /* eslint-disable react-hooks/set-state-in-effect -- guided onboarding restores and polls external state */
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw) {
+        const saved = JSON.parse(raw) as {
+          step?: Step;
+          businessQuestion?: number;
+          business?: Record<string, string>;
+          knowledge?: string;
+          knowledgeApplied?: boolean;
+          knowledgeCount?: number;
+          knowledgeSummary?: Record<string, number>;
+        };
+        if (saved.step && FLOW.some((item) => item.key === saved.step)) {
+          setStep(saved.step);
+        }
+        if (typeof saved.businessQuestion === "number") {
+          setBusinessQuestion(
+            Math.min(Math.max(0, saved.businessQuestion), businessQuestions.length - 1),
+          );
+        }
+        if (saved.business && typeof saved.business === "object") {
+          setBusiness(saved.business);
+        }
+        if (typeof saved.knowledge === "string") {
+          setKnowledge(saved.knowledge);
+        }
+        if (saved.knowledgeApplied === true) {
+          setKnowledgeApplied(true);
+          if (saved.step === "KNOWLEDGE") setMockState("success");
+        }
+        if (typeof saved.knowledgeCount === "number") {
+          setKnowledgeCount(saved.knowledgeCount);
+        }
+        if (saved.knowledgeSummary && typeof saved.knowledgeSummary === "object") {
+          setKnowledgeSummary(saved.knowledgeSummary);
+        }
+      }
+    } catch {
+      // Local resume is best-effort only.
+    } finally {
+      setDraftRestored(true);
+    }
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/businesses", { cache: "no-store" });
+        const data = await response.json();
+        if (response.ok && Array.isArray(data.businesses) && data.businesses.length > 0) {
+          setWorkspaceReady(true);
+          const agentsResponse = await fetch("/api/agents", { cache: "no-store" });
+          const agentsData = await agentsResponse.json();
+          const existingAgent = agentsData?.agents?.find((item: { isActive?: boolean }) => item.isActive)
+            ?? agentsData?.agents?.[0];
+          if (existingAgent?.agentId) setAgentId(existingAgent.agentId);
+        }
+      } catch {
+        // Setup can still create the first workspace later.
+      }
+    })();
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!draftRestored) return;
+    try {
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          step,
+          businessQuestion,
+          business,
+          knowledge,
+          knowledgeApplied,
+          knowledgeCount,
+          knowledgeSummary,
+        }),
+      );
+    } catch {
+      // Local resume is best-effort only.
+    }
+  }, [
+    step,
+    businessQuestion,
+    business,
+    knowledge,
+    knowledgeApplied,
+    knowledgeCount,
+    knowledgeSummary,
+    storageKey,
+    draftRestored,
+  ]);
+
+  useEffect(() => {
+    if (step !== "WHATSAPP" || !workspaceReady) return;
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const response = await fetch("/api/channels/whatsapp/status", { cache: "no-store" });
+        const data = await response.json();
+        if (stopped || !response.ok) return;
+        if (data.uiState === "READY") {
+          setWaReady(true);
+          setMockState("success");
+          return;
+        }
+        if (!qrImageDataUrl) {
+          const qrResponse = await fetch("/api/channels/whatsapp/qr", { cache: "no-store" });
+          const qrData = await qrResponse.json().catch(() => ({}));
+          if (qrResponse.ok && qrData.qrImageDataUrl) {
+            setQrImageDataUrl(qrData.qrImageDataUrl);
+          }
+        }
+        if (data.compatibility?.status === "DEGRADED_CRYPTO") {
+          setMockState("compatibility-warning");
+        }
+      } catch {
+        // Keep polling; transient status failures should not break setup.
+      }
+    };
+    void tick();
+    const timer = window.setInterval(tick, 2000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [step, workspaceReady, qrImageDataUrl]);
+
+  useEffect(() => {
+    if (step !== "FIRST_MESSAGE" || !workspaceReady) return;
+    if (!firstMessageStartedAt.current) {
+      firstMessageStartedAt.current = new Date().toISOString();
+      setFirstMessageStage(0);
+    }
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const response = await fetch("/api/inbox/conversations?limit=10", { cache: "no-store" });
+        const data = await response.json();
+        if (stopped || !response.ok || !Array.isArray(data.conversations)) return;
+        const started = new Date(firstMessageStartedAt.current!).getTime();
+        const conversation = data.conversations.find((item: {
+          lastInboundAtUtc?: string | null;
+        }) => item.lastInboundAtUtc && new Date(item.lastInboundAtUtc).getTime() >= started);
+        if (!conversation) return;
+        setTestConversationId(conversation.conversationId);
+        setFirstMessageStage((value) => Math.max(value, 2));
+        window.setTimeout(() => setFirstMessageStage((value) => Math.max(value, 3)), 350);
+
+        const messagesResponse = await fetch(
+          `/api/inbox/conversations/${conversation.conversationId}/messages?limit=30`,
+          { cache: "no-store" },
+        );
+        const messagesData = await messagesResponse.json();
+        if (!messagesResponse.ok || !Array.isArray(messagesData.messages)) return;
+        const outbound = messagesData.messages.some((message: {
+          direction?: string;
+          createdAtUtc?: string;
+        }) => message.direction === "OUTBOUND"
+          && message.createdAtUtc
+          && new Date(message.createdAtUtc).getTime() >= started);
+        if (outbound) {
+          setFirstMessageStage(5);
+          setMockState("success");
+        }
+      } catch {
+        // Polling is intentionally tolerant.
+      }
+    };
+    void tick();
+    const timer = window.setInterval(tick, 1800);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [step, workspaceReady]);
+
+  useEffect(() => {
+    if (step !== "HUMAN_TAKEOVER" || !testConversationId) return;
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const response = await fetch("/api/inbox/conversations?limit=10", { cache: "no-store" });
+        const data = await response.json();
+        if (stopped || !response.ok || !Array.isArray(data.conversations)) return;
+        const conversation = data.conversations.find(
+          (item: { conversationId?: string }) => item.conversationId === testConversationId,
+        );
+        if (conversation?.aiMode === "HUMAN_PAUSED"
+          && conversation?.aiPauseReason === "HUMAN_TAKEOVER") {
+          setHumanTakeoverDone(true);
+          setMockState("success");
+        }
+      } catch {
+        // Keep the guided wait state.
+      }
+    };
+    void tick();
+    const timer = window.setInterval(tick, 1800);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [step, testConversationId]);
+
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  async function ensureWorkspace() {
+    if (workspaceReady) return;
+
+    const existingResponse = await fetch("/api/businesses", { cache: "no-store" });
+    const existingData = await existingResponse.json().catch(() => ({}));
+    if (existingResponse.ok
+      && Array.isArray(existingData.businesses)
+      && existingData.businesses.length > 0) {
+      setWorkspaceReady(true);
+      const agentsResponse = await fetch("/api/agents", { cache: "no-store" });
+      const agentsData = await agentsResponse.json().catch(() => ({}));
+      const existingAgent = agentsData?.agents?.find((item: { isActive?: boolean }) => item.isActive)
+        ?? agentsData?.agents?.[0];
+      if (existingAgent?.agentId) setAgentId(existingAgent.agentId);
+      return;
+    }
+
+    const summary = [
+      `اسم البيزنس: ${business.name || "غير محدد"}`,
+      `النشاط: ${business.type || "عام"}`,
+      `الفروع: ${business.branches || "غير محدد"}`,
+      `المواعيد: ${business.hours || "غير محددة"}`,
+      business.link ? `الرابط: ${business.link}` : "",
+    ].filter(Boolean).join("\n");
+
+    const response = await fetch("/api/onboarding/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        business: {
+          name: business.name || "نشاطي",
+          category: business.type || "عام",
+          countryCode: business.countryCode || "EG",
+          locale:
+            countryChoices.find((item) => item.code === business.countryCode)?.locale
+            ?? "ar-EG",
+          timezone:
+            countryChoices.find((item) => item.code === business.countryCode)?.timezone
+            ?? "Africa/Cairo",
+        },
+        location: null,
+        agent: {
+          name: "موظف الاستقبال",
+          roleTitle: "موظف استقبال",
+          language: "ar",
+          dialect: "مصري",
+          tone: "مهني وودود",
+          instructions: "جاوب باختصار ووضوح وبناءً على معلومات النشاط فقط.",
+        },
+        knowledgeItems: [{
+          category: "ABOUT",
+          title: "معلومات النشاط الأساسية",
+          content: summary,
+        }],
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.error ?? data?.message ?? "تعذر إنشاء مساحة العمل");
+    setWorkspaceReady(true);
+    if (data?.agent?.agentId) setAgentId(data.agent.agentId);
+  }
+
+  async function trainKnowledge() {
+    setLiveError(null);
+    setMockState("loading");
+    try {
+      await ensureWorkspace();
+      const response = await fetch("/api/knowledge/ingest/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: knowledge }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error ?? data?.message ?? "تعذر تحليل المعلومات");
+      const proposalIds = (data.proposals ?? [])
+        .filter((item: { status?: string }) => item.status !== "NOOP")
+        .map((item: { proposalId: string }) => item.proposalId);
+      if (proposalIds.length > 0) {
+        const applyResponse = await fetch("/api/knowledge/ingest/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: data.session.sessionId, proposalIds }),
+        });
+        const applyData = await applyResponse.json();
+        if (!applyResponse.ok) {
+          throw new Error(applyData?.error ?? applyData?.message ?? "تعذر حفظ المعلومات");
+        }
+      }
+      const summary = (data.proposals ?? []).reduce(
+        (acc: Record<string, number>, item: { category?: string; status?: string }) => {
+          if (item.status === "NOOP") return acc;
+          const key = item.category || "CUSTOM";
+          acc[key] = (acc[key] ?? 0) + 1;
+          return acc;
+        },
+        {},
+      );
+      setKnowledgeSummary(summary);
+      setKnowledgeCount(Math.max(proposalIds.length, data.proposals?.length ?? 0));
+      setKnowledgeApplied(true);
+      setMockState("success");
+    } catch (error) {
+      setLiveError(error instanceof Error ? error.message : "حدث خطأ أثناء التدريب");
+      setMockState("error");
+    }
+  }
+
+  async function askPreview(question: string) {
+    setLiveError(null);
+    setPreviewQuestion(question);
+    setPreviewReply("بجهز الرد…");
+    try {
+      await ensureWorkspace();
+      const response = await fetch("/api/onboarding/preview-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: question }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error ?? data?.message ?? "تعذر تجربة الرد");
+      setPreviewReply(data.reply);
+      setChatCount((value) => Math.min(3, value + 1));
+    } catch (error) {
+      setPreviewReply("مقدرناش نطلع الرد دلوقتي.");
+      setLiveError(error instanceof Error ? error.message : "تعذر تجربة الرد");
+    }
+  }
+
+  async function startWhatsApp() {
+    setLiveError(null);
+    try {
+      await ensureWorkspace();
+      const connectResponse = await fetch("/api/channels/whatsapp/connect", { method: "POST" });
+      const connectData = await connectResponse.json();
+      if (!connectResponse.ok) {
+        throw new Error(connectData?.error ?? connectData?.message ?? "تعذر بدء الربط");
+      }
+      const qrResponse = await fetch("/api/channels/whatsapp/qr", { cache: "no-store" });
+      const qrData = await qrResponse.json();
+      if (!qrResponse.ok) throw new Error(qrData?.error ?? qrData?.message ?? "تعذر تحميل QR");
+      if (qrData.qrImageDataUrl) setQrImageDataUrl(qrData.qrImageDataUrl);
+      if (qrData.uiState === "READY") {
+        setWaReady(true);
+        setMockState("success");
+      }
+    } catch (error) {
+      setLiveError(error instanceof Error ? error.message : "تعذر ربط واتساب");
+      setMockState("error");
+    }
+  }
+
+  async function enableAutoReply() {
+    const response = await fetch("/api/channels/whatsapp/ai", { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.error ?? data?.message ?? "تعذر تجهيز الرد التلقائي");
+    const selectedAgentId = agentId ?? data?.agents?.[0]?.agentId;
+    if (!selectedAgentId) throw new Error("موظف الاستقبال غير موجود");
+    setAgentId(selectedAgentId);
+    if (data?.setting?.autoReplyEnabled && data.setting.agentId === selectedAgentId) return;
+    const patchResponse = await fetch("/api/channels/whatsapp/ai", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agentId: selectedAgentId, autoReplyEnabled: true }),
+    });
+    const patchData = await patchResponse.json();
+    if (!patchResponse.ok) {
+      throw new Error(patchData?.error ?? patchData?.message ?? "تعذر تشغيل الرد التلقائي");
+    }
+  }
+
   const primaryLabel = useMemo(() => {
     switch (step) {
       case "WELCOME":
@@ -69,32 +475,72 @@ export function GuidedOnboardingPreview() {
       case "BUSINESS":
         return businessQuestion < businessQuestions.length - 1 ? "التالي" : "تمام — كمل";
       case "KNOWLEDGE":
-        return mockState === "loading" ? "بنعلم الموظف..." : "علّم الموظف";
+        return mockState === "loading"
+          ? "بنعلم الموظف..."
+          : knowledgeApplied || mockState === "success"
+            ? "جربه دلوقتي"
+            : "علّم الموظف";
       case "PLAYGROUND":
-        return "الردود تمام — وصل واتساب";
+        return chatCount > 0 ? "الردود تمام — وصل واتساب" : "جرب سؤال الأول";
       case "WHATSAPP":
-        return "تم الربط";
+        return waReady ? "كمل لأول تجربة" : qrImageDataUrl ? "مستني المسح…" : "ابدأ الربط";
       case "FIRST_MESSAGE":
-        return "كمل تجربة التحكم";
+        return firstMessageStage >= 5 ? "كمل تجربة التحكم" : "مستني أول رد…";
       case "HUMAN_TAKEOVER":
-        return "فهمت";
+        return humanTakeoverDone ? "فهمت" : "مستني ردك اليدوي…";
       case "COMPLETED":
         return "افتح لوحة التحكم";
     }
-  }, [step, businessQuestion, mockState]);
+  }, [
+    step,
+    businessQuestion,
+    mockState,
+    waReady,
+    qrImageDataUrl,
+    firstMessageStage,
+    humanTakeoverDone,
+    knowledgeApplied,
+    chatCount,
+  ]);
 
-  function next() {
+  async function next() {
+    if (step === "COMPLETED") {
+      try {
+        window.localStorage.removeItem(storageKey);
+      } catch {
+        // Ignore storage failures.
+      }
+      router.push("/dashboard");
+      router.refresh();
+      return;
+    }
     if (step === "BUSINESS" && !businessCanContinue) return;
     if (step === "BUSINESS" && businessQuestion < businessQuestions.length - 1) {
       setBusinessQuestion((value) => value + 1);
       return;
     }
-    if (step === "KNOWLEDGE" && mockState === "default") {
-      setMockState("loading");
-      window.setTimeout(() => setMockState("success"), 900);
+    if (step === "KNOWLEDGE" && !knowledgeApplied && mockState !== "success") {
+      if (!knowledge.trim()) return;
+      await trainKnowledge();
       return;
     }
     if (step === "KNOWLEDGE" && mockState === "loading") return;
+    if (step === "PLAYGROUND" && chatCount === 0) return;
+    if (step === "WHATSAPP" && !waReady) {
+      if (!qrImageDataUrl) await startWhatsApp();
+      return;
+    }
+    if (step === "WHATSAPP" && waReady) {
+      try {
+        await enableAutoReply();
+        firstMessageStartedAt.current = null;
+      } catch (error) {
+        setLiveError(error instanceof Error ? error.message : "تعذر تشغيل الرد التلقائي");
+        return;
+      }
+    }
+    if (step === "FIRST_MESSAGE" && firstMessageStage < 5) return;
+    if (step === "HUMAN_TAKEOVER" && !humanTakeoverDone) return;
 
     const nextStep = FLOW[Math.min(index + 1, FLOW.length - 1)]?.key;
     if (nextStep) {
@@ -148,8 +594,14 @@ export function GuidedOnboardingPreview() {
                   <button
                     key={item.key}
                     type="button"
-                    onClick={() => jump(item.key)}
-                    className="group flex flex-col items-center gap-2"
+                    onClick={() => {
+                      if (itemIndex <= index) jump(item.key);
+                    }}
+                    disabled={itemIndex > index}
+                    className={cx(
+                      "group flex flex-col items-center gap-2",
+                      itemIndex > index && "cursor-default",
+                    )}
                     aria-current={active ? "step" : undefined}
                   >
                     <span
@@ -230,6 +682,29 @@ export function GuidedOnboardingPreview() {
                         );
                       })}
                     </div>
+                  ) : currentBusinessQuestion.kind === "country" ? (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      {countryChoices.map((choice) => {
+                        const selected = business.countryCode === choice.code;
+                        return (
+                          <button
+                            key={choice.code}
+                            type="button"
+                            onClick={() =>
+                              setBusiness((prev) => ({ ...prev, countryCode: choice.code }))
+                            }
+                            className={cx(
+                              "rounded-2xl border-2 px-3 py-5 text-center text-sm font-black transition-all duration-200",
+                              selected
+                                ? "border-primary bg-primary text-white shadow-lg"
+                                : "border-border bg-white hover:border-primary/50",
+                            )}
+                          >
+                            {choice.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   ) : currentBusinessQuestion.kind === "branches" ? (
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                       {branchChoices.map((choice) => {
@@ -284,6 +759,7 @@ export function GuidedOnboardingPreview() {
                         <div>
                           <h3 className="font-black">مقدرناش نكمل التدريب المرة دي</h3>
                           <p className="mt-2 text-sm leading-7 text-muted-foreground">معلوماتك لسه موجودة. جرّب تاني من غير ما تعيد أي حاجة.</p>
+                          {liveError ? <p className="mt-2 text-xs font-bold text-destructive">{liveError}</p> : null}
                         </div>
                       </div>
                     </div>
@@ -296,28 +772,30 @@ export function GuidedOnboardingPreview() {
                         </div>
                       ))}
                     </div>
-                  ) : mockState === "success" ? (
+                  ) : mockState === "success" || knowledgeApplied ? (
                     <div className="mt-8 rounded-[24px] border border-success/20 bg-success-soft/55 p-6">
                       <div className="flex items-center gap-4">
                         <div className="grid h-14 w-14 place-items-center rounded-2xl bg-success text-2xl text-white">✓</div>
                         <div>
                           <h3 className="text-xl font-black">جاهز للتجربة ✨</h3>
-                          <p className="mt-1 text-sm text-muted-foreground">موظفك اتعلم 37 معلومة عن البيزنس.</p>
+                          <p className="mt-1 text-sm text-muted-foreground">موظفك اتعلم {knowledgeCount || "مجموعة"} معلومات جديدة عن البيزنس.</p>
                         </div>
                       </div>
-                      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
+                      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
                         {[
-                          ["الخدمات", "12"],
-                          ["الأسعار", "9"],
-                          ["المواعيد", "3"],
-                          ["السياسات", "7"],
-                          ["عام", "6"],
-                        ].map(([label, count]) => (
-                          <div key={label} className="rounded-2xl bg-white/85 p-3 text-center">
-                            <div className="text-lg font-black">{count}</div>
-                            <div className="mt-1 text-[11px] font-bold text-muted-foreground">{label}</div>
-                          </div>
-                        ))}
+                          ["SERVICE", "الخدمات"],
+                          ["FAQ", "الأسئلة الشائعة"],
+                          ["POLICY", "السياسات"],
+                          ["LOCATION_INFO", "الفروع والموقع"],
+                          ["ABOUT", "عن البيزنس"],
+                          ["CUSTOM", "معلومات إضافية"],
+                        ].filter(([key]) => (knowledgeSummary[key] ?? 0) > 0)
+                          .map(([key, label]) => (
+                            <div key={key} className="rounded-2xl bg-white/85 p-3 text-center">
+                              <div className="text-lg font-black">{knowledgeSummary[key]}</div>
+                              <div className="mt-1 text-[11px] font-bold text-muted-foreground">{label}</div>
+                            </div>
+                          ))}
                       </div>
                     </div>
                   ) : (
@@ -348,7 +826,7 @@ export function GuidedOnboardingPreview() {
                       <button
                         key={question}
                         type="button"
-                        onClick={() => setChatCount((n) => Math.min(3, n + 1))}
+                        onClick={() => void askPreview(question)}
                         className="rounded-full border border-border bg-white px-4 py-2 text-sm font-bold shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:text-primary hover:shadow-md"
                       >
                         {question}
@@ -357,23 +835,25 @@ export function GuidedOnboardingPreview() {
                   </div>
                   <div className="mt-6 rounded-[26px] border border-border bg-surface/50 p-4 sm:p-6">
                     <div className="space-y-4">
-                      <div className="mr-auto max-w-[82%] translate-y-0 rounded-2xl rounded-bl-md bg-white p-4 text-sm shadow-sm transition-all">مواعيدكم إيه؟</div>
+                      <div className="mr-auto max-w-[82%] translate-y-0 rounded-2xl rounded-bl-md bg-white p-4 text-sm shadow-sm transition-all">{previewQuestion}</div>
                       <div className="ml-auto max-w-[86%] rounded-2xl rounded-br-md bg-primary p-4 text-sm leading-7 text-primary-foreground shadow-md">
-                        أهلاً بيك 👋 إحنا متاحين يوميًا، ولو تحب أساعدك في الحجز قولي أنسب يوم ليك.
-                        <div className="mt-2 text-[10px] font-semibold text-primary-foreground/70">رد تجريبي من موظفك</div>
+                        {previewReply}
+                        <div className="mt-2 text-[10px] font-semibold text-primary-foreground/70">رد حقيقي من موظفك التجريبي</div>
                       </div>
-                      {chatCount > 0 ? (
-                        <div className="mr-auto max-w-[82%] rounded-2xl rounded-bl-md bg-white p-4 text-sm shadow-sm">طب والأسعار؟</div>
-                      ) : null}
-                      {chatCount > 0 ? (
-                        <div className="ml-auto max-w-[86%] rounded-2xl rounded-br-md bg-primary p-4 text-sm leading-7 text-primary-foreground shadow-md">
-                          أقدر أقولك الأسعار بالتفصيل حسب الخدمة اللي محتاجها، وقولي تحب تبدأ بإيه؟
-                        </div>
-                      ) : null}
+
                     </div>
                     <div className="mt-4 flex gap-2">
-                      <button type="button" onClick={() => setChatCount((n) => Math.min(3, n + 1))} className="rounded-xl bg-success-soft px-3 py-2 text-xs font-black text-success">تمام 👍</button>
-                      <button type="button" className="rounded-xl bg-white px-3 py-2 text-xs font-black text-muted-foreground shadow-sm">عدّل المعلومة</button>
+                      <button type="button" onClick={() => setChatCount((n) => Math.max(1, n))} className="rounded-xl bg-success-soft px-3 py-2 text-xs font-black text-success">تمام 👍</button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStep("KNOWLEDGE");
+                          setMockState("default");
+                        }}
+                        className="rounded-xl bg-white px-3 py-2 text-xs font-black text-muted-foreground shadow-sm"
+                      >
+                        عدّل المعلومة
+                      </button>
                     </div>
                   </div>
                   <div className="mt-5 flex flex-wrap gap-2 text-xs font-bold">
@@ -402,9 +882,23 @@ export function GuidedOnboardingPreview() {
                     ))}
                   </div>
                   <div className="mx-auto mt-7 w-full max-w-md rounded-[28px] border border-border bg-white p-5 shadow-[0_18px_55px_rgba(15,28,36,.10)]">
-                    <div className="mx-auto grid h-52 w-52 place-items-center rounded-3xl border border-border bg-[linear-gradient(90deg,#0f1c24_50%,transparent_50%),linear-gradient(#0f1c24_50%,transparent_50%)] bg-[length:18px_18px] bg-[position:0_0,9px_9px] p-5">
-                      <div className="grid h-16 w-16 place-items-center rounded-2xl border-4 border-white bg-primary text-xl font-black text-white shadow-lg">D</div>
-                    </div>
+                    {qrImageDataUrl ? (
+                      <Image
+                        src={qrImageDataUrl}
+                        alt="QR لربط واتساب"
+                        width={208}
+                        height={208}
+                        unoptimized
+                        className="mx-auto h-52 w-52 rounded-3xl border border-border bg-white p-2"
+                      />
+                    ) : (
+                      <div className="mx-auto grid h-52 w-52 place-items-center rounded-3xl border border-dashed border-border bg-surface">
+                        <div className="text-center">
+                          <div className="text-3xl">▦</div>
+                          <div className="mt-2 text-xs font-bold text-muted-foreground">اضغط ابدأ الربط</div>
+                        </div>
+                      </div>
+                    )}
                     <div className="mt-4 flex items-center justify-center gap-2 text-xs font-bold text-muted-foreground">
                       <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
                       الكود بيتجدد تلقائيًا عند الحاجة
@@ -421,11 +915,18 @@ export function GuidedOnboardingPreview() {
                     {mockState === "compatibility-warning"
                       ? "الاتصال تم، لكن محتاج تهيئة إضافية لتحسين استقبال الرسائل."
                       : mockState === "error"
-                        ? "الكود انتهت صلاحيته — هنطلع لك كود جديد من غير ما تبدأ من الأول."
+                        ? "حصلت مشكلة أثناء الربط — تقدر تحاول تاني من غير ما تبدأ من الأول."
                         : mockState === "success"
-                          ? "تم الربط — استقبال الرسائل شغال ✓"
-                          : "مستني المسح…"}
+                          ? "تم الربط — واتساب جاهز لأول تجربة ✓"
+                          : qrImageDataUrl
+                            ? "مستني المسح…"
+                            : "ابدأ الربط علشان يظهر QR"}
                   </div>
+                  {liveError && mockState === "error" ? (
+                    <p className="mx-auto mt-3 max-w-md text-xs font-bold text-destructive">
+                      {liveError}
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -437,7 +938,7 @@ export function GuidedOnboardingPreview() {
                   <div className="mx-auto mt-5 w-fit rounded-2xl rounded-bl-md bg-[#dcf8c6] px-6 py-4 text-lg font-black shadow-sm">السلام عليكم</div>
                   <div className="mt-8 space-y-3 text-start">
                     {["مستني الرسالة", "وصلت الرسالة", "الموظف فهمها", "جهز الرد", "تم الرد"].map((label, i) => {
-                      const active = mockState === "success" ? true : i === 0;
+                      const active = firstMessageStage >= i + 1 || (i === 0 && firstMessageStage === 0);
                       return (
                         <div key={label} className="flex items-center gap-4 rounded-2xl border border-border/70 bg-white p-4 shadow-sm">
                           <span className={cx("grid h-9 w-9 place-items-center rounded-full font-black", active ? "bg-success text-white" : "bg-secondary text-muted-foreground")}>{active ? "✓" : "○"}</span>
@@ -461,10 +962,10 @@ export function GuidedOnboardingPreview() {
                   <span className="mt-6 text-xs font-black text-primary">التحكم اليدوي</span>
                   <h2 className="mt-2 text-3xl font-black tracking-[-0.035em]">وأنت دايمًا المتحكم</h2>
                   <p className="mt-4 max-w-lg leading-8 text-muted-foreground">رد بنفسك من موبايل واتساب على نفس المحادثة. DRVOWA هيعرف إن حد من فريقك تدخل.</p>
-                  <div className={cx("mt-8 w-full max-w-md rounded-2xl p-5 text-sm font-black", mockState === "success" ? "bg-success-soft text-success" : "bg-surface text-muted-foreground")}>
-                    {mockState === "success" ? "تمام 👌 وقفنا الرد التلقائي للمحادثة دي." : "مستني ردك اليدوي…"}
+                  <div className={cx("mt-8 w-full max-w-md rounded-2xl p-5 text-sm font-black", humanTakeoverDone ? "bg-success-soft text-success" : "bg-surface text-muted-foreground")}>
+                    {humanTakeoverDone ? "تمام 👌 وقفنا الرد التلقائي للمحادثة دي." : "مستني ردك اليدوي…"}
                   </div>
-                  {mockState === "success" ? <p className="mt-4 max-w-lg text-sm leading-7 text-muted-foreground">أي وقت حد من فريقك يرد بنفسه، DRVOWA يسيب المحادثة ليكم تلقائيًا.</p> : null}
+                  {humanTakeoverDone ? <p className="mt-4 max-w-lg text-sm leading-7 text-muted-foreground">أي وقت حد من فريقك يرد بنفسه، DRVOWA يسيب المحادثة ليكم تلقائيًا.</p> : null}
                 </div>
               ) : null}
 
@@ -490,7 +991,15 @@ export function GuidedOnboardingPreview() {
               <Button
                 type="button"
                 onClick={next}
-                disabled={mockState === "loading" || (step === "BUSINESS" && !businessCanContinue)}
+                disabled={
+                  mockState === "loading"
+                  || (step === "BUSINESS" && !businessCanContinue)
+                  || (step === "KNOWLEDGE" && !knowledgeApplied && !knowledge.trim() && mockState !== "success")
+                  || (step === "PLAYGROUND" && chatCount === 0)
+                  || (step === "WHATSAPP" && Boolean(qrImageDataUrl) && !waReady)
+                  || (step === "FIRST_MESSAGE" && firstMessageStage < 5)
+                  || (step === "HUMAN_TAKEOVER" && !humanTakeoverDone)
+                }
                 className="min-w-44"
               >
                 {primaryLabel}
@@ -499,14 +1008,14 @@ export function GuidedOnboardingPreview() {
           </div>
         </section>
 
-        <div className="mt-6 hidden justify-center md:flex">
+        {process.env.NODE_ENV !== "production" ? <div className="mt-6 hidden justify-center md:flex">
           <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-white/75 p-2 shadow-sm backdrop-blur">
             <span className="px-2 text-[11px] font-bold text-muted-foreground">Preview state</span>
             {(["default", "loading", "success", "error", "compatibility-warning"] as MockState[]).map((state) => (
               <button key={state} type="button" onClick={() => setMockState(state)} className={cx("rounded-xl px-2.5 py-1.5 text-[10px] font-bold transition", mockState === state ? "bg-primary text-white" : "text-muted-foreground hover:bg-secondary")}>{state}</button>
             ))}
           </div>
-        </div>
+        </div> : null}
       </div>
 
       <style jsx global>{`
@@ -523,7 +1032,15 @@ export function GuidedOnboardingPreview() {
             type="button"
             className="flex-1"
             onClick={next}
-            disabled={mockState === "loading" || (step === "BUSINESS" && !businessCanContinue)}
+            disabled={
+              mockState === "loading"
+              || (step === "BUSINESS" && !businessCanContinue)
+              || (step === "KNOWLEDGE" && !knowledgeApplied && !knowledge.trim() && mockState !== "success")
+                  || (step === "PLAYGROUND" && chatCount === 0)
+              || (step === "WHATSAPP" && Boolean(qrImageDataUrl) && !waReady)
+              || (step === "FIRST_MESSAGE" && firstMessageStage < 5)
+              || (step === "HUMAN_TAKEOVER" && !humanTakeoverDone)
+            }
           >
             {primaryLabel}
           </Button>
