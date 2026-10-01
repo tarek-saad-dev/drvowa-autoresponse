@@ -50,7 +50,7 @@ export function WorkspaceSwitcher({
     <div className="flex flex-col items-end gap-1">
       <Select
         aria-label="مساحة العمل"
-        className="h-9 min-w-40 text-sm"
+        className="h-9 w-28 max-w-[7rem] text-xs sm:w-40 sm:max-w-none sm:text-sm"
         disabled={pending || businesses.length < 2}
         value={activeBusinessId ?? businesses[0]?.businessId}
         onChange={(e) => onChange(e.target.value)}
