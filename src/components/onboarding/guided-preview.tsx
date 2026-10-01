@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -700,9 +701,12 @@ export function GuidedOnboardingPreview() {
                   </div>
                   <div className="mx-auto mt-7 w-full max-w-md rounded-[28px] border border-border bg-white p-5 shadow-[0_18px_55px_rgba(15,28,36,.10)]">
                     {qrImageDataUrl ? (
-                      <img
+                      <Image
                         src={qrImageDataUrl}
                         alt="QR لربط واتساب"
+                        width={208}
+                        height={208}
+                        unoptimized
                         className="mx-auto h-52 w-52 rounded-3xl border border-border bg-white p-2"
                       />
                     ) : (
