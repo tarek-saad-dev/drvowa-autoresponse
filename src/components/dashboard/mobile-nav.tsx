@@ -48,7 +48,7 @@ export function MobileNav({
               >
                 {item.icon}
               </span>
-              <span className="max-w-full truncate text-[10px] font-black">{item.label}</span>
+              <span className="max-w-full truncate text-[10px] font-black">{item.mobileLabel}</span>
             </Link>
           );
         })}
