@@ -835,11 +835,23 @@ export function InboxPanel({
             ) : (
               <Button
                 type="button"
-                onClick={() => void resumeAi()}
+                variant={selected.aiMode === "SAFETY_PAUSED" ? "outline" : "default"}
+                onClick={() => {
+                  if (
+                    selected.aiMode !== "SAFETY_PAUSED"
+                    || window.confirm("راجعت المحادثة ومتأكد إنك عايز تشغل الرد التلقائي؟")
+                  ) {
+                    void resumeAi();
+                  }
+                }}
                 disabled={resuming}
                 className="justify-start rounded-xl"
               >
-                {resuming ? "..." : "رجّع الرد التلقائي"}
+                {resuming
+                  ? "..."
+                  : selected.aiMode === "SAFETY_PAUSED"
+                    ? "راجع وشغّل الرد"
+                    : "رجّع الرد التلقائي"}
               </Button>
             )}
           </div>
