@@ -233,6 +233,17 @@ export function InboxPanel({
     [],
   );
 
+  useEffect(() => {
+    if (selectedId || conversations.length === 0) return;
+    if (typeof window === "undefined") return;
+    if (!window.matchMedia("(min-width: 768px)").matches) return;
+
+    const first = conversations[0];
+    setSelectedId(first.conversationId);
+    selectedIdRef.current = first.conversationId;
+    void loadMessages(first.conversationId, false);
+  }, [conversations, loadMessages, selectedId]);
+
   const selectConversation = useCallback(
     (conversationId: string) => {
       setSelectedId(conversationId);
@@ -649,8 +660,8 @@ export function InboxPanel({
         {!selectedId ? (
           <EmptyState
             className="my-auto border-0 bg-transparent"
-            title="اختار عميل من القائمة"
-            description="ومن هنا تقدر تتابع الردود أو تتدخل بنفسك."
+            title="اختار محادثة وابدأ"
+            description="هتشوف الرسائل هنا، وتقدر تسيب الموظف يرد أو تستلم المحادثة بنفسك."
           />
         ) : loadingMessages ? (
           <div className="my-auto text-center text-sm text-muted-foreground">
@@ -693,7 +704,7 @@ export function InboxPanel({
       </div>
 
       {selectedId ? (
-        <div className="border-t border-border bg-card p-3 sm:p-4">
+        <div className="border-t border-border bg-card p-3 pb-24 sm:p-4 sm:pb-24 md:pb-4">
           <div className="rounded-[22px] border border-border bg-surface/50 p-2 shadow-sm">
             <label className="sr-only" htmlFor={composerId}>
               اكتب ردك
@@ -715,7 +726,7 @@ export function InboxPanel({
             />
             <div className="flex items-center justify-between gap-3 px-1 pb-1">
               <p className="text-[10px] leading-4 text-muted-foreground">
-                ردك هنا = استلامك للمحادثة. الـAI هيتوقف فيها تلقائيًا لحد ما ترجعه.
+                أول ما تبعت رد، المحادثة تبقى معاك والرد التلقائي يقف تلقائيًا لحد ما ترجعه.
               </p>
               <Button
                 type="button"
