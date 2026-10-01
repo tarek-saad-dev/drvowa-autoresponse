@@ -132,6 +132,7 @@ export function InboxPanel({
   const [sending, setSending] = useState(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<InboxFilter>("ALL");
+  const [showDetails, setShowDetails] = useState(false);
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const selectedIdRef = useRef<string | null>(null);
@@ -249,6 +250,7 @@ export function InboxPanel({
     (conversationId: string) => {
       setSelectedId(conversationId);
       setMobileShowThread(true);
+      setShowDetails(false);
       setMessages([]);
       setError(null);
       void loadMessages(conversationId, false);
@@ -594,6 +596,16 @@ export function InboxPanel({
                 </div>
               </div>
 
+              <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowDetails((value) => !value)}
+                  className="hidden rounded-xl px-3 text-xs xl:inline-flex"
+                >
+                  {showDetails ? "اخفي التفاصيل" : "تفاصيل العميل"}
+                </Button>
               {selected.aiMode === "AUTO" ? (
                 <Button
                   type="button"
@@ -623,6 +635,7 @@ export function InboxPanel({
                   {resuming ? "..." : "رجّع الرد التلقائي"}
                 </Button>
               )}
+              </div>
             </div>
 
             {selected.aiMode === "HUMAN_PAUSED" ? (
@@ -762,11 +775,88 @@ export function InboxPanel({
     </section>
   );
 
+
+  const detailsPane = selected ? (
+    <aside className="hidden w-[19rem] shrink-0 border-s border-border bg-card xl:flex xl:flex-col">
+      <div className="border-b border-border p-5">
+        <p className="text-[11px] font-black text-primary">تفاصيل العميل</p>
+        <div className="mt-4 flex items-center gap-3">
+          <div className="grid h-12 w-12 place-items-center rounded-full bg-primary/10 text-base font-black text-primary">
+            {contactInitial(selected)}
+          </div>
+          <div className="min-w-0">
+            <h3 className="truncate text-sm font-black">{contactLabel(selected)}</h3>
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+              {selected.contactPhoneNormalized || "رقم الهاتف غير متاح"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-4 p-5">
+        <div className="rounded-2xl bg-surface p-4">
+          <p className="text-[10px] font-black text-muted-foreground">مين بيرد دلوقتي؟</p>
+          <p className="mt-2 text-sm font-black">{aiStatusLabel(selected.aiMode)}</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {selected.aiMode === "AUTO"
+              ? "موظف الاستقبال الذكي بيتابع المحادثة تلقائيًا."
+              : selected.aiMode === "HUMAN_PAUSED"
+                ? "المحادثة معاك أو مع حد من الفريق لحد ما ترجع الرد التلقائي."
+                : "الرد متوقف مؤقتًا لحد مراجعة المحادثة."}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-border p-4">
+          <p className="text-[10px] font-black text-muted-foreground">آخر نشاط</p>
+          <p className="mt-2 text-sm font-bold">
+            {formatTime(selected.lastMessageAtUtc) || "لسه مفيش نشاط"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {selected.lastMessageDirection === "INBOUND"
+              ? "آخر رسالة كانت من العميل."
+              : selected.lastMessageDirection === "OUTBOUND"
+                ? "آخر رسالة اتبعتت من عندك."
+                : "مفيش اتجاه رسالة متاح."}
+          </p>
+        </div>
+
+        <div>
+          <p className="mb-2 text-[10px] font-black text-muted-foreground">إجراءات سريعة</p>
+          <div className="grid gap-2">
+            {selected.aiMode === "AUTO" ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => composerRef.current?.focus()}
+                className="justify-start rounded-xl"
+              >
+                رد بنفسك على العميل
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={() => void resumeAi()}
+                disabled={resuming}
+                className="justify-start rounded-xl"
+              >
+                {resuming ? "..." : "رجّع الرد التلقائي"}
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </aside>
+  ) : null;
+
+
   return (
     <div className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm">
-      <div className="hidden h-[calc(100vh-10.5rem)] min-h-[36rem] md:grid md:grid-cols-[minmax(18rem,23rem)_1fr]">
-        {listPane}
+      <div className="hidden h-[calc(100vh-10.5rem)] min-h-[36rem] md:flex">
+        <div className="w-[min(23rem,34vw)] min-w-[18rem] shrink-0">
+          {listPane}
+        </div>
         {threadPane("inbox-manual-reply-desktop")}
+        {showDetails ? detailsPane : null}
       </div>
       <div className="min-h-[calc(100vh-11rem)] md:hidden">
         {mobileShowThread && selectedId
