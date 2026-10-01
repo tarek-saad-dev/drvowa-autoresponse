@@ -83,6 +83,7 @@ export function GuidedOnboardingPreview({
   const businessCanContinue =
     currentBusinessQuestion.key === "link" || currentBusinessValue.length > 0;
 
+  /* eslint-disable react-hooks/set-state-in-effect -- guided onboarding restores and polls external state */
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(storageKey);
@@ -282,6 +283,8 @@ export function GuidedOnboardingPreview({
       window.clearInterval(timer);
     };
   }, [step, testConversationId]);
+
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   async function ensureWorkspace() {
     if (workspaceReady) return;
