@@ -55,9 +55,20 @@ function formatTime(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return new Intl.DateTimeFormat("ar-SA", {
-    dateStyle: "short",
-    timeStyle: "short",
+
+  const diffMs = Date.now() - d.getTime();
+  const minutes = Math.max(0, Math.floor(diffMs / 60_000));
+  if (minutes < 1) return "دلوقتي";
+  if (minutes < 60) return `منذ ${minutes} د`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `منذ ${hours} س`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "أمس";
+  if (days < 7) return `منذ ${days} أيام`;
+
+  return new Intl.DateTimeFormat("ar-EG", {
+    day: "numeric",
+    month: "short",
   }).format(d);
 }
 
@@ -415,8 +426,10 @@ export function InboxPanel({
             <h2 className="text-base font-black">محادثات العملاء</h2>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
               {conversations.length === 0
-                ? "أول رسالة هتظهر هنا تلقائيًا"
-                : `${conversations.length} محادثة — اختار واحدة وابدأ`}
+                ? "أول رسالة من عميل هتظهر هنا تلقائيًا"
+                : filterCounts.ATTENTION > 0
+                  ? `${filterCounts.ATTENTION} محتاجة تدخلك من ${conversations.length}`
+                  : `${conversations.length} محادثة — كله تحت السيطرة`}
             </p>
           </div>
           <Button
@@ -434,7 +447,7 @@ export function InboxPanel({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="دور على عميل أو رقم…"
+            placeholder="ابحث باسم العميل أو رقمه…"
             aria-label="بحث في المحادثات"
             className="h-11 rounded-2xl bg-surface pe-4 text-sm"
           />
@@ -442,7 +455,7 @@ export function InboxPanel({
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
           {([
             ["ALL", "الكل"],
-            ["ATTENTION", "محتاجك"],
+            ["ATTENTION", "محتاج تدخلك"],
             ["AUTO", "الموظف بيتابع"],
           ] as Array<[InboxFilter, string]>).map(([value, label]) => (
             <button
@@ -521,7 +534,7 @@ export function InboxPanel({
 
                     <div className="mt-1 flex items-center gap-2">
                       <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                        {conversation.lastMessageDirection === "OUTBOUND" ? "أنت: " : ""}
+                        {conversation.lastMessageDirection === "OUTBOUND" ? "رد: " : ""}
                         {previewText(conversation)}
                       </span>
                       <span
@@ -580,7 +593,7 @@ export function InboxPanel({
                     ) : null}
                     <span className="text-[10px] text-muted-foreground">•</span>
                     <span className="text-[10px] text-muted-foreground">
-                      {selected.lastMessageDirection === "INBOUND" ? "آخر رسالة من العميل" : "آخر رد من عندك"}
+                      {formatTime(selected.lastMessageAtUtc)}
                     </span>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
@@ -683,17 +696,17 @@ export function InboxPanel({
               <div>
                 <p className="text-xs font-black text-foreground">
                   {selected.aiMode === "AUTO"
-                    ? "الموظف الذكي ماسك المحادثة"
+                    ? "الموظف بيتابع المحادثة"
                     : selected.aiMode === "HUMAN_PAUSED"
                       ? "المحادثة معاك دلوقتي"
-                      : "المحادثة واقفة وعايزة مراجعة"}
+                      : "المحادثة محتاجة مراجعة"}
                 </p>
                 <p className="mt-0.5 text-[10px] text-muted-foreground">
                   {selected.aiMode === "AUTO"
-                    ? "لو رديت بنفسك، هنوقف الرد الآلي هنا تلقائيًا."
+                    ? "سيبه يكمل، أو رد بنفسك في أي وقت."
                     : selected.aiMode === "HUMAN_PAUSED"
-                      ? "لما تخلص، رجّعها للموظف من الزر فوق."
-                      : "راجع آخر الرسائل قبل تشغيل الرد التلقائي تاني."}
+                      ? "لما تخلص، رجّع المحادثة للموظف."
+                      : "راجع آخر الرسائل قبل ما تشغّل الرد التلقائي."}
                 </p>
               </div>
             </div>
@@ -761,7 +774,7 @@ export function InboxPanel({
               onChange={(e) => setDraft(e.target.value)}
               rows={2}
               maxLength={4000}
-              placeholder="اكتب ردك للعميل…"
+              placeholder="اكتب ردك… واضغط Enter للإرسال"
               className="min-h-16 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -773,10 +786,10 @@ export function InboxPanel({
             <div className="flex items-center justify-between gap-3 px-1 pb-1">
               <p className="text-[10px] leading-4 text-muted-foreground">
                 {selected?.aiMode === "AUTO"
-                  ? "أول رد منك هيخلّي المحادثة معاك ويوقف الموظف تلقائيًا هنا."
+                  ? "أول رد منك هيسلّم المحادثة ليك تلقائيًا."
                   : selected?.aiMode === "HUMAN_PAUSED"
-                    ? "المحادثة معاك دلوقتي. لما تخلص رجّع الموظف من الزر فوق."
-                    : "راجع المحادثة قبل ما ترجع الرد التلقائي."}
+                    ? "إنت ماسك المحادثة دلوقتي."
+                    : "راجع المحادثة قبل استئناف الرد التلقائي."}
               </p>
               <Button
                 type="button"
