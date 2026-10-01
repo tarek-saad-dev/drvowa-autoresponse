@@ -56,14 +56,26 @@ export default async function BillingPage() {
   const latest = paymentStatus.latest;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">الخطة والفوترة</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          خطتك الحالية وحدود الاستخدام. يتجدد الاستهلاك الشهري في{" "}
-          {formatUsageRenewalAr(overview.usagePeriod.usagePeriodEndUtc)}.
-        </p>
-      </div>
+    <div className="mx-auto w-full max-w-6xl space-y-6">
+      <section className="rounded-[28px] border border-border bg-card p-5 shadow-sm sm:p-7">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-black text-primary">الخطة والفوترة</p>
+            <h1 className="mt-2 text-3xl font-black tracking-[-0.035em]">
+              خطتك واضحة، والترقية وقت ما تحتاج
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">
+              راجع حالة اشتراكك واستخدامك، واختار الخطة المناسبة من غير تفاصيل محاسبية معقدة.
+            </p>
+          </div>
+          <div className="rounded-2xl bg-surface px-4 py-3">
+            <p className="text-[11px] font-bold text-muted-foreground">التجديد</p>
+            <p className="mt-1 text-sm font-black">
+              {formatUsageRenewalAr(overview.usagePeriod.usagePeriodEndUtc)}
+            </p>
+          </div>
+        </div>
+      </section>
 
       {latest ? (
         <Alert
@@ -101,37 +113,49 @@ export default async function BillingPage() {
         </Alert>
       ) : null}
 
-      <section className="space-y-3 rounded-xl border border-border bg-card p-5">
-        <h2 className="text-lg font-semibold">اشتراكك الحالي</h2>
-        <dl className="grid gap-3 text-sm sm:grid-cols-2">
+      <section className="rounded-[24px] border border-border bg-card p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <dt className="text-muted-foreground">الخطة</dt>
-            <dd className="font-medium">{plan?.displayName ?? "—"}</dd>
+            <p className="text-xs font-black text-primary">اشتراكك الحالي</p>
+            <h2 className="mt-1 text-2xl font-black">{plan?.displayName ?? "—"}</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {overview.canAct
+                ? "التشغيل متاح دلوقتي ضمن حدود الخطة."
+                : "التشغيل متوقف مؤقتًا — راجع حالة الاشتراك."}
+            </p>
           </div>
-          <div>
-            <dt className="text-muted-foreground">الحالة</dt>
-            <dd className="font-medium">
-              {subscriptionStatusLabel(sub?.status)}
-            </dd>
+          <div className={`rounded-full px-3 py-1.5 text-xs font-black ${
+            overview.canAct
+              ? "bg-success-soft text-success"
+              : "bg-warning-soft text-warning"
+          }`}>
+            {subscriptionStatusLabel(sub?.status)}
           </div>
+        </div>
+
+        <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+
           <div>
             <dt className="text-muted-foreground">تاريخ الانتهاء</dt>
             <dd className="font-medium">{formatDate(sub?.periodEndUtc)}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">إمكانية التشغيل</dt>
+            <dt className="text-muted-foreground">حالة التشغيل</dt>
             <dd className="font-medium">
-              {overview.canAct
-                ? "يمكنك استخدام الرد الآلي ضمن حدود خطتك"
-                : "التشغيل موقوف مؤقتاً — راجع حالة الاشتراك"}
+              {overview.canAct ? "جاهز للاستخدام" : "محتاج مراجعة"}
             </dd>
           </div>
         </dl>
       </section>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold">استخدامك الحالي</h2>
-        <div className="space-y-4 rounded-xl border border-border bg-card p-5">
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-lg font-black">استخدامك الحالي</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            نظرة سريعة قبل ما تقرر إذا كنت محتاج ترقية.
+          </p>
+        </div>
+        <div className="grid gap-4 rounded-[24px] border border-border bg-card p-5 shadow-sm sm:grid-cols-2 sm:p-6">
           <Progress
             label="ردود الذكاء الاصطناعي"
             value={overview.aiUsed}
