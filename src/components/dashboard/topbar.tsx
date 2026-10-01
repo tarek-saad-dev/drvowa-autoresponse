@@ -69,9 +69,11 @@ export function DashboardTopbar({
           size="sm"
           onClick={logout}
           disabled={loggingOut}
-          className="hidden rounded-xl text-xs sm:inline-flex"
+          className="h-9 shrink-0 rounded-xl px-2 text-xs sm:px-3"
+          aria-label="تسجيل الخروج"
         >
-          {loggingOut ? "..." : "خروج"}
+          <span className="sm:hidden">{loggingOut ? "…" : "↪"}</span>
+          <span className="hidden sm:inline">{loggingOut ? "..." : "خروج"}</span>
         </Button>
       </div>
     </header>
