@@ -21,7 +21,7 @@ export function DashboardSidebar({
       "group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold transition-all duration-200",
       active
         ? "bg-white text-sidebar shadow-sm"
-        : "text-sidebar-muted hover:bg-white/7 hover:text-sidebar-foreground",
+        : "text-sidebar-muted hover:bg-white/5 hover:text-sidebar-foreground",
     );
 
   return (
