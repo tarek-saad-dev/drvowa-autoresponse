@@ -31,7 +31,7 @@ export function MobileNav({
               key={item.href}
               href={item.href}
               className={cn(
-                "relative flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-center transition",
+                "relative flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2.5 text-center transition active:scale-[.97]",
                 item.href === "/dashboard/inbox" && "-mt-1",
                 active
                   ? "bg-primary/10 text-primary"
@@ -48,7 +48,7 @@ export function MobileNav({
               >
                 {item.icon}
               </span>
-              <span className="max-w-full truncate text-[10px] font-black">{item.mobileLabel}</span>
+              <span className="max-w-full truncate text-[10px] font-black leading-none">{item.mobileLabel}</span>
             </Link>
           );
         })}
