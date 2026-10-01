@@ -25,7 +25,7 @@ export function DashboardSidebar({
     );
 
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-e border-white/10 bg-sidebar px-3 py-4 text-sidebar-foreground">
+    <aside className="flex w-[17rem] shrink-0 flex-col border-e border-white/10 bg-sidebar px-3 py-4 text-sidebar-foreground">
       <div className="px-3 pb-5 pt-1">
         <div className="flex items-center gap-3">
           <div className="grid h-10 w-10 place-items-center rounded-2xl bg-white text-lg font-black text-sidebar">
@@ -39,6 +39,9 @@ export function DashboardSidebar({
       </div>
 
       <nav className="flex-1 overflow-y-auto">
+        <p className="mb-2 px-3 text-[10px] font-black tracking-[.08em] text-sidebar-muted/70">
+          الشغل اليومي
+        </p>
         <div className="space-y-1">
           {primary.map((item) => {
             const active =
@@ -65,7 +68,7 @@ export function DashboardSidebar({
 
         <div className="my-4 border-t border-white/10" />
         <p className="mb-2 px-3 text-[10px] font-black tracking-[.08em] text-sidebar-muted/70">
-          إعدادات البيزنس
+          إدارة البيزنس
         </p>
 
         <div className="space-y-1">
@@ -101,9 +104,9 @@ export function DashboardSidebar({
       </nav>
 
       <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
-        <p className="text-xs font-black">عاوز تعمل إيه دلوقتي؟</p>
+        <p className="text-xs font-black">اختصارات سريعة</p>
         <p className="mt-1 text-[11px] leading-5 text-sidebar-muted">
-          اختار المهمة بدل ما تدور على اسم القسم.
+          أكتر حاجتين هتحتاجهم خلال اليوم.
         </p>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <Link
