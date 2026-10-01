@@ -151,15 +151,14 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
+    <div className="grid gap-5 xl:grid-cols-[1.08fr_.92fr]">
       <Card>
         <CardHeader>
           <CardTitle>
-            {editing ? "تعديل موظف الاستقبال" : "شخصية موظف الاستقبال"}
+            {editing ? "عدّل شخصية الموظف" : "خلّي طريقته شبه فريقك"}
           </CardTitle>
           <CardDescription>
-            عرّف كيف يتحدث مع عملائك. التغييرات تُطبَّق على الردود الجديدة بعد
-            الحفظ.
+            الاسم واللهجة والنبرة والتعليمات اللي عايزه يمشي عليها مع العملاء.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -180,7 +179,7 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
               </Alert>
             ) : null}
             <div>
-              <Label htmlFor="name">الاسم</Label>
+              <Label htmlFor="name">اسم الموظف</Label>
               <Input
                 id="name"
                 name="name"
@@ -191,7 +190,7 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
               />
             </div>
             <div>
-              <Label htmlFor="roleTitle">المسمى</Label>
+              <Label htmlFor="roleTitle">هيقدم نفسه بإيه؟</Label>
               <Input
                 id="roleTitle"
                 name="roleTitle"
@@ -231,10 +230,9 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
               </div>
             </div>
             <div>
-              <Label htmlFor="instructions">تعليمات السلوك</Label>
+              <Label htmlFor="instructions">قواعد مهمة يمشي عليها</Label>
               <p className="mb-1.5 text-xs text-muted-foreground">
-                مثال: رحّب بالعميل، اسأل عن الخدمة المطلوبة، لا تعد بمواعيد دون
-                تأكيد، ووجّه للطوارئ لرقم المحل.
+                اكتب له الحاجات اللي لازم يعملها أو يتجنبها في الرد.
               </p>
               <Textarea
                 id="instructions"
@@ -258,11 +256,7 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
                 disabled={pending}
                 data-testid={editing ? "agent-save-edit" : "agent-create"}
               >
-                {pending
-                  ? "جارٍ الحفظ..."
-                  : editing
-                    ? "حفظ التعديل"
-                    : "إنشاء"}
+                {pending ? "جاري الحفظ..." : editing ? "احفظ التعديلات" : "جهّز الموظف"}
               </Button>
               {editing ? (
                 <Button type="button" variant="ghost" onClick={cancelEdit}>
@@ -278,7 +272,7 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
         {agents.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="py-8 text-sm text-muted-foreground">
-              لا يوجد موظف استقبال بعد. أنشئ شخصيته من النموذج المجاور.
+              لسه معندكش شخصية موظف جاهزة. ابدأ من النموذج وحدد أسلوبه في دقايق.
             </CardContent>
           </Card>
         ) : (

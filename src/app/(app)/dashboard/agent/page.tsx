@@ -33,10 +33,10 @@ export default async function AgentPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">موظف الاستقبال</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          شخصية الرد الآلي على واتساب — الاسم، النبرة، والتعليمات التي يتبعها مع
-          العملاء.
+        <p className="text-xs font-black text-primary">شخصية الموظف</p>
+        <h1 className="mt-1 text-3xl font-black tracking-[-0.035em]">ظبّط موظف الاستقبال بطريقتك</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
+          اختار شخصيته وطريقة كلامه، وبعدها شغّل أو وقف الرد التلقائي وقت ما تحب.
         </p>
       </div>
       <AiAutoReplyPanel

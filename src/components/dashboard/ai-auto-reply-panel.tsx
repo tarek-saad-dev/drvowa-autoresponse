@@ -133,46 +133,64 @@ export function AiAutoReplyPanel({
       : "ربط واتساب";
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>الرد الآلي عبر واتساب</CardTitle>
-        <CardDescription>
-          يعمل فقط على الرسائل الجديدة بعد التفعيل. الرسائل القديمة لن يُرد عليها.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-2 rounded-md border border-border bg-surface/60 px-3 py-3 text-sm sm:grid-cols-3">
+    <Card className={enabled ? "border-success/20 bg-success-soft/20" : ""}>
+      <CardHeader className="pb-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-xs text-muted-foreground">واتساب</p>
-            <p className="font-medium">{whatsappStatusLabel(whatsapp.uiState)}</p>
+            <p className="text-xs font-black text-primary">تشغيل الموظف</p>
+            <CardTitle className="mt-1 text-xl">الرد التلقائي على واتساب</CardTitle>
+            <CardDescription className="mt-2 max-w-xl leading-6">
+              لما يكون شغال، الموظف يرد على الرسائل الجديدة. ولو حد من فريقك رد يدويًا، يسيب المحادثة ليكم تلقائيًا.
+            </CardDescription>
+          </div>
+          <div
+            className={`inline-flex items-center gap-2 self-start rounded-full px-3 py-2 text-xs font-black ${
+              enabled
+                ? "bg-success-soft text-success"
+                : "bg-secondary text-muted-foreground"
+            }`}
+          >
+            <span className={`h-2.5 w-2.5 rounded-full ${enabled ? "bg-success" : "bg-muted-foreground/40"}`} />
+            {enabled ? "شغال" : "متوقف"}
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-5">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <p className="text-[11px] font-bold text-muted-foreground">واتساب</p>
+            <p className="mt-1 text-sm font-black">{whatsappStatusLabel(whatsapp.uiState)}</p>
             {whatsapp.maskedPhone ? (
-              <p className="text-xs text-muted-foreground">{whatsapp.maskedPhone}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground" dir="ltr">
+                {whatsapp.maskedPhone}
+              </p>
             ) : null}
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground">موظف الاستقبال</p>
-            <p className="font-medium">
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <p className="text-[11px] font-bold text-muted-foreground">الموظف</p>
+            <p className="mt-1 text-sm font-black">
               {hasAgent
-                ? agents.find((a) => a.agentId === agentId)?.name ?? "محدد"
-                : "غير جاهز"}
+                ? agents.find((a) => a.agentId === agentId)?.name ?? "جاهز"
+                : "لسه مش جاهز"}
             </p>
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground">الرد الآلي</p>
-            <p className="font-medium">
-              {enabled ? "مفعّل" : "متوقف"}
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <p className="text-[11px] font-bold text-muted-foreground">المعرفة</p>
+            <p className="mt-1 text-sm font-black">
+              {knowledgeActiveCount > 0 ? `${knowledgeActiveCount} معلومة` : "مفيش معلومات"}
             </p>
           </div>
         </div>
 
         {!waReady ? (
-          <Alert variant="warning" title="واتساب غير متصل">
-            <p className="mb-2">
-              يلزم ربط واتساب قبل تفعيل الرد الآلي.
+          <Alert variant="warning" title="ناقص ربط واتساب">
+            <p className="mb-3">
+              وصل رقم واتساب الأول، وبعدها تقدر تشغل الموظف.
             </p>
             <Link
               href="/dashboard/whatsapp"
-              className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground"
+              className="inline-flex h-9 items-center justify-center rounded-xl bg-primary px-3 text-sm font-black text-primary-foreground"
             >
               {waCta}
             </Link>
@@ -181,18 +199,21 @@ export function AiAutoReplyPanel({
 
         {agents.length === 0 ? (
           <Alert variant="warning">
-            أنشئ موظف استقبال نشطاً أولاً قبل تفعيل الرد الآلي.
+            اعمل شخصية لموظف الاستقبال الأول قبل التشغيل.
           </Alert>
         ) : (
-          <label className="block space-y-1 text-sm">
-            <span className="text-muted-foreground">
-              موظف الاستقبال المرتبط بواتساب
-            </span>
+          <div className="rounded-2xl border border-border bg-surface/45 p-4">
+            <label className="block text-sm font-black" htmlFor="active-agent">
+              مين الموظف اللي يرد؟
+            </label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              لو عندك أكتر من شخصية، اختار اللي هتشتغل على واتساب.
+            </p>
             <select
-              className="w-full rounded-md border border-input bg-card px-3 py-2"
+              id="active-agent"
+              className="mt-3 h-11 w-full rounded-xl border border-input bg-card px-3 text-sm font-bold"
               value={agentId}
               disabled={busy}
-              aria-label="موظف الاستقبال المرتبط بواتساب"
               onChange={(e) => setAgentId(e.target.value)}
             >
               {agents.map((a) => (
@@ -201,31 +222,12 @@ export function AiAutoReplyPanel({
                 </option>
               ))}
             </select>
-          </label>
+          </div>
         )}
 
         {waReady && hasAgent && knowledgeActiveCount === 0 ? (
           <Alert variant="info">
-            لا توجد معرفة نشطة بعد. يُفضّل إضافة معلومات النشاط من قاعدة
-            المعرفة قبل التفعيل لتحسين جودة الردود.
-          </Alert>
-        ) : null}
-
-        <div className="rounded-md border border-border bg-surface/60 px-3 py-2 text-sm">
-          <p>
-            الحالة:{" "}
-            <strong>{enabled ? "مفعّل" : "متوقف (افتراضي)"}</strong>
-          </p>
-          {enabled && enabledAtUtc ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              بدأ التفعيل: {new Date(enabledAtUtc).toLocaleString("ar-SA")}
-            </p>
-          ) : null}
-        </div>
-
-        {enabled ? (
-          <Alert variant="warning">
-            سيتم الرد تلقائيًا على الرسائل الجديدة فقط.
+            الموظف ممكن يشتغل، بس الأفضل تعلّمه معلومات البيزنس الأول عشان ردوده تبقى أدق.
           </Alert>
         ) : null}
 
@@ -240,30 +242,46 @@ export function AiAutoReplyPanel({
           </Alert>
         ) : null}
 
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            disabled={busy || !canEnable}
-            onClick={() => void save(true)}
-          >
-            تفعيل الرد الآلي
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={busy || !enabled}
-            onClick={() => void save(false)}
-          >
-            إيقاف الرد الآلي
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={busy || agents.length === 0 || !waReady}
-            onClick={() => void save(enabled)}
-          >
-            حفظ موظف الاستقبال
-          </Button>
+        <div className="flex flex-col gap-2 border-t border-border pt-5 sm:flex-row sm:items-center">
+          {!enabled ? (
+            <Button
+              type="button"
+              size="lg"
+              disabled={busy || !canEnable}
+              onClick={() => void save(true)}
+              className="sm:min-w-48"
+            >
+              {busy ? "جاري التشغيل..." : "شغّل موظف الاستقبال"}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="lg"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void save(false)}
+              className="sm:min-w-48"
+            >
+              {busy ? "جاري الإيقاف..." : "وقف الرد التلقائي"}
+            </Button>
+          )}
+
+          {agents.length > 0 && waReady ? (
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => void save(enabled)}
+            >
+              حفظ الموظف المختار
+            </Button>
+          ) : null}
+
+          {enabled && enabledAtUtc ? (
+            <span className="text-[11px] text-muted-foreground sm:ms-auto">
+              شغال من {new Date(enabledAtUtc).toLocaleString("ar-SA")}
+            </span>
+          ) : null}
         </div>
       </CardContent>
     </Card>

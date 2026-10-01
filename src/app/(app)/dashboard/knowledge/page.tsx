@@ -24,10 +24,10 @@ export default async function KnowledgePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">قاعدة المعرفة</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          أضف معلومات نشاطك بالذكاء أو يدوياً — المعلومات النشطة هي ما يعتمد عليه
-          موظف الاستقبال في الرد.
+        <p className="text-xs font-black text-primary">تدريب الموظف</p>
+        <h1 className="mt-1 text-3xl font-black tracking-[-0.035em]">خلّي موظفك يعرف البيزنس زيك</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
+          علّمه الأسعار والخدمات والمواعيد والسياسات بالكلام الطبيعي، وراجع كل اللي عارفه من نفس المكان.
         </p>
       </div>
       <KnowledgePageClient

@@ -234,13 +234,10 @@ export function KnowledgeCopilot() {
 
   return (
     <div className="space-y-4">
-      <div className="mx-auto max-w-3xl text-center">
-        <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-          علّم موظف الاستقبال
-        </h2>
-        <p className="mt-2 text-sm text-muted-foreground sm:text-base">
-          اكتب أي معلومات عن نشاطك: الخدمات، الأسعار، الفروع، المواعيد، السياسات
-          أو الروابط… وأنا هرتبها وأضيف الجديد من غير تكرار.
+      <div className="mx-auto max-w-3xl rounded-2xl border border-primary/10 bg-primary/5 px-4 py-3">
+        <p className="text-sm font-black">اكتبها بطريقتك، مش لازم ترتب حاجة</p>
+        <p className="mt-1 text-xs leading-6 text-muted-foreground">
+          مثال: الأسعار، المواعيد، الخدمات، الفروع، سياسة الحجز أو أي معلومة الموظف لازم يعرفها.
         </p>
       </div>
 
@@ -297,8 +294,8 @@ export function KnowledgeCopilot() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder={PLACEHOLDER}
-          rows={10}
-          className="min-h-[180px] resize-y text-sm leading-7"
+          rows={8}
+          className="min-h-[170px] resize-y rounded-2xl border-2 bg-surface/30 p-4 text-sm leading-7 focus:border-primary"
           disabled={pending}
         />
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -308,7 +305,7 @@ export function KnowledgeCopilot() {
               : "الصق نصاً طويلاً دفعة واحدة — سنرتّبه لك."}
           </p>
           <Button type="submit" disabled={pending}>
-            {pending ? "جارٍ التحليل..." : "حلّل المعلومات"}
+            {pending ? "بفهم المعلومات..." : "علّم الموظف"}
           </Button>
         </div>
       </form>

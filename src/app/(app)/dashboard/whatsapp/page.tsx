@@ -39,9 +39,10 @@ export default async function WhatsAppPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">واتساب</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          ربط قناة واتساب بمساحة العمل عبر رمز QR.
+        <p className="text-xs font-black text-primary">اتصال واتساب</p>
+        <h1 className="mt-1 text-3xl font-black tracking-[-0.035em]">خلّي الموظف يستقبل العملاء على واتساب</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
+          اربط الرقم في كام خطوة بسيطة، وهنا هتشوف حالة الاتصال واستقبال الرسائل بشكل واضح.
         </p>
       </div>
       <WhatsAppConnectionPanel initial={initial} />
