@@ -33,14 +33,14 @@ export default async function InboxPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-black text-primary">Inbox</p>
+          <p className="text-xs font-black text-primary">المحادثات</p>
           <h1 className="mt-1 text-2xl font-black tracking-tight">محادثات العملاء</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             تابع اللي بيحصل، وخد المحادثة بنفسك وقت ما تحتاج.
           </p>
         </div>
         <div className="rounded-full bg-success-soft px-3 py-1.5 text-xs font-black text-success">
-          الرد الآلي والتدخل اليدوي في نفس المكان
+          الموظف يتابع تلقائيًا، وإنت تتدخل وقت ما تحتاج
         </div>
       </div>
       <InboxPanel initialConversations={initialConversations} />
