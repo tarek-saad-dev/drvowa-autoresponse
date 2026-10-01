@@ -63,6 +63,7 @@ export function GuidedOnboardingPreview({
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const [agentId, setAgentId] = useState<string | null>(null);
   const [knowledgeCount, setKnowledgeCount] = useState(0);
+  const [knowledgeSummary, setKnowledgeSummary] = useState<Record<string, number>>({});
   const [knowledgeApplied, setKnowledgeApplied] = useState(false);
   const [previewQuestion, setPreviewQuestion] = useState("مواعيدكم إيه؟");
   const [previewReply, setPreviewReply] = useState("لسه مجربناش الرد الحقيقي.");
@@ -92,6 +93,8 @@ export function GuidedOnboardingPreview({
           business?: Record<string, string>;
           knowledge?: string;
           knowledgeApplied?: boolean;
+          knowledgeCount?: number;
+          knowledgeSummary?: Record<string, number>;
         };
         if (saved.step && FLOW.some((item) => item.key === saved.step)) {
           setStep(saved.step);
@@ -110,6 +113,12 @@ export function GuidedOnboardingPreview({
         if (saved.knowledgeApplied === true) {
           setKnowledgeApplied(true);
           if (saved.step === "KNOWLEDGE") setMockState("success");
+        }
+        if (typeof saved.knowledgeCount === "number") {
+          setKnowledgeCount(saved.knowledgeCount);
+        }
+        if (saved.knowledgeSummary && typeof saved.knowledgeSummary === "object") {
+          setKnowledgeSummary(saved.knowledgeSummary);
         }
       }
     } catch {
@@ -144,12 +153,23 @@ export function GuidedOnboardingPreview({
           business,
           knowledge,
           knowledgeApplied,
+          knowledgeCount,
+          knowledgeSummary,
         }),
       );
     } catch {
       // Local resume is best-effort only.
     }
-  }, [step, businessQuestion, business, knowledge, knowledgeApplied, storageKey]);
+  }, [
+    step,
+    businessQuestion,
+    business,
+    knowledge,
+    knowledgeApplied,
+    knowledgeCount,
+    knowledgeSummary,
+    storageKey,
+  ]);
 
   useEffect(() => {
     if (step !== "WHATSAPP" || !workspaceReady) return;
@@ -347,6 +367,16 @@ export function GuidedOnboardingPreview({
           throw new Error(applyData?.error ?? applyData?.message ?? "تعذر حفظ المعلومات");
         }
       }
+      const summary = (data.proposals ?? []).reduce(
+        (acc: Record<string, number>, item: { category?: string; status?: string }) => {
+          if (item.status === "NOOP") return acc;
+          const key = item.category || "CUSTOM";
+          acc[key] = (acc[key] ?? 0) + 1;
+          return acc;
+        },
+        {},
+      );
+      setKnowledgeSummary(summary);
       setKnowledgeCount(Math.max(proposalIds.length, data.proposals?.length ?? 0));
       setKnowledgeApplied(true);
       setMockState("success");
@@ -709,19 +739,21 @@ export function GuidedOnboardingPreview({
                           <p className="mt-1 text-sm text-muted-foreground">موظفك اتعلم {knowledgeCount || "مجموعة"} معلومات جديدة عن البيزنس.</p>
                         </div>
                       </div>
-                      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
+                      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
                         {[
-                          ["الخدمات", "12"],
-                          ["الأسعار", "9"],
-                          ["المواعيد", "3"],
-                          ["السياسات", "7"],
-                          ["عام", "6"],
-                        ].map(([label, count]) => (
-                          <div key={label} className="rounded-2xl bg-white/85 p-3 text-center">
-                            <div className="text-lg font-black">{count}</div>
-                            <div className="mt-1 text-[11px] font-bold text-muted-foreground">{label}</div>
-                          </div>
-                        ))}
+                          ["SERVICE", "الخدمات"],
+                          ["FAQ", "الأسئلة الشائعة"],
+                          ["POLICY", "السياسات"],
+                          ["LOCATION_INFO", "الفروع والموقع"],
+                          ["ABOUT", "عن البيزنس"],
+                          ["CUSTOM", "معلومات إضافية"],
+                        ].filter(([key]) => (knowledgeSummary[key] ?? 0) > 0)
+                          .map(([key, label]) => (
+                            <div key={key} className="rounded-2xl bg-white/85 p-3 text-center">
+                              <div className="text-lg font-black">{knowledgeSummary[key]}</div>
+                              <div className="mt-1 text-[11px] font-bold text-muted-foreground">{label}</div>
+                            </div>
+                          ))}
                       </div>
                     </div>
                   ) : (
@@ -841,11 +873,18 @@ export function GuidedOnboardingPreview({
                     {mockState === "compatibility-warning"
                       ? "الاتصال تم، لكن محتاج تهيئة إضافية لتحسين استقبال الرسائل."
                       : mockState === "error"
-                        ? "الكود انتهت صلاحيته — هنطلع لك كود جديد من غير ما تبدأ من الأول."
+                        ? "حصلت مشكلة أثناء الربط — تقدر تحاول تاني من غير ما تبدأ من الأول."
                         : mockState === "success"
-                          ? "تم الربط — استقبال الرسائل شغال ✓"
-                          : "مستني المسح…"}
+                          ? "تم الربط — واتساب جاهز لأول تجربة ✓"
+                          : qrImageDataUrl
+                            ? "مستني المسح…"
+                            : "ابدأ الربط علشان يظهر QR"}
                   </div>
+                  {liveError && mockState === "error" ? (
+                    <p className="mx-auto mt-3 max-w-md text-xs font-bold text-destructive">
+                      {liveError}
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
 
