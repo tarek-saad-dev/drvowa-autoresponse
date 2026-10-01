@@ -48,7 +48,11 @@ function cx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
 }
 
-export function GuidedOnboardingPreview() {
+export function GuidedOnboardingPreview({
+  storageKey = "drvowa_guided_onboarding_draft_v1_preview",
+}: {
+  storageKey?: string;
+}) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("WELCOME");
   const [mockState, setMockState] = useState<MockState>("default");
@@ -59,6 +63,7 @@ export function GuidedOnboardingPreview() {
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const [agentId, setAgentId] = useState<string | null>(null);
   const [knowledgeCount, setKnowledgeCount] = useState(0);
+  const [knowledgeApplied, setKnowledgeApplied] = useState(false);
   const [previewQuestion, setPreviewQuestion] = useState("مواعيدكم إيه؟");
   const [previewReply, setPreviewReply] = useState("لسه مجربناش الرد الحقيقي.");
   const [qrImageDataUrl, setQrImageDataUrl] = useState<string | null>(null);
@@ -79,13 +84,14 @@ export function GuidedOnboardingPreview() {
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem("drvowa_guided_onboarding_draft_v1");
+      const raw = window.localStorage.getItem(storageKey);
       if (raw) {
         const saved = JSON.parse(raw) as {
           step?: Step;
           businessQuestion?: number;
           business?: Record<string, string>;
           knowledge?: string;
+          knowledgeApplied?: boolean;
         };
         if (saved.step && FLOW.some((item) => item.key === saved.step)) {
           setStep(saved.step);
@@ -100,6 +106,10 @@ export function GuidedOnboardingPreview() {
         }
         if (typeof saved.knowledge === "string") {
           setKnowledge(saved.knowledge);
+        }
+        if (saved.knowledgeApplied === true) {
+          setKnowledgeApplied(true);
+          if (saved.step === "KNOWLEDGE") setMockState("success");
         }
       }
     } catch {
@@ -122,18 +132,24 @@ export function GuidedOnboardingPreview() {
         // Setup can still create the first workspace later.
       }
     })();
-  }, []);
+  }, [storageKey]);
 
   useEffect(() => {
     try {
       window.localStorage.setItem(
-        "drvowa_guided_onboarding_draft_v1",
-        JSON.stringify({ step, businessQuestion, business, knowledge }),
+        storageKey,
+        JSON.stringify({
+          step,
+          businessQuestion,
+          business,
+          knowledge,
+          knowledgeApplied,
+        }),
       );
     } catch {
       // Local resume is best-effort only.
     }
-  }, [step, businessQuestion, business, knowledge]);
+  }, [step, businessQuestion, business, knowledge, knowledgeApplied, storageKey]);
 
   useEffect(() => {
     if (step !== "WHATSAPP" || !workspaceReady) return;
@@ -148,6 +164,13 @@ export function GuidedOnboardingPreview() {
           setMockState("success");
           return;
         }
+        if (!qrImageDataUrl) {
+          const qrResponse = await fetch("/api/channels/whatsapp/qr", { cache: "no-store" });
+          const qrData = await qrResponse.json().catch(() => ({}));
+          if (qrResponse.ok && qrData.qrImageDataUrl) {
+            setQrImageDataUrl(qrData.qrImageDataUrl);
+          }
+        }
         if (data.compatibility?.status === "DEGRADED_CRYPTO") {
           setMockState("compatibility-warning");
         }
@@ -161,7 +184,7 @@ export function GuidedOnboardingPreview() {
       stopped = true;
       window.clearInterval(timer);
     };
-  }, [step, workspaceReady]);
+  }, [step, workspaceReady, qrImageDataUrl]);
 
   useEffect(() => {
     if (step !== "FIRST_MESSAGE" || !workspaceReady) return;
@@ -325,6 +348,7 @@ export function GuidedOnboardingPreview() {
         }
       }
       setKnowledgeCount(Math.max(proposalIds.length, data.proposals?.length ?? 0));
+      setKnowledgeApplied(true);
       setMockState("success");
     } catch (error) {
       setLiveError(error instanceof Error ? error.message : "حدث خطأ أثناء التدريب");
@@ -404,11 +428,11 @@ export function GuidedOnboardingPreview() {
       case "KNOWLEDGE":
         return mockState === "loading"
           ? "بنعلم الموظف..."
-          : mockState === "success"
+          : knowledgeApplied || mockState === "success"
             ? "جربه دلوقتي"
             : "علّم الموظف";
       case "PLAYGROUND":
-        return "الردود تمام — وصل واتساب";
+        return chatCount > 0 ? "الردود تمام — وصل واتساب" : "جرب سؤال الأول";
       case "WHATSAPP":
         return waReady ? "كمل لأول تجربة" : qrImageDataUrl ? "مستني المسح…" : "ابدأ الربط";
       case "FIRST_MESSAGE":
@@ -426,12 +450,14 @@ export function GuidedOnboardingPreview() {
     qrImageDataUrl,
     firstMessageStage,
     humanTakeoverDone,
+    knowledgeApplied,
+    chatCount,
   ]);
 
   async function next() {
     if (step === "COMPLETED") {
       try {
-        window.localStorage.removeItem("drvowa_guided_onboarding_draft_v1");
+        window.localStorage.removeItem(storageKey);
       } catch {
         // Ignore storage failures.
       }
@@ -444,12 +470,13 @@ export function GuidedOnboardingPreview() {
       setBusinessQuestion((value) => value + 1);
       return;
     }
-    if (step === "KNOWLEDGE" && mockState !== "success") {
+    if (step === "KNOWLEDGE" && !knowledgeApplied && mockState !== "success") {
       if (!knowledge.trim()) return;
       await trainKnowledge();
       return;
     }
     if (step === "KNOWLEDGE" && mockState === "loading") return;
+    if (step === "PLAYGROUND" && chatCount === 0) return;
     if (step === "WHATSAPP" && !waReady) {
       if (!qrImageDataUrl) await startWhatsApp();
       return;
@@ -673,7 +700,7 @@ export function GuidedOnboardingPreview() {
                         </div>
                       ))}
                     </div>
-                  ) : mockState === "success" ? (
+                  ) : mockState === "success" || knowledgeApplied ? (
                     <div className="mt-8 rounded-[24px] border border-success/20 bg-success-soft/55 p-6">
                       <div className="flex items-center gap-4">
                         <div className="grid h-14 w-14 place-items-center rounded-2xl bg-success text-2xl text-white">✓</div>
@@ -743,7 +770,16 @@ export function GuidedOnboardingPreview() {
                     </div>
                     <div className="mt-4 flex gap-2">
                       <button type="button" onClick={() => setChatCount((n) => Math.max(1, n))} className="rounded-xl bg-success-soft px-3 py-2 text-xs font-black text-success">تمام 👍</button>
-                      <button type="button" className="rounded-xl bg-white px-3 py-2 text-xs font-black text-muted-foreground shadow-sm">عدّل المعلومة</button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStep("KNOWLEDGE");
+                          setMockState("default");
+                        }}
+                        className="rounded-xl bg-white px-3 py-2 text-xs font-black text-muted-foreground shadow-sm"
+                      >
+                        عدّل المعلومة
+                      </button>
                     </div>
                   </div>
                   <div className="mt-5 flex flex-wrap gap-2 text-xs font-bold">
@@ -877,7 +913,8 @@ export function GuidedOnboardingPreview() {
                 disabled={
                   mockState === "loading"
                   || (step === "BUSINESS" && !businessCanContinue)
-                  || (step === "KNOWLEDGE" && !knowledge.trim() && mockState !== "success")
+                  || (step === "KNOWLEDGE" && !knowledgeApplied && !knowledge.trim() && mockState !== "success")
+                  || (step === "PLAYGROUND" && chatCount === 0)
                   || (step === "WHATSAPP" && Boolean(qrImageDataUrl) && !waReady)
                   || (step === "FIRST_MESSAGE" && firstMessageStage < 5)
                   || (step === "HUMAN_TAKEOVER" && !humanTakeoverDone)
@@ -917,7 +954,8 @@ export function GuidedOnboardingPreview() {
             disabled={
               mockState === "loading"
               || (step === "BUSINESS" && !businessCanContinue)
-              || (step === "KNOWLEDGE" && !knowledge.trim() && mockState !== "success")
+              || (step === "KNOWLEDGE" && !knowledgeApplied && !knowledge.trim() && mockState !== "success")
+                  || (step === "PLAYGROUND" && chatCount === 0)
               || (step === "WHATSAPP" && Boolean(qrImageDataUrl) && !waReady)
               || (step === "FIRST_MESSAGE" && firstMessageStage < 5)
               || (step === "HUMAN_TAKEOVER" && !humanTakeoverDone)
