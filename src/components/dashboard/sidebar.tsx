@@ -68,7 +68,7 @@ export function DashboardSidebar({
 
         <div className="my-4 border-t border-white/10" />
         <p className="mb-2 px-3 text-[10px] font-black tracking-[.08em] text-sidebar-muted/70">
-          إدارة البيزنس
+          الإعدادات والأدوات
         </p>
 
         <div className="space-y-1">
@@ -104,9 +104,9 @@ export function DashboardSidebar({
       </nav>
 
       <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
-        <p className="text-xs font-black">اختصارات سريعة</p>
+        <p className="text-xs font-black">أسرع حاجتين</p>
         <p className="mt-1 text-[11px] leading-5 text-sidebar-muted">
-          أكتر حاجتين هتحتاجهم خلال اليوم.
+          ابدأ من هنا في أغلب شغلك اليومي.
         </p>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <Link
@@ -114,14 +114,14 @@ export function DashboardSidebar({
             className="flex items-center justify-center gap-1.5 rounded-xl bg-white px-2 py-2 text-[11px] font-black text-sidebar transition hover:bg-white/90"
           >
             <span>💬</span>
-            <span>شوف الرسائل</span>
+            <span>افتح المحادثات</span>
           </Link>
           <Link
             href="/dashboard/knowledge"
             className="flex items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-2 py-2 text-[11px] font-black text-white transition hover:bg-white/10"
           >
             <span>＋</span>
-            <span>علّمه معلومة</span>
+            <span>علّم الموظف</span>
           </Link>
         </div>
       </div>
