@@ -79,9 +79,28 @@ export function GuidedOnboardingPreview() {
 
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem("drvowa_guided_onboarding_step_v1") as Step | null;
-      if (saved && FLOW.some((item) => item.key === saved)) {
-        setStep(saved);
+      const raw = window.localStorage.getItem("drvowa_guided_onboarding_draft_v1");
+      if (raw) {
+        const saved = JSON.parse(raw) as {
+          step?: Step;
+          businessQuestion?: number;
+          business?: Record<string, string>;
+          knowledge?: string;
+        };
+        if (saved.step && FLOW.some((item) => item.key === saved.step)) {
+          setStep(saved.step);
+        }
+        if (typeof saved.businessQuestion === "number") {
+          setBusinessQuestion(
+            Math.min(Math.max(0, saved.businessQuestion), businessQuestions.length - 1),
+          );
+        }
+        if (saved.business && typeof saved.business === "object") {
+          setBusiness(saved.business);
+        }
+        if (typeof saved.knowledge === "string") {
+          setKnowledge(saved.knowledge);
+        }
       }
     } catch {
       // Local resume is best-effort only.
@@ -107,11 +126,14 @@ export function GuidedOnboardingPreview() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem("drvowa_guided_onboarding_step_v1", step);
+      window.localStorage.setItem(
+        "drvowa_guided_onboarding_draft_v1",
+        JSON.stringify({ step, businessQuestion, business, knowledge }),
+      );
     } catch {
       // Local resume is best-effort only.
     }
-  }, [step]);
+  }, [step, businessQuestion, business, knowledge]);
 
   useEffect(() => {
     if (step !== "WHATSAPP" || !workspaceReady) return;
@@ -409,7 +431,7 @@ export function GuidedOnboardingPreview() {
   async function next() {
     if (step === "COMPLETED") {
       try {
-        window.localStorage.removeItem("drvowa_guided_onboarding_step_v1");
+        window.localStorage.removeItem("drvowa_guided_onboarding_draft_v1");
       } catch {
         // Ignore storage failures.
       }
