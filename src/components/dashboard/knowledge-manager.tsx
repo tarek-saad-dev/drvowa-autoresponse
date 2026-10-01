@@ -41,6 +41,7 @@ export function KnowledgeManager({
   const [pending, setPending] = useState(false);
   const [editing, setEditing] = useState<KnowledgeItem | null>(null);
   const [filter, setFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
 
   const limitLabel =
     activeLimit == null ? "بلا حد" : String(activeLimit);
@@ -49,12 +50,23 @@ export function KnowledgeManager({
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    if (!q) return items;
     return items.filter((item) => {
+      if (categoryFilter !== "ALL" && item.category !== categoryFilter) {
+        return false;
+      }
+      if (!q) return true;
       const hay = `${item.title} ${item.content} ${knowledgeCategoryLabel(item.category)}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [items, filter]);
+  }, [items, filter, categoryFilter]);
+
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of items) {
+      counts.set(item.category, (counts.get(item.category) ?? 0) + 1);
+    }
+    return counts;
+  }, [items]);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -244,13 +256,46 @@ export function KnowledgeManager({
 
         <div className="space-y-3">
           {items.length > 0 ? (
-            <Input
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder="بحث في المعرفة…"
-              aria-label="بحث في المعرفة"
-              className="h-9"
-            />
+            <div className="space-y-3">
+              <Input
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder="ابحث في اللي الموظف عارفه…"
+                aria-label="بحث في المعرفة"
+                className="h-11 rounded-2xl"
+              />
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                <button
+                  type="button"
+                  onClick={() => setCategoryFilter("ALL")}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-black transition ${
+                    categoryFilter === "ALL"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-surface text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  الكل {items.length}
+                </button>
+                {KNOWLEDGE_CATEGORY_OPTIONS.map((opt) => {
+                  const count = categoryCounts.get(opt.value) ?? 0;
+                  if (count === 0) return null;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setCategoryFilter(opt.value)}
+                      className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-black transition ${
+                        categoryFilter === opt.value
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-surface text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {opt.label} {count}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           ) : null}
 
           {items.length === 0 ? (
@@ -268,7 +313,7 @@ export function KnowledgeManager({
             </Card>
           ) : (
             filtered.map((item) => (
-              <Card key={item.knowledgeItemId}>
+              <Card key={item.knowledgeItemId} className="transition hover:border-primary/20 hover:shadow-sm">
                 <CardHeader>
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -286,7 +331,7 @@ export function KnowledgeManager({
                   <p className="line-clamp-4 text-sm text-muted-foreground">
                     {item.content}
                   </p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       size="sm"
                       variant="outline"

@@ -81,6 +81,25 @@ const PLACEHOLDER = `مثال:
 الحلاقة بـ200 جنيه، شعر ودقن بـ300 جنيه، والحجز متاح من الموقع...
 https://maps.example/gleem`;
 
+const QUICK_STARTS = [
+  {
+    label: "الخدمات والأسعار",
+    text: "دي الخدمات والأسعار عندنا:\n",
+  },
+  {
+    label: "الفروع والمواعيد",
+    text: "دي الفروع ومواعيد العمل:\n",
+  },
+  {
+    label: "الحجز والإلغاء",
+    text: "سياسة الحجز والإلغاء والتأخير:\n",
+  },
+  {
+    label: "أسئلة العملاء",
+    text: "أكتر أسئلة العملاء وإجاباتها:\n",
+  },
+] as const;
+
 export function KnowledgeCopilot() {
   const router = useRouter();
   const [text, setText] = useState("");
@@ -288,8 +307,29 @@ export function KnowledgeCopilot() {
 
       <form
         onSubmit={analyze}
-        className="mx-auto max-w-3xl space-y-3 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6"
+        className="mx-auto max-w-3xl space-y-4 rounded-[24px] border border-border bg-card p-4 shadow-sm sm:p-6"
       >
+        <div>
+          <p className="text-xs font-black text-muted-foreground">ابدأ بحاجة جاهزة أو اكتب بطريقتك</p>
+          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+            {QUICK_STARTS.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                onClick={() =>
+                  setText((current) =>
+                    current.trim()
+                      ? `${current.trimEnd()}\n\n${item.text}`
+                      : item.text,
+                  )
+                }
+                className="shrink-0 rounded-full border border-border bg-surface px-3 py-2 text-[11px] font-black text-foreground transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <Textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -311,15 +351,30 @@ export function KnowledgeCopilot() {
       </form>
 
       {session?.summary ? (
-        <Card className="mx-auto max-w-3xl">
-          <CardHeader>
-            <CardTitle className="text-lg">ملخص التحليل</CardTitle>
+        <Card className="mx-auto max-w-3xl overflow-hidden">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">فهمت المعلومات دي</CardTitle>
             <CardDescription>
-              {session.summary.create} جديدة · {session.summary.merge} تحديثات ·{" "}
-              {session.summary.noop} موجودة · {session.summary.conflict} تحتاج
-              مراجعة
+              راجع بسرعة قبل ما نعتمد أي تغيير.
             </CardDescription>
           </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                ["جديدة", session.summary.create, "bg-success-soft text-success"],
+                ["تحديث", session.summary.merge, "bg-primary/10 text-primary"],
+                ["موجودة", session.summary.noop, "bg-secondary text-muted-foreground"],
+                ["مراجعة", session.summary.conflict, "bg-warning-soft text-warning"],
+              ].map(([label, value, tone]) => (
+                <div key={String(label)} className="rounded-2xl border border-border bg-surface/40 p-3">
+                  <div className={`inline-flex rounded-full px-2 py-1 text-[10px] font-black ${tone}`}>
+                    {label}
+                  </div>
+                  <div className="mt-2 text-2xl font-black tabular-nums">{value}</div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
         </Card>
       ) : null}
 
@@ -417,14 +472,28 @@ export function KnowledgeCopilot() {
             </Card>
           ))}
 
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              disabled={pending || selectedCount === 0}
-              onClick={applySelected}
-            >
-              اعتماد {selectedCount} تغيير
-            </Button>
+          <div className="sticky bottom-20 z-10 rounded-[22px] border border-border bg-card/95 p-3 shadow-[0_16px_50px_rgba(15,28,36,.14)] backdrop-blur md:bottom-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-black">
+                  {selectedCount > 0
+                    ? `${selectedCount} تغيير جاهز للاعتماد`
+                    : "اختار التغييرات اللي عايز تعتمدها"}
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  مفيش حاجة هتتحفظ غير بعد ما تضغط اعتماد.
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="lg"
+                disabled={pending || selectedCount === 0}
+                onClick={applySelected}
+                className="shrink-0"
+              >
+                {pending ? "بنحفظ..." : `اعتماد ${selectedCount} تغيير`}
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}
