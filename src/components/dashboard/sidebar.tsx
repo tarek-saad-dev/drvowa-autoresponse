@@ -101,10 +101,17 @@ export function DashboardSidebar({
       </nav>
 
       <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
-        <p className="text-xs font-black">محتاج تعمل إيه؟</p>
+        <p className="text-xs font-black">أسرع حاجة تعملها</p>
         <p className="mt-1 text-[11px] leading-5 text-sidebar-muted">
-          ابدأ من الرئيسية أو المحادثات، والباقي إعدادات مساعدة.
+          لو عندك معلومة جديدة، علّمها لموظفك فورًا من غير ما تدور جوه الإعدادات.
         </p>
+        <Link
+          href="/dashboard/knowledge"
+          className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black text-sidebar transition hover:bg-white/90"
+        >
+          <span>＋</span>
+          <span>علّمه معلومة</span>
+        </Link>
       </div>
     </aside>
   );
