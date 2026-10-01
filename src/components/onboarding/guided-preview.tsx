@@ -30,12 +30,15 @@ const FLOW: Array<{ key: Step; label: string; short: string }> = [
 ];
 
 const businessQuestions = [
-  { key: "name", label: "اسم البيزنس إيه؟", placeholder: "مثال: CUT SALON" },
-  { key: "type", label: "نشاطك إيه؟", placeholder: "مثال: صالون / عيادة / مطعم" },
-  { key: "branches", label: "عندك كام فرع؟", placeholder: "مثال: 2" },
-  { key: "hours", label: "مواعيد العمل إيه؟", placeholder: "مثال: يوميًا من 11 ص إلى 2 ص" },
-  { key: "link", label: "عندك موقع أو Instagram؟", placeholder: "اختياري" },
+  { key: "name", label: "اسم البيزنس إيه؟", placeholder: "مثال: CUT SALON", kind: "text" },
+  { key: "type", label: "نشاطك إيه؟", placeholder: "", kind: "type" },
+  { key: "branches", label: "عندك كام فرع؟", placeholder: "", kind: "branches" },
+  { key: "hours", label: "مواعيد العمل إيه؟", placeholder: "مثال: يوميًا من 11 ص إلى 2 ص", kind: "text" },
+  { key: "link", label: "عندك موقع أو Instagram؟", placeholder: "اختياري", kind: "text" },
 ] as const;
+
+const businessTypeChoices = ["صالون", "عيادة", "مطعم", "متجر", "خدمات", "أخرى"];
+const branchChoices = ["فرع واحد", "فرعين", "3 فروع", "4+", "لسه ببدأ"];
 
 const knowledgeChips = ["الخدمات", "الأسعار", "المواعيد", "الفروع", "السياسات", "العروض"];
 
@@ -127,33 +130,49 @@ export function GuidedOnboardingPreview() {
         </header>
 
         <section aria-label="تقدم الإعداد" className="mb-8">
-          <div className="relative h-2 overflow-hidden rounded-full bg-white/75 shadow-inner">
-            <div className="h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${progress}%` }} />
+          <div className="relative mx-auto max-w-4xl">
+            <div className="absolute left-[6%] right-[6%] top-5 h-1 rounded-full bg-white/80 shadow-inner" />
+            <div
+              className="absolute right-[6%] top-5 h-1 rounded-full bg-primary transition-[width] duration-700 ease-out"
+              style={{ width: `calc(${progress}% * .88)` }}
+            />
+            <div className="relative grid grid-cols-8 gap-1">
+              {FLOW.map((item, itemIndex) => {
+                const done = itemIndex < index;
+                const active = itemIndex === index;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => jump(item.key)}
+                    className="group flex flex-col items-center gap-2"
+                    aria-current={active ? "step" : undefined}
+                  >
+                    <span
+                      className={cx(
+                        "grid h-10 w-10 place-items-center rounded-2xl border-2 text-sm font-black shadow-sm transition-all duration-300",
+                        done && "border-primary bg-primary text-white",
+                        active && "scale-110 border-primary bg-white text-primary shadow-[0_10px_30px_rgba(15,118,110,.22)]",
+                        !done && !active && "border-white bg-white/90 text-muted-foreground",
+                      )}
+                    >
+                      {done ? "✓" : itemIndex === FLOW.length - 1 ? "★" : itemIndex + 1}
+                    </span>
+                    <span className={cx(
+                      "hidden text-[10px] font-black transition md:block",
+                      active ? "text-foreground" : done ? "text-primary" : "text-muted-foreground"
+                    )}>{item.short}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-3 text-center text-xs font-black text-primary md:hidden">{FLOW[index]?.label}</div>
           </div>
-          <div className="mt-3 hidden grid-cols-8 gap-2 md:grid">
-            {FLOW.map((item, itemIndex) => (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => jump(item.key)}
-                className={cx(
-                  "rounded-xl px-2 py-2 text-center text-[11px] font-bold transition",
-                  itemIndex < index && "text-primary",
-                  itemIndex === index && "bg-white text-foreground shadow-sm",
-                  itemIndex > index && "text-muted-foreground",
-                )}
-              >
-                <span className="mb-1 block text-base">{itemIndex < index ? "✓" : itemIndex === FLOW.length - 1 ? "★" : "●"}</span>
-                {item.short}
-              </button>
-            ))}
-          </div>
-          <div className="mt-3 text-center text-xs font-bold text-primary md:hidden">{FLOW[index]?.label}</div>
         </section>
 
         <section className="mx-auto w-full max-w-[840px]">
           <div className="overflow-hidden rounded-[30px] border border-white/80 bg-white/88 shadow-[0_24px_80px_rgba(15,28,36,.10)] backdrop-blur-xl">
-            <div className="min-h-[540px] p-6 sm:p-9 md:p-12">
+            <div key={step} className="min-h-[540px] animate-[fadeIn_.28s_ease-out] p-6 sm:p-9 md:p-12">
               {step === "WELCOME" ? (
                 <div className="flex min-h-[450px] flex-col items-center justify-center text-center">
                   <div className="mb-7 grid h-24 w-24 place-items-center rounded-[30px] bg-primary text-4xl text-primary-foreground shadow-[0_18px_50px_rgba(15,118,110,.28)]">✦</div>
@@ -185,13 +204,58 @@ export function GuidedOnboardingPreview() {
                     </div>
                     <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/10 text-lg font-black text-primary">{businessQuestion + 1}</div>
                   </div>
-                  <Input
-                    autoFocus
-                    value={business[currentBusinessQuestion.key] ?? ""}
-                    onChange={(event) => setBusiness((prev) => ({ ...prev, [currentBusinessQuestion.key]: event.target.value }))}
-                    placeholder={currentBusinessQuestion.placeholder}
-                    className="h-16 rounded-2xl border-2 bg-white px-5 text-lg font-semibold shadow-sm focus:border-primary"
-                  />
+                  {currentBusinessQuestion.kind === "type" ? (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      {businessTypeChoices.map((choice) => {
+                        const selected = business.type === choice;
+                        return (
+                          <button
+                            key={choice}
+                            type="button"
+                            onClick={() => setBusiness((prev) => ({ ...prev, type: choice }))}
+                            className={cx(
+                              "rounded-2xl border-2 p-5 text-start text-sm font-black transition-all duration-200",
+                              selected
+                                ? "border-primary bg-primary/8 text-primary shadow-[0_10px_28px_rgba(15,118,110,.12)]"
+                                : "border-border bg-white hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md",
+                            )}
+                          >
+                            <span className="mb-3 block text-2xl">{choice === "صالون" ? "✂️" : choice === "عيادة" ? "🩺" : choice === "مطعم" ? "🍽️" : choice === "متجر" ? "🛍️" : choice === "خدمات" ? "🧩" : "✨"}</span>
+                            {choice}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : currentBusinessQuestion.kind === "branches" ? (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                      {branchChoices.map((choice) => {
+                        const selected = business.branches === choice;
+                        return (
+                          <button
+                            key={choice}
+                            type="button"
+                            onClick={() => setBusiness((prev) => ({ ...prev, branches: choice }))}
+                            className={cx(
+                              "rounded-2xl border-2 px-3 py-5 text-center text-sm font-black transition-all duration-200",
+                              selected
+                                ? "border-primary bg-primary text-white shadow-lg"
+                                : "border-border bg-white hover:border-primary/50",
+                            )}
+                          >
+                            {choice}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <Input
+                      autoFocus
+                      value={business[currentBusinessQuestion.key] ?? ""}
+                      onChange={(event) => setBusiness((prev) => ({ ...prev, [currentBusinessQuestion.key]: event.target.value }))}
+                      placeholder={currentBusinessQuestion.placeholder}
+                      className="h-16 rounded-2xl border-2 bg-white px-5 text-lg font-semibold shadow-sm focus:border-primary"
+                    />
+                  )}
                   <div className="mt-5 flex gap-2">
                     {businessQuestions.map((_, qIndex) => (
                       <span key={qIndex} className={cx("h-1.5 flex-1 rounded-full transition", qIndex <= businessQuestion ? "bg-primary" : "bg-secondary")} />
@@ -267,13 +331,31 @@ export function GuidedOnboardingPreview() {
                   <p className="mt-3 text-muted-foreground">جرب سؤالين أو تلاتة قبل ما توصله بعملائك.</p>
                   <div className="mt-6 flex flex-wrap gap-2">
                     {["أسعاركم إيه؟", "مواعيدكم؟", "عاوز أحجز", "عندكم كام فرع؟"].map((question) => (
-                      <button key={question} type="button" onClick={() => setChatCount((n) => Math.min(3, n + 1))} className="rounded-full border border-border bg-white px-4 py-2 text-sm font-bold shadow-sm transition hover:border-primary hover:text-primary">{question}</button>
+                      <button
+                        key={question}
+                        type="button"
+                        onClick={() => setChatCount((n) => Math.min(3, n + 1))}
+                        className="rounded-full border border-border bg-white px-4 py-2 text-sm font-bold shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:text-primary hover:shadow-md"
+                      >
+                        {question}
+                      </button>
                     ))}
                   </div>
                   <div className="mt-6 rounded-[26px] border border-border bg-surface/50 p-4 sm:p-6">
                     <div className="space-y-4">
-                      <div className="mr-auto max-w-[82%] rounded-2xl rounded-bl-md bg-white p-4 text-sm shadow-sm">مواعيدكم إيه؟</div>
-                      <div className="ml-auto max-w-[86%] rounded-2xl rounded-br-md bg-primary p-4 text-sm leading-7 text-primary-foreground shadow-md">أهلاً بيك 👋 إحنا متاحين يوميًا، ولو تحب أساعدك في الحجز قولي أنسب يوم ليك.</div>
+                      <div className="mr-auto max-w-[82%] translate-y-0 rounded-2xl rounded-bl-md bg-white p-4 text-sm shadow-sm transition-all">مواعيدكم إيه؟</div>
+                      <div className="ml-auto max-w-[86%] rounded-2xl rounded-br-md bg-primary p-4 text-sm leading-7 text-primary-foreground shadow-md">
+                        أهلاً بيك 👋 إحنا متاحين يوميًا، ولو تحب أساعدك في الحجز قولي أنسب يوم ليك.
+                        <div className="mt-2 text-[10px] font-semibold text-primary-foreground/70">رد تجريبي من موظفك</div>
+                      </div>
+                      {chatCount > 0 ? (
+                        <div className="mr-auto max-w-[82%] rounded-2xl rounded-bl-md bg-white p-4 text-sm shadow-sm">طب والأسعار؟</div>
+                      ) : null}
+                      {chatCount > 0 ? (
+                        <div className="ml-auto max-w-[86%] rounded-2xl rounded-br-md bg-primary p-4 text-sm leading-7 text-primary-foreground shadow-md">
+                          أقدر أقولك الأسعار بالتفصيل حسب الخدمة اللي محتاجها، وقولي تحب تبدأ بإيه؟
+                        </div>
+                      ) : null}
                     </div>
                     <div className="mt-4 flex gap-2">
                       <button type="button" onClick={() => setChatCount((n) => Math.min(3, n + 1))} className="rounded-xl bg-success-soft px-3 py-2 text-xs font-black text-success">تمام 👍</button>
@@ -305,11 +387,28 @@ export function GuidedOnboardingPreview() {
                       </div>
                     ))}
                   </div>
-                  <div className="mx-auto mt-7 grid h-56 w-56 place-items-center rounded-[28px] border-8 border-white bg-[repeating-linear-gradient(45deg,#0f1c24_0_7px,#fff_7px_14px)] shadow-xl">
-                    <div className="grid h-20 w-20 place-items-center rounded-2xl bg-white text-2xl font-black text-primary">QR</div>
+                  <div className="mx-auto mt-7 w-full max-w-md rounded-[28px] border border-border bg-white p-5 shadow-[0_18px_55px_rgba(15,28,36,.10)]">
+                    <div className="mx-auto grid h-52 w-52 place-items-center rounded-3xl border border-border bg-[linear-gradient(90deg,#0f1c24_50%,transparent_50%),linear-gradient(#0f1c24_50%,transparent_50%)] bg-[length:18px_18px] bg-[position:0_0,9px_9px] p-5">
+                      <div className="grid h-16 w-16 place-items-center rounded-2xl border-4 border-white bg-primary text-xl font-black text-white shadow-lg">D</div>
+                    </div>
+                    <div className="mt-4 flex items-center justify-center gap-2 text-xs font-bold text-muted-foreground">
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+                      الكود بيتجدد تلقائيًا عند الحاجة
+                    </div>
                   </div>
-                  <div className="mx-auto mt-6 max-w-md rounded-2xl bg-surface p-4 text-sm font-bold">
-                    {mockState === "compatibility-warning" ? "الاتصال تم، لكن محتاج تهيئة إضافية لتحسين استقبال الرسائل." : mockState === "success" ? "استقبال الرسائل شغال ✓" : "مستني المسح…"}
+                  <div className={cx(
+                    "mx-auto mt-6 max-w-md rounded-2xl border p-4 text-sm font-black transition-all",
+                    mockState === "compatibility-warning"
+                      ? "border-warning/25 bg-warning-soft text-warning"
+                      : mockState === "success"
+                        ? "border-success/20 bg-success-soft text-success"
+                        : "border-border bg-surface text-muted-foreground"
+                  )}>
+                    {mockState === "compatibility-warning"
+                      ? "الاتصال تم، لكن محتاج تهيئة إضافية لتحسين استقبال الرسائل."
+                      : mockState === "success"
+                        ? "تم الربط — استقبال الرسائل شغال ✓"
+                        : "مستني المسح…"}
                   </div>
                 </div>
               ) : null}
@@ -381,6 +480,13 @@ export function GuidedOnboardingPreview() {
           </div>
         </div>
       </div>
+
+      <style jsx global>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(8px) scale(.995); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+      `}</style>
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/70 bg-white/95 p-3 shadow-[0_-8px_30px_rgba(15,28,36,.08)] backdrop-blur sm:hidden">
         <div className="mx-auto flex max-w-lg gap-2">
