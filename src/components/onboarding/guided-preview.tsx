@@ -58,6 +58,9 @@ export function GuidedOnboardingPreview() {
   const progress = Math.max(0, Math.round((index / (FLOW.length - 1)) * 100));
 
   const currentBusinessQuestion = businessQuestions[businessQuestion];
+  const currentBusinessValue = business[currentBusinessQuestion.key]?.trim() ?? "";
+  const businessCanContinue =
+    currentBusinessQuestion.key === "link" || currentBusinessValue.length > 0;
 
   const primaryLabel = useMemo(() => {
     switch (step) {
@@ -81,6 +84,7 @@ export function GuidedOnboardingPreview() {
   }, [step, businessQuestion, mockState]);
 
   function next() {
+    if (step === "BUSINESS" && !businessCanContinue) return;
     if (step === "BUSINESS" && businessQuestion < businessQuestions.length - 1) {
       setBusinessQuestion((value) => value + 1);
       return;
@@ -150,7 +154,7 @@ export function GuidedOnboardingPreview() {
                   >
                     <span
                       className={cx(
-                        "grid h-10 w-10 place-items-center rounded-2xl border-2 text-sm font-black shadow-sm transition-all duration-300",
+                        "grid h-9 w-9 place-items-center rounded-xl border-2 text-xs font-black shadow-sm transition-all duration-300 sm:h-10 sm:w-10 sm:rounded-2xl sm:text-sm",
                         done && "border-primary bg-primary text-white",
                         active && "scale-110 border-primary bg-white text-primary shadow-[0_10px_30px_rgba(15,118,110,.22)]",
                         !done && !active && "border-white bg-white/90 text-muted-foreground",
@@ -273,7 +277,17 @@ export function GuidedOnboardingPreview() {
                   <h2 className="mt-2 text-3xl font-black tracking-[-0.035em]">دلوقتي علّم موظفك</h2>
                   <p className="mt-3 leading-7 text-muted-foreground">الصق أي معلومات عندك، حتى لو مش مترتبة. إحنا هننظمها ونحولها لمعرفة يقدر يستخدمها في الرد.</p>
 
-                  {mockState === "loading" ? (
+                  {mockState === "error" ? (
+                    <div className="mt-8 rounded-[24px] border border-destructive/20 bg-destructive/5 p-6">
+                      <div className="flex items-start gap-4">
+                        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-destructive/10 font-black text-destructive">!</div>
+                        <div>
+                          <h3 className="font-black">مقدرناش نكمل التدريب المرة دي</h3>
+                          <p className="mt-2 text-sm leading-7 text-muted-foreground">معلوماتك لسه موجودة. جرّب تاني من غير ما تعيد أي حاجة.</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : mockState === "loading" ? (
                     <div className="mt-8 space-y-3 rounded-[24px] border border-primary/20 bg-primary/5 p-6">
                       {["بقرأ المعلومات…", "بنظم الخدمات والأسعار…", "بفهم السياسات والمواعيد…", "بنجهز موظف الاستقبال…"].map((label, i) => (
                         <div key={label} className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm">
@@ -406,9 +420,11 @@ export function GuidedOnboardingPreview() {
                   )}>
                     {mockState === "compatibility-warning"
                       ? "الاتصال تم، لكن محتاج تهيئة إضافية لتحسين استقبال الرسائل."
-                      : mockState === "success"
-                        ? "تم الربط — استقبال الرسائل شغال ✓"
-                        : "مستني المسح…"}
+                      : mockState === "error"
+                        ? "الكود انتهت صلاحيته — هنطلع لك كود جديد من غير ما تبدأ من الأول."
+                        : mockState === "success"
+                          ? "تم الربط — استقبال الرسائل شغال ✓"
+                          : "مستني المسح…"}
                   </div>
                 </div>
               ) : null}
@@ -431,6 +447,11 @@ export function GuidedOnboardingPreview() {
                     })}
                   </div>
                   {mockState === "success" ? <div className="mt-6 text-xl font-black text-success">أول رد حقيقي تم 🎉</div> : null}
+                  {mockState === "error" ? (
+                    <div className="mt-6 rounded-2xl border border-destructive/20 bg-destructive/5 p-4 text-sm font-bold text-destructive">
+                      الرسالة موصلتش لسه. تأكد إنك بعت من رقم مختلف وجرّب تاني.
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -466,7 +487,14 @@ export function GuidedOnboardingPreview() {
 
             <div className="hidden items-center justify-between gap-3 border-t border-border/70 bg-white/75 px-6 py-5 sm:flex sm:px-9 md:px-12">
               <Button type="button" variant="ghost" disabled={step === "WELCOME"} onClick={previous}>السابق</Button>
-              <Button type="button" onClick={next} disabled={mockState === "loading"} className="min-w-44">{primaryLabel}</Button>
+              <Button
+                type="button"
+                onClick={next}
+                disabled={mockState === "loading" || (step === "BUSINESS" && !businessCanContinue)}
+                className="min-w-44"
+              >
+                {primaryLabel}
+              </Button>
             </div>
           </div>
         </section>
@@ -491,7 +519,14 @@ export function GuidedOnboardingPreview() {
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/70 bg-white/95 p-3 shadow-[0_-8px_30px_rgba(15,28,36,.08)] backdrop-blur sm:hidden">
         <div className="mx-auto flex max-w-lg gap-2">
           {step !== "WELCOME" ? <Button type="button" variant="outline" className="w-24" onClick={previous}>السابق</Button> : null}
-          <Button type="button" className="flex-1" onClick={next} disabled={mockState === "loading"}>{primaryLabel}</Button>
+          <Button
+            type="button"
+            className="flex-1"
+            onClick={next}
+            disabled={mockState === "loading" || (step === "BUSINESS" && !businessCanContinue)}
+          >
+            {primaryLabel}
+          </Button>
         </div>
       </div>
     </main>
