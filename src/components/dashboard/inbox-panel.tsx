@@ -66,11 +66,19 @@ function previewText(c: ConversationRow): string {
 }
 
 function aiStatusLabel(mode: ConversationAiMode): string {
-  if (mode === "HUMAN_PAUSED") return "الرد الآلي متوقف — تدخل موظف";
-  if (mode === "SAFETY_PAUSED") {
-    return "الرد الآلي متوقف للأمان";
-  }
-  return "الرد الآلي نشط";
+  if (mode === "HUMAN_PAUSED") return "أنت بترد دلوقتي";
+  if (mode === "SAFETY_PAUSED") return "محتاج مراجعة";
+  return "الموظف بيرد تلقائيًا";
+}
+
+function aiStatusShort(mode: ConversationAiMode): string {
+  if (mode === "HUMAN_PAUSED") return "يدوي";
+  if (mode === "SAFETY_PAUSED") return "مراجعة";
+  return "AI";
+}
+
+function contactInitial(c: ConversationRow): string {
+  return contactLabel(c).slice(0, 1).toUpperCase();
 }
 
 function serializeConversations(
@@ -372,65 +380,100 @@ export function InboxPanel({
   });
 
   const listPane = (
-    <aside className="flex h-full min-h-[24rem] flex-col border-b border-border md:border-b-0 md:border-e">
-      <div className="space-y-2 border-b border-border px-3 py-3">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold">المحادثات</h2>
+    <aside className="flex h-full min-h-[30rem] flex-col border-b border-border bg-card md:border-b-0 md:border-e">
+      <div className="border-b border-border px-4 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-black">المحادثات</h2>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {conversations.length} محادثة
+            </p>
+          </div>
           <Button
             type="button"
             variant="ghost"
             size="sm"
             onClick={() => loadConversations(false)}
             disabled={refreshing}
-            className="h-8 px-2 text-xs"
+            className="h-9 rounded-xl px-3 text-xs"
           >
-            {refreshing ? "تحديث…" : "تحديث"}
+            {refreshing ? "..." : "تحديث"}
           </Button>
         </div>
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="بحث بالاسم أو الرقم…"
-          aria-label="بحث في المحادثات"
-          className="h-9"
-        />
+        <div className="relative mt-3">
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="دور على عميل أو رقم…"
+            aria-label="بحث في المحادثات"
+            className="h-11 rounded-2xl bg-surface pe-4 text-sm"
+          />
+        </div>
       </div>
+
       {filtered.length === 0 ? (
         <EmptyState
-          className="m-3 border-0 bg-transparent px-2 py-6"
-          title="لا توجد محادثات"
-          description="ستظهر هنا بعد استلام رسائل واتساب من العملاء."
+          className="m-4 border-0 bg-transparent px-2 py-10"
+          title={query.trim() ? "مفيش نتيجة للبحث" : "لسه مفيش محادثات"}
+          description={
+            query.trim()
+              ? "جرب اسم أو رقم مختلف."
+              : "أول رسالة من عميل هتظهر هنا تلقائيًا."
+          }
         />
       ) : (
-        <ul className="flex-1 overflow-y-auto">
-          {filtered.map((c) => {
-            const active = c.conversationId === selectedId;
+        <ul className="flex-1 overflow-y-auto p-2">
+          {filtered.map((conversation) => {
+            const active = conversation.conversationId === selectedId;
             return (
-              <li key={c.conversationId}>
+              <li key={conversation.conversationId}>
                 <button
                   type="button"
-                  onClick={() => selectConversation(c.conversationId)}
-                  className={`flex w-full flex-col gap-1 px-4 py-3 text-start transition-colors ${
-                    active ? "bg-primary/10" : "hover:bg-surface"
+                  onClick={() => selectConversation(conversation.conversationId)}
+                  className={`group flex w-full items-start gap-3 rounded-2xl px-3 py-3 text-start transition-all ${
+                    active
+                      ? "bg-primary/10 shadow-sm"
+                      : "hover:bg-surface"
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-medium">
-                      {contactLabel(c)}
-                    </span>
-                    <span className="shrink-0 text-[11px] text-muted-foreground">
-                      {formatTime(c.lastMessageAtUtc)}
-                    </span>
+                  <div
+                    className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-black ${
+                      active
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-secondary-foreground"
+                    }`}
+                  >
+                    {contactInitial(conversation)}
                   </div>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {c.lastMessageDirection === "OUTBOUND" ? "↗ " : "↙ "}
-                    {previewText(c)}
-                  </span>
-                  {c.aiMode !== "AUTO" ? (
-                    <span className="truncate text-[11px] text-amber-800">
-                      {aiStatusLabel(c.aiMode)}
-                    </span>
-                  ) : null}
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-black">
+                        {contactLabel(conversation)}
+                      </span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        {formatTime(conversation.lastMessageAtUtc)}
+                      </span>
+                    </div>
+
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                        {conversation.lastMessageDirection === "OUTBOUND" ? "أنت: " : ""}
+                        {previewText(conversation)}
+                      </span>
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${
+                          conversation.aiMode === "AUTO"
+                            ? "bg-success-soft text-success"
+                            : conversation.aiMode === "HUMAN_PAUSED"
+                              ? "bg-warning-soft text-warning"
+                              : "bg-destructive/10 text-destructive"
+                        }`}
+                      >
+                        {aiStatusShort(conversation.aiMode)}
+                      </span>
+                    </div>
+                  </div>
                 </button>
               </li>
             );
@@ -441,161 +484,183 @@ export function InboxPanel({
   );
 
   const threadPane = (composerId: string) => (
-    <section className="flex min-h-[24rem] flex-1 flex-col">
-      <div className="border-b border-border px-4 py-3">
+    <section className="flex min-h-[30rem] min-w-0 flex-1 flex-col bg-card">
+      <div className="border-b border-border bg-card/95 px-4 py-3 backdrop-blur">
         {selected ? (
-          <div className="flex flex-col gap-2">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-2 md:hidden"
-                    onClick={() => setMobileShowThread(false)}
-                  >
-                    رجوع
-                  </Button>
-                  <h2 className="truncate text-sm font-semibold">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 w-9 shrink-0 rounded-xl px-0 md:hidden"
+                  onClick={() => setMobileShowThread(false)}
+                  aria-label="رجوع للمحادثات"
+                >
+                  ←
+                </Button>
+
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-black text-primary">
+                  {contactInitial(selected)}
+                </div>
+
+                <div className="min-w-0">
+                  <h2 className="truncate text-sm font-black">
                     {contactLabel(selected)}
                   </h2>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    {selected.contactPhoneNormalized ? (
+                      <span className="text-[11px] text-muted-foreground">
+                        {selected.contactPhoneNormalized}
+                      </span>
+                    ) : null}
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
+                        selected.aiMode === "AUTO"
+                          ? "bg-success-soft text-success"
+                          : selected.aiMode === "HUMAN_PAUSED"
+                            ? "bg-warning-soft text-warning"
+                            : "bg-destructive/10 text-destructive"
+                      }`}
+                    >
+                      {aiStatusLabel(selected.aiMode)}
+                    </span>
+                  </div>
                 </div>
-                <p className="mt-1 text-xs font-medium">
-                  {aiStatusLabel(selected.aiMode)}
-                </p>
               </div>
+
+              {selected.aiMode !== "AUTO" ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={selected.aiMode === "SAFETY_PAUSED" ? "outline" : "default"}
+                  onClick={() => {
+                    if (
+                      selected.aiMode !== "SAFETY_PAUSED"
+                      || window.confirm("راجعت المحادثة ومتأكد إنك عايز تشغل الرد التلقائي؟")
+                    ) {
+                      void resumeAi();
+                    }
+                  }}
+                  disabled={resuming}
+                  className="shrink-0 rounded-xl"
+                >
+                  {resuming ? "..." : "رجّع الرد التلقائي"}
+                </Button>
+              ) : null}
             </div>
 
             {selected.aiMode === "HUMAN_PAUSED" ? (
-              <Alert variant="warning" title="الرد الآلي متوقف مؤقتاً لهذه المحادثة">
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <span className="text-sm">
-                    يمكنك الرد يدوياً، ثم استئناف الرد الآلي عند الانتهاء.
-                  </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => void resumeAi()}
-                    disabled={resuming}
-                  >
-                    {resuming ? "جاري الاستئناف…" : "استئناف الرد الآلي"}
-                  </Button>
-                </div>
-              </Alert>
+              <div className="rounded-2xl border border-warning/20 bg-warning-soft/55 px-3 py-2.5 text-xs leading-5 text-warning">
+                إنت أو حد من الفريق رد يدويًا، فالموظف الذكي سايب المحادثة ليكم دلوقتي.
+              </div>
             ) : null}
 
             {selected.aiMode === "SAFETY_PAUSED" ? (
-              <Alert
-                variant="error"
-                title="توقف أمان — راجع المحادثة قبل الاستئناف"
-              >
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <span className="text-sm">
-                    توقّف الرد الآلي بسبب حالة إرسال غير مؤكدة. تأكد من عدم تكرار
-                    الرسالة قبل الاستئناف.
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          "هل راجعت المحادثة وتريد استئناف الرد الآلي؟",
-                        )
-                      ) {
-                        void resumeAi();
-                      }
-                    }}
-                    disabled={resuming}
-                  >
-                    {resuming ? "جاري الاستئناف…" : "استئناف بعد المراجعة"}
-                  </Button>
-                </div>
+              <Alert variant="error" title="المحادثة محتاجة مراجعة">
+                اتأكد إن مفيش رسالة اتبعت مرتين قبل ما ترجع الرد التلقائي.
               </Alert>
             ) : null}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">
-            اختر محادثة لعرض الرسائل والرد.
-          </p>
+          <div className="py-1">
+            <h2 className="text-sm font-black">اختار محادثة</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              هتظهر الرسائل والرد هنا.
+            </p>
+          </div>
         )}
       </div>
 
       {error ? (
-        <p className="px-4 py-3 text-sm text-destructive" role="alert">
+        <div className="border-b border-border bg-destructive/5 px-4 py-2.5 text-xs font-bold text-destructive" role="alert">
           {error}
-        </p>
+        </div>
       ) : null}
 
-      <div className="flex flex-1 flex-col gap-3 overflow-y-auto bg-surface/60 px-4 py-4">
+      <div className="flex flex-1 flex-col gap-2 overflow-y-auto bg-[linear-gradient(180deg,#eef4f6_0%,#f4f7f8_100%)] px-3 py-5 sm:px-5">
         {!selectedId ? (
           <EmptyState
             className="my-auto border-0 bg-transparent"
-            title="اختر محادثة"
-            description="من القائمة لعرض الرسائل والرد على العميل."
+            title="اختار عميل من القائمة"
+            description="ومن هنا تقدر تتابع الردود أو تتدخل بنفسك."
           />
         ) : loadingMessages ? (
-          <p className="text-sm text-muted-foreground">جاري تحميل الرسائل…</p>
+          <div className="my-auto text-center text-sm text-muted-foreground">
+            بنفتح المحادثة…
+          </div>
         ) : messages.length === 0 ? (
-          <p className="text-sm text-muted-foreground">لا توجد رسائل بعد</p>
+          <div className="my-auto text-center text-sm text-muted-foreground">
+            مفيش رسائل في المحادثة دي لسه.
+          </div>
         ) : (
-          messages.map((m) => (
-            <div
-              key={m.messageId}
-              className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
-                m.direction === "OUTBOUND"
-                  ? "ms-auto bg-primary/15"
-                  : "me-auto border border-border bg-card"
-              }`}
-            >
-              <p className="whitespace-pre-wrap break-words">
-                {messageBodyDisplay({
-                  textContent: m.textContent,
-                  contentType: m.contentType,
-                })}
-              </p>
-              <p className="mt-1 text-[10px] text-muted-foreground">
-                {formatTime(m.providerTimestampUtc || m.receivedAtUtc)}
-              </p>
-            </div>
-          ))
+          messages.map((message) => {
+            const outgoing = message.direction === "OUTBOUND";
+            return (
+              <div
+                key={message.messageId}
+                className={`max-w-[88%] rounded-[18px] px-4 py-2.5 text-sm leading-6 shadow-sm sm:max-w-[75%] ${
+                  outgoing
+                    ? "ms-auto rounded-br-md bg-primary text-primary-foreground"
+                    : "me-auto rounded-bl-md border border-border bg-card text-foreground"
+                }`}
+              >
+                <p className="whitespace-pre-wrap break-words">
+                  {messageBodyDisplay({
+                    textContent: message.textContent,
+                    contentType: message.contentType,
+                  })}
+                </p>
+                <p
+                  className={`mt-1 text-[9px] ${
+                    outgoing ? "text-primary-foreground/65" : "text-muted-foreground"
+                  }`}
+                >
+                  {formatTime(message.providerTimestampUtc || message.receivedAtUtc)}
+                </p>
+              </div>
+            );
+          })
         )}
         <div ref={threadEndRef} />
       </div>
 
       {selectedId ? (
-        <div className="border-t border-border p-3">
-          <label className="sr-only" htmlFor={composerId}>
-            رسالة يدوية
-          </label>
-          <Textarea
-            id={composerId}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            rows={2}
-            maxLength={4000}
-            placeholder="اكتب ردك هنا… (Enter للإرسال، Shift+Enter لسطر جديد)"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void sendManual();
-              }
-            }}
-          />
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <p className="text-[11px] text-muted-foreground">
-              الإرسال يوقف الرد الآلي لهذه المحادثة تلقائياً.
-            </p>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => void sendManual()}
-              disabled={sending || !draft.trim()}
-            >
-              {sending ? "جاري الإرسال…" : "إرسال"}
-            </Button>
+        <div className="border-t border-border bg-card p-3 sm:p-4">
+          <div className="rounded-[22px] border border-border bg-surface/50 p-2 shadow-sm">
+            <label className="sr-only" htmlFor={composerId}>
+              اكتب ردك
+            </label>
+            <Textarea
+              id={composerId}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={2}
+              maxLength={4000}
+              placeholder="اكتب ردك للعميل…"
+              className="min-h-16 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void sendManual();
+                }
+              }}
+            />
+            <div className="flex items-center justify-between gap-3 px-1 pb-1">
+              <p className="text-[10px] leading-4 text-muted-foreground">
+                أول رد يدوي منك بيوقف الموظف الذكي للمحادثة دي تلقائيًا.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void sendManual()}
+                disabled={sending || !draft.trim()}
+                className="shrink-0 rounded-xl px-5"
+              >
+                {sending ? "..." : "إرسال"}
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -603,12 +668,12 @@ export function InboxPanel({
   );
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-      <div className="hidden min-h-[32rem] md:grid md:grid-cols-[minmax(16rem,22rem)_1fr]">
+    <div className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm">
+      <div className="hidden h-[calc(100vh-10.5rem)] min-h-[36rem] md:grid md:grid-cols-[minmax(18rem,23rem)_1fr]">
         {listPane}
         {threadPane("inbox-manual-reply-desktop")}
       </div>
-      <div className="md:hidden">
+      <div className="min-h-[calc(100vh-11rem)] md:hidden">
         {mobileShowThread && selectedId
           ? threadPane("inbox-manual-reply-mobile")
           : listPane}
