@@ -34,12 +34,19 @@ const FLOW: Array<{ key: Step; label: string; short: string }> = [
 const businessQuestions = [
   { key: "name", label: "اسم البيزنس إيه؟", placeholder: "مثال: CUT SALON", kind: "text" },
   { key: "type", label: "نشاطك إيه؟", placeholder: "", kind: "type" },
+  { key: "countryCode", label: "البيزنس موجود فين؟", placeholder: "", kind: "country" },
   { key: "branches", label: "عندك كام فرع؟", placeholder: "", kind: "branches" },
   { key: "hours", label: "مواعيد العمل إيه؟", placeholder: "مثال: يوميًا من 11 ص إلى 2 ص", kind: "text" },
   { key: "link", label: "عندك موقع أو Instagram؟", placeholder: "اختياري", kind: "text" },
 ] as const;
 
 const businessTypeChoices = ["صالون", "عيادة", "مطعم", "متجر", "خدمات", "أخرى"];
+const countryChoices = [
+  { code: "EG", label: "مصر", locale: "ar-EG", timezone: "Africa/Cairo" },
+  { code: "SA", label: "السعودية", locale: "ar-SA", timezone: "Asia/Riyadh" },
+  { code: "AE", label: "الإمارات", locale: "ar-AE", timezone: "Asia/Dubai" },
+  { code: "KW", label: "الكويت", locale: "ar-KW", timezone: "Asia/Kuwait" },
+] as const;
 const branchChoices = ["فرع واحد", "فرعين", "3 فروع", "4+", "لسه ببدأ"];
 
 const knowledgeChips = ["الخدمات", "الأسعار", "المواعيد", "الفروع", "السياسات", "العروض"];
@@ -323,9 +330,13 @@ export function GuidedOnboardingPreview({
         business: {
           name: business.name || "نشاطي",
           category: business.type || "عام",
-          countryCode: "EG",
-          locale: "ar-EG",
-          timezone: "Africa/Cairo",
+          countryCode: business.countryCode || "EG",
+          locale:
+            countryChoices.find((item) => item.code === business.countryCode)?.locale
+            ?? "ar-EG",
+          timezone:
+            countryChoices.find((item) => item.code === business.countryCode)?.timezone
+            ?? "Africa/Cairo",
         },
         location: null,
         agent: {
@@ -667,6 +678,29 @@ export function GuidedOnboardingPreview({
                           >
                             <span className="mb-3 block text-2xl">{choice === "صالون" ? "✂️" : choice === "عيادة" ? "🩺" : choice === "مطعم" ? "🍽️" : choice === "متجر" ? "🛍️" : choice === "خدمات" ? "🧩" : "✨"}</span>
                             {choice}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : currentBusinessQuestion.kind === "country" ? (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      {countryChoices.map((choice) => {
+                        const selected = business.countryCode === choice.code;
+                        return (
+                          <button
+                            key={choice.code}
+                            type="button"
+                            onClick={() =>
+                              setBusiness((prev) => ({ ...prev, countryCode: choice.code }))
+                            }
+                            className={cx(
+                              "rounded-2xl border-2 px-3 py-5 text-center text-sm font-black transition-all duration-200",
+                              selected
+                                ? "border-primary bg-primary text-white shadow-lg"
+                                : "border-border bg-white hover:border-primary/50",
+                            )}
+                          >
+                            {choice.label}
                           </button>
                         );
                       })}
