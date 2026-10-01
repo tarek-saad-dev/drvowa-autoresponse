@@ -5,8 +5,9 @@ import { AuthError } from "@/lib/tenancy/errors";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 
 export default async function OnboardingPage() {
+  let user;
   try {
-    await requireAuthenticatedUser();
+    user = await requireAuthenticatedUser();
   } catch (error) {
     if (error instanceof AuthError) {
       redirect("/login");
@@ -14,5 +15,9 @@ export default async function OnboardingPage() {
     throw error;
   }
 
-  return <GuidedOnboardingPreview />;
+  return (
+    <GuidedOnboardingPreview
+      storageKey={`drvowa_guided_onboarding_draft_v1_${user.userId}`}
+    />
+  );
 }
