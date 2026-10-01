@@ -34,7 +34,7 @@ export function DashboardTopbar({
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-border bg-card/90 px-4 backdrop-blur-xl sm:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b border-border bg-card/90 px-3 backdrop-blur-xl sm:h-16 sm:gap-3 sm:px-6">
       <div className="min-w-0">
         {title ? (
           <h1 className="truncate text-base font-black text-foreground">
@@ -42,7 +42,10 @@ export function DashboardTopbar({
           </h1>
         ) : (
           <>
-            <p className="truncate text-sm font-black text-foreground">
+            <p className="truncate text-sm font-black text-foreground sm:hidden">
+              DRVOWA
+            </p>
+            <p className="hidden truncate text-sm font-black text-foreground sm:block">
               أهلاً، {userName}
             </p>
             <p className="mt-0.5 hidden text-[10px] text-muted-foreground sm:block">
