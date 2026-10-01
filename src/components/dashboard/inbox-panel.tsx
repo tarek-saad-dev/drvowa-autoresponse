@@ -73,9 +73,9 @@ function aiStatusLabel(mode: ConversationAiMode): string {
 }
 
 function aiStatusShort(mode: ConversationAiMode): string {
-  if (mode === "HUMAN_PAUSED") return "يدوي";
-  if (mode === "SAFETY_PAUSED") return "مراجعة";
-  return "AI";
+  if (mode === "HUMAN_PAUSED") return "معاك";
+  if (mode === "SAFETY_PAUSED") return "راجع";
+  return "تلقائي";
 }
 
 function contactInitial(c: ConversationRow): string {
@@ -133,6 +133,7 @@ export function InboxPanel({
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<InboxFilter>("ALL");
   const threadEndRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const selectedIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -411,9 +412,11 @@ export function InboxPanel({
       <div className="border-b border-border px-4 py-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-black">المحادثات</h2>
+            <h2 className="text-base font-black">محادثات العملاء</h2>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
-              {conversations.length} محادثة
+              {conversations.length === 0
+                ? "أول رسالة هتظهر هنا تلقائيًا"
+                : `${conversations.length} محادثة — اختار واحدة وابدأ`}
             </p>
           </div>
           <Button
@@ -439,9 +442,9 @@ export function InboxPanel({
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
           {([
             ["ALL", "الكل"],
-            ["AUTO", "الـAI بيرد"],
-            ["HUMAN", "رد يدوي"],
-            ["REVIEW", "مراجعة"],
+            ["AUTO", "الموظف بيرد"],
+            ["HUMAN", "أنا برد"],
+            ["REVIEW", "محتاج مراجعة"],
           ] as Array<[InboxFilter, string]>).map(([value, label]) => (
             <button
               key={value}
@@ -591,7 +594,17 @@ export function InboxPanel({
                 </div>
               </div>
 
-              {selected.aiMode !== "AUTO" ? (
+              {selected.aiMode === "AUTO" ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => composerRef.current?.focus()}
+                  className="shrink-0 rounded-xl"
+                >
+                  رد بنفسك
+                </Button>
+              ) : (
                 <Button
                   type="button"
                   size="sm"
@@ -609,7 +622,7 @@ export function InboxPanel({
                 >
                   {resuming ? "..." : "رجّع الرد التلقائي"}
                 </Button>
-              ) : null}
+              )}
             </div>
 
             {selected.aiMode === "HUMAN_PAUSED" ? (
@@ -710,6 +723,7 @@ export function InboxPanel({
               اكتب ردك
             </label>
             <Textarea
+              ref={composerRef}
               id={composerId}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -726,7 +740,11 @@ export function InboxPanel({
             />
             <div className="flex items-center justify-between gap-3 px-1 pb-1">
               <p className="text-[10px] leading-4 text-muted-foreground">
-                أول ما تبعت رد، المحادثة تبقى معاك والرد التلقائي يقف تلقائيًا لحد ما ترجعه.
+                {selected?.aiMode === "AUTO"
+                  ? "أول رد منك هيخلّي المحادثة معاك ويوقف الموظف تلقائيًا هنا."
+                  : selected?.aiMode === "HUMAN_PAUSED"
+                    ? "المحادثة معاك دلوقتي. لما تخلص رجّع الموظف من الزر فوق."
+                    : "راجع المحادثة قبل ما ترجع الرد التلقائي."}
               </p>
               <Button
                 type="button"

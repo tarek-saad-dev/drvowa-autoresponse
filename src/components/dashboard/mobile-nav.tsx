@@ -31,13 +31,21 @@ export function MobileNav({
               key={item.href}
               href={item.href}
               className={cn(
-                "flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-center transition",
+                "relative flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-center transition",
+                item.href === "/dashboard/inbox" && "-mt-1",
                 active
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground active:bg-secondary",
               )}
             >
-              <span className="grid h-7 w-7 place-items-center text-base font-black">
+              <span
+                className={cn(
+                  "grid h-7 w-7 place-items-center text-base font-black transition",
+                  item.href === "/dashboard/inbox"
+                    && "h-10 w-10 rounded-2xl bg-primary text-lg text-primary-foreground shadow-[0_8px_22px_rgba(15,118,110,.25)]",
+                  item.href === "/dashboard/inbox" && active && "ring-4 ring-primary/10",
+                )}
+              >
                 {item.icon}
               </span>
               <span className="max-w-full truncate text-[10px] font-black">{item.label}</span>
