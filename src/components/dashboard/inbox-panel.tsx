@@ -579,7 +579,7 @@ export function InboxPanel({
         </div>
       ) : null}
 
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto bg-[linear-gradient(180deg,hsl(var(--surface))_0%,hsl(var(--background))_100%)] px-3 py-5 sm:px-5">
+      <div className="flex flex-1 flex-col gap-2 overflow-y-auto bg-[linear-gradient(180deg,#eef4f6_0%,#f4f7f8_100%)] px-3 py-5 sm:px-5">
         {!selectedId ? (
           <EmptyState
             className="my-auto border-0 bg-transparent"
