@@ -17,7 +17,7 @@ import { messageBodyDisplay } from "@/lib/ui/labels";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
 
 export type ConversationAiMode = "AUTO" | "HUMAN_PAUSED" | "SAFETY_PAUSED";
-type InboxFilter = "ALL" | "AUTO" | "HUMAN" | "REVIEW";
+type InboxFilter = "ALL" | "AUTO" | "ATTENTION";
 
 export type ConversationRow = {
   conversationId: string;
@@ -392,8 +392,7 @@ export function InboxPanel({
     const matchesMode =
       filter === "ALL"
       || (filter === "AUTO" && c.aiMode === "AUTO")
-      || (filter === "HUMAN" && c.aiMode === "HUMAN_PAUSED")
-      || (filter === "REVIEW" && c.aiMode === "SAFETY_PAUSED");
+      || (filter === "ATTENTION" && c.aiMode !== "AUTO");
     if (!matchesMode) return false;
 
     const q = query.trim();
@@ -405,8 +404,7 @@ export function InboxPanel({
   const filterCounts = {
     ALL: conversations.length,
     AUTO: conversations.filter((c) => c.aiMode === "AUTO").length,
-    HUMAN: conversations.filter((c) => c.aiMode === "HUMAN_PAUSED").length,
-    REVIEW: conversations.filter((c) => c.aiMode === "SAFETY_PAUSED").length,
+    ATTENTION: conversations.filter((c) => c.aiMode !== "AUTO").length,
   };
 
   const listPane = (
@@ -444,9 +442,8 @@ export function InboxPanel({
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
           {([
             ["ALL", "الكل"],
-            ["AUTO", "الموظف بيرد"],
-            ["HUMAN", "أنا برد"],
-            ["REVIEW", "محتاج مراجعة"],
+            ["ATTENTION", "محتاجك"],
+            ["AUTO", "الموظف بيتابع"],
           ] as Array<[InboxFilter, string]>).map(([value, label]) => (
             <button
               key={value}
@@ -473,14 +470,18 @@ export function InboxPanel({
               ? "مفيش نتيجة للبحث"
               : filter === "ALL"
                 ? "لسه مفيش محادثات"
-                : "مفيش محادثات بالحالة دي"
+                : filter === "ATTENTION"
+                  ? "مفيش حاجة محتاجة تدخلك"
+                  : "مفيش محادثات بالحالة دي"
           }
           description={
             query.trim()
               ? "جرب اسم أو رقم مختلف."
               : filter === "ALL"
                 ? "أول رسالة من عميل هتظهر هنا تلقائيًا."
-                : "غيّر الفلتر أو ارجع لكل المحادثات."
+                : filter === "ATTENTION"
+                  ? "كل المحادثات متسابّة للموظف الذكي حاليًا."
+                  : "غيّر الفلتر أو ارجع لكل المحادثات."
           }
         />
       ) : (
@@ -602,7 +603,7 @@ export function InboxPanel({
                   size="sm"
                   variant="ghost"
                   onClick={() => setShowDetails((value) => !value)}
-                  className="hidden rounded-xl px-3 text-xs xl:inline-flex"
+                  className="rounded-xl px-3 text-xs"
                 >
                   {showDetails ? "اخفي التفاصيل" : "تفاصيل العميل"}
                 </Button>
@@ -667,17 +668,35 @@ export function InboxPanel({
       ) : null}
 
       {selected ? (
-        <div className="border-b border-border bg-surface/50 px-4 py-2.5 text-[11px] text-muted-foreground">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <span>
-              الحالة: <strong className="text-foreground">{aiStatusLabel(selected.aiMode)}</strong>
-            </span>
-            {selected.aiMode === "AUTO" ? (
-              <span>تقدر ترد في أي وقت، وساعتها هنوقف الرد الآلي للمحادثة دي.</span>
-            ) : null}
-            {selected.aiMode === "HUMAN_PAUSED" ? (
-              <span>لما تخلص، اضغط «رجّع الرد التلقائي».</span>
-            ) : null}
+        <div className="border-b border-border bg-surface/55 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  selected.aiMode === "AUTO"
+                    ? "bg-success"
+                    : selected.aiMode === "HUMAN_PAUSED"
+                      ? "bg-warning"
+                      : "bg-destructive"
+                }`}
+              />
+              <div>
+                <p className="text-xs font-black text-foreground">
+                  {selected.aiMode === "AUTO"
+                    ? "الموظف الذكي ماسك المحادثة"
+                    : selected.aiMode === "HUMAN_PAUSED"
+                      ? "المحادثة معاك دلوقتي"
+                      : "المحادثة واقفة وعايزة مراجعة"}
+                </p>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  {selected.aiMode === "AUTO"
+                    ? "لو رديت بنفسك، هنوقف الرد الآلي هنا تلقائيًا."
+                    : selected.aiMode === "HUMAN_PAUSED"
+                      ? "لما تخلص، رجّعها للموظف من الزر فوق."
+                      : "راجع آخر الرسائل قبل تشغيل الرد التلقائي تاني."}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}
@@ -861,7 +880,57 @@ export function InboxPanel({
   ) : null;
 
 
+  const mobileDetailsSheet = selected && showDetails ? (
+    <div className="fixed inset-0 z-50 bg-black/30 p-3 backdrop-blur-[2px] xl:hidden">
+      <button
+        type="button"
+        aria-label="إغلاق تفاصيل العميل"
+        className="absolute inset-0"
+        onClick={() => setShowDetails(false)}
+      />
+      <div className="absolute inset-x-3 bottom-3 rounded-[26px] border border-border bg-card p-5 shadow-2xl">
+        <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-border" />
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-primary/10 text-base font-black text-primary">
+              {contactInitial(selected)}
+            </div>
+            <div className="min-w-0">
+              <h3 className="truncate text-sm font-black">{contactLabel(selected)}</h3>
+              <p className="mt-1 truncate text-xs text-muted-foreground">
+                {selected.contactPhoneNormalized || "رقم الهاتف غير متاح"}
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="rounded-xl"
+            onClick={() => setShowDetails(false)}
+          >
+            تم
+          </Button>
+        </div>
+
+        <div className="mt-5 grid gap-3">
+          <div className="rounded-2xl bg-surface p-4">
+            <p className="text-[10px] font-black text-muted-foreground">مين بيرد دلوقتي؟</p>
+            <p className="mt-2 text-sm font-black">{aiStatusLabel(selected.aiMode)}</p>
+          </div>
+          <div className="rounded-2xl border border-border p-4">
+            <p className="text-[10px] font-black text-muted-foreground">آخر نشاط</p>
+            <p className="mt-2 text-sm font-bold">
+              {formatTime(selected.lastMessageAtUtc) || "لسه مفيش نشاط"}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   return (
+    <>
     <div className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm">
       <div className="hidden h-[calc(100vh-10.5rem)] min-h-[36rem] md:flex">
         <div className="w-[min(23rem,34vw)] min-w-[18rem] shrink-0">
@@ -876,6 +945,8 @@ export function InboxPanel({
           : listPane}
       </div>
     </div>
+    {mobileDetailsSheet}
+    </>
   );
 }
 
