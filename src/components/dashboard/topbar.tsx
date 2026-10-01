@@ -33,7 +33,7 @@ export function DashboardTopbar({
           ? pathname === "/dashboard"
           : pathname === item.href || pathname.startsWith(`${item.href}/`),
       );
-    return matched?.label ?? "DRVOWA";
+    return matched?.label ?? "الرئيسية";
   }, [pathname, title]);
 
   async function logout() {
@@ -69,7 +69,7 @@ export function DashboardTopbar({
             {title ?? `أهلاً، ${userName}`}
           </p>
           <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-            {title ? currentLabel : "إدارة موظف الاستقبال والرسائل من مكان واحد."}
+            {title ? currentLabel : "كل حاجة محتاجها لتشغيل موظف الاستقبال."}
           </p>
         </div>
       </div>
@@ -82,7 +82,7 @@ export function DashboardTopbar({
         <Link
           href="/dashboard/settings"
           className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-border bg-card text-sm text-muted-foreground transition hover:bg-surface hover:text-foreground"
-          aria-label="الإعدادات"
+          aria-label="إعدادات النشاط"
         >
           ⚙
         </Link>
