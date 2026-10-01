@@ -73,6 +73,7 @@ export function GuidedOnboardingPreview({
   const [testConversationId, setTestConversationId] = useState<string | null>(null);
   const [humanTakeoverDone, setHumanTakeoverDone] = useState(false);
   const [liveError, setLiveError] = useState<string | null>(null);
+  const [draftRestored, setDraftRestored] = useState(false);
   const firstMessageStartedAt = useRef<string | null>(null);
 
   const index = FLOW.findIndex((item) => item.key === step);
@@ -124,6 +125,8 @@ export function GuidedOnboardingPreview({
       }
     } catch {
       // Local resume is best-effort only.
+    } finally {
+      setDraftRestored(true);
     }
 
     void (async () => {
@@ -145,6 +148,7 @@ export function GuidedOnboardingPreview({
   }, [storageKey]);
 
   useEffect(() => {
+    if (!draftRestored) return;
     try {
       window.localStorage.setItem(
         storageKey,
@@ -170,6 +174,7 @@ export function GuidedOnboardingPreview({
     knowledgeCount,
     knowledgeSummary,
     storageKey,
+    draftRestored,
   ]);
 
   useEffect(() => {
