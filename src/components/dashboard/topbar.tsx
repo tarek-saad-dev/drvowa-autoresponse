@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 
 import { WorkspaceSwitcher } from "@/components/dashboard/workspace-switcher";
 import { Button } from "@/components/ui/button";
+import { DASHBOARD_NAV } from "@/constants/nav";
 import type { Business } from "@/types/domain";
 
 export function DashboardTopbar({
@@ -20,7 +21,20 @@ export function DashboardTopbar({
   title?: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [loggingOut, setLoggingOut] = useState(false);
+
+  const currentLabel = useMemo(() => {
+    if (title) return title;
+    const matched = [...DASHBOARD_NAV]
+      .sort((a, b) => b.href.length - a.href.length)
+      .find((item) =>
+        item.href === "/dashboard"
+          ? pathname === "/dashboard"
+          : pathname === item.href || pathname.startsWith(`${item.href}/`),
+      );
+    return matched?.label ?? "DRVOWA";
+  }, [pathname, title]);
 
   async function logout() {
     setLoggingOut(true);
@@ -34,25 +48,30 @@ export function DashboardTopbar({
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b border-border bg-card/90 px-3 backdrop-blur-xl sm:h-16 sm:gap-3 sm:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b border-border bg-card/92 px-3 backdrop-blur-xl sm:h-16 sm:gap-3 sm:px-6">
       <div className="min-w-0">
-        {title ? (
-          <h1 className="truncate text-base font-black text-foreground">
-            {title}
-          </h1>
-        ) : (
-          <>
-            <p className="truncate text-sm font-black text-foreground sm:hidden">
+        <div className="flex items-center gap-2 sm:hidden">
+          <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary text-xs font-black text-primary-foreground shadow-sm">
+            D
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-black text-foreground">
+              {currentLabel}
+            </p>
+            <p className="truncate text-[10px] text-muted-foreground">
               DRVOWA
             </p>
-            <p className="hidden truncate text-sm font-black text-foreground sm:block">
-              أهلاً، {userName}
-            </p>
-            <p className="mt-0.5 hidden text-[10px] text-muted-foreground sm:block">
-              كل اللي محتاجه لإدارة موظف الاستقبال في مكان واحد.
-            </p>
-          </>
-        )}
+          </div>
+        </div>
+
+        <div className="hidden sm:block">
+          <p className="truncate text-sm font-black text-foreground">
+            {title ?? `أهلاً، ${userName}`}
+          </p>
+          <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+            {title ? currentLabel : "إدارة موظف الاستقبال والرسائل من مكان واحد."}
+          </p>
+        </div>
       </div>
 
       <div className="flex min-w-0 items-center gap-2">
