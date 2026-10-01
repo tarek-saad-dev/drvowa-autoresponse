@@ -356,167 +356,246 @@ export function WhatsAppConnectionPanel({
   const explanation = stateExplanation(state, compatibilityMessageAr);
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center gap-2">
-            <CardTitle>اتصال واتساب</CardTitle>
-            <Badge variant={badgeVariant(state, inboundDegraded)}>
-              {stateLabel(state)}
-            </Badge>
-          </div>
-          <CardDescription>
-            {inboundDegraded && !compatibilityMessageAr
-              ? "واتساب متصل، لكن استقبال الرسائل يحتاج مراجعة."
-              : explanation}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {error ? (
-            <Alert variant="error" aria-live="polite">
-              {error}
-            </Alert>
-          ) : null}
-          {panelMessage && state !== "READY" ? (
-            <Alert variant={state === "RUNTIME_DISABLED" ? "warning" : "error"}>
-              {panelMessage}
-            </Alert>
-          ) : null}
-
-          {view.connection?.maskedPhone ? (
-            <div className="space-y-1 text-sm" dir="rtl">
-              <p className="text-muted-foreground">رقم واتساب المتصل</p>
-              <p className="font-medium tracking-wide" dir="ltr">
-                {view.connection.maskedPhone}
-              </p>
-            </div>
-          ) : null}
-
-          {state === "READY" || state === "DISCONNECTED" || state === "LOGGED_OUT" ? (
-            <div className="space-y-2 text-sm" dir="rtl">
-              <p>
-                اتصال واتساب:{" "}
-                <span
-                  className={
-                    socketConnected
-                      ? "font-medium text-emerald-700"
-                      : "font-medium text-amber-800"
-                  }
-                >
-                  {socketConnected ? "متصل" : "غير متصل"}
+    <div className="space-y-5">
+      <section
+        className={`rounded-[28px] border p-5 shadow-sm sm:p-6 ${
+          state === "READY" && !inboundDegraded
+            ? "border-success/20 bg-success-soft/35"
+            : state === "READY"
+              ? "border-warning/20 bg-warning-soft/35"
+              : "border-border bg-card"
+        }`}
+      >
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={badgeVariant(state, inboundDegraded)}>
+                {stateLabel(state)}
+              </Badge>
+              {view.connection?.maskedPhone ? (
+                <span className="text-xs font-bold text-muted-foreground" dir="ltr">
+                  {view.connection.maskedPhone}
                 </span>
-              </p>
-              {inboundLabel ? (
-                <p>
-                  استقبال الرسائل:{" "}
-                  <span
-                    className={
-                      inboundDegraded
-                        ? "font-medium text-amber-700"
-                        : "font-medium text-emerald-700"
-                    }
-                  >
-                    {inboundLabel}
-                  </span>
-                </p>
-              ) : null}
-              {inboundDegraded ? (
-                <Alert variant="warning">
-                  واتساب متصل، لكن استقبال الرسائل يحتاج مراجعة.
-                  {inboundDetail ? ` ${inboundDetail}.` : null}
-                </Alert>
-              ) : null}
-              {socketConnected && lastDeliveryRelative ? (
-                <p className="text-muted-foreground">
-                  آخر رسالة مستلمة: {lastDeliveryRelative}
-                </p>
               ) : null}
             </div>
-          ) : null}
+            <h2 className="mt-3 text-2xl font-black tracking-[-0.03em]">
+              {state === "READY"
+                ? inboundDegraded
+                  ? "واتساب متصل، بس محتاج مراجعة"
+                  : "واتساب شغال وجاهز"
+                : state === "QR_REQUIRED"
+                  ? "امسح QR من موبايلك"
+                  : state === "CONNECTING" || state === "STARTING"
+                    ? "بنكمل الربط"
+                    : "وصّل رقم واتساب"}
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
+              {inboundDegraded && !compatibilityMessageAr
+                ? "الاتصال موجود، لكن استقبال الرسائل محتاج مراجعة بسيطة."
+                : explanation}
+            </p>
+          </div>
 
-          {state === "NOT_CONNECTED" || state === "DISCONNECTED" ? (
-            <div className="space-y-3">
-              <Button onClick={() => void connect()} disabled={busy}>
-                {busy
-                  ? "جاري الربط…"
-                  : state === "DISCONNECTED"
-                    ? "إعادة ربط واتساب"
-                    : "ربط واتساب"}
+          <div className="grid h-20 w-20 shrink-0 place-items-center rounded-[24px] border border-white/70 bg-white/80 text-3xl shadow-sm">
+            {state === "READY" ? "✓" : state === "QR_REQUIRED" ? "▦" : "◉"}
+          </div>
+        </div>
+      </section>
+
+      {error ? (
+        <Alert variant="error" aria-live="polite">
+          {error}
+        </Alert>
+      ) : null}
+      {panelMessage && state !== "READY" ? (
+        <Alert variant={state === "RUNTIME_DISABLED" ? "warning" : "error"}>
+          {panelMessage}
+        </Alert>
+      ) : null}
+
+      {state === "NOT_CONNECTED" || state === "DISCONNECTED" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">الربط بياخد أقل من دقيقة</CardTitle>
+            <CardDescription>
+              مش محتاج API أو إعدادات تقنية. كل اللي هتعمله إنك تمسح QR من واتساب.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {[
+                ["1", "افتح واتساب", "من موبايل رقم البيزنس"],
+                ["2", "الأجهزة المرتبطة", "اختار ربط جهاز جديد"],
+                ["3", "امسح QR", "وخلي الصفحة مفتوحة لحظات"],
+              ].map(([number, title, description]) => (
+                <div key={number} className="rounded-2xl border border-border bg-surface/45 p-4">
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-primary text-xs font-black text-primary-foreground">
+                    {number}
+                  </span>
+                  <p className="mt-3 text-sm font-black">{title}</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
+                </div>
+              ))}
+            </div>
+            <Button
+              size="lg"
+              className="mt-5 w-full sm:w-auto sm:min-w-44"
+              onClick={() => void connect()}
+              disabled={busy}
+            >
+              {busy
+                ? "بنجهز الربط..."
+                : state === "DISCONNECTED"
+                  ? "اربط واتساب تاني"
+                  : "ابدأ ربط واتساب"}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {state === "STARTING" || state === "CONNECTING" ? (
+        <Card>
+          <CardContent className="py-10 text-center">
+            <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-2xl text-primary">
+              …
+            </div>
+            <p className="mt-4 text-lg font-black">ثواني وبنكون جاهزين</p>
+            <p className="mt-2 text-sm text-muted-foreground">{explanation}</p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {state === "QR_REQUIRED" ? (
+        <Card className="overflow-hidden">
+          <CardContent className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[1fr_auto] lg:items-center">
+            <div>
+              <p className="text-xs font-black text-primary">الخطوة الأخيرة</p>
+              <h3 className="mt-1 text-xl font-black">امسح الكود من واتساب</h3>
+              <div className="mt-4 space-y-2 text-sm leading-7 text-muted-foreground">
+                <p>1. افتح واتساب على الموبايل.</p>
+                <p>2. ادخل على الأجهزة المرتبطة.</p>
+                <p>3. اضغط ربط جهاز ووجّه الكاميرا للكود.</p>
+              </div>
+              <p className="mt-4 text-xs leading-5 text-muted-foreground">
+                لو الكود انتهت صلاحيته هيتجدد تلقائيًا. متقفلش الصفحة أثناء المسح.
+              </p>
+              <Button
+                variant="ghost"
+                className="mt-4"
+                onClick={() => void disconnect()}
+                disabled={busy}
+              >
+                إلغاء الربط
               </Button>
             </div>
-          ) : null}
 
-          {state === "STARTING" || state === "CONNECTING" ? (
-            <p className="text-sm text-muted-foreground">{explanation}</p>
-          ) : null}
-
-          {state === "QR_REQUIRED" ? (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                افتح واتساب على هاتفك ← الأجهزة المرتبطة ← ربط جهاز، ثم امسح الرمز.
-                إذا انتهت صلاحية الرمز سيظهر رمز جديد تلقائياً — لا تغلق هذه
-                الصفحة أثناء المسح.
-              </p>
+            <div className="rounded-[26px] border border-border bg-white p-4 shadow-lg">
               {qrImageDataUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={qrImageDataUrl}
                   alt="رمز QR لربط واتساب"
-                  className="mx-auto h-64 w-64 rounded-lg border border-border bg-white p-3"
+                  className="h-64 w-64 rounded-2xl bg-white"
                 />
               ) : (
-                <p className="text-sm text-muted-foreground">
-                  جاري تحميل رمز QR…
-                </p>
+                <div className="grid h-64 w-64 place-items-center rounded-2xl bg-surface text-sm font-bold text-muted-foreground">
+                  بنجهز QR…
+                </div>
               )}
-              <Button
-                variant="outline"
-                onClick={() => void disconnect()}
-                disabled={busy}
-              >
-                إلغاء
-              </Button>
             </div>
-          ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
-          {state === "READY" ? (
-            <div className="space-y-3">
-              {!inboundDegraded ? (
-                <Alert variant="success">واتساب متصل وجاهز لهذه المساحة.</Alert>
+      {state === "READY" ? (
+        <div className="grid gap-4 lg:grid-cols-[1fr_.7fr]">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">حالة الاستقبال</CardTitle>
+              <CardDescription>
+                أهم حاجة تعرفها: هل الرسائل داخلة للسيستم بشكل طبيعي؟
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-surface/45 p-4">
+                <div>
+                  <p className="text-xs font-bold text-muted-foreground">استقبال الرسائل</p>
+                  <p className="mt-1 text-sm font-black">
+                    {inboundDegraded ? "محتاج مراجعة" : "شغال"}
+                  </p>
+                </div>
+                <span className={`h-3 w-3 rounded-full ${inboundDegraded ? "bg-warning" : "bg-success"}`} />
+              </div>
+
+              {lastDeliveryRelative ? (
+                <div className="rounded-2xl border border-border bg-surface/45 p-4">
+                  <p className="text-xs font-bold text-muted-foreground">آخر رسالة وصلت</p>
+                  <p className="mt-1 text-sm font-black">{lastDeliveryRelative}</p>
+                </div>
               ) : null}
+
+              {inboundDegraded ? (
+                <Alert variant="warning">
+                  استقبال الرسائل محتاج مراجعة.
+                  {inboundDetail ? ` ${inboundDetail}.` : null}
+                </Alert>
+              ) : (
+                <Alert variant="success">
+                  كل شيء جاهز — الرسائل الجديدة هتظهر في المحادثات تلقائيًا.
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">إدارة الاتصال</CardTitle>
+              <CardDescription>
+                مش محتاج تعمل حاجة طول ما الحالة فوق شغالة.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
               <Button
                 variant="outline"
                 onClick={() => void disconnect()}
                 disabled={busy}
+                className="w-full"
               >
-                قطع الاتصال
+                {busy ? "جاري التنفيذ..." : "قطع الاتصال"}
               </Button>
-            </div>
-          ) : null}
+              <p className="mt-3 text-center text-[11px] leading-5 text-muted-foreground">
+                استخدمها فقط لو ناوي تربط رقم مختلف أو تعيد الجلسة.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
 
-          {state === "LOGGED_OUT" ? (
-            <div className="space-y-3">
-              <Alert variant="error">{explanation}</Alert>
-              <Button onClick={() => void connect()} disabled={busy}>
-                إعادة ربط واتساب
-              </Button>
-            </div>
-          ) : null}
+      {state === "LOGGED_OUT" ? (
+        <Card>
+          <CardContent className="space-y-4 py-6">
+            <Alert variant="error">{explanation}</Alert>
+            <Button onClick={() => void connect()} disabled={busy}>
+              اربط واتساب من جديد
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
-          {state === "RUNTIME_DISABLED" ? (
-            <Alert variant="warning">{explanation}</Alert>
-          ) : null}
+      {state === "RUNTIME_DISABLED" ? (
+        <Alert variant="warning">{explanation}</Alert>
+      ) : null}
 
-          {state === "ERROR" ? (
-            <div className="space-y-3">
-              <Alert variant="error">{explanation}</Alert>
-              <Button onClick={() => void connect()} disabled={busy}>
-                إعادة المحاولة
-              </Button>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+      {state === "ERROR" ? (
+        <Card>
+          <CardContent className="space-y-4 py-6">
+            <Alert variant="error">{explanation}</Alert>
+            <Button onClick={() => void connect()} disabled={busy}>
+              جرّب الربط تاني
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }
