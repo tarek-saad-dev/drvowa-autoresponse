@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +53,18 @@ export function GuidedOnboardingPreview() {
   const [business, setBusiness] = useState<Record<string, string>>({});
   const [knowledge, setKnowledge] = useState("");
   const [chatCount, setChatCount] = useState(0);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  const [agentId, setAgentId] = useState<string | null>(null);
+  const [knowledgeCount, setKnowledgeCount] = useState(0);
+  const [previewQuestion, setPreviewQuestion] = useState("مواعيدكم إيه؟");
+  const [previewReply, setPreviewReply] = useState("لسه مجربناش الرد الحقيقي.");
+  const [qrImageDataUrl, setQrImageDataUrl] = useState<string | null>(null);
+  const [waReady, setWaReady] = useState(false);
+  const [firstMessageStage, setFirstMessageStage] = useState(0);
+  const [testConversationId, setTestConversationId] = useState<string | null>(null);
+  const [humanTakeoverDone, setHumanTakeoverDone] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const firstMessageStartedAt = useRef<string | null>(null);
 
   const index = FLOW.findIndex((item) => item.key === step);
   const progress = Math.max(0, Math.round((index / (FLOW.length - 1)) * 100));
@@ -62,6 +74,270 @@ export function GuidedOnboardingPreview() {
   const businessCanContinue =
     currentBusinessQuestion.key === "link" || currentBusinessValue.length > 0;
 
+  useEffect(() => {
+    void (async () => {
+      try {
+        const response = await fetch("/api/businesses", { cache: "no-store" });
+        const data = await response.json();
+        if (response.ok && Array.isArray(data.businesses) && data.businesses.length > 0) {
+          setWorkspaceReady(true);
+          const agentsResponse = await fetch("/api/agents", { cache: "no-store" });
+          const agentsData = await agentsResponse.json();
+          const existingAgent = agentsData?.agents?.find((item: { isActive?: boolean }) => item.isActive)
+            ?? agentsData?.agents?.[0];
+          if (existingAgent?.agentId) setAgentId(existingAgent.agentId);
+        }
+      } catch {
+        // Setup can still create the first workspace later.
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (step !== "WHATSAPP" || !workspaceReady) return;
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const response = await fetch("/api/channels/whatsapp/status", { cache: "no-store" });
+        const data = await response.json();
+        if (stopped || !response.ok) return;
+        if (data.uiState === "READY") {
+          setWaReady(true);
+          setMockState("success");
+          return;
+        }
+        if (data.compatibility?.status === "DEGRADED_CRYPTO") {
+          setMockState("compatibility-warning");
+        }
+      } catch {
+        // Keep polling; transient status failures should not break setup.
+      }
+    };
+    void tick();
+    const timer = window.setInterval(tick, 2000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [step, workspaceReady]);
+
+  useEffect(() => {
+    if (step !== "FIRST_MESSAGE" || !workspaceReady) return;
+    if (!firstMessageStartedAt.current) {
+      firstMessageStartedAt.current = new Date().toISOString();
+      setFirstMessageStage(0);
+    }
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const response = await fetch("/api/inbox/conversations?limit=10", { cache: "no-store" });
+        const data = await response.json();
+        if (stopped || !response.ok || !Array.isArray(data.conversations)) return;
+        const started = new Date(firstMessageStartedAt.current!).getTime();
+        const conversation = data.conversations.find((item: {
+          lastInboundAtUtc?: string | null;
+        }) => item.lastInboundAtUtc && new Date(item.lastInboundAtUtc).getTime() >= started);
+        if (!conversation) return;
+        setTestConversationId(conversation.conversationId);
+        setFirstMessageStage((value) => Math.max(value, 2));
+        window.setTimeout(() => setFirstMessageStage((value) => Math.max(value, 3)), 350);
+
+        const messagesResponse = await fetch(
+          `/api/inbox/conversations/${conversation.conversationId}/messages?limit=30`,
+          { cache: "no-store" },
+        );
+        const messagesData = await messagesResponse.json();
+        if (!messagesResponse.ok || !Array.isArray(messagesData.messages)) return;
+        const outbound = messagesData.messages.some((message: {
+          direction?: string;
+          createdAtUtc?: string;
+        }) => message.direction === "OUTBOUND"
+          && message.createdAtUtc
+          && new Date(message.createdAtUtc).getTime() >= started);
+        if (outbound) {
+          setFirstMessageStage(5);
+          setMockState("success");
+        }
+      } catch {
+        // Polling is intentionally tolerant.
+      }
+    };
+    void tick();
+    const timer = window.setInterval(tick, 1800);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [step, workspaceReady]);
+
+  useEffect(() => {
+    if (step !== "HUMAN_TAKEOVER" || !testConversationId) return;
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const response = await fetch("/api/inbox/conversations?limit=10", { cache: "no-store" });
+        const data = await response.json();
+        if (stopped || !response.ok || !Array.isArray(data.conversations)) return;
+        const conversation = data.conversations.find(
+          (item: { conversationId?: string }) => item.conversationId === testConversationId,
+        );
+        if (conversation?.aiMode === "HUMAN_PAUSED"
+          && conversation?.aiPauseReason === "HUMAN_TAKEOVER") {
+          setHumanTakeoverDone(true);
+          setMockState("success");
+        }
+      } catch {
+        // Keep the guided wait state.
+      }
+    };
+    void tick();
+    const timer = window.setInterval(tick, 1800);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [step, testConversationId]);
+
+  async function ensureWorkspace() {
+    if (workspaceReady) return;
+    const summary = [
+      `اسم البيزنس: ${business.name || "غير محدد"}`,
+      `النشاط: ${business.type || "عام"}`,
+      `الفروع: ${business.branches || "غير محدد"}`,
+      `المواعيد: ${business.hours || "غير محددة"}`,
+      business.link ? `الرابط: ${business.link}` : "",
+    ].filter(Boolean).join("\n");
+
+    const response = await fetch("/api/onboarding/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        business: {
+          name: business.name || "نشاطي",
+          category: business.type || "عام",
+          countryCode: "EG",
+          locale: "ar-EG",
+          timezone: "Africa/Cairo",
+        },
+        location: null,
+        agent: {
+          name: "موظف الاستقبال",
+          roleTitle: "موظف استقبال",
+          language: "ar",
+          dialect: "مصري",
+          tone: "مهني وودود",
+          instructions: "جاوب باختصار ووضوح وبناءً على معلومات النشاط فقط.",
+        },
+        knowledgeItems: [{
+          category: "ABOUT",
+          title: "معلومات النشاط الأساسية",
+          content: summary,
+        }],
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.error ?? data?.message ?? "تعذر إنشاء مساحة العمل");
+    setWorkspaceReady(true);
+    if (data?.agent?.agentId) setAgentId(data.agent.agentId);
+  }
+
+  async function trainKnowledge() {
+    setLiveError(null);
+    setMockState("loading");
+    try {
+      await ensureWorkspace();
+      const response = await fetch("/api/knowledge/ingest/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: knowledge }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error ?? data?.message ?? "تعذر تحليل المعلومات");
+      const proposalIds = (data.proposals ?? [])
+        .filter((item: { status?: string }) => item.status !== "NOOP")
+        .map((item: { proposalId: string }) => item.proposalId);
+      if (proposalIds.length > 0) {
+        const applyResponse = await fetch("/api/knowledge/ingest/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: data.session.sessionId, proposalIds }),
+        });
+        const applyData = await applyResponse.json();
+        if (!applyResponse.ok) {
+          throw new Error(applyData?.error ?? applyData?.message ?? "تعذر حفظ المعلومات");
+        }
+      }
+      setKnowledgeCount(Math.max(proposalIds.length, data.proposals?.length ?? 0));
+      setMockState("success");
+    } catch (error) {
+      setLiveError(error instanceof Error ? error.message : "حدث خطأ أثناء التدريب");
+      setMockState("error");
+    }
+  }
+
+  async function askPreview(question: string) {
+    setLiveError(null);
+    setPreviewQuestion(question);
+    setPreviewReply("بجهز الرد…");
+    try {
+      await ensureWorkspace();
+      const response = await fetch("/api/onboarding/preview-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: question }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error ?? data?.message ?? "تعذر تجربة الرد");
+      setPreviewReply(data.reply);
+      setChatCount((value) => Math.min(3, value + 1));
+    } catch (error) {
+      setPreviewReply("مقدرناش نطلع الرد دلوقتي.");
+      setLiveError(error instanceof Error ? error.message : "تعذر تجربة الرد");
+    }
+  }
+
+  async function startWhatsApp() {
+    setLiveError(null);
+    try {
+      await ensureWorkspace();
+      const connectResponse = await fetch("/api/channels/whatsapp/connect", { method: "POST" });
+      const connectData = await connectResponse.json();
+      if (!connectResponse.ok) {
+        throw new Error(connectData?.error ?? connectData?.message ?? "تعذر بدء الربط");
+      }
+      const qrResponse = await fetch("/api/channels/whatsapp/qr", { cache: "no-store" });
+      const qrData = await qrResponse.json();
+      if (!qrResponse.ok) throw new Error(qrData?.error ?? qrData?.message ?? "تعذر تحميل QR");
+      if (qrData.qrImageDataUrl) setQrImageDataUrl(qrData.qrImageDataUrl);
+      if (qrData.uiState === "READY") {
+        setWaReady(true);
+        setMockState("success");
+      }
+    } catch (error) {
+      setLiveError(error instanceof Error ? error.message : "تعذر ربط واتساب");
+      setMockState("error");
+    }
+  }
+
+  async function enableAutoReply() {
+    const response = await fetch("/api/channels/whatsapp/ai", { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.error ?? data?.message ?? "تعذر تجهيز الرد التلقائي");
+    const selectedAgentId = agentId ?? data?.agents?.[0]?.agentId;
+    if (!selectedAgentId) throw new Error("موظف الاستقبال غير موجود");
+    setAgentId(selectedAgentId);
+    if (data?.setting?.autoReplyEnabled && data.setting.agentId === selectedAgentId) return;
+    const patchResponse = await fetch("/api/channels/whatsapp/ai", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agentId: selectedAgentId, autoReplyEnabled: true }),
+    });
+    const patchData = await patchResponse.json();
+    if (!patchResponse.ok) {
+      throw new Error(patchData?.error ?? patchData?.message ?? "تعذر تشغيل الرد التلقائي");
+    }
+  }
+
   const primaryLabel = useMemo(() => {
     switch (step) {
       case "WELCOME":
@@ -69,32 +345,59 @@ export function GuidedOnboardingPreview() {
       case "BUSINESS":
         return businessQuestion < businessQuestions.length - 1 ? "التالي" : "تمام — كمل";
       case "KNOWLEDGE":
-        return mockState === "loading" ? "بنعلم الموظف..." : "علّم الموظف";
+        return mockState === "loading"
+          ? "بنعلم الموظف..."
+          : mockState === "success"
+            ? "جربه دلوقتي"
+            : "علّم الموظف";
       case "PLAYGROUND":
         return "الردود تمام — وصل واتساب";
       case "WHATSAPP":
-        return "تم الربط";
+        return waReady ? "كمل لأول تجربة" : qrImageDataUrl ? "مستني المسح…" : "ابدأ الربط";
       case "FIRST_MESSAGE":
-        return "كمل تجربة التحكم";
+        return firstMessageStage >= 5 ? "كمل تجربة التحكم" : "مستني أول رد…";
       case "HUMAN_TAKEOVER":
-        return "فهمت";
+        return humanTakeoverDone ? "فهمت" : "مستني ردك اليدوي…";
       case "COMPLETED":
         return "افتح لوحة التحكم";
     }
-  }, [step, businessQuestion, mockState]);
+  }, [
+    step,
+    businessQuestion,
+    mockState,
+    waReady,
+    qrImageDataUrl,
+    firstMessageStage,
+    humanTakeoverDone,
+  ]);
 
-  function next() {
+  async function next() {
     if (step === "BUSINESS" && !businessCanContinue) return;
     if (step === "BUSINESS" && businessQuestion < businessQuestions.length - 1) {
       setBusinessQuestion((value) => value + 1);
       return;
     }
-    if (step === "KNOWLEDGE" && mockState === "default") {
-      setMockState("loading");
-      window.setTimeout(() => setMockState("success"), 900);
+    if (step === "KNOWLEDGE" && mockState !== "success") {
+      if (!knowledge.trim()) return;
+      await trainKnowledge();
       return;
     }
     if (step === "KNOWLEDGE" && mockState === "loading") return;
+    if (step === "WHATSAPP" && !waReady) {
+      if (!qrImageDataUrl) await startWhatsApp();
+      return;
+    }
+    if (step === "WHATSAPP" && waReady) {
+      try {
+        await enableAutoReply();
+        firstMessageStartedAt.current = null;
+      } catch (error) {
+        setLiveError(error instanceof Error ? error.message : "تعذر تشغيل الرد التلقائي");
+        return;
+      }
+    }
+    if (step === "FIRST_MESSAGE" && firstMessageStage < 5) return;
+    if (step === "HUMAN_TAKEOVER" && !humanTakeoverDone) return;
 
     const nextStep = FLOW[Math.min(index + 1, FLOW.length - 1)]?.key;
     if (nextStep) {
@@ -284,6 +587,7 @@ export function GuidedOnboardingPreview() {
                         <div>
                           <h3 className="font-black">مقدرناش نكمل التدريب المرة دي</h3>
                           <p className="mt-2 text-sm leading-7 text-muted-foreground">معلوماتك لسه موجودة. جرّب تاني من غير ما تعيد أي حاجة.</p>
+                          {liveError ? <p className="mt-2 text-xs font-bold text-destructive">{liveError}</p> : null}
                         </div>
                       </div>
                     </div>
@@ -302,7 +606,7 @@ export function GuidedOnboardingPreview() {
                         <div className="grid h-14 w-14 place-items-center rounded-2xl bg-success text-2xl text-white">✓</div>
                         <div>
                           <h3 className="text-xl font-black">جاهز للتجربة ✨</h3>
-                          <p className="mt-1 text-sm text-muted-foreground">موظفك اتعلم 37 معلومة عن البيزنس.</p>
+                          <p className="mt-1 text-sm text-muted-foreground">موظفك اتعلم {knowledgeCount || "مجموعة"} معلومات جديدة عن البيزنس.</p>
                         </div>
                       </div>
                       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
@@ -348,7 +652,7 @@ export function GuidedOnboardingPreview() {
                       <button
                         key={question}
                         type="button"
-                        onClick={() => setChatCount((n) => Math.min(3, n + 1))}
+                        onClick={() => void askPreview(question)}
                         className="rounded-full border border-border bg-white px-4 py-2 text-sm font-bold shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:text-primary hover:shadow-md"
                       >
                         {question}
@@ -357,22 +661,15 @@ export function GuidedOnboardingPreview() {
                   </div>
                   <div className="mt-6 rounded-[26px] border border-border bg-surface/50 p-4 sm:p-6">
                     <div className="space-y-4">
-                      <div className="mr-auto max-w-[82%] translate-y-0 rounded-2xl rounded-bl-md bg-white p-4 text-sm shadow-sm transition-all">مواعيدكم إيه؟</div>
+                      <div className="mr-auto max-w-[82%] translate-y-0 rounded-2xl rounded-bl-md bg-white p-4 text-sm shadow-sm transition-all">{previewQuestion}</div>
                       <div className="ml-auto max-w-[86%] rounded-2xl rounded-br-md bg-primary p-4 text-sm leading-7 text-primary-foreground shadow-md">
-                        أهلاً بيك 👋 إحنا متاحين يوميًا، ولو تحب أساعدك في الحجز قولي أنسب يوم ليك.
-                        <div className="mt-2 text-[10px] font-semibold text-primary-foreground/70">رد تجريبي من موظفك</div>
+                        {previewReply}
+                        <div className="mt-2 text-[10px] font-semibold text-primary-foreground/70">رد حقيقي من موظفك التجريبي</div>
                       </div>
-                      {chatCount > 0 ? (
-                        <div className="mr-auto max-w-[82%] rounded-2xl rounded-bl-md bg-white p-4 text-sm shadow-sm">طب والأسعار؟</div>
-                      ) : null}
-                      {chatCount > 0 ? (
-                        <div className="ml-auto max-w-[86%] rounded-2xl rounded-br-md bg-primary p-4 text-sm leading-7 text-primary-foreground shadow-md">
-                          أقدر أقولك الأسعار بالتفصيل حسب الخدمة اللي محتاجها، وقولي تحب تبدأ بإيه؟
-                        </div>
-                      ) : null}
+
                     </div>
                     <div className="mt-4 flex gap-2">
-                      <button type="button" onClick={() => setChatCount((n) => Math.min(3, n + 1))} className="rounded-xl bg-success-soft px-3 py-2 text-xs font-black text-success">تمام 👍</button>
+                      <button type="button" onClick={() => setChatCount((n) => Math.max(1, n))} className="rounded-xl bg-success-soft px-3 py-2 text-xs font-black text-success">تمام 👍</button>
                       <button type="button" className="rounded-xl bg-white px-3 py-2 text-xs font-black text-muted-foreground shadow-sm">عدّل المعلومة</button>
                     </div>
                   </div>
@@ -402,9 +699,20 @@ export function GuidedOnboardingPreview() {
                     ))}
                   </div>
                   <div className="mx-auto mt-7 w-full max-w-md rounded-[28px] border border-border bg-white p-5 shadow-[0_18px_55px_rgba(15,28,36,.10)]">
-                    <div className="mx-auto grid h-52 w-52 place-items-center rounded-3xl border border-border bg-[linear-gradient(90deg,#0f1c24_50%,transparent_50%),linear-gradient(#0f1c24_50%,transparent_50%)] bg-[length:18px_18px] bg-[position:0_0,9px_9px] p-5">
-                      <div className="grid h-16 w-16 place-items-center rounded-2xl border-4 border-white bg-primary text-xl font-black text-white shadow-lg">D</div>
-                    </div>
+                    {qrImageDataUrl ? (
+                      <img
+                        src={qrImageDataUrl}
+                        alt="QR لربط واتساب"
+                        className="mx-auto h-52 w-52 rounded-3xl border border-border bg-white p-2"
+                      />
+                    ) : (
+                      <div className="mx-auto grid h-52 w-52 place-items-center rounded-3xl border border-dashed border-border bg-surface">
+                        <div className="text-center">
+                          <div className="text-3xl">▦</div>
+                          <div className="mt-2 text-xs font-bold text-muted-foreground">اضغط ابدأ الربط</div>
+                        </div>
+                      </div>
+                    )}
                     <div className="mt-4 flex items-center justify-center gap-2 text-xs font-bold text-muted-foreground">
                       <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
                       الكود بيتجدد تلقائيًا عند الحاجة
@@ -437,7 +745,7 @@ export function GuidedOnboardingPreview() {
                   <div className="mx-auto mt-5 w-fit rounded-2xl rounded-bl-md bg-[#dcf8c6] px-6 py-4 text-lg font-black shadow-sm">السلام عليكم</div>
                   <div className="mt-8 space-y-3 text-start">
                     {["مستني الرسالة", "وصلت الرسالة", "الموظف فهمها", "جهز الرد", "تم الرد"].map((label, i) => {
-                      const active = mockState === "success" ? true : i === 0;
+                      const active = firstMessageStage >= i + 1 || (i === 0 && firstMessageStage === 0);
                       return (
                         <div key={label} className="flex items-center gap-4 rounded-2xl border border-border/70 bg-white p-4 shadow-sm">
                           <span className={cx("grid h-9 w-9 place-items-center rounded-full font-black", active ? "bg-success text-white" : "bg-secondary text-muted-foreground")}>{active ? "✓" : "○"}</span>
@@ -461,10 +769,10 @@ export function GuidedOnboardingPreview() {
                   <span className="mt-6 text-xs font-black text-primary">التحكم اليدوي</span>
                   <h2 className="mt-2 text-3xl font-black tracking-[-0.035em]">وأنت دايمًا المتحكم</h2>
                   <p className="mt-4 max-w-lg leading-8 text-muted-foreground">رد بنفسك من موبايل واتساب على نفس المحادثة. DRVOWA هيعرف إن حد من فريقك تدخل.</p>
-                  <div className={cx("mt-8 w-full max-w-md rounded-2xl p-5 text-sm font-black", mockState === "success" ? "bg-success-soft text-success" : "bg-surface text-muted-foreground")}>
-                    {mockState === "success" ? "تمام 👌 وقفنا الرد التلقائي للمحادثة دي." : "مستني ردك اليدوي…"}
+                  <div className={cx("mt-8 w-full max-w-md rounded-2xl p-5 text-sm font-black", humanTakeoverDone ? "bg-success-soft text-success" : "bg-surface text-muted-foreground")}>
+                    {humanTakeoverDone ? "تمام 👌 وقفنا الرد التلقائي للمحادثة دي." : "مستني ردك اليدوي…"}
                   </div>
-                  {mockState === "success" ? <p className="mt-4 max-w-lg text-sm leading-7 text-muted-foreground">أي وقت حد من فريقك يرد بنفسه، DRVOWA يسيب المحادثة ليكم تلقائيًا.</p> : null}
+                  {humanTakeoverDone ? <p className="mt-4 max-w-lg text-sm leading-7 text-muted-foreground">أي وقت حد من فريقك يرد بنفسه، DRVOWA يسيب المحادثة ليكم تلقائيًا.</p> : null}
                 </div>
               ) : null}
 
@@ -490,7 +798,14 @@ export function GuidedOnboardingPreview() {
               <Button
                 type="button"
                 onClick={next}
-                disabled={mockState === "loading" || (step === "BUSINESS" && !businessCanContinue)}
+                disabled={
+                  mockState === "loading"
+                  || (step === "BUSINESS" && !businessCanContinue)
+                  || (step === "KNOWLEDGE" && !knowledge.trim() && mockState !== "success")
+                  || (step === "WHATSAPP" && Boolean(qrImageDataUrl) && !waReady)
+                  || (step === "FIRST_MESSAGE" && firstMessageStage < 5)
+                  || (step === "HUMAN_TAKEOVER" && !humanTakeoverDone)
+                }
                 className="min-w-44"
               >
                 {primaryLabel}
@@ -499,14 +814,14 @@ export function GuidedOnboardingPreview() {
           </div>
         </section>
 
-        <div className="mt-6 hidden justify-center md:flex">
+        {process.env.NODE_ENV !== "production" ? <div className="mt-6 hidden justify-center md:flex">
           <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-white/75 p-2 shadow-sm backdrop-blur">
             <span className="px-2 text-[11px] font-bold text-muted-foreground">Preview state</span>
             {(["default", "loading", "success", "error", "compatibility-warning"] as MockState[]).map((state) => (
               <button key={state} type="button" onClick={() => setMockState(state)} className={cx("rounded-xl px-2.5 py-1.5 text-[10px] font-bold transition", mockState === state ? "bg-primary text-white" : "text-muted-foreground hover:bg-secondary")}>{state}</button>
             ))}
           </div>
-        </div>
+        </div> : null}
       </div>
 
       <style jsx global>{`
@@ -523,7 +838,14 @@ export function GuidedOnboardingPreview() {
             type="button"
             className="flex-1"
             onClick={next}
-            disabled={mockState === "loading" || (step === "BUSINESS" && !businessCanContinue)}
+            disabled={
+              mockState === "loading"
+              || (step === "BUSINESS" && !businessCanContinue)
+              || (step === "KNOWLEDGE" && !knowledge.trim() && mockState !== "success")
+              || (step === "WHATSAPP" && Boolean(qrImageDataUrl) && !waReady)
+              || (step === "FIRST_MESSAGE" && firstMessageStage < 5)
+              || (step === "HUMAN_TAKEOVER" && !humanTakeoverDone)
+            }
           >
             {primaryLabel}
           </Button>
