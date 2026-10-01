@@ -17,6 +17,7 @@ import { messageBodyDisplay } from "@/lib/ui/labels";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
 
 export type ConversationAiMode = "AUTO" | "HUMAN_PAUSED" | "SAFETY_PAUSED";
+type InboxFilter = "ALL" | "AUTO" | "HUMAN" | "REVIEW";
 
 export type ConversationRow = {
   conversationId: string;
@@ -130,6 +131,7 @@ export function InboxPanel({
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<InboxFilter>("ALL");
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const selectedIdRef = useRef<string | null>(null);
 
@@ -373,11 +375,25 @@ export function InboxPanel({
 
   const selected = conversations.find((c) => c.conversationId === selectedId);
   const filtered = conversations.filter((c) => {
+    const matchesMode =
+      filter === "ALL"
+      || (filter === "AUTO" && c.aiMode === "AUTO")
+      || (filter === "HUMAN" && c.aiMode === "HUMAN_PAUSED")
+      || (filter === "REVIEW" && c.aiMode === "SAFETY_PAUSED");
+    if (!matchesMode) return false;
+
     const q = query.trim();
     if (!q) return true;
     const hay = `${contactLabel(c)} ${previewText(c)}`.toLowerCase();
     return hay.includes(q.toLowerCase());
   });
+
+  const filterCounts = {
+    ALL: conversations.length,
+    AUTO: conversations.filter((c) => c.aiMode === "AUTO").length,
+    HUMAN: conversations.filter((c) => c.aiMode === "HUMAN_PAUSED").length,
+    REVIEW: conversations.filter((c) => c.aiMode === "SAFETY_PAUSED").length,
+  };
 
   const listPane = (
     <aside className="flex h-full min-h-[30rem] flex-col border-b border-border bg-card md:border-b-0 md:border-e">
@@ -409,16 +425,46 @@ export function InboxPanel({
             className="h-11 rounded-2xl bg-surface pe-4 text-sm"
           />
         </div>
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+          {([
+            ["ALL", "الكل"],
+            ["AUTO", "الـAI بيرد"],
+            ["HUMAN", "رد يدوي"],
+            ["REVIEW", "مراجعة"],
+          ] as Array<[InboxFilter, string]>).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setFilter(value)}
+              className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-black transition ${
+                filter === value
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-surface text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {label}
+              <span className="ms-1 opacity-70">{filterCounts[value]}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {filtered.length === 0 ? (
         <EmptyState
           className="m-4 border-0 bg-transparent px-2 py-10"
-          title={query.trim() ? "مفيش نتيجة للبحث" : "لسه مفيش محادثات"}
+          title={
+            query.trim()
+              ? "مفيش نتيجة للبحث"
+              : filter === "ALL"
+                ? "لسه مفيش محادثات"
+                : "مفيش محادثات بالحالة دي"
+          }
           description={
             query.trim()
               ? "جرب اسم أو رقم مختلف."
-              : "أول رسالة من عميل هتظهر هنا تلقائيًا."
+              : filter === "ALL"
+                ? "أول رسالة من عميل هتظهر هنا تلقائيًا."
+                : "غيّر الفلتر أو ارجع لكل المحادثات."
           }
         />
       ) : (
@@ -515,6 +561,10 @@ export function InboxPanel({
                         {selected.contactPhoneNormalized}
                       </span>
                     ) : null}
+                    <span className="text-[10px] text-muted-foreground">•</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {selected.lastMessageDirection === "INBOUND" ? "آخر رسالة من العميل" : "آخر رد من عندك"}
+                    </span>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
                         selected.aiMode === "AUTO"
@@ -576,6 +626,22 @@ export function InboxPanel({
       {error ? (
         <div className="border-b border-border bg-destructive/5 px-4 py-2.5 text-xs font-bold text-destructive" role="alert">
           {error}
+        </div>
+      ) : null}
+
+      {selected ? (
+        <div className="border-b border-border bg-surface/50 px-4 py-2.5 text-[11px] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span>
+              الحالة: <strong className="text-foreground">{aiStatusLabel(selected.aiMode)}</strong>
+            </span>
+            {selected.aiMode === "AUTO" ? (
+              <span>تقدر ترد في أي وقت، وساعتها هنوقف الرد الآلي للمحادثة دي.</span>
+            ) : null}
+            {selected.aiMode === "HUMAN_PAUSED" ? (
+              <span>لما تخلص، اضغط «رجّع الرد التلقائي».</span>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -649,7 +715,7 @@ export function InboxPanel({
             />
             <div className="flex items-center justify-between gap-3 px-1 pb-1">
               <p className="text-[10px] leading-4 text-muted-foreground">
-                أول رد يدوي منك بيوقف الموظف الذكي للمحادثة دي تلقائيًا.
+                ردك هنا = استلامك للمحادثة. الـAI هيتوقف فيها تلقائيًا لحد ما ترجعه.
               </p>
               <Button
                 type="button"
