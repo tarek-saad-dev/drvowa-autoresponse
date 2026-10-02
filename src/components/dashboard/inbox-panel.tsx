@@ -84,9 +84,9 @@ function aiStatusLabel(mode: ConversationAiMode): string {
 }
 
 function aiStatusShort(mode: ConversationAiMode): string {
-  if (mode === "HUMAN_PAUSED") return "معاك";
-  if (mode === "SAFETY_PAUSED") return "راجع";
-  return "تلقائي";
+  if (mode === "HUMAN_PAUSED") return "معاك دلوقتي";
+  if (mode === "SAFETY_PAUSED") return "محتاج مراجعة";
+  return "AI شغال";
 }
 
 function contactInitial(c: ConversationRow): string {
@@ -257,7 +257,7 @@ export function InboxPanel({
     if (typeof window === "undefined") return;
     if (!window.matchMedia("(min-width: 768px)").matches) return;
 
-    const first = conversations[0];
+    const first = conversations.find((item) => item.aiMode !== "AUTO") ?? conversations[0];
     setSelectedId(first.conversationId);
     selectedIdRef.current = first.conversationId;
     void loadMessages(first.conversationId, false);
@@ -416,6 +416,10 @@ export function InboxPanel({
     if (!q) return true;
     const hay = `${contactLabel(c)} ${previewText(c)}`.toLowerCase();
     return hay.includes(q.toLowerCase());
+  }).sort((a, b) => {
+    const aAttention = a.aiMode === "AUTO" ? 1 : 0;
+    const bAttention = b.aiMode === "AUTO" ? 1 : 0;
+    return aAttention - bAttention;
   });
 
   const filterCounts = {
@@ -724,8 +728,8 @@ export function InboxPanel({
         {!selectedId ? (
           <EmptyState
             className="my-auto border-0 bg-transparent"
-            title="اختار محادثة وابدأ"
-            description="هتشوف الرسائل هنا، وتقدر تسيب الموظف يرد أو تستلم المحادثة بنفسك."
+            title="اختار محادثة"
+            description="افتح أي عميل من القائمة. لو محتاج تدخلك هنطلعهولك فوق تلقائيًا."
           />
         ) : loadingMessages ? (
           <div className="my-auto text-center text-sm text-muted-foreground">
@@ -792,10 +796,10 @@ export function InboxPanel({
             <div className="flex items-center justify-between gap-3 px-1 pb-1">
               <p className="text-[10px] leading-4 text-muted-foreground">
                 {selected?.aiMode === "AUTO"
-                  ? "أول رد منك هيسلّم المحادثة ليك تلقائيًا."
+                  ? "أول ما تبعت، الموظف الذكي هيقف في المحادثة دي تلقائيًا."
                   : selected?.aiMode === "HUMAN_PAUSED"
-                    ? "إنت ماسك المحادثة دلوقتي."
-                    : "راجع المحادثة قبل استئناف الرد التلقائي."}
+                    ? "المحادثة معاك. لما تخلص رجّعها للموظف الذكي."
+                    : "راجع آخر الرسائل قبل ما ترجع الرد التلقائي."}
               </p>
               <Button
                 type="button"
