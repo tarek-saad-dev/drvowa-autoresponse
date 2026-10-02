@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Alert } from "@/components/ui/alert";
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
 import type { Agent } from "@/types/domain";
@@ -29,6 +30,9 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
   const [editing, setEditing] = useState<Agent | null>(null);
   const [dirty, setDirty] = useState(false);
   const [instructionsLen, setInstructionsLen] = useState(0);
+  const dialectRef = useRef<HTMLInputElement | null>(null);
+  const toneRef = useRef<HTMLInputElement | null>(null);
+  const instructionsRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (!dirty) return;
@@ -59,6 +63,22 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
   function markDirty() {
     setDirty(true);
     setSuccess(null);
+  }
+
+  function applyStylePreset(dialect: string, tone: string) {
+    if (dialectRef.current) dialectRef.current.value = dialect;
+    if (toneRef.current) toneRef.current.value = tone;
+    markDirty();
+  }
+
+  function addInstruction(text: string) {
+    const current = instructionsRef.current?.value?.trim() ?? "";
+    const next = current ? `${current}\n${text}` : text;
+    if (instructionsRef.current) {
+      instructionsRef.current.value = next.slice(0, INSTRUCTIONS_MAX);
+      setInstructionsLen(instructionsRef.current.value.length);
+    }
+    markDirty();
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -200,33 +220,78 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
                 placeholder="موظف استقبال"
               />
             </div>
+            <div className="rounded-2xl border border-primary/10 bg-primary/5 p-4">
+              <p className="text-xs font-black text-primary">اختار ستايل جاهز</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                ابدأ بستايل قريب من فريقك وبعدها عدّل أي حاجة.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {[
+                  ["مصرية", "ودود وبسيط", "مصري وودود"],
+                  ["بيضاء", "مهني ومختصر", "مهني مختصر"],
+                  ["فصحى", "رسمي وهادئ", "رسمي هادي"],
+                ].map(([dialect, tone, label]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => applyStylePreset(dialect, tone)}
+                    className="rounded-full border border-border bg-white px-3 py-2 text-[11px] font-black transition hover:border-primary/40 hover:text-primary"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid gap-3 sm:grid-cols-3">
               <div>
                 <Label htmlFor="language">اللغة</Label>
-                <Input
+                <Select
                   id="language"
                   name="language"
                   defaultValue={editing?.language ?? "ar"}
-                  placeholder="ar"
-                />
+                >
+                  {editing?.language && !["ar", "en"].includes(editing.language) ? (
+                    <option value={editing.language}>{editing.language}</option>
+                  ) : null}
+                  <option value="ar">العربية</option>
+                  <option value="en">English</option>
+                </Select>
               </div>
               <div>
                 <Label htmlFor="dialect">اللهجة</Label>
                 <Input
+                  ref={dialectRef}
                   id="dialect"
                   name="dialect"
+                  list="dialect-options"
                   defaultValue={editing?.dialect ?? ""}
-                  placeholder="مثال: بيضاء · خليجية · مصرية"
+                  placeholder="مثال: مصرية"
                 />
+                <datalist id="dialect-options">
+                  <option value="مصرية" />
+                  <option value="بيضاء" />
+                  <option value="سعودية" />
+                  <option value="خليجية" />
+                  <option value="فصحى" />
+                </datalist>
               </div>
               <div>
                 <Label htmlFor="tone">النبرة</Label>
                 <Input
+                  ref={toneRef}
                   id="tone"
                   name="tone"
+                  list="tone-options"
                   defaultValue={editing?.tone ?? ""}
                   placeholder="مثال: مهني وودود"
                 />
+                <datalist id="tone-options">
+                  <option value="ودود وبسيط" />
+                  <option value="مهني وودود" />
+                  <option value="مهني ومختصر" />
+                  <option value="رسمي وهادئ" />
+                </datalist>
               </div>
             </div>
             <div>
@@ -234,7 +299,24 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
               <p className="mb-1.5 text-xs text-muted-foreground">
                 اكتب له الحاجات اللي لازم يعملها أو يتجنبها في الرد.
               </p>
+              <div className="mb-3 flex flex-wrap gap-2">
+                {[
+                  "ما تخترعش أسعار أو معلومات مش موجودة.",
+                  "خلي الردود قصيرة ومناسبة لواتساب.",
+                  "لو المعلومة مش معروفة، قول للعميل إن حد من الفريق هيساعده.",
+                ].map((rule) => (
+                  <button
+                    key={rule}
+                    type="button"
+                    onClick={() => addInstruction(rule)}
+                    className="rounded-full bg-surface px-3 py-1.5 text-[10px] font-bold text-muted-foreground transition hover:bg-primary/5 hover:text-primary"
+                  >
+                    + {rule}
+                  </button>
+                ))}
+              </div>
               <Textarea
+                ref={instructionsRef}
                 id="instructions"
                 name="instructions"
                 rows={5}
