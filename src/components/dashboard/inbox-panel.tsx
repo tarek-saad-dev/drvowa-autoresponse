@@ -148,6 +148,12 @@ export function InboxPanel({
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const selectedIdRef = useRef<string | null>(null);
 
+  const draft = selectedId ? drafts[selectedId] ?? "" : "";
+  const setDraft = useCallback((value: string) => {
+    if (!selectedId) return;
+    setDrafts((prev) => ({ ...prev, [selectedId]: value }));
+  }, [selectedId]);
+
   useEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
@@ -397,12 +403,6 @@ export function InboxPanel({
       setSending(false);
     }
   }, [selectedId, draft, sending, loadMessages]);
-
-  const draft = selectedId ? drafts[selectedId] ?? "" : "";
-  const setDraft = useCallback((value: string) => {
-    if (!selectedId) return;
-    setDrafts((prev) => ({ ...prev, [selectedId]: value }));
-  }, [selectedId]);
 
   const selected = conversations.find((c) => c.conversationId === selectedId);
   const filtered = conversations.filter((c) => {
