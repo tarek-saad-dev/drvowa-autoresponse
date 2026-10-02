@@ -55,6 +55,7 @@ export const RATE_LIMITS = {
   knowledgeIngestAnalyze: { limit: 20, windowMs: 60 * 60 * 1000 },
   onboardingPreviewReply: { limit: 12, windowMs: 15 * 60 * 1000 },
   voiceTranscribe: { limit: 20, windowMs: 15 * 60 * 1000 },
+  onboardingDiscovery: { limit: 30, windowMs: 30 * 60 * 1000 },
 } as const satisfies Record<string, RateLimitPolicy>;
 
 /**
