@@ -132,10 +132,7 @@ fulfillment, policies, promotions, exceptions, human_escalation, faq.
       contents: prompt,
     });
 
-    const raw =
-      typeof response.text === "function"
-        ? response.text()
-        : response.text || "";
+    const raw = response.text || "";
 
     const parsed = outputSchema.parse(parseJsonObject(raw));
 
