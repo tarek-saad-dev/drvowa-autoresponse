@@ -104,24 +104,29 @@ export function DashboardSidebar({
       </nav>
 
       <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
-        <p className="text-xs font-black">ابدأ من هنا</p>
-        <p className="mt-1 text-[11px] leading-5 text-sidebar-muted">
-          أكتر حاجتين هتحتاجهم أثناء الشغل.
+        <p className="text-[10px] font-black tracking-[.08em] text-sidebar-muted/70">
+          اختصارات
         </p>
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="mt-2 grid gap-2">
           <Link
             href="/dashboard/inbox"
-            className="flex items-center justify-center gap-1.5 rounded-xl bg-white px-2 py-2 text-[11px] font-black text-sidebar transition hover:bg-white/90"
+            className="flex items-center justify-between gap-2 rounded-xl bg-white px-3 py-2.5 text-xs font-black text-sidebar transition hover:bg-white/90"
           >
-            <span>💬</span>
-            <span>المحادثات</span>
+            <span className="flex items-center gap-2">
+              <span>💬</span>
+              <span>افتح المحادثات</span>
+            </span>
+            <span aria-hidden>←</span>
           </Link>
           <Link
             href="/dashboard/knowledge"
-            className="flex items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-2 py-2 text-[11px] font-black text-white transition hover:bg-white/10"
+            className="flex items-center justify-between gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-xs font-black text-white transition hover:bg-white/10"
           >
-            <span>＋</span>
-            <span>درّب الموظف</span>
+            <span className="flex items-center gap-2">
+              <span>＋</span>
+              <span>علّمه معلومة</span>
+            </span>
+            <span aria-hidden>←</span>
           </Link>
         </div>
       </div>
