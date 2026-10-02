@@ -951,43 +951,45 @@ export function GuidedOnboardingPreview({
                     <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/10 text-lg font-black text-primary">{businessQuestion + 1}</div>
                   </div>
                   {currentBusinessQuestion.kind === "type" ? (
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                      {businessTypeChoices.map((choice) => {
-                        const selected = business.type === choice;
-                        return (
-                          <button
-                            key={choice}
-                            type="button"
-                            onClick={() => setBusiness((prev) => ({ ...prev, type: choice, ...(choice !== "أخرى" ? { customType: "" } : {}) }))}
-                            className={cx(
-                              "rounded-2xl border-2 p-5 text-start text-sm font-black transition-all duration-200",
-                              selected
-                                ? "border-primary bg-primary/8 text-primary shadow-[0_10px_28px_rgba(15,118,110,.12)]"
-                                : "border-border bg-white hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md",
-                            )}
-                          >
-                            <span className="mb-3 block text-2xl">{choice === "صالون" ? "✂️" : choice === "عيادة" ? "🩺" : choice === "مطعم" ? "🍽️" : choice === "متجر" ? "🛍️" : choice === "خدمات" ? "🧩" : "✨"}</span>
-                            {choice}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {business.type === "أخرى" ? (
-                      <div className="mt-4">
-                        <Input
-                          value={business.customType ?? ""}
-                          onChange={(event) =>
-                            setBusiness((prev) => ({ ...prev, customType: event.target.value }))
-                          }
-                          placeholder="اكتب نوع النشاط بالتحديد، مثال: أكاديمية تعليم، شركة عقارات، مركز صيانة..."
-                          className="h-14 rounded-2xl border-2 bg-white px-4 text-base"
-                          autoFocus
-                        />
-                        <p className="mt-2 text-xs leading-6 text-muted-foreground">
-                          هنستخدم النوع ده علشان نصيغ أسئلة التدريب على طبيعة شغلك بالظبط.
-                        </p>
+                    <>
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                        {businessTypeChoices.map((choice) => {
+                          const selected = business.type === choice;
+                          return (
+                            <button
+                              key={choice}
+                              type="button"
+                              onClick={() => setBusiness((prev) => ({ ...prev, type: choice, ...(choice !== "أخرى" ? { customType: "" } : {}) }))}
+                              className={cx(
+                                "rounded-2xl border-2 p-5 text-start text-sm font-black transition-all duration-200",
+                                selected
+                                  ? "border-primary bg-primary/8 text-primary shadow-[0_10px_28px_rgba(15,118,110,.12)]"
+                                  : "border-border bg-white hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md",
+                              )}
+                            >
+                              <span className="mb-3 block text-2xl">{choice === "صالون" ? "✂️" : choice === "عيادة" ? "🩺" : choice === "مطعم" ? "🍽️" : choice === "متجر" ? "🛍️" : choice === "خدمات" ? "🧩" : "✨"}</span>
+                              {choice}
+                            </button>
+                          );
+                        })}
                       </div>
-                    ) : null}
+                      {business.type === "أخرى" ? (
+                        <div className="mt-4">
+                          <Input
+                            value={business.customType ?? ""}
+                            onChange={(event) =>
+                              setBusiness((prev) => ({ ...prev, customType: event.target.value }))
+                            }
+                            placeholder="اكتب نوع النشاط بالتحديد، مثال: أكاديمية تعليم، شركة عقارات، مركز صيانة..."
+                            className="h-14 rounded-2xl border-2 bg-white px-4 text-base"
+                            autoFocus
+                          />
+                          <p className="mt-2 text-xs leading-6 text-muted-foreground">
+                            هنستخدم النوع ده علشان نصيغ أسئلة التدريب على طبيعة شغلك بالظبط.
+                          </p>
+                        </div>
+                      ) : null}
+                    </>
                   ) : currentBusinessQuestion.kind === "country" ? (
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                       {countryChoices.map((choice) => {
