@@ -140,6 +140,7 @@ export function GuidedOnboardingPreview({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const [recording, setRecording] = useState(false);
+  const [recordingPaused, setRecordingPaused] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [knowledgeMode, setKnowledgeMode] = useState<KnowledgeMode>("guided");
@@ -455,12 +456,14 @@ export function GuidedOnboardingPreview({
         });
         stream.getTracks().forEach((track) => track.stop());
         mediaRecorderRef.current = null;
+        setRecordingPaused(false);
         setRecording(false);
         if (voiceTargetRef.current === "discovery") setVoiceFlowState("transcribing");
         void transcribeVoice(blob);
       };
 
       recorder.start();
+      setRecordingPaused(false);
       setRecording(true);
     } catch {
       if (target === "discovery") setVoiceFlowState("idle");
@@ -469,8 +472,38 @@ export function GuidedOnboardingPreview({
   }
 
   function stopVoiceRecording() {
-    if (mediaRecorderRef.current?.state === "recording") {
+    if (
+      mediaRecorderRef.current?.state === "recording"
+      || mediaRecorderRef.current?.state === "paused"
+    ) {
       mediaRecorderRef.current.stop();
+    }
+  }
+
+  function pauseVoiceRecording() {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state !== "recording") return;
+    if (typeof recorder.pause !== "function") return;
+
+    try {
+      recorder.pause();
+      setRecordingPaused(true);
+    } catch {
+      // Some browsers expose pause() but do not support it reliably.
+      // In that case, keep recording rather than interrupting the answer.
+    }
+  }
+
+  function resumeVoiceRecording() {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state !== "paused") return;
+    if (typeof recorder.resume !== "function") return;
+
+    try {
+      recorder.resume();
+      setRecordingPaused(false);
+    } catch {
+      setVoiceError("مقدرناش نكمل التسجيل من نفس النقطة. تقدر تنهي التسجيل وتبدأ إجابة جديدة.");
     }
   }
 
@@ -1231,7 +1264,7 @@ export function GuidedOnboardingPreview({
                                 {recording ? (
                                   <div className="mt-3 flex items-center gap-2 text-xs font-black text-destructive">
                                     <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-destructive" />
-                                    بسمعك دلوقتي… اتكلم براحتك.
+                                    {recordingPaused ? "التسجيل متوقف مؤقتًا." : "بسمعك دلوقتي… اتكلم براحتك."}
                                   </div>
                                 ) : null}
                                 {voiceError ? <p className="mt-3 text-xs font-bold text-destructive">{voiceError}</p> : null}
@@ -1538,28 +1571,52 @@ export function GuidedOnboardingPreview({
                   {[0, 1, 2, 3, 4, 5, 6].map((bar) => (
                     <span
                       key={bar}
-                      className="voice-wave-bar w-1.5 rounded-full bg-primary"
-                      style={{ animationDelay: `${bar * 90}ms` }}
+                      className={cx(
+                        "w-1.5 rounded-full bg-primary transition-opacity",
+                        recordingPaused ? "h-2 opacity-35" : "voice-wave-bar",
+                      )}
+                      style={recordingPaused ? undefined : { animationDelay: `${bar * 90}ms` }}
                     />
                   ))}
                 </div>
-                <h3 className="mt-4 text-2xl font-black tracking-[-0.03em]">بسمعك… اتكلم براحتك</h3>
+                <h3 className="mt-4 text-2xl font-black tracking-[-0.03em]">
+                  {recordingPaused ? "التسجيل متوقف مؤقتًا" : "بسمعك… اتكلم براحتك"}
+                </h3>
                 <p className="mx-auto mt-3 max-w-sm text-sm leading-7 text-muted-foreground">
-                  سجّل في مكان هادي، قرّب الموبايل منك، واتكلم بصوت واضح وطبيعي. اذكر كل التفاصيل والاستثناءات حتى لو شايفها بسيطة.
+                  {recordingPaused
+                    ? "خد وقتك، ولما تبقى جاهز اضغط «كمّل التسجيل» وهتكمل نفس الإجابة من مكان ما وقفت."
+                    : "سجّل في مكان هادي، قرّب الموبايل منك، واتكلم بصوت واضح وطبيعي. اذكر كل التفاصيل والاستثناءات حتى لو شايفها بسيطة."}
                 </p>
                 <div className="mt-5 grid grid-cols-3 gap-2 text-[11px] font-bold text-muted-foreground">
                   <span className="rounded-xl bg-surface px-2 py-2.5">مكان هادي</span>
                   <span className="rounded-xl bg-surface px-2 py-2.5">صوت واضح</span>
                   <span className="rounded-xl bg-surface px-2 py-2.5">بدون استعجال</span>
                 </div>
-                <Button
-                  type="button"
-                  variant="danger"
-                  onClick={stopVoiceRecording}
-                  className="mt-6 h-12 w-full rounded-2xl"
-                >
-                  ■ خلصت الإجابة
-                </Button>
+                <div className="mt-6 grid grid-cols-2 gap-2">
+                  {typeof MediaRecorder !== "undefined"
+                    && mediaRecorderRef.current
+                    && typeof mediaRecorderRef.current.pause === "function"
+                    && typeof mediaRecorderRef.current.resume === "function" ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={recordingPaused ? resumeVoiceRecording : pauseVoiceRecording}
+                        className="h-12 rounded-2xl"
+                      >
+                        {recordingPaused ? "▶ كمّل التسجيل" : "Ⅱ وقف مؤقتًا"}
+                      </Button>
+                    ) : (
+                      <div className="hidden" aria-hidden="true" />
+                    )}
+                  <Button
+                    type="button"
+                    variant="danger"
+                    onClick={stopVoiceRecording}
+                    className="h-12 rounded-2xl"
+                  >
+                    ■ خلصت الإجابة
+                  </Button>
+                </div>
               </>
             ) : (
               <>
