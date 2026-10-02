@@ -61,7 +61,7 @@ function compileDiscoveryKnowledge(
   turns: DiscoveryTurn[],
 ) {
   return [
-    `نوع النشاط: ${business.type || "غير محدد"}`,
+    `نوع النشاط: ${business.type === "أخرى" ? business.customType || "غير محدد" : business.type || "غير محدد"}`,
     business.name ? `اسم النشاط: ${business.name}` : "",
     business.branches ? `الفروع: ${business.branches}` : "",
     business.hours ? `المواعيد الأولية: ${business.hours}` : "",
@@ -159,8 +159,17 @@ export function GuidedOnboardingPreview({
 
   const currentBusinessQuestion = businessQuestions[businessQuestion];
   const currentBusinessValue = business[currentBusinessQuestion.key]?.trim() ?? "";
+  const effectiveBusinessType =
+    business.type === "أخرى"
+      ? business.customType?.trim() || "نشاط آخر"
+      : business.type?.trim() || "";
   const businessCanContinue =
-    currentBusinessQuestion.key === "link" || currentBusinessValue.length > 0;
+    currentBusinessQuestion.key === "link"
+    || (currentBusinessQuestion.key === "type"
+      ? business.type === "أخرى"
+        ? Boolean(business.customType?.trim())
+        : currentBusinessValue.length > 0
+      : currentBusinessValue.length > 0);
 
   /* eslint-disable react-hooks/set-state-in-effect -- guided onboarding restores and polls external state */
   useEffect(() => {
@@ -507,7 +516,7 @@ export function GuidedOnboardingPreview({
     const answer = discoveryInput.trim();
     if (!answer || discoveryLoading) return;
 
-    const question = discoveryQuestion || initialDiscoveryQuestion(business.type);
+    const question = discoveryQuestion || initialDiscoveryQuestion(effectiveBusinessType);
     const nextTurns: DiscoveryTurn[] = [
       ...discoveryTurns,
       {
@@ -529,7 +538,7 @@ export function GuidedOnboardingPreview({
         body: JSON.stringify({
           business: {
             name: business.name || "",
-            type: business.type || "",
+            type: effectiveBusinessType,
             branches: business.branches || "",
             hours: business.hours || "",
             link: business.link || "",
@@ -593,7 +602,7 @@ export function GuidedOnboardingPreview({
 
     const summary = [
       `اسم البيزنس: ${business.name || "غير محدد"}`,
-      `النشاط: ${business.type || "عام"}`,
+      `النشاط: ${effectiveBusinessType || "عام"}`,
       `الفروع: ${business.branches || "غير محدد"}`,
       `المواعيد: ${business.hours || "غير محددة"}`,
       business.link ? `الرابط: ${business.link}` : "",
@@ -605,7 +614,7 @@ export function GuidedOnboardingPreview({
       body: JSON.stringify({
         business: {
           name: business.name || "نشاطي",
-          category: business.type || "عام",
+          category: effectiveBusinessType || "عام",
           countryCode: business.countryCode || "EG",
           locale:
             countryChoices.find((item) => item.code === business.countryCode)?.locale
@@ -949,7 +958,7 @@ export function GuidedOnboardingPreview({
                           <button
                             key={choice}
                             type="button"
-                            onClick={() => setBusiness((prev) => ({ ...prev, type: choice }))}
+                            onClick={() => setBusiness((prev) => ({ ...prev, type: choice, ...(choice !== "أخرى" ? { customType: "" } : {}) }))}
                             className={cx(
                               "rounded-2xl border-2 p-5 text-start text-sm font-black transition-all duration-200",
                               selected
@@ -963,6 +972,22 @@ export function GuidedOnboardingPreview({
                         );
                       })}
                     </div>
+                    {business.type === "أخرى" ? (
+                      <div className="mt-4">
+                        <Input
+                          value={business.customType ?? ""}
+                          onChange={(event) =>
+                            setBusiness((prev) => ({ ...prev, customType: event.target.value }))
+                          }
+                          placeholder="اكتب نوع النشاط بالتحديد، مثال: أكاديمية تعليم، شركة عقارات، مركز صيانة..."
+                          className="h-14 rounded-2xl border-2 bg-white px-4 text-base"
+                          autoFocus
+                        />
+                        <p className="mt-2 text-xs leading-6 text-muted-foreground">
+                          هنستخدم النوع ده علشان نصيغ أسئلة التدريب على طبيعة شغلك بالظبط.
+                        </p>
+                      </div>
+                    ) : null}
                   ) : currentBusinessQuestion.kind === "country" ? (
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                       {countryChoices.map((choice) => {
@@ -1117,7 +1142,7 @@ export function GuidedOnboardingPreview({
                                 <div className="flex-1">
                                   <h3 className="font-black">تمام — الصورة بقت واضحة جدًا</h3>
                                   <p className="mt-2 text-sm leading-7 text-muted-foreground">
-                                    جمعنا {discoveryTurns.length} إجابات عن {business.type || "النشاط"}، وجهزناهم للتدريب. تقدر تدرب الموظف دلوقتي.
+                                    جمعنا {discoveryTurns.length} إجابات عن {effectiveBusinessType || "النشاط"}، وجهزناهم للتدريب. تقدر تدرب الموظف دلوقتي.
                                   </p>
                                   {discoveryCovered.length > 0 ? (
                                     <div className="mt-4 flex flex-wrap gap-2">
@@ -1137,10 +1162,10 @@ export function GuidedOnboardingPreview({
                                 <div className="flex items-start justify-between gap-4">
                                   <div>
                                     <span className="text-[11px] font-black text-primary">
-                                      مقابلة ذكية · {business.type || "نشاطك"}
+                                      مقابلة ذكية · {effectiveBusinessType || "نشاطك"}
                                     </span>
                                     <h3 className="mt-2 text-xl font-black leading-8">
-                                      {discoveryQuestion || initialDiscoveryQuestion(business.type)}
+                                      {discoveryQuestion || initialDiscoveryQuestion(effectiveBusinessType)}
                                     </h3>
                                     <p className="mt-2 text-xs leading-6 text-muted-foreground">
                                       جاوب براحتك وبالتفاصيل. كل إجابة بتحدد السؤال اللي بعدها، فمش هنسألك حاجات ملهاش علاقة بنشاطك.
