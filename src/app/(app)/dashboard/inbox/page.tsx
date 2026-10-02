@@ -30,8 +30,8 @@ export default async function InboxPage() {
   }));
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="space-y-3 sm:space-y-6">
+      <div className="hidden flex-col gap-3 sm:flex sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-black text-primary">مركز المحادثات</p>
           <h1 className="mt-1 text-2xl font-black tracking-tight">محادثات العملاء</h1>
