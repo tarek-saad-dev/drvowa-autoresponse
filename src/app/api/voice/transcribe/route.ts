@@ -1,4 +1,4 @@
-import { requireApiBusiness } from "@/lib/api/auth-context";
+import { requireApiUser } from "@/lib/api/auth-context";
 import { handleApiError, jsonOk } from "@/lib/api/http";
 import { RATE_LIMITS, assertRateLimit } from "@/lib/security/rate-limit";
 import { ValidationError } from "@/lib/tenancy/errors";
@@ -7,9 +7,9 @@ const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
 
 export async function POST(request: Request) {
   try {
-    const { businessId } = await requireApiBusiness();
+    const user = await requireApiUser();
     assertRateLimit(
-      `voice-transcribe:${businessId}`,
+      `voice-transcribe:${user.userId}`,
       RATE_LIMITS.voiceTranscribe,
     );
 
