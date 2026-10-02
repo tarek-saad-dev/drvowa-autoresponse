@@ -20,6 +20,61 @@ type Step =
 
 type MockState = "default" | "loading" | "success" | "error" | "compatibility-warning";
 
+type KnowledgeMode = "guided" | "freeform";
+
+type DiscoveryTurn = {
+  question: string;
+  answer: string;
+  topic?: string;
+};
+
+const discoveryLabels: Record<string, string> = {
+  offerings: "الخدمات / المنتجات",
+  pricing: "الأسعار",
+  customer_journey: "رحلة العميل",
+  availability: "المواعيد والتوفر",
+  booking_ordering: "الحجز / الطلب",
+  payments: "الدفع",
+  fulfillment: "التنفيذ / التوصيل",
+  policies: "السياسات",
+  promotions: "العروض",
+  exceptions: "الحالات الخاصة",
+  human_escalation: "التدخل البشري",
+  faq: "الأسئلة المتكررة",
+};
+
+function initialDiscoveryQuestion(type?: string) {
+  const businessType = type?.trim() || "البيزنس";
+  const examples: Record<string, string> = {
+    "صالون": "الخدمات الأساسية والإضافات والباقات والحجز",
+    "عيادة": "الكشف والخدمات أو الإجراءات والحجز والمتابعة",
+    "مطعم": "الأكل والمشروبات والطلبات والدليفري أو الاستلام",
+    "متجر": "المنتجات والاختيارات والطلب والشحن أو الاستلام",
+    "خدمات": "الخدمات اللي بتقدمها وخطوات طلب وتنفيذ كل خدمة",
+  };
+  const hint = examples[businessType] || "كل حاجة العميل ممكن يطلبها أو يسأل عنها";
+  return `بما إن نشاطك ${businessType}، احكيلي كأني عميل جديد: بتقدمولي إيه بالظبط؟ اذكر ${hint}، حتى التفاصيل الصغيرة والاختيارات الإضافية.`;
+}
+
+function compileDiscoveryKnowledge(
+  business: Record<string, string>,
+  turns: DiscoveryTurn[],
+) {
+  return [
+    `نوع النشاط: ${business.type || "غير محدد"}`,
+    business.name ? `اسم النشاط: ${business.name}` : "",
+    business.branches ? `الفروع: ${business.branches}` : "",
+    business.hours ? `المواعيد الأولية: ${business.hours}` : "",
+    "",
+    "مقابلة معرفة النشاط:",
+    ...turns.flatMap((turn, index) => [
+      `سؤال ${index + 1}: ${turn.question}`,
+      `الإجابة: ${turn.answer}`,
+      "",
+    ]),
+  ].filter((line, index, arr) => line !== "" || arr[index - 1] !== "").join("\n").trim();
+}
+
 const FLOW: Array<{ key: Step; label: string; short: string }> = [
   { key: "WELCOME", label: "البداية", short: "ابدأ" },
   { key: "BUSINESS", label: "تعريف البيزنس", short: "البيزنس" },
@@ -87,6 +142,17 @@ export function GuidedOnboardingPreview({
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [knowledgeMode, setKnowledgeMode] = useState<KnowledgeMode>("guided");
+  const [discoveryTurns, setDiscoveryTurns] = useState<DiscoveryTurn[]>([]);
+  const [discoveryQuestion, setDiscoveryQuestion] = useState("");
+  const [discoveryTopic, setDiscoveryTopic] = useState<string | null>("offerings");
+  const [discoveryInput, setDiscoveryInput] = useState("");
+  const [discoveryCovered, setDiscoveryCovered] = useState<string[]>([]);
+  const [discoveryMissing, setDiscoveryMissing] = useState<string[]>([]);
+  const [discoveryDone, setDiscoveryDone] = useState(false);
+  const [discoveryLoading, setDiscoveryLoading] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const voiceTargetRef = useRef<"knowledge" | "discovery">("knowledge");
 
   const index = FLOW.findIndex((item) => item.key === step);
   const progress = Math.max(0, Math.round((index / (FLOW.length - 1)) * 100));
@@ -109,6 +175,14 @@ export function GuidedOnboardingPreview({
           knowledgeApplied?: boolean;
           knowledgeCount?: number;
           knowledgeSummary?: Record<string, number>;
+          knowledgeMode?: KnowledgeMode;
+          discoveryTurns?: DiscoveryTurn[];
+          discoveryQuestion?: string;
+          discoveryTopic?: string | null;
+          discoveryInput?: string;
+          discoveryCovered?: string[];
+          discoveryMissing?: string[];
+          discoveryDone?: boolean;
         };
         if (saved.step && FLOW.some((item) => item.key === saved.step)) {
           setStep(saved.step);
@@ -134,6 +208,16 @@ export function GuidedOnboardingPreview({
         if (saved.knowledgeSummary && typeof saved.knowledgeSummary === "object") {
           setKnowledgeSummary(saved.knowledgeSummary);
         }
+        if (saved.knowledgeMode === "guided" || saved.knowledgeMode === "freeform") {
+          setKnowledgeMode(saved.knowledgeMode);
+        }
+        if (Array.isArray(saved.discoveryTurns)) setDiscoveryTurns(saved.discoveryTurns);
+        if (typeof saved.discoveryQuestion === "string") setDiscoveryQuestion(saved.discoveryQuestion);
+        if (typeof saved.discoveryTopic === "string" || saved.discoveryTopic === null) setDiscoveryTopic(saved.discoveryTopic ?? null);
+        if (typeof saved.discoveryInput === "string") setDiscoveryInput(saved.discoveryInput);
+        if (Array.isArray(saved.discoveryCovered)) setDiscoveryCovered(saved.discoveryCovered);
+        if (Array.isArray(saved.discoveryMissing)) setDiscoveryMissing(saved.discoveryMissing);
+        if (saved.discoveryDone === true) setDiscoveryDone(true);
       }
     } catch {
       // Local resume is best-effort only.
@@ -172,6 +256,14 @@ export function GuidedOnboardingPreview({
           knowledgeApplied,
           knowledgeCount,
           knowledgeSummary,
+          knowledgeMode,
+          discoveryTurns,
+          discoveryQuestion,
+          discoveryTopic,
+          discoveryInput,
+          discoveryCovered,
+          discoveryMissing,
+          discoveryDone,
         }),
       );
     } catch {
@@ -185,6 +277,14 @@ export function GuidedOnboardingPreview({
     knowledgeApplied,
     knowledgeCount,
     knowledgeSummary,
+    knowledgeMode,
+    discoveryTurns,
+    discoveryQuestion,
+    discoveryTopic,
+    discoveryInput,
+    discoveryCovered,
+    discoveryMissing,
+    discoveryDone,
     storageKey,
     draftRestored,
   ]);
@@ -303,8 +403,9 @@ export function GuidedOnboardingPreview({
 
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  async function startVoiceRecording() {
+  async function startVoiceRecording(target: "knowledge" | "discovery" = "knowledge") {
     setVoiceError(null);
+    voiceTargetRef.current = target;
 
     if (
       typeof window === "undefined"
@@ -383,16 +484,93 @@ export function GuidedOnboardingPreview({
         throw new Error(data.error || "تعذر تحويل الصوت إلى نص");
       }
 
-      setKnowledge((current) => {
-        const transcript = data.text!.trim();
-        return current.trim() ? `${current.trim()}\n${transcript}` : transcript;
-      });
+      const transcript = data.text!.trim();
+      if (voiceTargetRef.current === "discovery") {
+        setDiscoveryInput((current) =>
+          current.trim() ? `${current.trim()} ${transcript}` : transcript,
+        );
+      } else {
+        setKnowledge((current) =>
+          current.trim() ? `${current.trim()}\n${transcript}` : transcript,
+        );
+      }
     } catch (error) {
       setVoiceError(
         error instanceof Error ? error.message : "تعذر تحويل الصوت إلى نص",
       );
     } finally {
       setTranscribing(false);
+    }
+  }
+
+  async function submitDiscoveryAnswer() {
+    const answer = discoveryInput.trim();
+    if (!answer || discoveryLoading) return;
+
+    const question = discoveryQuestion || initialDiscoveryQuestion(business.type);
+    const nextTurns: DiscoveryTurn[] = [
+      ...discoveryTurns,
+      {
+        question,
+        answer,
+        topic: discoveryTopic || undefined,
+      },
+    ];
+
+    setDiscoveryTurns(nextTurns);
+    setDiscoveryInput("");
+    setDiscoveryLoading(true);
+    setDiscoveryError(null);
+
+    try {
+      const response = await fetch("/api/onboarding/discovery/next", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          business: {
+            name: business.name || "",
+            type: business.type || "",
+            branches: business.branches || "",
+            hours: business.hours || "",
+            link: business.link || "",
+          },
+          turns: nextTurns,
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        done?: boolean;
+        nextQuestion?: string | null;
+        topic?: string | null;
+        covered?: string[];
+        missing?: string[];
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || "تعذر تجهيز السؤال التالي");
+      }
+
+      setDiscoveryCovered(Array.isArray(data.covered) ? data.covered : []);
+      setDiscoveryMissing(Array.isArray(data.missing) ? data.missing : []);
+
+      if (data.done) {
+        setDiscoveryDone(true);
+        setDiscoveryQuestion("");
+        setDiscoveryTopic(null);
+        setKnowledge(compileDiscoveryKnowledge(business, nextTurns));
+        return;
+      }
+
+      if (!data.nextQuestion?.trim()) {
+        throw new Error("مقدرناش نحدد السؤال التالي");
+      }
+      setDiscoveryQuestion(data.nextQuestion.trim());
+      setDiscoveryTopic(data.topic ?? null);
+    } catch (error) {
+      setDiscoveryError(
+        error instanceof Error ? error.message : "تعذر تجهيز السؤال التالي",
+      );
+    } finally {
+      setDiscoveryLoading(false);
     }
   }
 
@@ -577,7 +755,9 @@ export function GuidedOnboardingPreview({
           ? "بنعلم الموظف..."
           : knowledgeApplied || mockState === "success"
             ? "جربه دلوقتي"
-            : "علّم الموظف";
+            : knowledgeMode === "guided" && !discoveryDone
+              ? "كمّل المقابلة الأول"
+              : "علّم الموظف";
       case "PLAYGROUND":
         return chatCount > 0 ? "الردود تمام — وصل واتساب" : "جرب سؤال الأول";
       case "WHATSAPP":
@@ -598,6 +778,8 @@ export function GuidedOnboardingPreview({
     firstMessageStage,
     humanTakeoverDone,
     knowledgeApplied,
+    knowledgeMode,
+    discoveryDone,
     chatCount,
   ]);
 
@@ -618,6 +800,7 @@ export function GuidedOnboardingPreview({
       return;
     }
     if (step === "KNOWLEDGE" && !knowledgeApplied && mockState !== "success") {
+      if (knowledgeMode === "guided" && !discoveryDone) return;
       if (!knowledge.trim()) return;
       await trainKnowledge();
       return;
@@ -898,51 +1081,191 @@ export function GuidedOnboardingPreview({
                     </div>
                   ) : (
                     <>
-                      <Textarea
-                        value={knowledge}
-                        onChange={(event) => setKnowledge(event.target.value)}
-                        placeholder="مثال: عندنا فرعين، بنفتح يوميًا من 11 الصبح، خدمة الشعر بـ200 جنيه، الحجز متاح من الموقع..."
-                        className="mt-7 min-h-56 rounded-[24px] border-2 bg-white p-5 text-base leading-8 shadow-sm focus:border-primary"
-                      />
-                      <div className="mt-4 rounded-[22px] border border-primary/15 bg-primary/5 p-4">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-black">مش عايز تكتب؟ اتكلم وإحنا هنكتبلك.</p>
-                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                              اتكلم بالعربي بشكل طبيعي، وبعد التحويل راجع النص وعدّله لو محتاج.
-                            </p>
-                          </div>
-                          <Button
-                            type="button"
-                            variant={recording ? "danger" : "outline"}
-                            disabled={transcribing}
-                            onClick={recording ? stopVoiceRecording : () => void startVoiceRecording()}
-                            className="min-w-40 rounded-2xl"
-                          >
-                            {transcribing
-                              ? "بنحوّل الصوت لنص…"
-                              : recording
-                                ? "■ وقف التسجيل"
-                                : "🎙️ اتكلم بدل الكتابة"}
-                          </Button>
+                      <div className="mt-7 grid grid-cols-2 gap-2 rounded-2xl bg-surface p-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setKnowledgeMode("guided")}
+                          className={cx(
+                            "rounded-xl px-4 py-3 text-sm font-black transition",
+                            knowledgeMode === "guided"
+                              ? "bg-white text-primary shadow-sm"
+                              : "text-muted-foreground",
+                          )}
+                        >
+                          ✨ اسألني واحدة واحدة
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setKnowledgeMode("freeform")}
+                          className={cx(
+                            "rounded-xl px-4 py-3 text-sm font-black transition",
+                            knowledgeMode === "freeform"
+                              ? "bg-white text-primary shadow-sm"
+                              : "text-muted-foreground",
+                          )}
+                        >
+                          📝 هكتب كل حاجة
+                        </button>
+                      </div>
+
+                      {knowledgeMode === "guided" ? (
+                        <div className="mt-5">
+                          {discoveryDone ? (
+                            <div className="rounded-[24px] border border-success/20 bg-success-soft/55 p-6">
+                              <div className="flex items-start gap-4">
+                                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-success text-xl text-white">✓</div>
+                                <div className="flex-1">
+                                  <h3 className="font-black">تمام — الصورة بقت واضحة جدًا</h3>
+                                  <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                                    جمعنا {discoveryTurns.length} إجابات عن {business.type || "النشاط"}، وجهزناهم للتدريب. تقدر تدرب الموظف دلوقتي.
+                                  </p>
+                                  {discoveryCovered.length > 0 ? (
+                                    <div className="mt-4 flex flex-wrap gap-2">
+                                      {discoveryCovered.map((key) => (
+                                        <span key={key} className="rounded-full bg-white px-3 py-1.5 text-[11px] font-black text-success">
+                                          {discoveryLabels[key] || key} ✓
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="rounded-[24px] border border-primary/15 bg-primary/5 p-5 sm:p-6">
+                                <div className="flex items-start justify-between gap-4">
+                                  <div>
+                                    <span className="text-[11px] font-black text-primary">
+                                      مقابلة ذكية · {business.type || "نشاطك"}
+                                    </span>
+                                    <h3 className="mt-2 text-xl font-black leading-8">
+                                      {discoveryQuestion || initialDiscoveryQuestion(business.type)}
+                                    </h3>
+                                    <p className="mt-2 text-xs leading-6 text-muted-foreground">
+                                      جاوب براحتك وبالتفاصيل. كل إجابة بتحدد السؤال اللي بعدها، فمش هنسألك حاجات ملهاش علاقة بنشاطك.
+                                    </p>
+                                  </div>
+                                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-sm font-black text-primary shadow-sm">
+                                    {discoveryTurns.length + 1}
+                                  </span>
+                                </div>
+
+                                <Textarea
+                                  value={discoveryInput}
+                                  onChange={(event) => setDiscoveryInput(event.target.value)}
+                                  placeholder="احكي براحتك... كل تفصيلة صغيرة ممكن تفرق في رد موظف الاستقبال."
+                                  className="mt-5 min-h-36 rounded-[20px] border-2 bg-white p-4 text-base leading-8 shadow-sm focus:border-primary"
+                                />
+
+                                <div className="mt-3 flex flex-wrap items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    variant={recording ? "danger" : "outline"}
+                                    disabled={transcribing || discoveryLoading}
+                                    onClick={recording ? stopVoiceRecording : () => void startVoiceRecording("discovery")}
+                                    className="rounded-2xl"
+                                  >
+                                    {transcribing
+                                      ? "بنحوّل الصوت لنص…"
+                                      : recording
+                                        ? "■ وقف التسجيل"
+                                        : "🎙️ جاوب بصوتك"}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    disabled={!discoveryInput.trim() || discoveryLoading || recording || transcribing}
+                                    onClick={() => void submitDiscoveryAnswer()}
+                                    className="rounded-2xl"
+                                  >
+                                    {discoveryLoading ? "بفهم إجابتك…" : "ثبّت الإجابة وكمل"}
+                                  </Button>
+                                </div>
+
+                                {recording ? (
+                                  <div className="mt-3 flex items-center gap-2 text-xs font-black text-destructive">
+                                    <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-destructive" />
+                                    بسمعك دلوقتي… اتكلم براحتك.
+                                  </div>
+                                ) : null}
+                                {voiceError ? <p className="mt-3 text-xs font-bold text-destructive">{voiceError}</p> : null}
+                                {discoveryError ? <p className="mt-3 text-xs font-bold text-destructive">{discoveryError}</p> : null}
+                              </div>
+
+                              {discoveryTurns.length > 0 ? (
+                                <div className="mt-4 rounded-2xl border border-border/70 bg-white p-4">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <span className="text-xs font-black">اللي عرفناه لحد دلوقتي</span>
+                                    <span className="text-[11px] font-bold text-muted-foreground">
+                                      {discoveryTurns.length} إجابة
+                                    </span>
+                                  </div>
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {discoveryCovered.map((key) => (
+                                      <span key={key} className="rounded-full bg-success-soft px-3 py-1.5 text-[11px] font-black text-success">
+                                        {discoveryLabels[key] || key} ✓
+                                      </span>
+                                    ))}
+                                    {discoveryMissing.slice(0, 4).map((key) => (
+                                      <span key={key} className="rounded-full bg-secondary px-3 py-1.5 text-[11px] font-bold text-muted-foreground">
+                                        {discoveryLabels[key] || key}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </>
+                          )}
                         </div>
-                        {recording ? (
-                          <div className="mt-3 flex items-center gap-2 text-xs font-black text-destructive">
-                            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-destructive" />
-                            بسمعك دلوقتي… اتكلم براحتك وبعدين وقف التسجيل.
+                      ) : (
+                        <>
+                          <Textarea
+                            value={knowledge}
+                            onChange={(event) => setKnowledge(event.target.value)}
+                            placeholder="مثال: عندنا فرعين، بنفتح يوميًا من 11 الصبح، خدمة الشعر بـ200 جنيه، الحجز متاح من الموقع..."
+                            className="mt-5 min-h-56 rounded-[24px] border-2 bg-white p-5 text-base leading-8 shadow-sm focus:border-primary"
+                          />
+                          <div className="mt-4 rounded-[22px] border border-primary/15 bg-primary/5 p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-black">مش عايز تكتب؟ اتكلم وإحنا هنكتبلك.</p>
+                                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                  اتكلم بالعربي بشكل طبيعي، وبعد التحويل راجع النص وعدّله لو محتاج.
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                variant={recording ? "danger" : "outline"}
+                                disabled={transcribing}
+                                onClick={recording ? stopVoiceRecording : () => void startVoiceRecording("knowledge")}
+                                className="min-w-40 rounded-2xl"
+                              >
+                                {transcribing
+                                  ? "بنحوّل الصوت لنص…"
+                                  : recording
+                                    ? "■ وقف التسجيل"
+                                    : "🎙️ اتكلم بدل الكتابة"}
+                              </Button>
+                            </div>
+                            {recording ? (
+                              <div className="mt-3 flex items-center gap-2 text-xs font-black text-destructive">
+                                <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-destructive" />
+                                بسمعك دلوقتي… اتكلم براحتك وبعدين وقف التسجيل.
+                              </div>
+                            ) : null}
+                            {voiceError ? (
+                              <p className="mt-3 text-xs font-bold text-destructive" role="alert">
+                                {voiceError}
+                              </p>
+                            ) : null}
                           </div>
-                        ) : null}
-                        {voiceError ? (
-                          <p className="mt-3 text-xs font-bold text-destructive" role="alert">
-                            {voiceError}
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {knowledgeChips.map((chip) => (
-                          <span key={chip} className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-bold text-secondary-foreground">{chip}</span>
-                        ))}
-                      </div>
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {knowledgeChips.map((chip) => (
+                              <span key={chip} className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-bold text-secondary-foreground">{chip}</span>
+                            ))}
+                          </div>
+                        </>
+                      )}
                     </>
                   )}
                 </div>
@@ -1126,7 +1449,7 @@ export function GuidedOnboardingPreview({
                 disabled={
                   mockState === "loading"
                   || (step === "BUSINESS" && !businessCanContinue)
-                  || (step === "KNOWLEDGE" && !knowledgeApplied && !knowledge.trim() && mockState !== "success")
+                  || (step === "KNOWLEDGE" && !knowledgeApplied && ((knowledgeMode === "guided" && !discoveryDone) || !knowledge.trim()) && mockState !== "success")
                   || (step === "PLAYGROUND" && chatCount === 0)
                   || (step === "WHATSAPP" && Boolean(qrImageDataUrl) && !waReady)
                   || (step === "FIRST_MESSAGE" && firstMessageStage < 5)
