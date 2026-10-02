@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 import { cn } from "@/lib/utils/cn";
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "outline";
+type ButtonVariant = "primary" | "default" | "secondary" | "ghost" | "danger" | "outline";
 type ButtonSize = "sm" | "md" | "lg";
 
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -13,6 +13,8 @@ export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const variantClass: Record<ButtonVariant, string> = {
   primary:
+    "bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm",
+  default:
     "bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm",
   secondary:
     "bg-secondary text-secondary-foreground hover:bg-surface",
