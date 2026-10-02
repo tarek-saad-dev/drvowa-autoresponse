@@ -82,6 +82,11 @@ export function GuidedOnboardingPreview({
   const [liveError, setLiveError] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
   const firstMessageStartedAt = useRef<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
 
   const index = FLOW.findIndex((item) => item.key === step);
   const progress = Math.max(0, Math.round((index / (FLOW.length - 1)) * 100));
@@ -297,6 +302,99 @@ export function GuidedOnboardingPreview({
   }, [step, testConversationId]);
 
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  async function startVoiceRecording() {
+    setVoiceError(null);
+
+    if (
+      typeof window === "undefined"
+      || !navigator.mediaDevices?.getUserMedia
+      || typeof MediaRecorder === "undefined"
+    ) {
+      setVoiceError("التسجيل الصوتي غير مدعوم على المتصفح ده. تقدر تكتب المعلومات بدلًا منه.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const preferredTypes = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+      ];
+      const mimeType = preferredTypes.find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
+      audioChunksRef.current = [];
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, {
+          type: recorder.mimeType || "audio/webm",
+        });
+        stream.getTracks().forEach((track) => track.stop());
+        mediaRecorderRef.current = null;
+        setRecording(false);
+        void transcribeVoice(blob);
+      };
+
+      recorder.start();
+      setRecording(true);
+    } catch {
+      setVoiceError("مقدرناش نفتح الميكروفون. اسمح باستخدامه من المتصفح وجرب تاني.");
+    }
+  }
+
+  function stopVoiceRecording() {
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+  }
+
+  async function transcribeVoice(blob: Blob) {
+    if (blob.size === 0) {
+      setVoiceError("التسجيل فاضي. جرّب تتكلم تاني.");
+      return;
+    }
+
+    setTranscribing(true);
+    setVoiceError(null);
+    try {
+      const form = new FormData();
+      const extension = blob.type.includes("mp4") ? "m4a" : "webm";
+      form.append("file", blob, `onboarding-voice.${extension}`);
+
+      const response = await fetch("/api/voice/transcribe", {
+        method: "POST",
+        body: form,
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        text?: string;
+        error?: string;
+      };
+
+      if (!response.ok || !data.text?.trim()) {
+        throw new Error(data.error || "تعذر تحويل الصوت إلى نص");
+      }
+
+      setKnowledge((current) => {
+        const transcript = data.text!.trim();
+        return current.trim() ? `${current.trim()}\n${transcript}` : transcript;
+      });
+    } catch (error) {
+      setVoiceError(
+        error instanceof Error ? error.message : "تعذر تحويل الصوت إلى نص",
+      );
+    } finally {
+      setTranscribing(false);
+    }
+  }
 
   async function ensureWorkspace() {
     if (workspaceReady) return;
@@ -806,6 +904,40 @@ export function GuidedOnboardingPreview({
                         placeholder="مثال: عندنا فرعين، بنفتح يوميًا من 11 الصبح، خدمة الشعر بـ200 جنيه، الحجز متاح من الموقع..."
                         className="mt-7 min-h-56 rounded-[24px] border-2 bg-white p-5 text-base leading-8 shadow-sm focus:border-primary"
                       />
+                      <div className="mt-4 rounded-[22px] border border-primary/15 bg-primary/5 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-black">مش عايز تكتب؟ اتكلم وإحنا هنكتبلك.</p>
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                              اتكلم بالعربي بشكل طبيعي، وبعد التحويل راجع النص وعدّله لو محتاج.
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant={recording ? "danger" : "outline"}
+                            disabled={transcribing}
+                            onClick={recording ? stopVoiceRecording : () => void startVoiceRecording()}
+                            className="min-w-40 rounded-2xl"
+                          >
+                            {transcribing
+                              ? "بنحوّل الصوت لنص…"
+                              : recording
+                                ? "■ وقف التسجيل"
+                                : "🎙️ اتكلم بدل الكتابة"}
+                          </Button>
+                        </div>
+                        {recording ? (
+                          <div className="mt-3 flex items-center gap-2 text-xs font-black text-destructive">
+                            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-destructive" />
+                            بسمعك دلوقتي… اتكلم براحتك وبعدين وقف التسجيل.
+                          </div>
+                        ) : null}
+                        {voiceError ? (
+                          <p className="mt-3 text-xs font-bold text-destructive" role="alert">
+                            {voiceError}
+                          </p>
+                        ) : null}
+                      </div>
                       <div className="mt-4 flex flex-wrap gap-2">
                         {knowledgeChips.map((chip) => (
                           <span key={chip} className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-bold text-secondary-foreground">{chip}</span>
