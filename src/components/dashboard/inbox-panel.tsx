@@ -139,7 +139,7 @@ export function InboxPanel({
   const [error, setError] = useState<string | null>(null);
   const [refreshing, startRefresh] = useTransition();
   const [resuming, setResuming] = useState(false);
-  const [draft, setDraft] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<InboxFilter>("ALL");
@@ -147,6 +147,12 @@ export function InboxPanel({
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const selectedIdRef = useRef<string | null>(null);
+
+  const draft = selectedId ? drafts[selectedId] ?? "" : "";
+  const setDraft = useCallback((value: string) => {
+    if (!selectedId) return;
+    setDrafts((prev) => ({ ...prev, [selectedId]: value }));
+  }, [selectedId]);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
