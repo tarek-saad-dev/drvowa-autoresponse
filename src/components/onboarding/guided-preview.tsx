@@ -153,6 +153,10 @@ export function GuidedOnboardingPreview({
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const voiceTargetRef = useRef<"knowledge" | "discovery">("knowledge");
+  const discoveryInputRef = useRef("");
+  const [voiceFlowState, setVoiceFlowState] = useState<
+    "idle" | "recording" | "transcribing" | "saving"
+  >("idle");
 
   const index = FLOW.findIndex((item) => item.key === step);
   const progress = Math.max(0, Math.round((index / (FLOW.length - 1)) * 100));
@@ -415,6 +419,7 @@ export function GuidedOnboardingPreview({
   async function startVoiceRecording(target: "knowledge" | "discovery" = "knowledge") {
     setVoiceError(null);
     voiceTargetRef.current = target;
+    if (target === "discovery") setVoiceFlowState("recording");
 
     if (
       typeof window === "undefined"
@@ -451,12 +456,14 @@ export function GuidedOnboardingPreview({
         stream.getTracks().forEach((track) => track.stop());
         mediaRecorderRef.current = null;
         setRecording(false);
+        if (voiceTargetRef.current === "discovery") setVoiceFlowState("transcribing");
         void transcribeVoice(blob);
       };
 
       recorder.start();
       setRecording(true);
     } catch {
+      if (target === "discovery") setVoiceFlowState("idle");
       setVoiceError("مقدرناش نفتح الميكروفون. اسمح باستخدامه من المتصفح وجرب تاني.");
     }
   }
@@ -469,6 +476,7 @@ export function GuidedOnboardingPreview({
 
   async function transcribeVoice(blob: Blob) {
     if (blob.size === 0) {
+      if (voiceTargetRef.current === "discovery") setVoiceFlowState("idle");
       setVoiceError("التسجيل فاضي. جرّب تتكلم تاني.");
       return;
     }
@@ -495,15 +503,19 @@ export function GuidedOnboardingPreview({
 
       const transcript = data.text!.trim();
       if (voiceTargetRef.current === "discovery") {
-        setDiscoveryInput((current) =>
-          current.trim() ? `${current.trim()} ${transcript}` : transcript,
-        );
+        const existing = discoveryInputRef.current.trim();
+        const answer = existing ? `${existing} ${transcript}` : transcript;
+        setDiscoveryInput(answer);
+        discoveryInputRef.current = answer;
+        setVoiceFlowState("saving");
+        await submitDiscoveryAnswer(answer);
       } else {
         setKnowledge((current) =>
           current.trim() ? `${current.trim()}\n${transcript}` : transcript,
         );
       }
     } catch (error) {
+      if (voiceTargetRef.current === "discovery") setVoiceFlowState("idle");
       setVoiceError(
         error instanceof Error ? error.message : "تعذر تحويل الصوت إلى نص",
       );
@@ -512,8 +524,8 @@ export function GuidedOnboardingPreview({
     }
   }
 
-  async function submitDiscoveryAnswer() {
-    const answer = discoveryInput.trim();
+  async function submitDiscoveryAnswer(answerOverride?: string) {
+    const answer = (answerOverride ?? discoveryInput).trim();
     if (!answer || discoveryLoading) return;
 
     const question = discoveryQuestion || initialDiscoveryQuestion(effectiveBusinessType);
@@ -528,6 +540,7 @@ export function GuidedOnboardingPreview({
 
     setDiscoveryTurns(nextTurns);
     setDiscoveryInput("");
+    discoveryInputRef.current = "";
     setDiscoveryLoading(true);
     setDiscoveryError(null);
 
@@ -580,6 +593,9 @@ export function GuidedOnboardingPreview({
       );
     } finally {
       setDiscoveryLoading(false);
+      if (voiceFlowState !== "idle" || voiceTargetRef.current === "discovery") {
+        setVoiceFlowState("idle");
+      }
     }
   }
 
@@ -1180,7 +1196,10 @@ export function GuidedOnboardingPreview({
 
                                 <Textarea
                                   value={discoveryInput}
-                                  onChange={(event) => setDiscoveryInput(event.target.value)}
+                                  onChange={(event) => {
+                                    setDiscoveryInput(event.target.value);
+                                    discoveryInputRef.current = event.target.value;
+                                  }}
                                   placeholder="احكي براحتك... كل تفصيلة صغيرة ممكن تفرق في رد موظف الاستقبال."
                                   className="mt-5 min-h-36 rounded-[20px] border-2 bg-white p-4 text-base leading-8 shadow-sm focus:border-primary"
                                 />
@@ -1500,10 +1519,106 @@ export function GuidedOnboardingPreview({
         </div> : null}
       </div>
 
+      {voiceFlowState !== "idle" ? (
+        <div
+          className="voice-flow-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 px-5 backdrop-blur-md"
+          role="dialog"
+          aria-modal="true"
+          aria-label={voiceFlowState === "recording" ? "جاري تسجيل الإجابة" : "جاري تجهيز الإجابة"}
+        >
+          <div className="w-full max-w-md rounded-[32px] border border-white/60 bg-white/95 p-6 text-center shadow-[0_30px_100px_rgba(15,23,42,.30)] sm:p-8">
+            {voiceFlowState === "recording" ? (
+              <>
+                <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-destructive/10">
+                  <div className="grid h-14 w-14 place-items-center rounded-full bg-destructive text-2xl text-white shadow-[0_10px_35px_rgba(220,38,38,.28)]">
+                    🎙️
+                  </div>
+                </div>
+                <div className="mt-5 flex h-8 items-center justify-center gap-1.5" aria-hidden="true">
+                  {[0, 1, 2, 3, 4, 5, 6].map((bar) => (
+                    <span
+                      key={bar}
+                      className="voice-wave-bar w-1.5 rounded-full bg-primary"
+                      style={{ animationDelay: `${bar * 90}ms` }}
+                    />
+                  ))}
+                </div>
+                <h3 className="mt-4 text-2xl font-black tracking-[-0.03em]">بسمعك… اتكلم براحتك</h3>
+                <p className="mx-auto mt-3 max-w-sm text-sm leading-7 text-muted-foreground">
+                  سجّل في مكان هادي، قرّب الموبايل منك، واتكلم بصوت واضح وطبيعي. اذكر كل التفاصيل والاستثناءات حتى لو شايفها بسيطة.
+                </p>
+                <div className="mt-5 grid grid-cols-3 gap-2 text-[11px] font-bold text-muted-foreground">
+                  <span className="rounded-xl bg-surface px-2 py-2.5">مكان هادي</span>
+                  <span className="rounded-xl bg-surface px-2 py-2.5">صوت واضح</span>
+                  <span className="rounded-xl bg-surface px-2 py-2.5">بدون استعجال</span>
+                </div>
+                <Button
+                  type="button"
+                  variant="danger"
+                  onClick={stopVoiceRecording}
+                  className="mt-6 h-12 w-full rounded-2xl"
+                >
+                  ■ خلصت الإجابة
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-primary/10">
+                  <div className="voice-processing-ring h-12 w-12 rounded-full border-4 border-primary/20 border-t-primary" />
+                </div>
+                <h3 className="mt-5 text-2xl font-black tracking-[-0.03em]">
+                  {voiceFlowState === "transcribing"
+                    ? "بنحوّل كلامك لنص…"
+                    : "تمام، بنثبت إجابتك…"}
+                </h3>
+                <p className="mx-auto mt-3 max-w-sm text-sm leading-7 text-muted-foreground">
+                  {voiceFlowState === "transcribing"
+                    ? "بنسمع التسجيل ونكتب كلامك بدقة. مش محتاج تعمل أي حاجة."
+                    : "بنفهم التفاصيل، بنحفظ الإجابة، وبنجهزلك السؤال الأنسب اللي بعده."}
+                </p>
+                <div className="mt-6 space-y-2 text-start text-xs font-bold">
+                  <div className="flex items-center gap-3 rounded-xl bg-success-soft/70 px-4 py-3 text-success">
+                    <span>✓</span>
+                    <span>التسجيل وصل</span>
+                  </div>
+                  <div className={cx(
+                    "flex items-center gap-3 rounded-xl px-4 py-3",
+                    voiceFlowState === "saving"
+                      ? "bg-success-soft/70 text-success"
+                      : "bg-primary/5 text-primary",
+                  )}>
+                    <span>{voiceFlowState === "saving" ? "✓" : "…"}</span>
+                    <span>تحويل الصوت إلى نص</span>
+                  </div>
+                  <div className="flex items-center gap-3 rounded-xl bg-primary/5 px-4 py-3 text-primary">
+                    <span>…</span>
+                    <span>{voiceFlowState === "saving" ? "تثبيت الإجابة وتجهيز السؤال التالي" : "هنثبت الإجابة بعدها تلقائيًا"}</span>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       <style jsx global>{`
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(8px) scale(.995); }
           to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes voiceWave {
+          0%, 100% { height: 8px; opacity: .45; }
+          50% { height: 30px; opacity: 1; }
+        }
+        @keyframes voiceSpin {
+          to { transform: rotate(360deg); }
+        }
+        .voice-wave-bar {
+          height: 8px;
+          animation: voiceWave .85s ease-in-out infinite;
+        }
+        .voice-processing-ring {
+          animation: voiceSpin .85s linear infinite;
         }
       `}</style>
 
@@ -1517,8 +1632,8 @@ export function GuidedOnboardingPreview({
             disabled={
               mockState === "loading"
               || (step === "BUSINESS" && !businessCanContinue)
-              || (step === "KNOWLEDGE" && !knowledgeApplied && !knowledge.trim() && mockState !== "success")
-                  || (step === "PLAYGROUND" && chatCount === 0)
+              || (step === "KNOWLEDGE" && !knowledgeApplied && ((knowledgeMode === "guided" && !discoveryDone) || !knowledge.trim()) && mockState !== "success")
+              || (step === "PLAYGROUND" && chatCount === 0)
               || (step === "WHATSAPP" && Boolean(qrImageDataUrl) && !waReady)
               || (step === "FIRST_MESSAGE" && firstMessageStage < 5)
               || (step === "HUMAN_TAKEOVER" && !humanTakeoverDone)
