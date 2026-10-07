@@ -24,11 +24,13 @@ export const EXTRACTION_RESPONSE_SCHEMA: Schema = {
           "title",
           "content",
           "subject",
+          "topicKey",
+          "topicTitle",
           "aliases",
           "urls",
           "confidence",
         ],
-        required: ["tempId", "category", "title", "content", "subject"],
+        required: ["tempId", "category", "title", "content", "subject", "topicKey", "topicTitle"],
         properties: {
           tempId: { type: Type.STRING },
           category: {
@@ -39,6 +41,8 @@ export const EXTRACTION_RESPONSE_SCHEMA: Schema = {
           title: { type: Type.STRING },
           content: { type: Type.STRING },
           subject: { type: Type.STRING },
+          topicKey: { type: Type.STRING, nullable: true },
+          topicTitle: { type: Type.STRING, nullable: true },
           aliases: {
             type: Type.ARRAY,
             items: { type: Type.STRING },

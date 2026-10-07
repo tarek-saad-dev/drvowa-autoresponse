@@ -8,7 +8,7 @@ export type AiReplyRequest = {
     Agent,
     "name" | "roleTitle" | "language" | "dialect" | "tone" | "instructions"
   >;
-  knowledge: Array<Pick<KnowledgeItem, "category" | "title" | "content">>;
+  knowledge: Array<Pick<KnowledgeItem, "category" | "title" | "content" | "topicKey" | "topicTitle">>;
   recentMessages: Array<
     Pick<Message, "direction" | "textContent" | "createdAtUtc" | "messageId">
   >;
@@ -72,7 +72,10 @@ export function buildUserPrompt(request: AiReplyRequest): string {
   const knowledgeBlock = request.knowledge.length === 0
     ? "(No business knowledge items provided.)"
     : request.knowledge
-      .map((k) => `[${k.category}] ${k.title}\n${k.content}`)
+      .map((k) => {
+        const topic = k.topicTitle?.trim() ? `TOPIC: ${k.topicTitle}\n` : "";
+        return `${topic}[${k.category}] ${k.title}\n${k.content}`;
+      })
       .join("\n\n")
       .slice(0, MAX_KNOWLEDGE_CHARS);
 

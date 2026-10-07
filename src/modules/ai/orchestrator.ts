@@ -48,6 +48,7 @@ import {
   MAX_KNOWLEDGE_CHARS,
   type AiReplyProvider,
 } from "./provider";
+import { selectRelevantKnowledge } from "./knowledge-retrieval";
 import { getChannelAiSettingByConnection } from "./settings-repository";
 
 export type AiJobLeaseContext = {
@@ -396,27 +397,27 @@ export async function processAiReplyJob(params: {
       return { status: "LEASE_LOST", errorCode: "LEASE_LOST" };
     }
 
-    const knowledgeItems = orderKnowledge(
-      await listItems({ businessId, includeInactive: false }),
-    );
-    let knowledgeChars = 0;
-    const knowledge = [];
-    for (const item of knowledgeItems) {
-      const chunk = `${item.title}\n${item.content}`;
-      if (knowledgeChars + chunk.length > MAX_KNOWLEDGE_CHARS) break;
-      knowledge.push({
-        category: item.category,
-        title: item.title,
-        content: item.content,
-      });
-      knowledgeChars += chunk.length;
-    }
-
     const recentMessages = await messagingRepo.listRecentTextMessages({
       businessId,
       conversationId: job.conversationId,
       limit: MAX_HISTORY_MESSAGES,
     });
+
+    const knowledgeItems = orderKnowledge(
+      await listItems({ businessId, includeInactive: false }),
+    );
+    const relevantKnowledge = selectRelevantKnowledge({
+      items: knowledgeItems,
+      recentMessages,
+      maxChars: MAX_KNOWLEDGE_CHARS,
+    });
+    const knowledge = relevantKnowledge.map((item) => ({
+      category: item.category,
+      title: item.title,
+      content: item.content,
+      topicKey: item.topicKey,
+      topicTitle: item.topicTitle,
+    }));
 
     const provider = params.provider ?? createGeminiProvider();
 
@@ -424,6 +425,11 @@ export async function processAiReplyJob(params: {
       businessId,
       conversationId: job.conversationId,
       jobId: job.aiReplyJobId,
+      knowledgeTotal: knowledgeItems.length,
+      knowledgeSelected: knowledge.length,
+      topicCount: new Set(
+        relevantKnowledge.map((item) => item.topicKey).filter(Boolean),
+      ).size,
     }, logger);
 
     try {

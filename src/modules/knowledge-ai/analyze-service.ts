@@ -22,6 +22,7 @@ import {
   clampTitle,
   dedupeExtractedFacts,
   hashInput,
+  normalizeTopicKey,
   subjectKey,
 } from "./normalize";
 import * as repo from "./repository";
@@ -662,6 +663,8 @@ export async function analyzeKnowledgeIngest(params: {
         selected,
         status: "PENDING",
         subjectKey: subjectKey(fact),
+        topicKey: normalizeTopicKey(fact.topicKey || fact.topicTitle),
+        topicTitle: fact.topicTitle?.trim() || null,
       });
     }
 

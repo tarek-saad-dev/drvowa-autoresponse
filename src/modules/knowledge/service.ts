@@ -53,6 +53,8 @@ export async function createItem(params: {
   category: KnowledgeCategory;
   title: string;
   content: string;
+  topicKey?: string | null;
+  topicTitle?: string | null;
   knowledgeBaseId?: string;
   isActive?: boolean;
 }): Promise<KnowledgeItem> {
@@ -68,6 +70,8 @@ export async function createItem(params: {
       category: params.category,
       title: params.title.trim(),
       content: params.content.trim(),
+      topicKey: params.topicKey?.trim() || null,
+      topicTitle: params.topicTitle?.trim() || null,
       isActive: false,
     });
   }
@@ -83,6 +87,8 @@ export async function createItem(params: {
           category: params.category,
           title: params.title.trim(),
           content: params.content.trim(),
+          topicKey: params.topicKey?.trim() || null,
+          topicTitle: params.topicTitle?.trim() || null,
           isActive: true,
         },
         trx,
@@ -96,6 +102,8 @@ export async function updateItem(params: {
   category?: KnowledgeCategory;
   title?: string;
   content?: string;
+  topicKey?: string | null;
+  topicTitle?: string | null;
   isActive?: boolean;
 }): Promise<KnowledgeItem> {
   const existing = await repo.getKnowledgeItem({
@@ -121,6 +129,8 @@ export async function updateItem(params: {
             category: params.category,
             title: params.title?.trim(),
             content: params.content?.trim(),
+            topicKey: params.topicKey === undefined ? undefined : params.topicKey?.trim() || null,
+            topicTitle: params.topicTitle === undefined ? undefined : params.topicTitle?.trim() || null,
             isActive: true,
           },
           trx,
@@ -139,6 +149,8 @@ export async function updateItem(params: {
     category: params.category,
     title: params.title?.trim(),
     content: params.content?.trim(),
+    topicKey: params.topicKey === undefined ? undefined : params.topicKey?.trim() || null,
+    topicTitle: params.topicTitle === undefined ? undefined : params.topicTitle?.trim() || null,
     isActive: params.isActive,
   });
   if (!updated) {

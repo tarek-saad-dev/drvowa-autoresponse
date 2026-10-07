@@ -62,6 +62,12 @@ export function extractPhones(text: string): string[] {
   ];
 }
 
+export function normalizeTopicKey(value: string | null | undefined): string | null {
+  if (!value?.trim()) return null;
+  const normalized = normalizeText(value).replace(/\s+/g, "-");
+  return normalized ? normalized.slice(0, 200) : null;
+}
+
 export function subjectKey(fact: {
   category: string;
   subject?: string;
@@ -106,7 +112,10 @@ export function dedupeExtractedFacts(facts: ExtractedFact[]): ExtractedFact[] {
       const sameSubject =
         normalizeText(existing.subject || existing.title)
         === normalizeText(fact.subject || fact.title);
-      if (score >= 0.72 || sameSubject || urlOverlap) {
+      const existingTopic = normalizeTopicKey(existing.topicKey || existing.topicTitle);
+      const incomingTopic = normalizeTopicKey(fact.topicKey || fact.topicTitle);
+      const sameTopic = existingTopic != null && existingTopic === incomingTopic;
+      if (score >= 0.72 || (sameSubject && sameTopic) || urlOverlap) {
         const combinedContent = mergeContents(existing.content, fact.content);
         out[i] = {
           ...existing,

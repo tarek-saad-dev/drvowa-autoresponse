@@ -19,6 +19,8 @@ export type ExtractedFact = {
   title: string;
   content: string;
   subject: string;
+  topicKey?: string | null;
+  topicTitle?: string | null;
   aliases?: string[];
   urls?: string[];
   confidence?: number;
@@ -68,6 +70,8 @@ export type KnowledgeIngestProposal = {
   selected: boolean;
   status: IngestProposalStatus;
   subjectKey: string | null;
+  topicKey?: string | null;
+  topicTitle?: string | null;
   createdAtUtc: Date;
   updatedAtUtc: Date;
 };
@@ -78,6 +82,8 @@ export type CandidateAlias = {
   category: KnowledgeCategory;
   title: string;
   content: string;
+  topicKey?: string | null;
+  topicTitle?: string | null;
   updatedAtUtc: Date;
 };
 
