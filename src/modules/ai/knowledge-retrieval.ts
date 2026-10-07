@@ -106,16 +106,7 @@ export function selectRelevantKnowledge(params: {
         || Boolean(entry.item.topicKey && topicKeys.has(entry.item.topicKey)),
     );
 
-    const expandedIds = new Set(expanded.map((entry) => entry.item.knowledgeItemId));
-    const safeguards = ranked
-      .filter(
-        (entry) =>
-          !expandedIds.has(entry.item.knowledgeItemId)
-          && (entry.item.category === "POLICY" || entry.item.category === "LOCATION_INFO"),
-      )
-      .slice(0, 2);
-
-    ordered = [...expanded, ...safeguards].map((entry) => entry.item);
+    ordered = expanded.map((entry) => entry.item);
   } else {
     ordered = [...items].sort(
       (a, b) =>
