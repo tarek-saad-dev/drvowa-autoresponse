@@ -52,6 +52,8 @@ type ProposalRow = {
   Selected: boolean;
   Status: string;
   SubjectKey: string | null;
+  TopicKey: string | null;
+  TopicTitle: string | null;
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
@@ -124,6 +126,8 @@ function mapProposal(row: ProposalRow): KnowledgeIngestProposal {
     selected: Boolean(row.Selected),
     status: row.Status as IngestProposalStatus,
     subjectKey: row.SubjectKey,
+    topicKey: row.TopicKey,
+    topicTitle: row.TopicTitle,
     createdAtUtc: row.CreatedAtUtc,
     updatedAtUtc: row.UpdatedAtUtc,
   };
@@ -363,6 +367,8 @@ export async function insertProposals(
     selected: boolean;
     status: IngestProposalStatus;
     subjectKey: string | null;
+    topicKey: string | null;
+    topicTitle: string | null;
   }>,
   trx?: TransactionClient,
 ): Promise<void> {
@@ -373,13 +379,13 @@ export async function insertProposals(
         KnowledgeIngestProposalID, SessionID, Sequence, Action, Category,
         ProposedTitle, ProposedContent, ExistingKnowledgeItemID,
         ExistingTitle, ExistingContent, ExistingUpdatedAtUtc,
-        Confidence, Resolution, Selected, Status, SubjectKey,
+        Confidence, Resolution, Selected, Status, SubjectKey, TopicKey, TopicTitle,
         CreatedAtUtc, UpdatedAtUtc
       ) VALUES (
         @proposalId, @sessionId, @sequence, @action, @category,
         @proposedTitle, @proposedContent, @existingId,
         @existingTitle, @existingContent, @existingUpdatedAtUtc,
-        @confidence, NULL, @selected, @status, @subjectKey,
+        @confidence, NULL, @selected, @status, @subjectKey, @topicKey, @topicTitle,
         @createdAtUtc, @updatedAtUtc
       )`,
       [
@@ -418,6 +424,8 @@ export async function insertProposals(
         { name: "selected", type: sql.Bit, value: p.selected ? 1 : 0 },
         { name: "status", type: sql.NVarChar(32), value: p.status },
         { name: "subjectKey", type: sql.NVarChar(200), value: p.subjectKey },
+        { name: "topicKey", type: sql.NVarChar(200), value: p.topicKey },
+        { name: "topicTitle", type: sql.NVarChar(300), value: p.topicTitle },
         { name: "createdAtUtc", type: sql.DateTime2, value: now },
         { name: "updatedAtUtc", type: sql.DateTime2, value: now },
       ],
@@ -433,7 +441,7 @@ export async function listProposals(params: {
     `SELECT p.KnowledgeIngestProposalID, p.SessionID, p.Sequence, p.Action, p.Category,
             p.ProposedTitle, p.ProposedContent, p.ExistingKnowledgeItemID,
             p.ExistingTitle, p.ExistingContent, p.ExistingUpdatedAtUtc,
-            p.Confidence, p.Resolution, p.Selected, p.Status, p.SubjectKey,
+            p.Confidence, p.Resolution, p.Selected, p.Status, p.SubjectKey, p.TopicKey, p.TopicTitle,
             p.CreatedAtUtc, p.UpdatedAtUtc
      FROM TblKnowledgeIngestProposal p
      INNER JOIN TblKnowledgeIngestSession s
@@ -456,7 +464,7 @@ export async function getProposal(params: {
     `SELECT p.KnowledgeIngestProposalID, p.SessionID, p.Sequence, p.Action, p.Category,
             p.ProposedTitle, p.ProposedContent, p.ExistingKnowledgeItemID,
             p.ExistingTitle, p.ExistingContent, p.ExistingUpdatedAtUtc,
-            p.Confidence, p.Resolution, p.Selected, p.Status, p.SubjectKey,
+            p.Confidence, p.Resolution, p.Selected, p.Status, p.SubjectKey, p.TopicKey, p.TopicTitle,
             p.CreatedAtUtc, p.UpdatedAtUtc
      FROM TblKnowledgeIngestProposal p
      INNER JOIN TblKnowledgeIngestSession s
