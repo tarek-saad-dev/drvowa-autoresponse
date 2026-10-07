@@ -115,6 +115,8 @@ export type KnowledgeItem = {
   category: KnowledgeCategory;
   title: string;
   content: string;
+  topicKey: string | null;
+  topicTitle: string | null;
   isActive: boolean;
   createdAtUtc: Date;
   updatedAtUtc: Date;
