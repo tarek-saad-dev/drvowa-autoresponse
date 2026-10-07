@@ -299,6 +299,8 @@ export async function applyKnowledgeIngest(params: {
             title: p.proposedTitle,
             content: p.proposedContent,
             subject: p.proposedTitle,
+            topicKey: p.topicKey,
+            topicTitle: p.topicTitle,
           },
           existingForDup,
         );
@@ -335,6 +337,8 @@ export async function applyKnowledgeIngest(params: {
             category: p.category,
             title: p.proposedTitle,
             content: p.proposedContent,
+            topicKey: p.topicKey,
+            topicTitle: p.topicTitle,
             isActive: true,
           },
           trx,
@@ -379,6 +383,8 @@ export async function applyKnowledgeIngest(params: {
             title: p.proposedTitle || current.title,
             content: nextContent,
             category: p.category,
+            topicKey: p.topicKey ?? current.topicKey,
+            topicTitle: p.topicTitle ?? current.topicTitle,
           },
           trx,
         );
