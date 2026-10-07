@@ -56,6 +56,9 @@ jobs:
             echo "==> Production build"
             npm run build
 
+            echo "==> Applying database migrations"
+            npm run db:migrate
+
             echo "==> Restarting app service"
             systemctl restart drvowa.service
 
