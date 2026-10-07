@@ -17,11 +17,11 @@ const STRONG_SCORE = 0.22;
 
 function factTokenMaterial(fact: ExtractedFact): string {
   const aliases = (fact.aliases ?? []).join(" ");
-  return `${fact.subject} ${fact.title} ${aliases} ${fact.content}`;
+  return `${fact.subject} ${fact.title} ${fact.topicTitle ?? ""} ${fact.topicKey ?? ""} ${aliases} ${fact.content}`;
 }
 
 function itemTokenMaterial(item: KnowledgeItem): string {
-  return `${item.title} ${item.content}`;
+  return `${item.title} ${item.topicTitle ?? ""} ${item.topicKey ?? ""} ${item.content}`;
 }
 
 function scoreCandidate(fact: ExtractedFact, item: KnowledgeItem): number {
@@ -77,6 +77,8 @@ function toAliases(
     category: r.item.category,
     title: r.item.title,
     content: r.item.content,
+    topicKey: r.item.topicKey,
+    topicTitle: r.item.topicTitle,
     updatedAtUtc: r.item.updatedAtUtc,
   }));
 }
