@@ -87,6 +87,8 @@ export async function createItem(params: {
           category: params.category,
           title: params.title.trim(),
           content: params.content.trim(),
+          topicKey: params.topicKey?.trim() || null,
+          topicTitle: params.topicTitle?.trim() || null,
           isActive: true,
         },
         trx,
