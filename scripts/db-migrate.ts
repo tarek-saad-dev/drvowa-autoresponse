@@ -25,13 +25,16 @@ const MIGRATIONS_DIR = resolve(process.cwd(), "db", "migrations");
  * Does not log file contents.
  */
 function loadDotEnvIfPresent(): void {
-  const envPath = resolve(process.cwd(), ".env");
-  if (!existsSync(envPath)) {
-    return;
-  }
+  const envPaths = [
+    resolve(process.cwd(), ".env.production.local"),
+    resolve(process.cwd(), ".env"),
+  ];
 
-  const text = readFileSync(envPath, "utf8");
-  for (const line of text.split(/\r?\n/)) {
+  for (const envPath of envPaths) {
+    if (!existsSync(envPath)) continue;
+
+    const text = readFileSync(envPath, "utf8");
+    for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) {
       continue;
@@ -51,8 +54,9 @@ function loadDotEnvIfPresent(): void {
       value = value.slice(1, -1);
     }
 
-    if (process.env[key] === undefined) {
-      process.env[key] = value;
+      if (process.env[key] === undefined) {
+        process.env[key] = value;
+      }
     }
   }
 }
