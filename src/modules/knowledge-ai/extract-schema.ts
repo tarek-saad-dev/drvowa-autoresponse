@@ -13,6 +13,8 @@ export const extractedFactSchema = z.object({
   title: z.string().min(1).max(300),
   content: z.string().min(1).max(20_000),
   subject: z.string().min(1).max(200),
+  topicKey: z.string().min(1).max(200).nullable().optional(),
+  topicTitle: z.string().min(1).max(300).nullable().optional(),
   aliases: z.array(z.string().max(120)).max(12).optional(),
   urls: z.array(z.string().max(2000)).max(20).optional(),
   confidence: z.number().min(0).max(1).optional(),
