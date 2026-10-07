@@ -367,8 +367,8 @@ export async function insertProposals(
     selected: boolean;
     status: IngestProposalStatus;
     subjectKey: string | null;
-    topicKey: string | null;
-    topicTitle: string | null;
+    topicKey?: string | null;
+    topicTitle?: string | null;
   }>,
   trx?: TransactionClient,
 ): Promise<void> {
@@ -424,8 +424,8 @@ export async function insertProposals(
         { name: "selected", type: sql.Bit, value: p.selected ? 1 : 0 },
         { name: "status", type: sql.NVarChar(32), value: p.status },
         { name: "subjectKey", type: sql.NVarChar(200), value: p.subjectKey },
-        { name: "topicKey", type: sql.NVarChar(200), value: p.topicKey },
-        { name: "topicTitle", type: sql.NVarChar(300), value: p.topicTitle },
+        { name: "topicKey", type: sql.NVarChar(200), value: p.topicKey ?? null },
+        { name: "topicTitle", type: sql.NVarChar(300), value: p.topicTitle ?? null },
         { name: "createdAtUtc", type: sql.DateTime2, value: now },
         { name: "updatedAtUtc", type: sql.DateTime2, value: now },
       ],
