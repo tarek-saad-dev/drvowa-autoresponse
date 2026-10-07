@@ -232,10 +232,10 @@ export async function createKnowledgeItem(
 
   await db(trx).query(
     `INSERT INTO TblKnowledgeItem (
-      KnowledgeItemID, KnowledgeBaseID, BusinessID, Category, Title, Content,
+      KnowledgeItemID, KnowledgeBaseID, BusinessID, Category, Title, Content, TopicKey, TopicTitle,
       IsActive, CreatedAtUtc, UpdatedAtUtc
     ) VALUES (
-      @knowledgeItemId, @knowledgeBaseId, @businessId, @category, @title, @content,
+      @knowledgeItemId, @knowledgeBaseId, @businessId, @category, @title, @content, @topicKey, @topicTitle,
       @isActive, @createdAtUtc, @updatedAtUtc
     )`,
     [
