@@ -74,8 +74,9 @@ Return JSON only matching the schema. No markdown. No chain-of-thought.`;
 const DEDUP_SYSTEM = `You are DRVOWA Knowledge Dedup resolver.
 For each extracted fact, decide CREATE, MERGE, NOOP, or CONFLICT against candidate aliases (K1, K2...).
 Rules:
-- NOOP: same meaning already present (even if phrased differently).
+- NOOP: same meaning already present (even if phrased differently) AND grouping metadata is already adequate.
 - MERGE: same real-world subject; incoming adds complementary facts. Preserve all existing valid facts and ADD new ones.
+- If content is otherwise a NOOP but the existing candidate has no topic grouping and the incoming fact has topicKey/topicTitle, prefer MERGE so grouping metadata can be enriched during apply.
 - CONFLICT: same subject but factual values disagree (e.g. price 200 vs 250).
 - CREATE: no suitable candidate.
 Never invent facts. candidateAlias must be one of the provided aliases or null.
