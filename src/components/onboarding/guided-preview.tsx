@@ -30,7 +30,7 @@ type DiscoveryTurn = {
 
 type KnowledgeTreeItem = {
   proposalId: string;
-  action: "CREATE" | "MERGE" | "NOOP" | "CONFLICT";
+  action: "CREATE" | "MERGE" | "NOOP" | "CONFLICT" | "DELETE";
   category: string;
   title: string;
   topicKey?: string | null;
@@ -753,7 +753,7 @@ export function GuidedOnboardingPreview({
           )
           .map((item: {
             proposalId: string;
-            action: "CREATE" | "MERGE" | "NOOP" | "CONFLICT";
+            action: "CREATE" | "MERGE" | "NOOP" | "CONFLICT" | "DELETE";
             category?: string;
             proposedTitle?: string;
             topicKey?: string | null;
@@ -1208,77 +1208,134 @@ export function GuidedOnboardingPreview({
                       </div>
 
                       {knowledgeTreeGroups.length > 0 ? (
-                        <div className="mt-6 rounded-[22px] border border-white/80 bg-white/80 p-4 sm:p-5">
-                          <div className="flex items-center justify-between gap-3">
+                        <div className="mt-6 rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+                          <div className="flex flex-wrap items-start justify-between gap-4">
                             <div>
-                              <div className="text-sm font-black">شجرة المعرفة اللي اتضافت</div>
-                              <div className="mt-1 text-xs text-muted-foreground">
-                                كل مجموعة تحتها المعلومات المرتبطة بيها، علشان تشوف إيه اتضاف وتحت إيه.
+                              <div className="text-base font-black">خريطة التغييرات في المعرفة</div>
+                              <div className="mt-1 text-xs leading-6 text-muted-foreground">
+                                الموضوع الرئيسي فوق، وتحته كل المعلومات التابعة له كـ Nodes مترابطة.
                               </div>
                             </div>
-                            <span className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-black text-primary">
-                              {knowledgeTreeGroups.length} مجموعات
-                            </span>
+                            <div className="flex flex-wrap gap-2 text-[10px] font-black">
+                              <span className="rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-green-700">● جديد</span>
+                              <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-700">● تعديل</span>
+                              <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-red-700">● حذف</span>
+                            </div>
                           </div>
 
-                          <div className="mt-5 space-y-3">
+                          <div className="mt-7 space-y-8">
                             {knowledgeTreeGroups.map((group) => (
-                              <details
-                                key={group.key}
-                                open
-                                className="group rounded-2xl border border-border/70 bg-white p-1"
-                              >
-                                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-4 py-3">
-                                  <div className="flex min-w-0 items-center gap-3">
-                                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-sm text-primary">⌘</span>
-                                    <div className="min-w-0">
-                                      <div className="truncate text-sm font-black">{group.title}</div>
-                                      <div className="mt-0.5 text-[11px] font-bold text-muted-foreground">
-                                        {group.items.length} {group.items.length === 1 ? "معلومة" : "معلومات"}
-                                      </div>
+                              <div key={group.key} className="relative">
+                                <div className="relative z-10 flex items-center gap-3">
+                                  <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-2 border-slate-800 bg-slate-900 text-lg font-black text-white shadow-sm">
+                                    ◉
+                                  </div>
+                                  <div className="min-w-0 rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 shadow-sm">
+                                    <div className="truncate text-sm font-black text-slate-900">{group.title}</div>
+                                    <div className="mt-1 text-[10px] font-bold text-slate-500">
+                                      Parent node · {group.items.length} {group.items.length === 1 ? "child" : "children"}
                                     </div>
                                   </div>
-                                  <span className="text-xs text-muted-foreground transition group-open:rotate-180">⌄</span>
-                                </summary>
-
-                                <div className="relative mr-7 border-r-2 border-primary/15 pb-2 pr-5">
-                                  {group.items.map((item, itemIndex) => (
-                                    <div key={item.proposalId} className="relative py-2">
-                                      <span className="absolute -right-[1.45rem] top-5 h-2.5 w-2.5 rounded-full border-2 border-white bg-primary" />
-                                      <div className="rounded-xl bg-surface/75 px-3 py-2.5">
-                                        <div className="flex flex-wrap items-center justify-between gap-2">
-                                          <span className="text-xs font-black">{item.title}</span>
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="rounded-full bg-white px-2 py-1 text-[9px] font-black text-muted-foreground">
-                                              {item.category}
-                                            </span>
-                                            <span className={cx(
-                                              "rounded-full px-2 py-1 text-[9px] font-black",
-                                              item.action === "CREATE"
-                                                ? "bg-success-soft text-success"
-                                                : item.action === "MERGE"
-                                                  ? "bg-primary/10 text-primary"
-                                                  : "bg-warning-soft text-warning",
-                                            )}>
-                                              {item.action === "CREATE"
-                                                ? "اتضافت"
-                                                : item.action === "MERGE"
-                                                  ? "اتحدّثت"
-                                                  : "اتراجعت"}
-                                            </span>
-                                          </div>
-                                        </div>
-                                        {itemIndex === 0 && group.items.length > 1 ? (
-                                          <div className="mt-1.5 text-[10px] font-bold text-muted-foreground">
-                                            ↳ باقي العناصر دي مرتبطة بنفس الموضوع وبتتجاب مع بعض وقت الحاجة.
-                                          </div>
-                                        ) : null}
-                                      </div>
-                                    </div>
-                                  ))}
                                 </div>
-                              </details>
+
+                                <div className="relative mr-6 mt-1 border-r-[3px] border-slate-200 pb-1 pr-8">
+                                  {group.items.map((item, itemIndex) => {
+                                    const isCreate = item.action === "CREATE";
+                                    const isMerge = item.action === "MERGE";
+                                    const isDelete = item.action === "DELETE";
+                                    const isConflict = item.action === "CONFLICT";
+
+                                    const nodeClasses = isCreate
+                                      ? "border-green-200 bg-green-50/80"
+                                      : isMerge
+                                        ? "border-amber-200 bg-amber-50/80"
+                                        : isDelete
+                                          ? "border-red-200 bg-red-50/80"
+                                          : isConflict
+                                            ? "border-orange-200 bg-orange-50/80"
+                                            : "border-slate-200 bg-slate-50";
+
+                                    const dotClasses = isCreate
+                                      ? "bg-green-500 ring-green-100"
+                                      : isMerge
+                                        ? "bg-amber-500 ring-amber-100"
+                                        : isDelete
+                                          ? "bg-red-500 ring-red-100"
+                                          : isConflict
+                                            ? "bg-orange-500 ring-orange-100"
+                                            : "bg-slate-400 ring-slate-100";
+
+                                    const badgeClasses = isCreate
+                                      ? "border-green-200 bg-green-100 text-green-800"
+                                      : isMerge
+                                        ? "border-amber-200 bg-amber-100 text-amber-800"
+                                        : isDelete
+                                          ? "border-red-200 bg-red-100 text-red-800"
+                                          : isConflict
+                                            ? "border-orange-200 bg-orange-100 text-orange-800"
+                                            : "border-slate-200 bg-slate-100 text-slate-600";
+
+                                    const statusLabel = isCreate
+                                      ? "جديد"
+                                      : isMerge
+                                        ? "اتعدل"
+                                        : isDelete
+                                          ? "اتمسح"
+                                          : isConflict
+                                            ? "محتاج مراجعة"
+                                            : "بدون تغيير";
+
+                                    return (
+                                      <div key={item.proposalId} className="relative pt-5">
+                                        <span className="absolute -right-8 top-10 h-[3px] w-8 bg-slate-200" />
+                                        <span className={cx(
+                                          "absolute -right-[2.18rem] top-[2.18rem] h-4 w-4 rounded-full border-2 border-white ring-4",
+                                          dotClasses,
+                                        )} />
+
+                                        <div className={cx(
+                                          "relative rounded-2xl border-2 px-4 py-3.5 shadow-[0_5px_16px_rgba(15,23,42,.04)]",
+                                          nodeClasses,
+                                        )}>
+                                          <div className="flex flex-wrap items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                              <div className="flex items-center gap-2">
+                                                <span className="text-[10px] font-black text-slate-400">
+                                                  Child {itemIndex + 1}
+                                                </span>
+                                                <span className="text-[10px] text-slate-300">/</span>
+                                                <span className="text-[10px] font-black text-slate-500">{item.category}</span>
+                                              </div>
+                                              <div className="mt-1.5 text-sm font-black leading-6 text-slate-900">
+                                                {item.title}
+                                              </div>
+                                            </div>
+
+                                            <span className={cx(
+                                              "shrink-0 rounded-full border px-3 py-1 text-[10px] font-black",
+                                              badgeClasses,
+                                            )}>
+                                              {statusLabel}
+                                            </span>
+                                          </div>
+
+                                          {group.items.length > 1 ? (
+                                            <div className="mt-2.5 flex items-center gap-2 text-[10px] font-bold text-slate-500">
+                                              <span className="text-slate-300">↳</span>
+                                              مرتبط بـ {group.title}
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
                             ))}
+                          </div>
+
+                          <div className="mt-7 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[11px] leading-6 text-slate-600">
+                            اللون بيوضح نوع التغيير: الأخضر إضافة جديدة، الأصفر تعديل على معرفة موجودة، والأحمر حذف صريح. التعارض بيظهر برتقالي للمراجعة ومش بيتحسب حذف.
                           </div>
                         </div>
                       ) : null}
