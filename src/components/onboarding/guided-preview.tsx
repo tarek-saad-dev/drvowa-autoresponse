@@ -28,6 +28,15 @@ type DiscoveryTurn = {
   topic?: string;
 };
 
+type KnowledgeTreeItem = {
+  proposalId: string;
+  action: "CREATE" | "MERGE" | "NOOP" | "CONFLICT";
+  category: string;
+  title: string;
+  topicKey?: string | null;
+  topicTitle?: string | null;
+};
+
 const discoveryLabels: Record<string, string> = {
   offerings: "الخدمات / المنتجات",
   pricing: "الأسعار",
@@ -126,6 +135,7 @@ export function GuidedOnboardingPreview({
   const [agentId, setAgentId] = useState<string | null>(null);
   const [knowledgeCount, setKnowledgeCount] = useState(0);
   const [knowledgeSummary, setKnowledgeSummary] = useState<Record<string, number>>({});
+  const [knowledgeTreeItems, setKnowledgeTreeItems] = useState<KnowledgeTreeItem[]>([]);
   const [knowledgeApplied, setKnowledgeApplied] = useState(false);
   const [previewQuestion, setPreviewQuestion] = useState("مواعيدكم إيه؟");
   const [previewReply, setPreviewReply] = useState("لسه مجربناش الرد الحقيقي.");
@@ -189,6 +199,7 @@ export function GuidedOnboardingPreview({
           knowledgeApplied?: boolean;
           knowledgeCount?: number;
           knowledgeSummary?: Record<string, number>;
+          knowledgeTreeItems?: KnowledgeTreeItem[];
           knowledgeMode?: KnowledgeMode;
           discoveryTurns?: DiscoveryTurn[];
           discoveryQuestion?: string;
@@ -221,6 +232,9 @@ export function GuidedOnboardingPreview({
         }
         if (saved.knowledgeSummary && typeof saved.knowledgeSummary === "object") {
           setKnowledgeSummary(saved.knowledgeSummary);
+        }
+        if (Array.isArray(saved.knowledgeTreeItems)) {
+          setKnowledgeTreeItems(saved.knowledgeTreeItems);
         }
         if (saved.knowledgeMode === "guided" || saved.knowledgeMode === "freeform") {
           setKnowledgeMode(saved.knowledgeMode);
@@ -270,6 +284,7 @@ export function GuidedOnboardingPreview({
           knowledgeApplied,
           knowledgeCount,
           knowledgeSummary,
+          knowledgeTreeItems,
           knowledgeMode,
           discoveryTurns,
           discoveryQuestion,
@@ -291,6 +306,7 @@ export function GuidedOnboardingPreview({
     knowledgeApplied,
     knowledgeCount,
     knowledgeSummary,
+    knowledgeTreeItems,
     knowledgeMode,
     discoveryTurns,
     discoveryQuestion,
@@ -730,6 +746,27 @@ export function GuidedOnboardingPreview({
         {},
       );
       setKnowledgeSummary(summary);
+      setKnowledgeTreeItems(
+        (data.proposals ?? [])
+          .filter((item: { action?: string; status?: string }) =>
+            item.action !== "NOOP" && item.status !== "NOOP"
+          )
+          .map((item: {
+            proposalId: string;
+            action: "CREATE" | "MERGE" | "NOOP" | "CONFLICT";
+            category?: string;
+            proposedTitle?: string;
+            topicKey?: string | null;
+            topicTitle?: string | null;
+          }) => ({
+            proposalId: item.proposalId,
+            action: item.action,
+            category: item.category || "CUSTOM",
+            title: item.proposedTitle || "معلومة جديدة",
+            topicKey: item.topicKey ?? null,
+            topicTitle: item.topicTitle ?? null,
+          })),
+      );
       setKnowledgeCount(Math.max(proposalIds.length, data.proposals?.length ?? 0));
       setKnowledgeApplied(true);
       setMockState("success");
@@ -801,6 +838,21 @@ export function GuidedOnboardingPreview({
       throw new Error(patchData?.error ?? patchData?.message ?? "تعذر تشغيل الرد التلقائي");
     }
   }
+
+  const knowledgeTreeGroups = useMemo(() => {
+    const groups = new Map<string, { title: string; items: KnowledgeTreeItem[] }>();
+    for (const item of knowledgeTreeItems) {
+      const key = item.topicKey?.trim() || `standalone:${item.proposalId}`;
+      const title = item.topicTitle?.trim() || item.title;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.items.push(item);
+      } else {
+        groups.set(key, { title, items: [item] });
+      }
+    }
+    return [...groups.entries()].map(([key, group]) => ({ key, ...group }));
+  }, [knowledgeTreeItems]);
 
   const primaryLabel = useMemo(() => {
     switch (step) {
@@ -1154,6 +1206,82 @@ export function GuidedOnboardingPreview({
                             </div>
                           ))}
                       </div>
+
+                      {knowledgeTreeGroups.length > 0 ? (
+                        <div className="mt-6 rounded-[22px] border border-white/80 bg-white/80 p-4 sm:p-5">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-black">شجرة المعرفة اللي اتضافت</div>
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                كل مجموعة تحتها المعلومات المرتبطة بيها، علشان تشوف إيه اتضاف وتحت إيه.
+                              </div>
+                            </div>
+                            <span className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-black text-primary">
+                              {knowledgeTreeGroups.length} مجموعات
+                            </span>
+                          </div>
+
+                          <div className="mt-5 space-y-3">
+                            {knowledgeTreeGroups.map((group) => (
+                              <details
+                                key={group.key}
+                                open
+                                className="group rounded-2xl border border-border/70 bg-white p-1"
+                              >
+                                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-4 py-3">
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-sm text-primary">⌘</span>
+                                    <div className="min-w-0">
+                                      <div className="truncate text-sm font-black">{group.title}</div>
+                                      <div className="mt-0.5 text-[11px] font-bold text-muted-foreground">
+                                        {group.items.length} {group.items.length === 1 ? "معلومة" : "معلومات"}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <span className="text-xs text-muted-foreground transition group-open:rotate-180">⌄</span>
+                                </summary>
+
+                                <div className="relative mr-7 border-r-2 border-primary/15 pb-2 pr-5">
+                                  {group.items.map((item, itemIndex) => (
+                                    <div key={item.proposalId} className="relative py-2">
+                                      <span className="absolute -right-[1.45rem] top-5 h-2.5 w-2.5 rounded-full border-2 border-white bg-primary" />
+                                      <div className="rounded-xl bg-surface/75 px-3 py-2.5">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                          <span className="text-xs font-black">{item.title}</span>
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="rounded-full bg-white px-2 py-1 text-[9px] font-black text-muted-foreground">
+                                              {item.category}
+                                            </span>
+                                            <span className={cx(
+                                              "rounded-full px-2 py-1 text-[9px] font-black",
+                                              item.action === "CREATE"
+                                                ? "bg-success-soft text-success"
+                                                : item.action === "MERGE"
+                                                  ? "bg-primary/10 text-primary"
+                                                  : "bg-warning-soft text-warning",
+                                            )}>
+                                              {item.action === "CREATE"
+                                                ? "اتضافت"
+                                                : item.action === "MERGE"
+                                                  ? "اتحدّثت"
+                                                  : "اتراجعت"}
+                                            </span>
+                                          </div>
+                                        </div>
+                                        {itemIndex === 0 && group.items.length > 1 ? (
+                                          <div className="mt-1.5 text-[10px] font-bold text-muted-foreground">
+                                            ↳ باقي العناصر دي مرتبطة بنفس الموضوع وبتتجاب مع بعض وقت الحاجة.
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </details>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   ) : (
                     <>
