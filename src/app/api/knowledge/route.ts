@@ -14,6 +14,8 @@ const createSchema = z.object({
   category: z.enum(ALL_KNOWLEDGE_CATEGORIES),
   title: z.string().min(1, "Title is required").max(KNOWLEDGE_TITLE_MAX),
   content: z.string().min(1, "Content is required").max(KNOWLEDGE_CONTENT_MAX),
+  topicKey: z.string().max(200).nullable().optional(),
+  topicTitle: z.string().max(300).nullable().optional(),
   knowledgeBaseId: z.string().uuid().optional(),
 });
 
@@ -45,6 +47,8 @@ export async function POST(request: Request) {
       category: input.category,
       title: input.title,
       content: input.content,
+      topicKey: input.topicKey,
+      topicTitle: input.topicTitle,
       knowledgeBaseId: input.knowledgeBaseId,
     });
 
