@@ -21,6 +21,8 @@ type KnowledgeItemRow = {
   Category: string;
   Title: string;
   Content: string;
+  TopicKey: string | null;
+  TopicTitle: string | null;
   IsActive: boolean;
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
@@ -51,6 +53,8 @@ function mapItem(row: KnowledgeItemRow): KnowledgeItem {
     category: row.Category as KnowledgeCategory,
     title: row.Title,
     content: row.Content,
+    topicKey: row.TopicKey,
+    topicTitle: row.TopicTitle,
     isActive: Boolean(row.IsActive),
     createdAtUtc: row.CreatedAtUtc,
     updatedAtUtc: row.UpdatedAtUtc,
@@ -132,7 +136,7 @@ export async function listKnowledgeItems(
 ): Promise<KnowledgeItem[]> {
   const includeInactive = params.includeInactive ?? false;
   const result = await db(trx).query<KnowledgeItemRow>(
-    `SELECT KnowledgeItemID, KnowledgeBaseID, BusinessID, Category, Title, Content,
+    `SELECT KnowledgeItemID, KnowledgeBaseID, BusinessID, Category, Title, Content, TopicKey, TopicTitle,
             IsActive, CreatedAtUtc, UpdatedAtUtc
      FROM TblKnowledgeItem
      WHERE BusinessID = @businessId
@@ -158,7 +162,7 @@ export async function getKnowledgeItem(
   trx?: TransactionClient,
 ): Promise<KnowledgeItem | null> {
   const result = await db(trx).query<KnowledgeItemRow>(
-    `SELECT KnowledgeItemID, KnowledgeBaseID, BusinessID, Category, Title, Content,
+    `SELECT KnowledgeItemID, KnowledgeBaseID, BusinessID, Category, Title, Content, TopicKey, TopicTitle,
             IsActive, CreatedAtUtc, UpdatedAtUtc
      FROM TblKnowledgeItem
      WHERE BusinessID = @businessId AND KnowledgeItemID = @knowledgeItemId`,
@@ -188,7 +192,7 @@ export async function lockKnowledgeItemForUpdate(
   trx: TransactionClient,
 ): Promise<KnowledgeItem | null> {
   const result = await trx.query<KnowledgeItemRow>(
-    `SELECT KnowledgeItemID, KnowledgeBaseID, BusinessID, Category, Title, Content,
+    `SELECT KnowledgeItemID, KnowledgeBaseID, BusinessID, Category, Title, Content, TopicKey, TopicTitle,
             IsActive, CreatedAtUtc, UpdatedAtUtc
      FROM TblKnowledgeItem WITH (UPDLOCK, HOLDLOCK, ROWLOCK)
      WHERE BusinessID = @businessId AND KnowledgeItemID = @knowledgeItemId`,
@@ -216,6 +220,8 @@ export async function createKnowledgeItem(
     category: KnowledgeCategory;
     title: string;
     content: string;
+    topicKey?: string | null;
+    topicTitle?: string | null;
     isActive?: boolean;
   },
   trx?: TransactionClient,
@@ -255,6 +261,8 @@ export async function createKnowledgeItem(
         type: sql.NVarChar(sql.MAX),
         value: params.content,
       },
+      { name: "topicKey", type: sql.NVarChar(200), value: params.topicKey ?? null },
+      { name: "topicTitle", type: sql.NVarChar(300), value: params.topicTitle ?? null },
       { name: "isActive", type: sql.Bit, value: isActive },
       { name: "createdAtUtc", type: sql.DateTime2, value: now },
       { name: "updatedAtUtc", type: sql.DateTime2, value: now },
@@ -268,6 +276,8 @@ export async function createKnowledgeItem(
     category: params.category,
     title: params.title,
     content: params.content,
+    topicKey: params.topicKey ?? null,
+    topicTitle: params.topicTitle ?? null,
     isActive,
     createdAtUtc: now,
     updatedAtUtc: now,
@@ -281,6 +291,8 @@ export async function updateKnowledgeItem(
     category?: KnowledgeCategory;
     title?: string;
     content?: string;
+    topicKey?: string | null;
+    topicTitle?: string | null;
     isActive?: boolean;
   },
   trx?: TransactionClient,
@@ -300,6 +312,8 @@ export async function updateKnowledgeItem(
     category: params.category ?? existing.category,
     title: params.title ?? existing.title,
     content: params.content ?? existing.content,
+    topicKey: params.topicKey === undefined ? existing.topicKey : params.topicKey,
+    topicTitle: params.topicTitle === undefined ? existing.topicTitle : params.topicTitle,
     isActive: params.isActive ?? existing.isActive,
   };
   const now = new Date();
@@ -309,6 +323,8 @@ export async function updateKnowledgeItem(
      SET Category = @category,
          Title = @title,
          Content = @content,
+         TopicKey = @topicKey,
+         TopicTitle = @topicTitle,
          IsActive = @isActive,
          UpdatedAtUtc = @updatedAtUtc
      WHERE BusinessID = @businessId AND KnowledgeItemID = @knowledgeItemId`,
@@ -330,6 +346,8 @@ export async function updateKnowledgeItem(
         type: sql.NVarChar(sql.MAX),
         value: next.content,
       },
+      { name: "topicKey", type: sql.NVarChar(200), value: next.topicKey },
+      { name: "topicTitle", type: sql.NVarChar(300), value: next.topicTitle },
       { name: "isActive", type: sql.Bit, value: next.isActive },
       { name: "updatedAtUtc", type: sql.DateTime2, value: now },
     ],
