@@ -17,7 +17,11 @@ import { findWhatsAppConnection } from "@/modules/channels/repository";
 import { sendAccountMessage } from "@/modules/channels/runtime-client";
 import type { Integration, IntegrationStatus } from "@/types/domain";
 
-import { callIntegrationTool, fetchIntegrationManifest } from "./connector-client";
+import {
+  assertSafeIntegrationBaseUrl,
+  callIntegrationTool,
+  fetchIntegrationManifest,
+} from "./connector-client";
 import type {
   IntegrationManifest,
   IntegrationToolCallResult,
@@ -47,14 +51,6 @@ export async function upsertIntegrationShell(params: {
   });
 }
 
-function normalizeBaseUrl(value: string): string {
-  const parsed = new URL(value);
-  if (!["http:", "https:"].includes(parsed.protocol)) {
-    throw new ValidationError("ERP base URL must use http or https");
-  }
-  return parsed.toString().replace(/\/$/, "");
-}
-
 export async function configureDrvoErpIntegration(params: {
   businessId: string;
   baseUrl: string;
@@ -81,7 +77,7 @@ export async function configureDrvoErpIntegration(params: {
   const configured = await repo.configureIntegrationConnector({
     businessId: params.businessId,
     integrationId: shell.integrationId,
-    baseUrl: normalizeBaseUrl(params.baseUrl),
+    baseUrl: await assertSafeIntegrationBaseUrl(params.baseUrl),
     inboundApiKeyHash: hashIntegrationApiKey(inboundApiKey),
     secretCiphertext: encryptIntegrationSecret(params.outboundToken.trim()),
     status: "ACTIVE",
