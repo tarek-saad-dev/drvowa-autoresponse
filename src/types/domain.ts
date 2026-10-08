@@ -298,6 +298,12 @@ export type Integration = {
   status: IntegrationStatus;
   externalReference: string | null;
   configJson: string | null;
+  baseUrl?: string | null;
+  inboundApiKeyHash?: string | null;
+  secretCiphertext?: string | null;
+  capabilitiesJson?: string | null;
+  lastHealthAtUtc?: Date | null;
+  lastHealthStatus?: string | null;
   createdAtUtc: Date;
   updatedAtUtc: Date;
 };
