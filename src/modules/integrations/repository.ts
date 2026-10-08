@@ -492,3 +492,22 @@ export async function revokeOpenIntegrationPairings(params: {
     ],
   );
 }
+
+
+export async function releaseIntegrationPairing(params: {
+  pairingId: string;
+}): Promise<void> {
+  await query(
+    `UPDATE TblIntegrationPairing
+     SET UsedAtUtc = NULL
+     WHERE IntegrationPairingID = @pairingId
+       AND ExpiresAtUtc > SYSUTCDATETIME()`,
+    [
+      {
+        name: "pairingId",
+        type: sql.UniqueIdentifier,
+        value: params.pairingId,
+      },
+    ],
+  );
+}
