@@ -207,6 +207,11 @@ export async function pauseConversationAi(params: {
 export async function resumeConversationAi(params: {
   businessId: string;
   conversationId: string;
+  /**
+   * Resume watermark. Inbound messages received before it are not answered.
+   * Defaults to now (manual resume: only new messages get AI replies).
+   */
+  resumedAtUtc?: Date | null;
   logger?: { info: (...a: unknown[]) => void; warn: (...a: unknown[]) => void };
 }, trx?: TransactionClient): Promise<ConversationAiState> {
   await db(trx).execute(
@@ -219,7 +224,7 @@ export async function resumeConversationAi(params: {
          Mode = N'AUTO',
          PausedAtUtc = NULL,
          PauseReason = NULL,
-         ResumedAtUtc = SYSUTCDATETIME(),
+         ResumedAtUtc = ISNULL(@resumedAtUtc, SYSUTCDATETIME()),
          UpdatedAtUtc = SYSUTCDATETIME()
      WHEN NOT MATCHED THEN
        INSERT (
@@ -228,7 +233,7 @@ export async function resumeConversationAi(params: {
          CreatedAtUtc, UpdatedAtUtc
        ) VALUES (
          @businessId, @conversationId, N'AUTO', NULL, NULL,
-         SYSUTCDATETIME(), NULL,
+         ISNULL(@resumedAtUtc, SYSUTCDATETIME()), NULL,
          SYSUTCDATETIME(), SYSUTCDATETIME()
        );`,
     [
@@ -237,6 +242,11 @@ export async function resumeConversationAi(params: {
         name: "conversationId",
         type: sql.UniqueIdentifier,
         value: params.conversationId,
+      },
+      {
+        name: "resumedAtUtc",
+        type: sql.DateTime2,
+        value: params.resumedAtUtc ?? null,
       },
     ],
   );
@@ -295,10 +305,15 @@ export async function evaluateConversationAiScheduleGate(params: {
         businessTimezone: resumeContext.businessTimezone,
       })
     ) {
+      // The inbound that expired the takeover must itself be answered, so the
+      // watermark cannot be later than its receive time.
       state = await resumeConversationAi(
         {
           businessId: params.businessId,
           conversationId: params.conversationId,
+          resumedAtUtc: new Date(
+            Math.min(params.messageReceivedAt.getTime(), Date.now()),
+          ),
         },
         trx,
       );
