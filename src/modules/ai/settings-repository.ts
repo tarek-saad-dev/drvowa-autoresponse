@@ -68,7 +68,8 @@ export async function getChannelAiSettingForBusiness(params: {
 }): Promise<ChannelAiSetting | null> {
   const result = await query<SettingRow>(
     `SELECT TOP 1 s.ChannelAiSettingID, s.BusinessID, s.ChannelConnectionID, s.AgentID,
-            s.AutoReplyEnabled, s.EnabledAtUtc, s.DebounceMs, s.CreatedAtUtc, s.UpdatedAtUtc
+            s.AutoReplyEnabled, s.EnabledAtUtc, s.DebounceMs, s.HumanTakeoverResumePolicy,
+            s.CreatedAtUtc, s.UpdatedAtUtc
      FROM TblChannelAiSetting s
      INNER JOIN TblChannelConnection c
        ON c.ChannelConnectionID = s.ChannelConnectionID AND c.BusinessID = s.BusinessID
@@ -167,7 +168,8 @@ export async function upsertChannelAiSetting(params: {
             CreatedAtUtc, UpdatedAtUtc
      ) VALUES (
        @settingId, @businessId, @channelConnectionId, @agentId,
-       @autoReplyEnabled, @enabledAtUtc, @debounceMs, SYSUTCDATETIME(), SYSUTCDATETIME()
+       @autoReplyEnabled, @enabledAtUtc, @debounceMs, @humanTakeoverResumePolicy,
+       SYSUTCDATETIME(), SYSUTCDATETIME()
      )`,
     [
       { name: "settingId", type: sql.UniqueIdentifier, value: settingId },
