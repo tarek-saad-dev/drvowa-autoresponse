@@ -103,6 +103,7 @@ export async function completeExternalDrvoErpPairing(params: {
     throw new ValidationError("ERP access token is required");
   }
 
+  const safeBaseUrl = await assertSafeIntegrationBaseUrl(params.baseUrl);
   const pairing = await repo.consumeIntegrationPairing({
     pairingCodeHash: hashIntegrationApiKey(normalizedCode),
   });
@@ -110,34 +111,39 @@ export async function completeExternalDrvoErpPairing(params: {
     throw new ForbiddenError("Pairing code is invalid or expired");
   }
 
-  const shell = await repo.upsertIntegration({
-    businessId: pairing.businessId,
-    type: INTEGRATION_TYPE_DRVO_ERP,
-    status: "PENDING",
-    externalReference: params.externalReference ?? null,
-    config: {
-      contractVersion: "drvowa-erp-v1",
-      setupMethod: "PAIRING_CODE",
-    },
-  });
+  try {
+    const shell = await repo.upsertIntegration({
+      businessId: pairing.businessId,
+      type: INTEGRATION_TYPE_DRVO_ERP,
+      status: "PENDING",
+      externalReference: params.externalReference ?? null,
+      config: {
+        contractVersion: "drvowa-erp-v1",
+        setupMethod: "PAIRING_CODE",
+      },
+    });
 
-  const inboundApiKey = generateIntegrationApiKey();
-  const configured = await repo.configureIntegrationConnector({
-    businessId: pairing.businessId,
-    integrationId: shell.integrationId,
-    baseUrl: await assertSafeIntegrationBaseUrl(params.baseUrl),
-    inboundApiKeyHash: hashIntegrationApiKey(inboundApiKey),
-    secretCiphertext: encryptIntegrationSecret(params.outboundToken.trim()),
-    status: "ACTIVE",
-  });
-  if (!configured) {
-    throw new NotFoundError("Integration not found");
+    const inboundApiKey = generateIntegrationApiKey();
+    const configured = await repo.configureIntegrationConnector({
+      businessId: pairing.businessId,
+      integrationId: shell.integrationId,
+      baseUrl: safeBaseUrl,
+      inboundApiKeyHash: hashIntegrationApiKey(inboundApiKey),
+      secretCiphertext: encryptIntegrationSecret(params.outboundToken.trim()),
+      status: "ACTIVE",
+    });
+    if (!configured) {
+      throw new NotFoundError("Integration not found");
+    }
+
+    return {
+      integration: configured,
+      inboundApiKey,
+    };
+  } catch (error) {
+    await repo.releaseIntegrationPairing({ pairingId: pairing.pairingId }).catch(() => {});
+    throw error;
   }
-
-  return {
-    integration: configured,
-    inboundApiKey,
-  };
 }
 
 export async function refreshExternalIntegrationManifest(params: {
