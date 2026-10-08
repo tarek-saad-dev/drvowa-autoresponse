@@ -30,6 +30,8 @@ export function IntegrationManager({
   const [integration, setIntegration] = useState(initialIntegration);
   const [inboundKey, setInboundKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [pairingExpiresAt, setPairingExpiresAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const tools = useMemo(() => {
@@ -43,6 +45,27 @@ export function IntegrationManager({
       return [];
     }
   }, [integration]);
+
+  async function createPairingCode() {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/integrations/drvo-erp/pairing", {
+        method: "POST",
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data?.error ?? "تعذر إنشاء كود الربط");
+        return;
+      }
+      setPairingCode(data.pairingCode ?? null);
+      setPairingExpiresAt(data.expiresAtUtc ?? null);
+    } catch {
+      setError("تعذر إنشاء كود الربط.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function connect() {
     setBusy(true);
@@ -112,6 +135,47 @@ export function IntegrationManager({
   return (
     <div className="space-y-5">
       {error ? <Alert variant="error">{error}</Alert> : null}
+
+      <section className="rounded-[26px] border border-primary/20 bg-primary/[0.025] p-5 shadow-sm sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-black text-primary">الربط السريع</p>
+            <h2 className="mt-1 text-xl font-black">Pairing Code</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
+              ولّد كود مؤقت وحطه في صفحة DRVOWA داخل الـ ERP. النظامين هيتبادلوا المفاتيح ويعملوا الربط تلقائيًا من غير نقل API keys يدوي.
+            </p>
+          </div>
+          <Button
+            type="button"
+            disabled={busy}
+            onClick={() => void createPairingCode()}
+          >
+            {busy ? "جاري الإنشاء..." : pairingCode ? "كود جديد" : "إنشاء كود ربط"}
+          </Button>
+        </div>
+
+        {pairingCode ? (
+          <div className="mt-5 rounded-2xl border border-primary/20 bg-card p-4">
+            <div className="text-[11px] font-black text-muted-foreground">
+              الكود صالح لمدة 15 دقيقة ولمرة واحدة
+            </div>
+            <div dir="ltr" className="mt-2 font-mono text-2xl font-black tracking-[0.16em] text-primary sm:text-3xl">
+              {pairingCode}
+            </div>
+            {pairingExpiresAt ? (
+              <div className="mt-2 text-[11px] text-muted-foreground">
+                ينتهي: {new Date(pairingExpiresAt).toLocaleTimeString("ar-EG", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </div>
+            ) : null}
+            <div className="mt-4 rounded-xl bg-surface/60 px-3 py-2.5 text-xs leading-6 text-muted-foreground">
+              افتح في الـ ERP: <b>الإدارة ← Integrations ← DRVOWA</b>، والصق الكود ده واضغط ربط.
+            </div>
+          </div>
+        ) : null}
+      </section>
 
       <section className="rounded-[26px] border border-border bg-card p-5 shadow-sm sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
