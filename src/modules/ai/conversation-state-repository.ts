@@ -15,6 +15,7 @@ import type {
 } from "@/types/domain";
 
 import { logAiSafety } from "./guard-repository";
+import { HUMAN_TAKEOVER_PAUSE_MS } from "./safety-policy";
 
 type StateRow = {
   BusinessID: string;
@@ -220,13 +221,39 @@ export async function evaluateConversationAiScheduleGate(params: {
   reason?: string;
   state: ConversationAiState;
 }> {
-  const state = await getEffectiveConversationAiState(
+  let state = await getEffectiveConversationAiState(
     {
       businessId: params.businessId,
       conversationId: params.conversationId,
     },
     trx,
   );
+
+  if (
+    state.mode === "HUMAN_PAUSED"
+    && state.pauseReason === "HUMAN_TAKEOVER"
+    && state.pausedAtUtc
+    && params.messageReceivedAt.getTime()
+      >= state.pausedAtUtc.getTime() + HUMAN_TAKEOVER_PAUSE_MS
+  ) {
+    state = await resumeConversationAi(
+      {
+        businessId: params.businessId,
+        conversationId: params.conversationId,
+      },
+      trx,
+    );
+    logAiSafety(
+      "human_takeover_auto_resumed",
+      {
+        businessId: params.businessId,
+        conversationId: params.conversationId,
+        pausedAtUtc: state.pausedAtUtc,
+        resumedAtUtc: state.resumedAtUtc,
+        reason: "HUMAN_TAKEOVER_TIMEOUT",
+      },
+    );
+  }
 
   if (state.mode === "HUMAN_PAUSED") {
     return { allow: false, reason: "HUMAN_PAUSED", state };
