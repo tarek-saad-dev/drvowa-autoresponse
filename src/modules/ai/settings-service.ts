@@ -4,7 +4,10 @@ import {
   findWhatsAppConnection,
   getChannelConnection,
 } from "@/modules/channels/repository";
-import type { ChannelAiSetting } from "@/types/domain";
+import type {
+  ChannelAiSetting,
+  HumanTakeoverResumePolicy,
+} from "@/types/domain";
 
 import * as settingsRepo from "./settings-repository";
 
@@ -19,6 +22,7 @@ export async function upsertWhatsAppAiSetting(params: {
   agentId: string;
   autoReplyEnabled: boolean;
   debounceMs?: number;
+  humanTakeoverResumePolicy?: HumanTakeoverResumePolicy;
   channelConnectionId?: string;
 }): Promise<ChannelAiSetting> {
   const connection = params.channelConnectionId
@@ -54,6 +58,7 @@ export async function upsertWhatsAppAiSetting(params: {
     agentId: agent.agentId,
     autoReplyEnabled: params.autoReplyEnabled,
     debounceMs: params.debounceMs,
+    humanTakeoverResumePolicy: params.humanTakeoverResumePolicy,
   });
 }
 
