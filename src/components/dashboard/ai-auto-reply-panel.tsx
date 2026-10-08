@@ -30,12 +30,59 @@ type SettingView = {
   autoReplyEnabled: boolean;
   enabledAtUtc: string | Date | null;
   debounceMs: number;
+  humanTakeoverResumePolicy:
+    | "AFTER_30_MIN"
+    | "AFTER_60_MIN"
+    | "AFTER_120_MIN"
+    | "AFTER_240_MIN"
+    | "END_OF_DAY"
+    | "MANUAL";
 } | null;
 
 type WhatsAppReadiness = {
   uiState: string;
   maskedPhone?: string | null;
 };
+
+const TAKEOVER_OPTIONS = [
+  {
+    value: "AFTER_30_MIN",
+    label: "30 دقيقة",
+    description: "للأنشطة السريعة والردود القصيرة.",
+  },
+  {
+    value: "AFTER_60_MIN",
+    label: "ساعة",
+    description: "وقت كفاية لمتابعة سريعة من الفريق.",
+  },
+  {
+    value: "AFTER_120_MIN",
+    label: "ساعتين",
+    description: "الاختيار المتوازن والمقترح لمعظم الأنشطة.",
+  },
+  {
+    value: "AFTER_240_MIN",
+    label: "4 ساعات",
+    description: "للمحادثات اللي محتاجة متابعة أطول.",
+  },
+  {
+    value: "END_OF_DAY",
+    label: "لحد نهاية اليوم",
+    description: "الـ AI يرجع من أول رسالة في يوم جديد.",
+  },
+  {
+    value: "MANUAL",
+    label: "يدوي فقط",
+    description: "مش هيرجع إلا لما الفريق يفعّله بنفسه.",
+  },
+] as const;
+
+type TakeoverPolicy = (typeof TAKEOVER_OPTIONS)[number]["value"];
+
+function takeoverPolicyLabel(policy: TakeoverPolicy): string {
+  return TAKEOVER_OPTIONS.find((option) => option.value === policy)?.label
+    ?? "ساعتين";
+}
 
 export function AiAutoReplyPanel({
   initialSetting,
@@ -60,6 +107,10 @@ export function AiAutoReplyPanel({
       ? new Date(initialSetting.enabledAtUtc).toISOString()
       : null,
   );
+  const [humanTakeoverResumePolicy, setHumanTakeoverResumePolicy] =
+    useState<TakeoverPolicy>(
+      initialSetting?.humanTakeoverResumePolicy ?? "AFTER_120_MIN",
+    );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -90,6 +141,7 @@ export function AiAutoReplyPanel({
         body: JSON.stringify({
           agentId,
           autoReplyEnabled: nextEnabled,
+          humanTakeoverResumePolicy,
         }),
       });
       const data = (await res.json()) as {
@@ -100,6 +152,7 @@ export function AiAutoReplyPanel({
           autoReplyEnabled: boolean;
           enabledAtUtc: string | null;
           agentId: string;
+          humanTakeoverResumePolicy?: TakeoverPolicy;
         };
       };
       if (!res.ok) {
@@ -113,6 +166,9 @@ export function AiAutoReplyPanel({
           : null,
       );
       if (data.setting?.agentId) setAgentId(data.setting.agentId);
+      if (data.setting?.humanTakeoverResumePolicy) {
+        setHumanTakeoverResumePolicy(data.setting.humanTakeoverResumePolicy);
+      }
       setMessage(
         data.warning
           || (nextEnabled
@@ -140,7 +196,7 @@ export function AiAutoReplyPanel({
             <p className="text-xs font-black text-primary">تشغيل الموظف</p>
             <CardTitle className="mt-1 text-xl">الرد التلقائي على واتساب</CardTitle>
             <CardDescription className="mt-2 max-w-xl leading-6">
-              لما يكون شغال، الموظف يرد على الرسائل الجديدة. ولو حد من فريقك رد يدويًا، يسيب المحادثة ليكم مؤقتًا ويرجع يرد تلقائيًا بعد ساعتين لو وصلت رسالة جديدة.
+              لما يكون شغال، الموظف يرد على الرسائل الجديدة. ولو حد من فريقك رد يدويًا، يسيب المحادثة ليكم مؤقتًا ويرجع حسب المدة اللي تختارها.
             </CardDescription>
           </div>
           <div
@@ -225,6 +281,59 @@ export function AiAutoReplyPanel({
           </div>
         )}
 
+        {waReady && hasAgent ? (
+          <div className="rounded-2xl border border-border bg-surface/45 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <label className="block text-sm font-black">
+                  بعد تدخل موظف بشري، إمتى الـ AI يرجع يرد؟
+                </label>
+                <p className="mt-1 text-xs leading-6 text-muted-foreground">
+                  المدة بتتحسب من آخر رد يدوي من فريقك على نفس المحادثة.
+                </p>
+              </div>
+              <span className="rounded-full bg-primary/10 px-3 py-1.5 text-[11px] font-black text-primary">
+                الحالي: {takeoverPolicyLabel(humanTakeoverResumePolicy)}
+              </span>
+            </div>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {TAKEOVER_OPTIONS.map((option) => {
+                const selected = humanTakeoverResumePolicy === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setHumanTakeoverResumePolicy(option.value)}
+                    className={`rounded-2xl border-2 p-3 text-start transition ${selected
+                      ? "border-primary bg-primary/5 shadow-sm"
+                      : "border-border bg-card hover:border-primary/30"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`text-sm font-black ${selected ? "text-primary" : "text-foreground"}`}>
+                        {option.label}
+                      </span>
+                      <span className={`h-3 w-3 rounded-full border-2 ${selected
+                        ? "border-primary bg-primary"
+                        : "border-muted-foreground/30 bg-transparent"
+                      }`} />
+                    </div>
+                    <p className="mt-1.5 text-[11px] leading-5 text-muted-foreground">
+                      {option.description}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+
+            <p className="mt-3 text-[11px] leading-5 text-muted-foreground">
+              لو اخترت نهاية اليوم، بنستخدم المنطقة الزمنية المسجلة للبيزنس.
+            </p>
+          </div>
+        ) : null}
+
         {waReady && hasAgent && knowledgeActiveCount === 0 ? (
           <Alert variant="info">
             الموظف ممكن يشتغل، بس الأفضل تعلّمه معلومات البيزنس الأول عشان ردوده تبقى أدق.
@@ -273,7 +382,7 @@ export function AiAutoReplyPanel({
               disabled={busy}
               onClick={() => void save(enabled)}
             >
-              حفظ الموظف المختار
+              حفظ الإعدادات
             </Button>
           ) : null}
 
