@@ -7,6 +7,12 @@ import {
   hashIntegrationApiKey,
 } from "@/lib/security/integration-secrets";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/tenancy/errors";
+import {
+  consumeQuotaReservation,
+  releaseQuotaReservation,
+  reserveQuota,
+} from "@/modules/billing/entitlements";
+import { USAGE_EVENT_WHATSAPP_OUTBOUND } from "@/modules/billing/period";
 import { findWhatsAppConnection } from "@/modules/channels/repository";
 import { sendAccountMessage } from "@/modules/channels/runtime-client";
 import type { Integration, IntegrationStatus } from "@/types/domain";
@@ -224,6 +230,14 @@ export async function deliverExternalEventMessage(params: {
     };
   }
 
+  const reservationKey =
+    `erp-event:${params.integration.integrationId}:${params.externalEventId}`;
+  await reserveQuota({
+    businessId: params.integration.businessId,
+    eventType: USAGE_EVENT_WHATSAPP_OUTBOUND,
+    reservationKey,
+  });
+
   const connection = await findWhatsAppConnection({
     businessId: params.integration.businessId,
   });
@@ -238,6 +252,11 @@ export async function deliverExternalEventMessage(params: {
       status: "FAILED",
       errorCode: "WHATSAPP_NOT_READY",
     });
+    await releaseQuotaReservation({
+      businessId: params.integration.businessId,
+      eventType: USAGE_EVENT_WHATSAPP_OUTBOUND,
+      reservationKey,
+    });
     throw new ValidationError("WhatsApp is not ready");
   }
 
@@ -246,7 +265,7 @@ export async function deliverExternalEventMessage(params: {
       accountKey: connection.externalAccountKey,
       phone: params.recipient,
       message: params.message,
-      idempotencyKey: `erp-event:${params.integration.integrationId}:${params.externalEventId}`,
+      idempotencyKey: reservationKey,
     });
     if (!sent.success) {
       throw new Error(sent.code || "WHATSAPP_SEND_FAILED");
@@ -255,6 +274,15 @@ export async function deliverExternalEventMessage(params: {
       eventLogId: claim.eventLogId,
       status: "SENT",
       providerMessageId: sent.messageId ?? null,
+    });
+    await consumeQuotaReservation({
+      businessId: params.integration.businessId,
+      eventType: USAGE_EVENT_WHATSAPP_OUTBOUND,
+      reservationKey,
+      metadata: {
+        source: "ERP_INTEGRATION_EVENT",
+        eventType: params.eventType,
+      },
     });
     return {
       replay: claim.replay,
@@ -269,6 +297,11 @@ export async function deliverExternalEventMessage(params: {
       eventLogId: claim.eventLogId,
       status: "FAILED",
       errorCode: code,
+    });
+    await releaseQuotaReservation({
+      businessId: params.integration.businessId,
+      eventType: USAGE_EVENT_WHATSAPP_OUTBOUND,
+      reservationKey,
     });
     throw error;
   }
