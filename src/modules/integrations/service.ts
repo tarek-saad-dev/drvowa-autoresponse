@@ -218,7 +218,7 @@ export async function deliverExternalEventMessage(params: {
     metadataJson: params.metadata ? JSON.stringify(params.metadata) : null,
   });
 
-  if (claim.replay && claim.status !== "RECEIVED") {
+  if (claim.replay && claim.status === "SENT") {
     return {
       replay: true,
       status: claim.status,
