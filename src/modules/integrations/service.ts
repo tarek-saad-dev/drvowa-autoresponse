@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
 import {
   decryptIntegrationSecret,
@@ -49,6 +49,117 @@ export async function upsertIntegrationShell(params: {
     externalReference: params.externalReference ?? null,
     config: params.config ?? null,
   });
+}
+
+
+const PAIRING_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+
+function generatePairingCode(): string {
+  const bytes = randomBytes(12);
+  let raw = "";
+  for (let i = 0; i < 12; i += 1) {
+    raw += PAIRING_ALPHABET[bytes[i] % PAIRING_ALPHABET.length];
+  }
+  return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
+}
+
+function normalizePairingCode(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+export async function createDrvoErpPairing(params: {
+  businessId: string;
+  userId?: string | null;
+}): Promise<{
+  pairingCode: string;
+  expiresAtUtc: Date;
+}> {
+  await repo.revokeOpenIntegrationPairings({ businessId: params.businessId });
+  const pairingCode = generatePairingCode();
+  const expiresAtUtc = new Date(Date.now() + 15 * 60 * 1000);
+  await repo.createIntegrationPairing({
+    businessId: params.businessId,
+    pairingCodeHash: hashIntegrationApiKey(normalizePairingCode(pairingCode)),
+    expiresAtUtc,
+    createdByUserId: params.userId ?? null,
+  });
+  return { pairingCode, expiresAtUtc };
+}
+
+export async function completeExternalDrvoErpPairing(params: {
+  pairingCode: string;
+  baseUrl: string;
+  outboundToken: string;
+  externalReference?: string | null;
+}): Promise<{
+  integration: Integration;
+  inboundApiKey: string;
+}> {
+  const normalizedCode = normalizePairingCode(params.pairingCode);
+  if (normalizedCode.length !== 12) {
+    throw new ValidationError("Invalid pairing code");
+  }
+  if (!params.outboundToken.trim()) {
+    throw new ValidationError("ERP access token is required");
+  }
+
+  const pairing = await repo.consumeIntegrationPairing({
+    pairingCodeHash: hashIntegrationApiKey(normalizedCode),
+  });
+  if (!pairing) {
+    throw new ForbiddenError("Pairing code is invalid or expired");
+  }
+
+  const shell = await repo.upsertIntegration({
+    businessId: pairing.businessId,
+    type: INTEGRATION_TYPE_DRVO_ERP,
+    status: "PENDING",
+    externalReference: params.externalReference ?? null,
+    config: {
+      contractVersion: "drvowa-erp-v1",
+      setupMethod: "PAIRING_CODE",
+    },
+  });
+
+  const inboundApiKey = generateIntegrationApiKey();
+  const configured = await repo.configureIntegrationConnector({
+    businessId: pairing.businessId,
+    integrationId: shell.integrationId,
+    baseUrl: await assertSafeIntegrationBaseUrl(params.baseUrl),
+    inboundApiKeyHash: hashIntegrationApiKey(inboundApiKey),
+    secretCiphertext: encryptIntegrationSecret(params.outboundToken.trim()),
+    status: "ACTIVE",
+  });
+  if (!configured) {
+    throw new NotFoundError("Integration not found");
+  }
+
+  return {
+    integration: configured,
+    inboundApiKey,
+  };
+}
+
+export async function refreshExternalIntegrationManifest(params: {
+  integration: Integration;
+}): Promise<IntegrationManifest> {
+  try {
+    const manifest = await fetchIntegrationManifest(params.integration);
+    await repo.updateIntegrationHealth({
+      businessId: params.integration.businessId,
+      integrationId: params.integration.integrationId,
+      status: "HEALTHY",
+      capabilitiesJson: JSON.stringify(manifest),
+    });
+    return manifest;
+  } catch (error) {
+    await repo.updateIntegrationHealth({
+      businessId: params.integration.businessId,
+      integrationId: params.integration.integrationId,
+      status: "ERROR",
+    });
+    throw error;
+  }
 }
 
 export async function configureDrvoErpIntegration(params: {
