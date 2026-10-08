@@ -1,5 +1,8 @@
 import "server-only";
 
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
+
 import { z } from "zod";
 
 import { decryptIntegrationSecret } from "@/lib/security/integration-secrets";
@@ -26,11 +29,49 @@ const manifestSchema = z.object({
   ).max(100),
 });
 
-function normalizeBaseUrl(value: string): string {
+function isPrivateIp(address: string): boolean {
+  if (address === "::1" || address === "0:0:0:0:0:0:0:1") return true;
+  const lower = address.toLowerCase();
+  if (lower.startsWith("fc") || lower.startsWith("fd") || lower.startsWith("fe80:")) {
+    return true;
+  }
+  const parts = address.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) return false;
+  if (parts[0] === 10 || parts[0] === 127) return true;
+  if (parts[0] === 169 && parts[1] === 254) return true;
+  if (parts[0] === 192 && parts[1] === 168) return true;
+  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+  return false;
+}
+
+export async function assertSafeIntegrationBaseUrl(value: string): Promise<string> {
   const parsed = new URL(value);
   if (!["http:", "https:"].includes(parsed.protocol)) {
     throw new Error("Unsupported integration URL");
   }
+  if (process.env.NODE_ENV === "production" && parsed.protocol !== "https:") {
+    throw new Error("ERP integration must use HTTPS in production");
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname === "localhost" || hostname.endsWith(".localhost")) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("Private integration hosts are not allowed");
+    }
+    return parsed.toString().replace(/\/$/, "");
+  }
+
+  if (isIP(hostname)) {
+    if (process.env.NODE_ENV === "production" && isPrivateIp(hostname)) {
+      throw new Error("Private integration hosts are not allowed");
+    }
+  } else if (process.env.NODE_ENV === "production") {
+    const resolved = await lookup(hostname, { all: true, verbatim: true });
+    if (!resolved.length || resolved.some((item) => isPrivateIp(item.address))) {
+      throw new Error("Private integration hosts are not allowed");
+    }
+  }
+
   return parsed.toString().replace(/\/$/, "");
 }
 
@@ -44,7 +85,7 @@ async function integrationFetch<T>(params: {
   if (!params.integration.baseUrl || !params.integration.secretCiphertext) {
     throw new Error("Integration is not configured");
   }
-  const baseUrl = normalizeBaseUrl(params.integration.baseUrl);
+  const baseUrl = await assertSafeIntegrationBaseUrl(params.integration.baseUrl);
   const token = decryptIntegrationSecret(params.integration.secretCiphertext);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), params.timeoutMs ?? 8_000);
