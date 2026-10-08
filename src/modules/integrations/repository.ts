@@ -13,6 +13,12 @@ type IntegrationRow = {
   Status: string;
   ExternalReference: string | null;
   ConfigJson: string | null;
+  BaseUrl: string | null;
+  InboundApiKeyHash: string | null;
+  SecretCiphertext: string | null;
+  CapabilitiesJson: string | null;
+  LastHealthAtUtc: Date | null;
+  LastHealthStatus: string | null;
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
@@ -25,6 +31,12 @@ function mapIntegration(row: IntegrationRow): Integration {
     status: row.Status as IntegrationStatus,
     externalReference: row.ExternalReference,
     configJson: row.ConfigJson,
+    baseUrl: row.BaseUrl,
+    inboundApiKeyHash: row.InboundApiKeyHash,
+    secretCiphertext: row.SecretCiphertext,
+    capabilitiesJson: row.CapabilitiesJson,
+    lastHealthAtUtc: row.LastHealthAtUtc,
+    lastHealthStatus: row.LastHealthStatus,
     createdAtUtc: row.CreatedAtUtc,
     updatedAtUtc: row.UpdatedAtUtc,
   };
@@ -62,7 +74,8 @@ export async function listIntegrations(params: {
 }): Promise<Integration[]> {
   const result = await query<IntegrationRow>(
     `SELECT IntegrationID, BusinessID, Type, Status, ExternalReference, ConfigJson,
-            CreatedAtUtc, UpdatedAtUtc
+            BaseUrl, InboundApiKeyHash, SecretCiphertext, CapabilitiesJson,
+            LastHealthAtUtc, LastHealthStatus, CreatedAtUtc, UpdatedAtUtc
      FROM TblIntegration
      WHERE BusinessID = @businessId
      ORDER BY Type`,
@@ -83,7 +96,8 @@ export async function getIntegrationByType(params: {
 }): Promise<Integration | null> {
   const result = await query<IntegrationRow>(
     `SELECT IntegrationID, BusinessID, Type, Status, ExternalReference, ConfigJson,
-            CreatedAtUtc, UpdatedAtUtc
+            BaseUrl, InboundApiKeyHash, SecretCiphertext, CapabilitiesJson,
+            LastHealthAtUtc, LastHealthStatus, CreatedAtUtc, UpdatedAtUtc
      FROM TblIntegration
      WHERE BusinessID = @businessId AND Type = @type`,
     [
@@ -208,4 +222,188 @@ export async function upsertIntegration(params: {
     createdAtUtc: now,
     updatedAtUtc: now,
   };
+}
+
+
+export async function getIntegrationByInboundApiKeyHash(params: {
+  apiKeyHash: string;
+}): Promise<Integration | null> {
+  const result = await query<IntegrationRow>(
+    `SELECT IntegrationID, BusinessID, Type, Status, ExternalReference, ConfigJson,
+            BaseUrl, InboundApiKeyHash, SecretCiphertext, CapabilitiesJson,
+            LastHealthAtUtc, LastHealthStatus, CreatedAtUtc, UpdatedAtUtc
+     FROM TblIntegration
+     WHERE InboundApiKeyHash = @apiKeyHash`,
+    [
+      {
+        name: "apiKeyHash",
+        type: sql.NVarChar(128),
+        value: params.apiKeyHash,
+      },
+    ],
+  );
+  const row = result.recordset[0];
+  return row ? mapIntegration(row) : null;
+}
+
+export async function configureIntegrationConnector(params: {
+  businessId: string;
+  integrationId: string;
+  baseUrl: string;
+  inboundApiKeyHash: string;
+  secretCiphertext: string;
+  capabilitiesJson?: string | null;
+  status?: IntegrationStatus;
+}): Promise<Integration | null> {
+  await query(
+    `UPDATE TblIntegration
+     SET BaseUrl = @baseUrl,
+         InboundApiKeyHash = @inboundApiKeyHash,
+         SecretCiphertext = @secretCiphertext,
+         CapabilitiesJson = @capabilitiesJson,
+         Status = @status,
+         UpdatedAtUtc = SYSUTCDATETIME()
+     WHERE BusinessID = @businessId AND IntegrationID = @integrationId`,
+    [
+      { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+      { name: "integrationId", type: sql.UniqueIdentifier, value: params.integrationId },
+      { name: "baseUrl", type: sql.NVarChar(500), value: params.baseUrl },
+      { name: "inboundApiKeyHash", type: sql.NVarChar(128), value: params.inboundApiKeyHash },
+      { name: "secretCiphertext", type: sql.NVarChar(sql.MAX), value: params.secretCiphertext },
+      { name: "capabilitiesJson", type: sql.NVarChar(sql.MAX), value: params.capabilitiesJson ?? null },
+      { name: "status", type: sql.NVarChar(32), value: params.status ?? "ACTIVE" },
+    ],
+  );
+  const result = await query<IntegrationRow>(
+    `SELECT IntegrationID, BusinessID, Type, Status, ExternalReference, ConfigJson,
+            BaseUrl, InboundApiKeyHash, SecretCiphertext, CapabilitiesJson,
+            LastHealthAtUtc, LastHealthStatus, CreatedAtUtc, UpdatedAtUtc
+     FROM TblIntegration
+     WHERE BusinessID = @businessId AND IntegrationID = @integrationId`,
+    [
+      { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+      { name: "integrationId", type: sql.UniqueIdentifier, value: params.integrationId },
+    ],
+  );
+  const row = result.recordset[0];
+  return row ? mapIntegration(row) : null;
+}
+
+export async function updateIntegrationHealth(params: {
+  businessId: string;
+  integrationId: string;
+  status: "HEALTHY" | "ERROR";
+  capabilitiesJson?: string | null;
+}): Promise<void> {
+  await query(
+    `UPDATE TblIntegration
+     SET LastHealthAtUtc = SYSUTCDATETIME(),
+         LastHealthStatus = @lastHealthStatus,
+         CapabilitiesJson = COALESCE(@capabilitiesJson, CapabilitiesJson),
+         Status = CASE WHEN @lastHealthStatus = N'HEALTHY' THEN N'ACTIVE' ELSE Status END,
+         UpdatedAtUtc = SYSUTCDATETIME()
+     WHERE BusinessID = @businessId AND IntegrationID = @integrationId`,
+    [
+      { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+      { name: "integrationId", type: sql.UniqueIdentifier, value: params.integrationId },
+      { name: "lastHealthStatus", type: sql.NVarChar(32), value: params.status },
+      { name: "capabilitiesJson", type: sql.NVarChar(sql.MAX), value: params.capabilitiesJson ?? null },
+    ],
+  );
+}
+
+type EventLogRow = {
+  IntegrationEventLogID: string;
+  Status: string;
+  ProviderMessageID: string | null;
+  ErrorCode: string | null;
+};
+
+export async function claimIntegrationEvent(params: {
+  businessId: string;
+  integrationId: string;
+  externalEventId: string;
+  eventType: string;
+  recipient: string;
+  messagePreview: string | null;
+  metadataJson: string | null;
+}): Promise<{
+  eventLogId: string;
+  status: string;
+  providerMessageId: string | null;
+  errorCode: string | null;
+  replay: boolean;
+}> {
+  try {
+    const eventLogId = randomUUID();
+    await query(
+      `INSERT INTO TblIntegrationEventLog (
+        IntegrationEventLogID, BusinessID, IntegrationID, ExternalEventID,
+        EventType, Recipient, MessagePreview, Status, MetadataJson,
+        CreatedAtUtc, UpdatedAtUtc
+      ) VALUES (
+        @eventLogId, @businessId, @integrationId, @externalEventId,
+        @eventType, @recipient, @messagePreview, N'RECEIVED', @metadataJson,
+        SYSUTCDATETIME(), SYSUTCDATETIME()
+      )`,
+      [
+        { name: "eventLogId", type: sql.UniqueIdentifier, value: eventLogId },
+        { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+        { name: "integrationId", type: sql.UniqueIdentifier, value: params.integrationId },
+        { name: "externalEventId", type: sql.NVarChar(200), value: params.externalEventId },
+        { name: "eventType", type: sql.NVarChar(128), value: params.eventType },
+        { name: "recipient", type: sql.NVarChar(64), value: params.recipient },
+        { name: "messagePreview", type: sql.NVarChar(300), value: params.messagePreview },
+        { name: "metadataJson", type: sql.NVarChar(sql.MAX), value: params.metadataJson },
+      ],
+    );
+    return {
+      eventLogId,
+      status: "RECEIVED",
+      providerMessageId: null,
+      errorCode: null,
+      replay: false,
+    };
+  } catch (error) {
+    const existing = await query<EventLogRow>(
+      `SELECT IntegrationEventLogID, Status, ProviderMessageID, ErrorCode
+       FROM TblIntegrationEventLog
+       WHERE IntegrationID = @integrationId AND ExternalEventID = @externalEventId`,
+      [
+        { name: "integrationId", type: sql.UniqueIdentifier, value: params.integrationId },
+        { name: "externalEventId", type: sql.NVarChar(200), value: params.externalEventId },
+      ],
+    );
+    const row = existing.recordset[0];
+    if (!row) throw error;
+    return {
+      eventLogId: normalizeUuid(row.IntegrationEventLogID),
+      status: row.Status,
+      providerMessageId: row.ProviderMessageID,
+      errorCode: row.ErrorCode,
+      replay: true,
+    };
+  }
+}
+
+export async function completeIntegrationEvent(params: {
+  eventLogId: string;
+  status: "SENT" | "FAILED";
+  providerMessageId?: string | null;
+  errorCode?: string | null;
+}): Promise<void> {
+  await query(
+    `UPDATE TblIntegrationEventLog
+     SET Status = @status,
+         ProviderMessageID = @providerMessageId,
+         ErrorCode = @errorCode,
+         UpdatedAtUtc = SYSUTCDATETIME()
+     WHERE IntegrationEventLogID = @eventLogId`,
+    [
+      { name: "eventLogId", type: sql.UniqueIdentifier, value: params.eventLogId },
+      { name: "status", type: sql.NVarChar(32), value: params.status },
+      { name: "providerMessageId", type: sql.NVarChar(256), value: params.providerMessageId ?? null },
+      { name: "errorCode", type: sql.NVarChar(128), value: params.errorCode ?? null },
+    ],
+  );
 }
