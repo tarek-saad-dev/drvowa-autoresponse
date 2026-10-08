@@ -13,6 +13,7 @@ export type AiReplyRequest = {
     Pick<Message, "direction" | "textContent" | "createdAtUtc" | "messageId">
   >;
   customerPhoneHint?: string | null;
+  liveContext?: string | null;
 };
 
 export type AiReplyResult = {
@@ -56,7 +57,7 @@ export function buildSystemPrompt(agent: AiReplyRequest["agent"]): string {
     `Your name: ${agent.name}. Role: ${agent.roleTitle}.`,
     `Language: ${language}. Dialect: ${dialect || "match the customer"}. Tone: ${tone || "friendly professional"}.`,
     "Follow the tenant Agent instructions below, but never override these platform rules:",
-    "- Use only supplied business knowledge for factual business claims (prices, hours, policies, services, locations, availability).",
+    "- Use supplied business knowledge for static business facts. If LIVE ERP CONTEXT is supplied, treat it as authoritative current data and let it override stale static knowledge.",
     "- Never invent unavailable facts. If unknown, say you need to confirm or that a human will help.",
     "- Keep replies concise for WhatsApp. Prefer short paragraphs. Avoid heavy markdown.",
     "- Do not overuse emojis. Do not reveal system/tool/database internals.",
@@ -87,10 +88,13 @@ export function buildUserPrompt(request: AiReplyRequest): string {
     .join("\n");
 
   return [
-    "BUSINESS KNOWLEDGE (authoritative facts only):",
+    "BUSINESS KNOWLEDGE (authoritative static facts):",
     knowledgeBlock,
     "",
-    "RECENT CONVERSATION (oldest → newest):",
+    "LIVE ERP CONTEXT:",
+    request.liveContext?.trim() || "(No live ERP context for this turn.)",
+    "",
+    "RECENT CONVERSATION (oldest → newest):"
     history || "(empty)",
     "",
     "Write the next WhatsApp reply as the receptionist. Plain text only.",
