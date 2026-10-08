@@ -9,11 +9,13 @@ type Context = { params: Promise<{ tool: string }> };
 const schema = z.object({
   input: z.record(z.string(), z.unknown()).default({}),
   requestId: z.string().min(1).max(128).optional(),
+  customerConfirmed: z.boolean().optional(),
+  humanApproved: z.boolean().optional(),
 });
 
 export async function POST(request: Request, context: Context) {
   try {
-    const { businessId } = await requireApiBusiness();
+    const { businessId, user } = await requireApiBusiness();
     const { tool } = await context.params;
     const body = schema.parse(await parseJsonBody(request));
     const result = await invokeDrvoErpTool({
@@ -21,6 +23,8 @@ export async function POST(request: Request, context: Context) {
       tool,
       input: body.input,
       requestId: body.requestId,
+      customerConfirmed: body.customerConfirmed === true,
+      humanApprovedByUserId: body.humanApproved ? user.userId : null,
     });
     return jsonOk(result);
   } catch (error) {
