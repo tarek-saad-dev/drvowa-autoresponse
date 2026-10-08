@@ -7,6 +7,7 @@ import {
   type TransactionClient,
 } from "@/lib/db";
 import { normalizeUuid } from "@/lib/ids/uuid";
+import { deriveAiReplyHealth } from "@/modules/ai/reply-health";
 import type {
   ChannelConnection,
   Contact,
@@ -81,6 +82,14 @@ type ConversationListRow = ConversationRow & {
   LastMessageDirection: string | null;
   AiMode: string | null;
   AiPauseReason: string | null;
+  AutoReplyEnabled: boolean | number | null;
+  AiEnabledAtUtc: Date | null;
+  LastInboundReceivedAtUtc: Date | null;
+  LastInboundContentType: string | null;
+  AnsweredAfterLastInbound: boolean | number | null;
+  LastInboundJobStatus: string | null;
+  LastInboundJobErrorCode: string | null;
+  LastInboundJobNotBeforeUtc: Date | null;
 };
 
 function mapChannel(row: ChannelRow): ChannelConnection {
@@ -1025,12 +1034,46 @@ export async function listConversationsForBusiness(params: {
           ORDER BY ISNULL(m.ProviderTimestampUtc, m.CreatedAtUtc) DESC, m.CreatedAtUtc DESC
         ) AS LastMessageDirection,
         ai.Mode AS AiMode,
-        ai.PauseReason AS AiPauseReason
+        ai.PauseReason AS AiPauseReason,
+        s.AutoReplyEnabled,
+        s.EnabledAtUtc AS AiEnabledAtUtc,
+        li.ReceivedAtUtc AS LastInboundReceivedAtUtc,
+        li.ContentType AS LastInboundContentType,
+        CASE WHEN li.MessageID IS NOT NULL AND EXISTS (
+          SELECT 1
+          FROM TblMessage mo
+          WHERE mo.BusinessID = c.BusinessID
+            AND mo.ConversationID = c.ConversationID
+            AND mo.Direction = N'OUTBOUND'
+            AND mo.CreatedAtUtc >= li.CreatedAtUtc
+        ) THEN 1 ELSE 0 END AS AnsweredAfterLastInbound,
+        lj.Status AS LastInboundJobStatus,
+        lj.LastErrorCode AS LastInboundJobErrorCode,
+        lj.NotBeforeUtc AS LastInboundJobNotBeforeUtc
      FROM TblConversation c
      INNER JOIN TblContact ct
        ON ct.ContactID = c.ContactID AND ct.BusinessID = c.BusinessID
      LEFT JOIN TblConversationAiState ai
        ON ai.BusinessID = c.BusinessID AND ai.ConversationID = c.ConversationID
+     LEFT JOIN TblChannelAiSetting s
+       ON s.BusinessID = c.BusinessID
+      AND s.ChannelConnectionID = c.ChannelConnectionID
+     OUTER APPLY (
+       SELECT TOP 1 m.MessageID, m.ContentType, m.ReceivedAtUtc, m.CreatedAtUtc
+       FROM TblMessage m
+       WHERE m.BusinessID = c.BusinessID
+         AND m.ConversationID = c.ConversationID
+         AND m.Direction = N'INBOUND'
+       ORDER BY m.CreatedAtUtc DESC
+     ) li
+     OUTER APPLY (
+       SELECT TOP 1 j.Status, j.LastErrorCode, j.NotBeforeUtc
+       FROM TblAiReplyJob j
+       WHERE j.BusinessID = c.BusinessID
+         AND j.ConversationID = c.ConversationID
+         AND j.TriggerMessageID = li.MessageID
+       ORDER BY j.CreatedAtUtc DESC
+     ) lj
      WHERE c.BusinessID = @businessId
      ORDER BY ISNULL(c.LastMessageAtUtc, c.CreatedAtUtc) DESC`,
     [
@@ -1043,18 +1086,40 @@ export async function listConversationsForBusiness(params: {
     ],
   );
 
-  return result.recordset.map((row) => ({
-    ...mapConversation(row),
-    contactExternalKey: row.ContactExternalKey,
-    contactDisplayName: row.ContactDisplayName,
-    contactPhoneNormalized: row.ContactPhoneNormalized,
-    lastMessagePreview: row.LastMessagePreview,
-    lastMessageDirection: row.LastMessageDirection
-      ? (row.LastMessageDirection as MessageDirection)
-      : null,
-    aiMode: (row.AiMode as ConversationListItem["aiMode"]) || "AUTO",
-    aiPauseReason: row.AiPauseReason,
-  }));
+  const now = new Date();
+  return result.recordset.map((row) => {
+    const aiMode = (row.AiMode as ConversationListItem["aiMode"]) || "AUTO";
+    return {
+      ...mapConversation(row),
+      contactExternalKey: row.ContactExternalKey,
+      contactDisplayName: row.ContactDisplayName,
+      contactPhoneNormalized: row.ContactPhoneNormalized,
+      lastMessagePreview: row.LastMessagePreview,
+      lastMessageDirection: row.LastMessageDirection
+        ? (row.LastMessageDirection as MessageDirection)
+        : null,
+      aiMode,
+      aiPauseReason: row.AiPauseReason,
+      aiReplyHealth: deriveAiReplyHealth(
+        {
+          aiMode,
+          autoReplyEnabled: Boolean(row.AutoReplyEnabled),
+          enabledAtUtc: row.AiEnabledAtUtc,
+          lastInboundAtUtc: row.LastInboundReceivedAtUtc,
+          lastInboundContentType: row.LastInboundContentType,
+          answeredAfterLastInbound: Boolean(row.AnsweredAfterLastInbound),
+          lastInboundJob: row.LastInboundJobStatus
+            ? {
+                status: row.LastInboundJobStatus,
+                lastErrorCode: row.LastInboundJobErrorCode,
+                notBeforeUtc: row.LastInboundJobNotBeforeUtc,
+              }
+            : null,
+        },
+        now,
+      ),
+    };
+  });
 }
 
 export async function getConversationForBusiness(params: {

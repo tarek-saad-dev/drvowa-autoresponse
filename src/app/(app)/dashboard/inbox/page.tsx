@@ -27,6 +27,7 @@ export default async function InboxPage() {
     status: c.status,
     aiMode: c.aiMode ?? "AUTO",
     aiPauseReason: c.aiPauseReason,
+    aiReplyHealth: c.aiReplyHealth,
   }));
 
   return (

@@ -196,6 +196,27 @@ export type ConversationListItem = Conversation & {
   lastMessageDirection: MessageDirection | null;
   aiMode: ConversationAiMode;
   aiPauseReason: string | null;
+  /** Null when nothing is awaiting an AI reply (or AI isn't responsible). */
+  aiReplyHealth: AiReplyHealth | null;
+};
+
+export type AiReplyHealthReason =
+  | "AI_DISABLED"
+  | "WORKER_STALLED"
+  | "NOT_SCHEDULED"
+  | "UNSUPPORTED_CONTENT"
+  | "AI_GENERATION_FAILED"
+  | "WHATSAPP_SEND_FAILED"
+  | "QUOTA_EXCEEDED"
+  | "AGENT_UNAVAILABLE"
+  | "DESTINATION_UNAVAILABLE"
+  | "LOOP_GUARD"
+  | "UNKNOWN";
+
+export type AiReplyHealth = {
+  state: "REPLYING" | "FAILED" | "DISABLED";
+  reason: AiReplyHealthReason | null;
+  errorCode: string | null;
 };
 
 export type AiReplyJobStatus =

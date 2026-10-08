@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { messageBodyDisplay } from "@/lib/ui/labels";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
+import type { AiReplyHealth, AiReplyHealthReason } from "@/types/domain";
 
 export type ConversationAiMode = "AUTO" | "HUMAN_PAUSED" | "SAFETY_PAUSED";
 type InboxFilter = "ALL" | "AUTO" | "ATTENTION";
@@ -30,6 +31,7 @@ export type ConversationRow = {
   status: string;
   aiMode: ConversationAiMode;
   aiPauseReason: string | null;
+  aiReplyHealth: AiReplyHealth | null;
 };
 
 type MessageRow = {
@@ -77,17 +79,120 @@ function previewText(c: ConversationRow): string {
   return "بدون نص";
 }
 
-function aiStatusLabel(mode: ConversationAiMode): string {
-  if (mode === "HUMAN_PAUSED") return "أنت بترد دلوقتي";
-  if (mode === "SAFETY_PAUSED") return "محتاج مراجعة";
-  return "الموظف بيرد تلقائيًا";
+const AI_FAILURE_TEXT: Record<AiReplyHealthReason, string> = {
+  AI_DISABLED: "الرد التلقائي مقفول لرقم الواتساب ده. شغّله من صفحة الموظف أو رد بنفسك.",
+  WORKER_STALLED: "خدمة الرد التلقائي مش بتشتغل دلوقتي، والرسالة مستنية من غير رد.",
+  NOT_SCHEDULED: "الموظف الذكي مش هيرد على آخر رسالة من العميل.",
+  UNSUPPORTED_CONTENT: "العميل بعت مرفق، والموظف الذكي بيرد على الرسائل النصية بس.",
+  AI_GENERATION_FAILED: "خدمة الذكاء الاصطناعي فشلت في تجهيز الرد.",
+  WHATSAPP_SEND_FAILED: "الرد اتجهز لكن إرساله على واتساب فشل. اتأكد إن الرقم متصل.",
+  QUOTA_EXCEEDED: "وصلت لحد الردود في باقتك، فالموظف الذكي وقف الرد.",
+  AGENT_UNAVAILABLE: "الموظف الذكي متوقف أو مش متاح.",
+  DESTINATION_UNAVAILABLE: "رقم العميل مش متاح للرد.",
+  LOOP_GUARD: "الرد التلقائي اتوقف مؤقتًا لحماية المحادثة من التكرار.",
+  UNKNOWN: "الموظف الذكي مقدرش يرد على آخر رسالة.",
+};
+
+type AiStatusTone = "success" | "warning" | "destructive";
+
+type AiStatusView = {
+  short: string;
+  label: string;
+  tone: AiStatusTone;
+  stripTitle: string;
+  stripHint: string;
+  detail: string;
+  failure: string | null;
+  needsAttention: boolean;
+};
+
+function aiStatusView(c: ConversationRow): AiStatusView {
+  if (c.aiMode === "HUMAN_PAUSED") {
+    return {
+      short: "معاك دلوقتي",
+      label: "أنت بترد دلوقتي",
+      tone: "warning",
+      stripTitle: "المحادثة معاك دلوقتي",
+      stripHint: "لما تخلص، رجّع المحادثة للموظف.",
+      detail: "المحادثة معاك أو مع حد من الفريق لحد ما ترجع الرد التلقائي.",
+      failure: null,
+      needsAttention: true,
+    };
+  }
+  if (c.aiMode === "SAFETY_PAUSED") {
+    return {
+      short: "محتاج مراجعة",
+      label: "محتاج مراجعة",
+      tone: "destructive",
+      stripTitle: "المحادثة محتاجة مراجعة",
+      stripHint: "راجع آخر الرسائل قبل ما تشغّل الرد التلقائي.",
+      detail: "الرد متوقف مؤقتًا لحد مراجعة المحادثة.",
+      failure: null,
+      needsAttention: true,
+    };
+  }
+
+  const health = c.aiReplyHealth;
+  if (health?.state === "DISABLED") {
+    return {
+      short: "الرد التلقائي مقفول",
+      label: "الرد التلقائي مقفول",
+      tone: "destructive",
+      stripTitle: "الموظف الذكي مش بيرد",
+      stripHint: "الرد التلقائي مقفول، فلازم ترد بنفسك.",
+      detail: AI_FAILURE_TEXT.AI_DISABLED,
+      failure: AI_FAILURE_TEXT.AI_DISABLED,
+      needsAttention: true,
+    };
+  }
+  if (health?.state === "FAILED") {
+    const failure = AI_FAILURE_TEXT[health.reason ?? "UNKNOWN"];
+    return {
+      short: "الرد متعطل",
+      label: "الموظف الذكي ماردش",
+      tone: "destructive",
+      stripTitle: "آخر رسالة من العميل من غير رد",
+      stripHint: "رد بنفسك على العميل دلوقتي.",
+      detail: failure,
+      failure,
+      needsAttention: true,
+    };
+  }
+  if (health?.state === "REPLYING") {
+    return {
+      short: "بيجهّز الرد",
+      label: "الموظف بيجهّز الرد",
+      tone: "success",
+      stripTitle: "الموظف بيجهّز الرد",
+      stripHint: "الرد هيوصل للعميل خلال ثواني.",
+      detail: "موظف الاستقبال الذكي بيجهّز الرد على آخر رسالة.",
+      failure: null,
+      needsAttention: false,
+    };
+  }
+  return {
+    short: "AI شغال",
+    label: "الموظف بيرد تلقائيًا",
+    tone: "success",
+    stripTitle: "الموظف بيتابع المحادثة",
+    stripHint: "سيبه يكمل، أو رد بنفسك في أي وقت.",
+    detail: "موظف الاستقبال الذكي بيتابع المحادثة تلقائيًا.",
+    failure: null,
+    needsAttention: false,
+  };
 }
 
-function aiStatusShort(mode: ConversationAiMode): string {
-  if (mode === "HUMAN_PAUSED") return "معاك دلوقتي";
-  if (mode === "SAFETY_PAUSED") return "محتاج مراجعة";
-  return "AI شغال";
-}
+const TONE_BADGE: Record<AiStatusTone, string> = {
+  success: "bg-success-soft text-success",
+  warning: "bg-warning-soft text-warning",
+  destructive: "bg-destructive/10 text-destructive",
+};
+
+const TONE_DOT: Record<AiStatusTone, string> = {
+  success: "bg-success",
+  warning: "bg-warning",
+  destructive: "bg-destructive",
+};
 
 function contactInitial(c: ConversationRow): string {
   return contactLabel(c).slice(0, 1).toUpperCase();
@@ -105,6 +210,7 @@ function serializeConversations(
     status: string;
     aiMode?: ConversationAiMode | null;
     aiPauseReason?: string | null;
+    aiReplyHealth?: AiReplyHealth | null;
   }>,
 ): ConversationRow[] {
   return rows.map((c) => ({
@@ -120,6 +226,7 @@ function serializeConversations(
     status: c.status,
     aiMode: c.aiMode ?? "AUTO",
     aiPauseReason: c.aiPauseReason ?? null,
+    aiReplyHealth: c.aiReplyHealth ?? null,
   }));
 }
 
@@ -182,6 +289,7 @@ export function InboxPanel({
             status: string;
             aiMode?: ConversationAiMode | null;
             aiPauseReason?: string | null;
+            aiReplyHealth?: AiReplyHealth | null;
           }>;
           error?: string;
           code?: string;
@@ -200,6 +308,7 @@ export function InboxPanel({
                 : null,
               aiMode: c.aiMode ?? "AUTO",
               aiPauseReason: c.aiPauseReason ?? null,
+              aiReplyHealth: c.aiReplyHealth ?? null,
             })),
           ),
         );
@@ -257,7 +366,8 @@ export function InboxPanel({
     if (typeof window === "undefined") return;
     if (!window.matchMedia("(min-width: 768px)").matches) return;
 
-    const first = conversations.find((item) => item.aiMode !== "AUTO") ?? conversations[0];
+    const first = conversations.find((item) => aiStatusView(item).needsAttention)
+      ?? conversations[0];
     setSelectedId(first.conversationId);
     selectedIdRef.current = first.conversationId;
     void loadMessages(first.conversationId, false);
@@ -384,6 +494,7 @@ export function InboxPanel({
                 ...c,
                 aiMode: "HUMAN_PAUSED",
                 aiPauseReason: "HUMAN_TAKEOVER",
+                aiReplyHealth: null,
                 lastMessagePreview: text,
                 lastMessageDirection: "OUTBOUND",
                 lastMessageAtUtc: new Date().toISOString(),
@@ -405,11 +516,13 @@ export function InboxPanel({
   }, [selectedId, draft, sending, loadMessages]);
 
   const selected = conversations.find((c) => c.conversationId === selectedId);
+  const selectedView = selected ? aiStatusView(selected) : null;
   const filtered = conversations.filter((c) => {
+    const attention = aiStatusView(c).needsAttention;
     const matchesMode =
       filter === "ALL"
-      || (filter === "AUTO" && c.aiMode === "AUTO")
-      || (filter === "ATTENTION" && c.aiMode !== "AUTO");
+      || (filter === "AUTO" && !attention)
+      || (filter === "ATTENTION" && attention);
     if (!matchesMode) return false;
 
     const q = query.trim();
@@ -417,16 +530,25 @@ export function InboxPanel({
     const hay = `${contactLabel(c)} ${previewText(c)}`.toLowerCase();
     return hay.includes(q.toLowerCase());
   }).sort((a, b) => {
-    const aAttention = a.aiMode === "AUTO" ? 1 : 0;
-    const bAttention = b.aiMode === "AUTO" ? 1 : 0;
+    const aAttention = aiStatusView(a).needsAttention ? 0 : 1;
+    const bAttention = aiStatusView(b).needsAttention ? 0 : 1;
     return aAttention - bAttention;
   });
 
+  const attentionCount = conversations.filter(
+    (c) => aiStatusView(c).needsAttention,
+  ).length;
   const filterCounts = {
     ALL: conversations.length,
-    AUTO: conversations.filter((c) => c.aiMode === "AUTO").length,
-    ATTENTION: conversations.filter((c) => c.aiMode !== "AUTO").length,
+    AUTO: conversations.length - attentionCount,
+    ATTENTION: attentionCount,
   };
+  const workerStalled = conversations.some(
+    (c) =>
+      c.aiMode === "AUTO"
+      && c.aiReplyHealth?.state === "FAILED"
+      && c.aiReplyHealth.reason === "WORKER_STALLED",
+  );
 
   const listPane = (
     <aside className="flex h-full min-h-[30rem] flex-col border-b border-border bg-card md:border-b-0 md:border-e">
@@ -483,6 +605,11 @@ export function InboxPanel({
             </button>
           ))}
         </div>
+        {workerStalled ? (
+          <Alert variant="error" title="الرد التلقائي متوقف" className="mt-3">
+            في رسائل عملاء مستنية رد ومش بتتعالج. رد بنفسك على المحادثات المعلّمة لحد ما الخدمة ترجع.
+          </Alert>
+        ) : null}
       </div>
 
       {filtered.length === 0 ? (
@@ -549,14 +676,10 @@ export function InboxPanel({
                       </span>
                       <span
                         className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${
-                          conversation.aiMode === "AUTO"
-                            ? "bg-success-soft text-success"
-                            : conversation.aiMode === "HUMAN_PAUSED"
-                              ? "bg-warning-soft text-warning"
-                              : "bg-destructive/10 text-destructive"
+                          TONE_BADGE[aiStatusView(conversation).tone]
                         }`}
                       >
-                        {aiStatusShort(conversation.aiMode)}
+                        {aiStatusView(conversation).short}
                       </span>
                     </div>
                   </div>
@@ -607,14 +730,10 @@ export function InboxPanel({
                     </span>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
-                        selected.aiMode === "AUTO"
-                          ? "bg-success-soft text-success"
-                          : selected.aiMode === "HUMAN_PAUSED"
-                            ? "bg-warning-soft text-warning"
-                            : "bg-destructive/10 text-destructive"
+                        TONE_BADGE[selectedView!.tone]
                       }`}
                     >
-                      {aiStatusLabel(selected.aiMode)}
+                      {selectedView!.label}
                     </span>
                   </div>
                 </div>
@@ -673,6 +792,12 @@ export function InboxPanel({
                 اتأكد إن مفيش رسالة اتبعت مرتين قبل ما ترجع الرد التلقائي.
               </Alert>
             ) : null}
+
+            {selectedView?.failure ? (
+              <Alert variant="error" title="العميل مستني رد">
+                {selectedView.failure} رد بنفسك من الخانة تحت.
+              </Alert>
+            ) : null}
           </div>
         ) : (
           <div className="py-1">
@@ -695,28 +820,14 @@ export function InboxPanel({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <span
-                className={`h-2.5 w-2.5 rounded-full ${
-                  selected.aiMode === "AUTO"
-                    ? "bg-success"
-                    : selected.aiMode === "HUMAN_PAUSED"
-                      ? "bg-warning"
-                      : "bg-destructive"
-                }`}
+                className={`h-2.5 w-2.5 rounded-full ${TONE_DOT[selectedView!.tone]}`}
               />
               <div>
                 <p className="text-xs font-black text-foreground">
-                  {selected.aiMode === "AUTO"
-                    ? "الموظف بيتابع المحادثة"
-                    : selected.aiMode === "HUMAN_PAUSED"
-                      ? "المحادثة معاك دلوقتي"
-                      : "المحادثة محتاجة مراجعة"}
+                  {selectedView!.stripTitle}
                 </p>
                 <p className="mt-0.5 text-[10px] text-muted-foreground">
-                  {selected.aiMode === "AUTO"
-                    ? "سيبه يكمل، أو رد بنفسك في أي وقت."
-                    : selected.aiMode === "HUMAN_PAUSED"
-                      ? "لما تخلص، رجّع المحادثة للموظف."
-                      : "راجع آخر الرسائل قبل ما تشغّل الرد التلقائي."}
+                  {selectedView!.stripHint}
                 </p>
               </div>
             </div>
@@ -838,13 +949,9 @@ export function InboxPanel({
       <div className="space-y-4 p-5">
         <div className="rounded-2xl bg-surface p-4">
           <p className="text-[10px] font-black text-muted-foreground">مين بيرد دلوقتي؟</p>
-          <p className="mt-2 text-sm font-black">{aiStatusLabel(selected.aiMode)}</p>
+          <p className="mt-2 text-sm font-black">{aiStatusView(selected).label}</p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {selected.aiMode === "AUTO"
-              ? "موظف الاستقبال الذكي بيتابع المحادثة تلقائيًا."
-              : selected.aiMode === "HUMAN_PAUSED"
-                ? "المحادثة معاك أو مع حد من الفريق لحد ما ترجع الرد التلقائي."
-                : "الرد متوقف مؤقتًا لحد مراجعة المحادثة."}
+            {aiStatusView(selected).detail}
           </p>
         </div>
 
@@ -939,7 +1046,7 @@ export function InboxPanel({
         <div className="mt-5 grid gap-3">
           <div className="rounded-2xl bg-surface p-4">
             <p className="text-[10px] font-black text-muted-foreground">مين بيرد دلوقتي؟</p>
-            <p className="mt-2 text-sm font-black">{aiStatusLabel(selected.aiMode)}</p>
+            <p className="mt-2 text-sm font-black">{aiStatusView(selected).label}</p>
           </div>
           <div className="rounded-2xl border border-border p-4">
             <p className="text-[10px] font-black text-muted-foreground">آخر نشاط</p>

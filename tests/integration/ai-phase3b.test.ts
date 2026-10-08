@@ -8,7 +8,9 @@ import {
   completeJob,
   countJobs,
   findPendingJobForConversation,
+  getConversationAiState,
   getJob,
+  pauseConversationAi,
   processAiReplyJob,
   upsertWhatsAppAiSetting,
   getWhatsAppAiSetting,
@@ -750,5 +752,114 @@ describe("Phase 3B AI jobs integration", () => {
     expect(result.status).toBe("FAILED");
     expect(result.errorCode).toBe("GEMINI_EMPTY");
     expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("expired human takeover: the inbound that auto-resumes AI gets a reply job", async ({
+    skip,
+  }) => {
+    requireDb(skip);
+    await upsertWhatsAppAiSetting({
+      businessId,
+      agentId,
+      autoReplyEnabled: true,
+      debounceMs: 200,
+    });
+    const contactKey = "201555910010@s.whatsapp.net";
+    const first = await ingestWhatsAppInbound(
+      dto({
+        content: "أول رسالة",
+        providerMessageId: `takeover-a-${randomUUID()}`,
+        externalContactKey: contactKey,
+      }),
+    );
+    expect(first.outcome).toBe("accepted");
+    if (first.outcome !== "accepted") return;
+
+    await query(
+      `UPDATE TblAiReplyJob SET Status = N'SKIPPED', CompletedAtUtc = SYSUTCDATETIME()
+       WHERE BusinessID = @businessId AND ConversationID = @conversationId AND Status = N'PENDING'`,
+      [
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        { name: "conversationId", type: sql.UniqueIdentifier, value: first.conversationId },
+      ],
+    );
+    await pauseConversationAi({
+      businessId,
+      conversationId: first.conversationId,
+      mode: "HUMAN_PAUSED",
+      pauseReason: "HUMAN_TAKEOVER",
+      pausedAtUtc: new Date(Date.now() - 3 * 60 * 60 * 1000),
+    });
+
+    const trigger = await ingestWhatsAppInbound(
+      dto({
+        content: "السلام عليكم",
+        providerMessageId: `takeover-b-${randomUUID()}`,
+        externalContactKey: contactKey,
+      }),
+    );
+    expect(trigger.outcome).toBe("accepted");
+    if (trigger.outcome !== "accepted") return;
+
+    const state = await getConversationAiState({
+      businessId,
+      conversationId: first.conversationId,
+    });
+    expect(state?.mode).toBe("AUTO");
+
+    const pending = await findPendingJobForConversation({
+      businessId,
+      conversationId: first.conversationId,
+    });
+    expect(pending).toBeTruthy();
+    expect(pending!.triggerMessageId).toBe(trigger.messageId);
+
+    const list = await messagingRepo.listConversationsForBusiness({ businessId, limit: 100 });
+    const row = list.find((c) => c.conversationId === first.conversationId);
+    expect(row?.aiMode).toBe("AUTO");
+    expect(row?.aiReplyHealth?.state).toBe("REPLYING");
+  });
+
+  it("inbox list reports a failed AI reply instead of a healthy AUTO status", async ({
+    skip,
+  }) => {
+    requireDb(skip);
+    const accepted = await ingestWhatsAppInbound(
+      dto({
+        content: "health check",
+        providerMessageId: `health-${randomUUID()}`,
+        externalContactKey: "201555920011@s.whatsapp.net",
+      }),
+    );
+    if (accepted.outcome !== "accepted") return;
+    await query(
+      `UPDATE TblAiReplyJob SET NotBeforeUtc = DATEADD(second, -1, SYSUTCDATETIME())
+       WHERE BusinessID = @businessId AND ConversationID = @conversationId AND Status = N'PENDING'`,
+      [
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+        { name: "conversationId", type: sql.UniqueIdentifier, value: accepted.conversationId },
+      ],
+    );
+    const job = await claimNextJob({ businessId });
+    expect(job?.conversationId).toBe(accepted.conversationId);
+    await processAiReplyJob({
+      job: job!,
+      sendMessage: vi.fn(),
+      provider: {
+        async generateReply() {
+          return { text: "", model: "mock", latencyMs: 1 };
+        },
+      },
+      logger: { info() {}, warn() {} },
+    });
+
+    const list = await messagingRepo.listConversationsForBusiness({ businessId, limit: 100 });
+    const row = list.find((c) => c.conversationId === accepted.conversationId);
+    expect(row?.aiMode).toBe("AUTO");
+    expect(row?.aiReplyHealth).toMatchObject({
+      state: "FAILED",
+      reason: "AI_GENERATION_FAILED",
+      errorCode: "GEMINI_EMPTY",
+    });
   });
 });
