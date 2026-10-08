@@ -150,6 +150,8 @@ export async function invokeDrvoErpTool(params: {
   tool: string;
   input: Record<string, unknown>;
   requestId?: string;
+  customerConfirmed?: boolean;
+  humanApprovedByUserId?: string | null;
 }): Promise<IntegrationToolCallResult> {
   const integration = await repo.getIntegrationByType({
     businessId: params.businessId,
@@ -167,7 +169,18 @@ export async function invokeDrvoErpTool(params: {
   if (!tool) {
     throw new NotFoundError("ERP tool is not available");
   }
-  if (tool.mode === "WRITE" && tool.approval === "HUMAN_APPROVAL") {
+  if (
+    tool.mode === "WRITE"
+    && tool.approval === "CUSTOMER_CONFIRM"
+    && params.customerConfirmed !== true
+  ) {
+    throw new ForbiddenError("This ERP action requires explicit customer confirmation");
+  }
+  if (
+    tool.mode === "WRITE"
+    && tool.approval === "HUMAN_APPROVAL"
+    && !params.humanApprovedByUserId
+  ) {
     throw new ForbiddenError("This ERP action requires human approval");
   }
 
