@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 
 import { query, sql, type TransactionClient } from "@/lib/db";
 import { normalizeUuid } from "@/lib/ids/uuid";
-import type { ChannelAiSetting } from "@/types/domain";
+import type {
+  ChannelAiSetting,
+  HumanTakeoverResumePolicy,
+} from "@/types/domain";
 
 type SettingRow = {
   ChannelAiSettingID: string;
@@ -12,6 +15,7 @@ type SettingRow = {
   AutoReplyEnabled: boolean | number;
   EnabledAtUtc: Date | null;
   DebounceMs: number;
+  HumanTakeoverResumePolicy: string;
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
@@ -25,6 +29,8 @@ function mapSetting(row: SettingRow): ChannelAiSetting {
     autoReplyEnabled: Boolean(row.AutoReplyEnabled),
     enabledAtUtc: row.EnabledAtUtc,
     debounceMs: row.DebounceMs,
+    humanTakeoverResumePolicy:
+      row.HumanTakeoverResumePolicy as HumanTakeoverResumePolicy,
     createdAtUtc: row.CreatedAtUtc,
     updatedAtUtc: row.UpdatedAtUtc,
   };
@@ -40,7 +46,8 @@ export async function getChannelAiSettingByConnection(params: {
 }, trx?: TransactionClient): Promise<ChannelAiSetting | null> {
   const result = await db(trx).query<SettingRow>(
     `SELECT ChannelAiSettingID, BusinessID, ChannelConnectionID, AgentID,
-            AutoReplyEnabled, EnabledAtUtc, DebounceMs, CreatedAtUtc, UpdatedAtUtc
+            AutoReplyEnabled, EnabledAtUtc, DebounceMs, HumanTakeoverResumePolicy,
+            CreatedAtUtc, UpdatedAtUtc
      FROM TblChannelAiSetting
      WHERE BusinessID = @businessId AND ChannelConnectionID = @channelConnectionId`,
     [
@@ -82,6 +89,7 @@ export async function upsertChannelAiSetting(params: {
   agentId: string;
   autoReplyEnabled: boolean;
   debounceMs?: number;
+  humanTakeoverResumePolicy?: HumanTakeoverResumePolicy;
 }): Promise<ChannelAiSetting> {
   const existing = await getChannelAiSettingByConnection({
     businessId: params.businessId,
@@ -92,6 +100,10 @@ export async function upsertChannelAiSetting(params: {
     Math.max(params.debounceMs ?? existing?.debounceMs ?? 900, 0),
     10_000,
   );
+  const humanTakeoverResumePolicy =
+    params.humanTakeoverResumePolicy
+    ?? existing?.humanTakeoverResumePolicy
+    ?? "AFTER_120_MIN";
 
   // Enabling: set watermark NOW. Disabling: clear EnabledAtUtc.
   // Already enabled staying enabled: keep prior EnabledAtUtc.
@@ -111,6 +123,7 @@ export async function upsertChannelAiSetting(params: {
            AutoReplyEnabled = @autoReplyEnabled,
            EnabledAtUtc = @enabledAtUtc,
            DebounceMs = @debounceMs,
+           HumanTakeoverResumePolicy = @humanTakeoverResumePolicy,
            UpdatedAtUtc = SYSUTCDATETIME()
        WHERE BusinessID = @businessId AND ChannelAiSettingID = @settingId`,
       [
@@ -122,6 +135,11 @@ export async function upsertChannelAiSetting(params: {
         },
         { name: "enabledAtUtc", type: sql.DateTime2, value: enabledAtUtc },
         { name: "debounceMs", type: sql.Int, value: debounceMs },
+        {
+          name: "humanTakeoverResumePolicy",
+          type: sql.NVarChar(32),
+          value: humanTakeoverResumePolicy,
+        },
         {
           name: "businessId",
           type: sql.UniqueIdentifier,
@@ -145,7 +163,8 @@ export async function upsertChannelAiSetting(params: {
   await query(
     `INSERT INTO TblChannelAiSetting (
        ChannelAiSettingID, BusinessID, ChannelConnectionID, AgentID,
-       AutoReplyEnabled, EnabledAtUtc, DebounceMs, CreatedAtUtc, UpdatedAtUtc
+       AutoReplyEnabled, EnabledAtUtc, DebounceMs, HumanTakeoverResumePolicy,
+            CreatedAtUtc, UpdatedAtUtc
      ) VALUES (
        @settingId, @businessId, @channelConnectionId, @agentId,
        @autoReplyEnabled, @enabledAtUtc, @debounceMs, SYSUTCDATETIME(), SYSUTCDATETIME()
@@ -170,6 +189,11 @@ export async function upsertChannelAiSetting(params: {
       },
       { name: "enabledAtUtc", type: sql.DateTime2, value: enabledAtUtc },
       { name: "debounceMs", type: sql.Int, value: debounceMs },
+      {
+        name: "humanTakeoverResumePolicy",
+        type: sql.NVarChar(32),
+        value: humanTakeoverResumePolicy,
+      },
     ],
   );
 
