@@ -140,7 +140,7 @@ export function AiAutoReplyPanel({
             <p className="text-xs font-black text-primary">تشغيل الموظف</p>
             <CardTitle className="mt-1 text-xl">الرد التلقائي على واتساب</CardTitle>
             <CardDescription className="mt-2 max-w-xl leading-6">
-              لما يكون شغال، الموظف يرد على الرسائل الجديدة. ولو حد من فريقك رد يدويًا، يسيب المحادثة ليكم تلقائيًا.
+              لما يكون شغال، الموظف يرد على الرسائل الجديدة. ولو حد من فريقك رد يدويًا، يسيب المحادثة ليكم مؤقتًا ويرجع يرد تلقائيًا بعد ساعتين لو وصلت رسالة جديدة.
             </CardDescription>
           </div>
           <div
