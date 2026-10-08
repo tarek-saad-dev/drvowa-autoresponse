@@ -7,6 +7,7 @@ import {
   listActiveAgentsForAi,
   upsertWhatsAppAiSetting,
 } from "@/modules/ai";
+import { HUMAN_TAKEOVER_RESUME_POLICIES } from "@/modules/ai/safety-policy";
 
 export async function GET() {
   try {
@@ -24,6 +25,7 @@ export async function GET() {
             autoReplyEnabled: setting.autoReplyEnabled,
             enabledAtUtc: setting.enabledAtUtc,
             debounceMs: setting.debounceMs,
+            humanTakeoverResumePolicy: setting.humanTakeoverResumePolicy,
           }
         : null,
       agents: agents.map((a) => ({
@@ -42,6 +44,7 @@ const patchSchema = z.object({
   agentId: z.string().uuid(),
   autoReplyEnabled: z.boolean(),
   debounceMs: z.number().int().min(0).max(10_000).optional(),
+  humanTakeoverResumePolicy: z.enum(HUMAN_TAKEOVER_RESUME_POLICIES).optional(),
 });
 
 export async function PATCH(request: Request) {
@@ -54,6 +57,7 @@ export async function PATCH(request: Request) {
       agentId: parsed.agentId,
       autoReplyEnabled: parsed.autoReplyEnabled,
       debounceMs: parsed.debounceMs,
+      humanTakeoverResumePolicy: parsed.humanTakeoverResumePolicy,
     });
     return jsonOk({
       setting: {
@@ -63,6 +67,7 @@ export async function PATCH(request: Request) {
         autoReplyEnabled: setting.autoReplyEnabled,
         enabledAtUtc: setting.enabledAtUtc,
         debounceMs: setting.debounceMs,
+        humanTakeoverResumePolicy: setting.humanTakeoverResumePolicy,
       },
       warning: setting.autoReplyEnabled
         ? "سيتم الرد تلقائيًا على الرسائل الجديدة فقط."
