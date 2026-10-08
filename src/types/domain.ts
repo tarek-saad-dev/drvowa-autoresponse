@@ -206,6 +206,14 @@ export type AiReplyJobStatus =
   | "FAILED"
   | "COALESCED";
 
+export type HumanTakeoverResumePolicy =
+  | "AFTER_30_MIN"
+  | "AFTER_60_MIN"
+  | "AFTER_120_MIN"
+  | "AFTER_240_MIN"
+  | "END_OF_DAY"
+  | "MANUAL";
+
 export type ChannelAiSetting = {
   channelAiSettingId: string;
   businessId: string;
@@ -214,6 +222,7 @@ export type ChannelAiSetting = {
   autoReplyEnabled: boolean;
   enabledAtUtc: Date | null;
   debounceMs: number;
+  humanTakeoverResumePolicy: HumanTakeoverResumePolicy;
   createdAtUtc: Date;
   updatedAtUtc: Date;
 };
