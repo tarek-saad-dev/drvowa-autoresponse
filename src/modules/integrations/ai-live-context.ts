@@ -124,10 +124,7 @@ export async function resolveLiveErpContext(params: {
       },
     });
 
-    const raw =
-      typeof response.text === "function"
-        ? response.text()
-        : response.text ?? "";
+    const raw = response.text ?? "";
     const planned = plannerSchema.parse(JSON.parse(raw || "{}"));
     if (planned.action !== "CALL" || !planned.tool) {
       return { text: "", tool: null, status: "NONE" };
