@@ -10,7 +10,22 @@ export async function GET(request: Request) {
       businessId: queryBusinessId,
     });
     const integrations = await listIntegrations({ businessId });
-    return jsonOk({ integrations });
+    return jsonOk({
+      integrations: integrations.map((integration) => ({
+        integrationId: integration.integrationId,
+        businessId: integration.businessId,
+        type: integration.type,
+        status: integration.status,
+        externalReference: integration.externalReference,
+        configJson: integration.configJson,
+        baseUrl: integration.baseUrl ?? null,
+        capabilitiesJson: integration.capabilitiesJson ?? null,
+        lastHealthAtUtc: integration.lastHealthAtUtc ?? null,
+        lastHealthStatus: integration.lastHealthStatus ?? null,
+        createdAtUtc: integration.createdAtUtc,
+        updatedAtUtc: integration.updatedAtUtc,
+      })),
+    });
   } catch (error) {
     return handleApiError(error);
   }

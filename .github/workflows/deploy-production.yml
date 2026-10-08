@@ -47,6 +47,15 @@ jobs:
             echo "==> Pulling main"
             git pull --ff-only origin main
 
+            echo "==> Ensuring integration encryption secret"
+            ENV_FILE=".env.production.local"
+            touch "$ENV_FILE"
+            if ! grep -q '^INTEGRATION_SECRET_KEY=' "$ENV_FILE"; then
+              SECRET_VALUE="$(openssl rand -hex 32)"
+              printf '\nINTEGRATION_SECRET_KEY=%s\n' "$SECRET_VALUE" >> "$ENV_FILE"
+            fi
+            chmod 600 "$ENV_FILE"
+
             echo "==> Installing locked dependencies"
             npm ci
 
@@ -61,6 +70,9 @@ jobs:
 
             echo "==> Restarting app service"
             systemctl restart drvowa.service
+
+            echo "==> Restarting AI worker for integration-aware replies"
+            systemctl restart drvowa-ai-worker.service
 
             echo "==> Waiting for app"
             for attempt in {1..15}; do

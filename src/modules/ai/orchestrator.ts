@@ -50,6 +50,7 @@ import {
 } from "./provider";
 import { selectRelevantKnowledge } from "./knowledge-retrieval";
 import { getChannelAiSettingByConnection } from "./settings-repository";
+import { resolveLiveErpContext } from "@/modules/integrations/ai-live-context";
 
 export type AiJobLeaseContext = {
   token: string;
@@ -419,6 +420,12 @@ export async function processAiReplyJob(params: {
       topicTitle: item.topicTitle,
     }));
 
+    const liveErpContext = await resolveLiveErpContext({
+      businessId,
+      recentMessages,
+      customerPhoneHint: contact.phoneNormalized,
+    });
+
     const provider = params.provider ?? createGeminiProvider();
 
     logAi("generation_start", {
@@ -430,6 +437,8 @@ export async function processAiReplyJob(params: {
       topicCount: new Set(
         relevantKnowledge.map((item) => item.topicKey).filter(Boolean),
       ).size,
+      liveErpStatus: liveErpContext.status,
+      liveErpTool: liveErpContext.tool,
     }, logger);
 
     try {
@@ -452,6 +461,7 @@ export async function processAiReplyJob(params: {
           messageId: m.messageId,
         })),
         customerPhoneHint: contact.phoneNormalized,
+        liveContext: liveErpContext.text,
       });
       replyText = generated.text;
       modelName = generated.model;
