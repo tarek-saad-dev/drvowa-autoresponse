@@ -94,7 +94,7 @@ export function buildUserPrompt(request: AiReplyRequest): string {
     "LIVE ERP CONTEXT:",
     request.liveContext?.trim() || "(No live ERP context for this turn.)",
     "",
-    "RECENT CONVERSATION (oldest → newest):"
+    "RECENT CONVERSATION (oldest → newest):",
     history || "(empty)",
     "",
     "Write the next WhatsApp reply as the receptionist. Plain text only.",
