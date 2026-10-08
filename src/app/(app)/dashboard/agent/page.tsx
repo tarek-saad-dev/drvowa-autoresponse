@@ -49,6 +49,8 @@ export default async function AgentPage() {
                 autoReplyEnabled: setting.autoReplyEnabled,
                 enabledAtUtc: setting.enabledAtUtc,
                 debounceMs: setting.debounceMs,
+                humanTakeoverResumePolicy:
+                  setting.humanTakeoverResumePolicy,
               }
             : null
         }
