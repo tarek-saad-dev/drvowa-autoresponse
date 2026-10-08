@@ -407,3 +407,88 @@ export async function completeIntegrationEvent(params: {
     ],
   );
 }
+
+
+type PairingRow = {
+  IntegrationPairingID: string;
+  BusinessID: string;
+  ExpiresAtUtc: Date;
+  UsedAtUtc: Date | null;
+};
+
+export async function createIntegrationPairing(params: {
+  businessId: string;
+  pairingCodeHash: string;
+  expiresAtUtc: Date;
+  createdByUserId?: string | null;
+}): Promise<{ pairingId: string; expiresAtUtc: Date }> {
+  const pairingId = randomUUID();
+  await query(
+    `INSERT INTO TblIntegrationPairing (
+      IntegrationPairingID, BusinessID, PairingCodeHash, ExpiresAtUtc,
+      CreatedByUserID, CreatedAtUtc
+    ) VALUES (
+      @pairingId, @businessId, @pairingCodeHash, @expiresAtUtc,
+      @createdByUserId, SYSUTCDATETIME()
+    )`,
+    [
+      { name: "pairingId", type: sql.UniqueIdentifier, value: pairingId },
+      { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+      { name: "pairingCodeHash", type: sql.NVarChar(128), value: params.pairingCodeHash },
+      { name: "expiresAtUtc", type: sql.DateTime2, value: params.expiresAtUtc },
+      {
+        name: "createdByUserId",
+        type: sql.UniqueIdentifier,
+        value: params.createdByUserId ?? null,
+      },
+    ],
+  );
+  return { pairingId, expiresAtUtc: params.expiresAtUtc };
+}
+
+export async function consumeIntegrationPairing(params: {
+  pairingCodeHash: string;
+}): Promise<{
+  pairingId: string;
+  businessId: string;
+  expiresAtUtc: Date;
+} | null> {
+  const result = await query<PairingRow>(
+    `UPDATE TblIntegrationPairing
+     SET UsedAtUtc = SYSUTCDATETIME()
+     OUTPUT INSERTED.IntegrationPairingID, INSERTED.BusinessID,
+            INSERTED.ExpiresAtUtc, INSERTED.UsedAtUtc
+     WHERE PairingCodeHash = @pairingCodeHash
+       AND UsedAtUtc IS NULL
+       AND ExpiresAtUtc > SYSUTCDATETIME()`,
+    [
+      {
+        name: "pairingCodeHash",
+        type: sql.NVarChar(128),
+        value: params.pairingCodeHash,
+      },
+    ],
+  );
+  const row = result.recordset[0];
+  if (!row) return null;
+  return {
+    pairingId: normalizeUuid(row.IntegrationPairingID),
+    businessId: normalizeUuid(row.BusinessID),
+    expiresAtUtc: row.ExpiresAtUtc,
+  };
+}
+
+export async function revokeOpenIntegrationPairings(params: {
+  businessId: string;
+}): Promise<void> {
+  await query(
+    `UPDATE TblIntegrationPairing
+     SET UsedAtUtc = SYSUTCDATETIME()
+     WHERE BusinessID = @businessId
+       AND UsedAtUtc IS NULL
+       AND ExpiresAtUtc > SYSUTCDATETIME()`,
+    [
+      { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+    ],
+  );
+}
