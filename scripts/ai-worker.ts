@@ -54,6 +54,13 @@ function getPollMs(): number {
 }
 
 async function main(): Promise<void> {
+  // Deploy gate: reaching here proves the full worker module graph loads
+  // under plain Node/tsx (Next-only modules like "server-only" break it).
+  if (process.argv.includes("--check")) {
+    console.log("[ai-worker] check_ok");
+    return;
+  }
+
   loadDotEnvIfPresent();
   await getPool();
 

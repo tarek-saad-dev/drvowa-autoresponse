@@ -50,7 +50,10 @@ import {
 } from "./provider";
 import { selectRelevantKnowledge } from "./knowledge-retrieval";
 import { getChannelAiSettingByConnection } from "./settings-repository";
-import { resolveLiveErpContext } from "@/modules/integrations/ai-live-context";
+import {
+  resolveLiveErpContext,
+  type LiveErpContextResult,
+} from "@/modules/integrations/ai-live-context";
 
 export type AiJobLeaseContext = {
   token: string;
@@ -420,11 +423,18 @@ export async function processAiReplyJob(params: {
       topicTitle: item.topicTitle,
     }));
 
-    const liveErpContext = await resolveLiveErpContext({
+    // ERP enrichment is optional: its failure must never block the reply.
+    const liveErpContext: LiveErpContextResult = await resolveLiveErpContext({
       businessId,
       recentMessages,
       customerPhoneHint: contact.phoneNormalized,
-    });
+    }).catch(() => ({
+      text:
+        "LIVE ERP STATUS: Live ERP lookup was unavailable. "
+        + "Do not guess current operational data; offer human confirmation.",
+      tool: null,
+      status: "UNAVAILABLE" as const,
+    }));
 
     const provider = params.provider ?? createGeminiProvider();
 

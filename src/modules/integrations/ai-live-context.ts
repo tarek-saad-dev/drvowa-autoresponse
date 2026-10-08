@@ -1,5 +1,3 @@
-import "server-only";
-
 import { randomUUID } from "node:crypto";
 import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";

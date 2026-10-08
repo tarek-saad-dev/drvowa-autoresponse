@@ -65,6 +65,9 @@ jobs:
             echo "==> Production build"
             npm run build
 
+            echo "==> AI worker boot check"
+            npm run ai:worker:check
+
             echo "==> Applying database migrations"
             npm run db:migrate
 
@@ -73,6 +76,17 @@ jobs:
 
             echo "==> Restarting AI worker for integration-aware replies"
             systemctl restart drvowa-ai-worker.service
+            sleep 2
+            WORKER_RESTARTS_BEFORE="$(systemctl show drvowa-ai-worker.service -p NRestarts --value)"
+            sleep 10
+            WORKER_RESTARTS_AFTER="$(systemctl show drvowa-ai-worker.service -p NRestarts --value)"
+            if ! systemctl is-active --quiet drvowa-ai-worker.service \
+              || [ "$WORKER_RESTARTS_AFTER" != "$WORKER_RESTARTS_BEFORE" ]; then
+              echo "DRVOWA AI worker failed to stay up after restart"
+              journalctl -u drvowa-ai-worker.service -n 60 --no-pager || true
+              exit 1
+            fi
+            echo "AI worker is running"
 
             echo "==> Waiting for app"
             for attempt in {1..15}; do
