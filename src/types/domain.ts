@@ -167,6 +167,7 @@ export type Conversation = {
   lastMessageAtUtc: Date | null;
   lastInboundAtUtc: Date | null;
   lastOutboundAtUtc: Date | null;
+  lastReadAtUtc?: Date | null;
   createdAtUtc: Date;
   updatedAtUtc: Date;
 };
@@ -200,6 +201,7 @@ export type ConversationListItem = Conversation & {
   lastMessageDirection: MessageDirection | null;
   aiMode: ConversationAiMode;
   aiPauseReason: string | null;
+  unread: boolean;
   /** Null when nothing is awaiting an AI reply (or AI isn't responsible). */
   aiReplyHealth: AiReplyHealth | null;
 };
