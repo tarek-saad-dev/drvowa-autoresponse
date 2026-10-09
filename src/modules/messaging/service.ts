@@ -111,6 +111,7 @@ export async function ingestWhatsAppInbound(
         contactId: contact.contactId,
         direction: "INBOUND",
         provider: "baileys",
+        origin: "CUSTOMER",
         providerMessageId: dto.providerMessageId,
         contentType: normalized.contentType,
         textContent: normalized.textContent,
