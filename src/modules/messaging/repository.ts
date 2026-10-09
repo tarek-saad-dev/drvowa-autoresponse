@@ -1204,6 +1204,7 @@ export async function listMessagesForConversation(params: {
            SELECT TOP (@limit)
               MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
               Direction, Provider, ProviderMessageID, ContentType, TextContent,
+              Origin, ActorUserID, ActorName,
               ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
            FROM TblMessage
            WHERE BusinessID = @businessId
@@ -1232,6 +1233,7 @@ export async function listMessagesForConversation(params: {
            SELECT TOP (@limit)
               MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
               Direction, Provider, ProviderMessageID, ContentType, TextContent,
+              Origin, ActorUserID, ActorName,
               ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
            FROM TblMessage
            WHERE BusinessID = @businessId
