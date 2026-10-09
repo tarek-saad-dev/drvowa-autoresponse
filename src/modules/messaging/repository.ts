@@ -16,6 +16,7 @@ import type {
   Message,
   MessageContentType,
   MessageDirection,
+  MessageOrigin,
 } from "@/types/domain";
 
 type ChannelRow = {
@@ -69,6 +70,9 @@ type MessageRow = {
   ProviderMessageID: string;
   ContentType: string;
   TextContent: string | null;
+  Origin?: string | null;
+  ActorUserID?: string | null;
+  ActorName?: string | null;
   ProviderTimestampUtc: Date | null;
   ReceivedAtUtc: Date;
   CreatedAtUtc: Date;
@@ -154,6 +158,9 @@ function mapMessage(row: MessageRow): Message {
     providerMessageId: row.ProviderMessageID,
     contentType: row.ContentType as MessageContentType,
     textContent: row.TextContent,
+    origin: (row.Origin as MessageOrigin | null) ?? (row.Direction === "INBOUND" ? "CUSTOMER" : "UNKNOWN"),
+    actorUserId: row.ActorUserID ? normalizeUuid(row.ActorUserID) : null,
+    actorName: row.ActorName ?? null,
     providerTimestampUtc: row.ProviderTimestampUtc,
     receivedAtUtc: row.ReceivedAtUtc,
     createdAtUtc: row.CreatedAtUtc,
@@ -198,6 +205,7 @@ export async function findMessageByProviderId(
   const result = await db(trx).query<MessageRow>(
     `SELECT MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
             Direction, Provider, ProviderMessageID, ContentType, TextContent,
+            Origin, ActorUserID, ActorName,
             ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
      FROM TblMessage
      WHERE ChannelConnectionID = @channelConnectionId
@@ -678,6 +686,9 @@ export type InsertMessageParams = {
   providerMessageId: string;
   contentType: MessageContentType;
   textContent: string | null;
+  origin?: MessageOrigin;
+  actorUserId?: string | null;
+  actorName?: string | null;
   providerTimestampUtc: Date | null;
   receivedAtUtc: Date;
 };
@@ -703,10 +714,12 @@ export async function insertMessageIdempotent(
       `INSERT INTO TblMessage (
          MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
          Direction, Provider, ProviderMessageID, ContentType, TextContent,
+         Origin, ActorUserID, ActorName,
          ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
        ) VALUES (
          @messageId, @businessId, @conversationId, @channelConnectionId, @contactId,
          @direction, @provider, @providerMessageId, @contentType, @textContent,
+         @origin, @actorUserId, @actorName,
          @providerTimestampUtc, @receivedAtUtc, SYSUTCDATETIME()
        )`,
       [
@@ -761,6 +774,21 @@ export async function insertMessageIdempotent(
           value: params.textContent,
         },
         {
+          name: "origin",
+          type: sql.NVarChar(16),
+          value: params.origin ?? (params.direction === "INBOUND" ? "CUSTOMER" : "UNKNOWN"),
+        },
+        {
+          name: "actorUserId",
+          type: sql.UniqueIdentifier,
+          value: params.actorUserId ?? null,
+        },
+        {
+          name: "actorName",
+          type: sql.NVarChar(200),
+          value: params.actorName ?? null,
+        },
+        {
           name: "providerTimestampUtc",
           type: sql.DateTime2,
           value: params.providerTimestampUtc,
@@ -797,6 +825,9 @@ export async function insertMessageIdempotent(
       providerMessageId: params.providerMessageId,
       contentType: params.contentType,
       textContent: params.textContent,
+      origin: params.origin ?? (params.direction === "INBOUND" ? "CUSTOMER" : "UNKNOWN"),
+      actorUserId: params.actorUserId ?? null,
+      actorName: params.actorName ?? null,
       providerTimestampUtc: params.providerTimestampUtc,
       receivedAtUtc: params.receivedAtUtc,
       createdAtUtc: new Date(),
@@ -907,6 +938,7 @@ export async function getMessageForBusiness(params: {
   const result = await query<MessageRow>(
     `SELECT MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
             Direction, Provider, ProviderMessageID, ContentType, TextContent,
+            Origin, ActorUserID, ActorName,
             ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
      FROM TblMessage
      WHERE BusinessID = @businessId AND MessageID = @messageId`,
@@ -938,6 +970,7 @@ export async function listRecentTextMessages(params: {
        SELECT TOP (@limit)
           MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
           Direction, Provider, ProviderMessageID, ContentType, TextContent,
+          Origin, ActorUserID, ActorName,
           ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
        FROM TblMessage
        WHERE BusinessID = @businessId
