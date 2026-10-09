@@ -182,9 +182,9 @@ export type Message = {
   providerMessageId: string;
   contentType: MessageContentType;
   textContent: string | null;
-  origin: MessageOrigin;
-  actorUserId: string | null;
-  actorName: string | null;
+  origin?: MessageOrigin;
+  actorUserId?: string | null;
+  actorName?: string | null;
   providerTimestampUtc: Date | null;
   receivedAtUtc: Date;
   createdAtUtc: Date;
