@@ -11,6 +11,8 @@ type Context = { params: Promise<{ conversationId: string }> };
 const schema = z.object({
   text: z.string().min(1).max(4000),
   idempotencyKey: z.string().uuid().optional(),
+  actorName: z.string().min(1).max(200).optional(),
+  actorExternalId: z.string().max(100).optional(),
 });
 
 export async function POST(request: Request, context: Context) {
@@ -26,6 +28,8 @@ export async function POST(request: Request, context: Context) {
       conversationId,
       text: body.text,
       idempotencyKey: body.idempotencyKey ?? randomUUID(),
+      actorName: body.actorName?.trim() || "موظف ERP",
+      actorUserId: null,
     });
 
     if (result.status === "FAILED") {
