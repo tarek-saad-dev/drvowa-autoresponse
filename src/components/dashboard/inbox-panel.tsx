@@ -39,9 +39,18 @@ type MessageRow = {
   direction: "INBOUND" | "OUTBOUND";
   contentType: string;
   textContent: string | null;
+  origin: "CUSTOMER" | "AI" | "HUMAN" | "SYSTEM" | "UNKNOWN";
+  actorUserId: string | null;
+  actorName: string | null;
   providerTimestampUtc: string | null;
   receivedAtUtc: string;
   createdAtUtc: string;
+};
+
+type MessageCursor = {
+  beforeAt: string;
+  beforeCreatedAt: string;
+  beforeMessageId: string;
 };
 
 function contactLabel(c: ConversationRow): string {
@@ -232,6 +241,38 @@ function serializeConversations(
 
 const LIST_POLL_MS = 10_000;
 const THREAD_POLL_MS = 6_000;
+const MESSAGE_PAGE_SIZE = 100;
+
+function messageActorLabel(message: MessageRow): string | null {
+  if (message.origin === "CUSTOMER") return null;
+  if (message.origin === "AI") return "🤖 AI";
+  if (message.origin === "HUMAN") {
+    return `👤 ${message.actorName?.trim() || "موظف"}`;
+  }
+  if (message.origin === "SYSTEM") return "⚙ النظام";
+  if (message.direction === "OUTBOUND") return "رسالة صادرة قديمة";
+  return null;
+}
+
+function messageDayKey(message: MessageRow): string {
+  const raw = message.providerTimestampUtc || message.receivedAtUtc || message.createdAtUtc;
+  return new Date(raw).toISOString().slice(0, 10);
+}
+
+function messageDayLabel(message: MessageRow): string {
+  const raw = message.providerTimestampUtc || message.receivedAtUtc || message.createdAtUtc;
+  const date = new Date(raw);
+  const today = new Date();
+  if (date.toDateString() === today.toDateString()) return "اليوم";
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return "أمس";
+  return new Intl.DateTimeFormat("ar-EG", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).format(date);
+}
 
 export function InboxPanel({
   initialConversations,
@@ -243,6 +284,9 @@ export function InboxPanel({
   const [mobileShowThread, setMobileShowThread] = useState(false);
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [olderCursor, setOlderCursor] = useState<MessageCursor | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, startRefresh] = useTransition();
   const [resuming, setResuming] = useState(false);
@@ -273,7 +317,7 @@ export function InboxPanel({
     startRefresh(async () => {
       if (!silent) setError(null);
       try {
-        const res = await fetch("/api/inbox/conversations?limit=50", {
+        const res = await fetch("/api/inbox/conversations?limit=200", {
           credentials: "same-origin",
           cache: "no-store",
         });
@@ -330,7 +374,7 @@ export function InboxPanel({
       if (!silent) setLoadingMessages(true);
       try {
         const res = await fetch(
-          `/api/inbox/conversations/${encodeURIComponent(conversationId)}/messages?limit=100`,
+          `/api/inbox/conversations/${encodeURIComponent(conversationId)}/messages?limit=${MESSAGE_PAGE_SIZE}`,
           { credentials: "same-origin", cache: "no-store" },
         );
         const data = (await res.json()) as {
@@ -342,7 +386,31 @@ export function InboxPanel({
           throw new Error(mapUserFacingError(data, "تعذر تحميل الرسائل"));
         }
         if (selectedIdRef.current === conversationId) {
-          setMessages(data.messages ?? []);
+          const next = data.messages ?? [];
+          if (silent) {
+            setMessages((prev) => {
+              const byId = new Map(prev.map((message) => [message.messageId, message]));
+              for (const message of next) byId.set(message.messageId, message);
+              return [...byId.values()].sort((a, b) => {
+                const at = new Date(a.providerTimestampUtc || a.receivedAtUtc || a.createdAtUtc).getTime();
+                const bt = new Date(b.providerTimestampUtc || b.receivedAtUtc || b.createdAtUtc).getTime();
+                return at - bt;
+              });
+            });
+          } else {
+            setMessages(next);
+            setHasMoreMessages(next.length === MESSAGE_PAGE_SIZE);
+            const first = next[0];
+            setOlderCursor(
+              first
+                ? {
+                    beforeAt: first.providerTimestampUtc || first.createdAtUtc,
+                    beforeCreatedAt: first.createdAtUtc,
+                    beforeMessageId: first.messageId,
+                  }
+                : null,
+            );
+          }
         }
       } catch (err) {
         if (!silent) {
@@ -360,6 +428,50 @@ export function InboxPanel({
     },
     [],
   );
+
+  const loadOlderMessages = useCallback(async () => {
+    if (!selectedId || !olderCursor || !hasMoreMessages || loadingOlder) return;
+    setLoadingOlder(true);
+    try {
+      const params = new URLSearchParams({
+        limit: String(MESSAGE_PAGE_SIZE),
+        beforeAt: olderCursor.beforeAt,
+        beforeCreatedAt: olderCursor.beforeCreatedAt,
+        beforeMessageId: olderCursor.beforeMessageId,
+      });
+      const res = await fetch(
+        `/api/inbox/conversations/${encodeURIComponent(selectedId)}/messages?${params.toString()}`,
+        { credentials: "same-origin", cache: "no-store" },
+      );
+      const data = (await res.json()) as { messages?: MessageRow[]; error?: string };
+      if (!res.ok) throw new Error(mapUserFacingError(data, "تعذر تحميل الرسائل الأقدم"));
+      const older = data.messages ?? [];
+      setMessages((prev) => {
+        const known = new Set(prev.map((message) => message.messageId));
+        return [...older.filter((message) => !known.has(message.messageId)), ...prev];
+      });
+      setHasMoreMessages(older.length === MESSAGE_PAGE_SIZE);
+      const first = older[0];
+      setOlderCursor(
+        first
+          ? {
+              beforeAt: first.providerTimestampUtc || first.createdAtUtc,
+              beforeCreatedAt: first.createdAtUtc,
+              beforeMessageId: first.messageId,
+            }
+          : null,
+      );
+    } catch (err) {
+      setError(
+        mapUserFacingError(
+          { error: err instanceof Error ? err.message : null },
+          "تعذر تحميل الرسائل الأقدم",
+        ),
+      );
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [selectedId, olderCursor, hasMoreMessages, loadingOlder]);
 
   useEffect(() => {
     if (selectedId || conversations.length === 0) return;
@@ -379,6 +491,8 @@ export function InboxPanel({
       setMobileShowThread(true);
       setShowDetails(false);
       setMessages([]);
+      setHasMoreMessages(false);
+      setOlderCursor(null);
       setError(null);
       void loadMessages(conversationId, false);
     },
@@ -661,9 +775,16 @@ export function InboxPanel({
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-black">
-                        {contactLabel(conversation)}
-                      </span>
+                      <div className="min-w-0">
+                        <span className="block truncate text-sm font-black">
+                          {contactLabel(conversation)}
+                        </span>
+                        {conversation.contactDisplayName && conversation.contactPhoneNormalized ? (
+                          <span className="block truncate text-[10px] text-muted-foreground" dir="ltr">
+                            {conversation.contactPhoneNormalized}
+                          </span>
+                        ) : null}
+                      </div>
                       <span className="shrink-0 text-[10px] text-muted-foreground">
                         {formatTime(conversation.lastMessageAtUtc)}
                       </span>
@@ -851,33 +972,83 @@ export function InboxPanel({
             مفيش رسائل في المحادثة دي لسه.
           </div>
         ) : (
-          messages.map((message) => {
-            const outgoing = message.direction === "OUTBOUND";
-            return (
-              <div
-                key={message.messageId}
-                className={`max-w-[88%] rounded-[18px] px-4 py-2.5 text-sm leading-6 shadow-sm sm:max-w-[75%] ${
-                  outgoing
-                    ? "ms-auto rounded-br-md bg-primary text-primary-foreground"
-                    : "me-auto rounded-bl-md border border-border bg-card text-foreground"
-                }`}
-              >
-                <p className="whitespace-pre-wrap break-words">
-                  {messageBodyDisplay({
-                    textContent: message.textContent,
-                    contentType: message.contentType,
-                  })}
-                </p>
-                <p
-                  className={`mt-1 text-[9px] ${
-                    outgoing ? "text-primary-foreground/65" : "text-muted-foreground"
-                  }`}
+          <>
+            {hasMoreMessages ? (
+              <div className="flex justify-center py-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={loadingOlder}
+                  onClick={() => void loadOlderMessages()}
+                  className="rounded-full px-4 text-[10px]"
                 >
-                  {formatTime(message.providerTimestampUtc || message.receivedAtUtc)}
-                </p>
+                  {loadingOlder ? "بنحمّل الرسائل الأقدم…" : "تحميل رسائل أقدم"}
+                </Button>
               </div>
-            );
-          })
+            ) : (
+              <div className="py-1 text-center text-[10px] text-muted-foreground">
+                بداية المحادثة
+              </div>
+            )}
+            {messages.map((message, index) => {
+              const outgoing = message.direction === "OUTBOUND";
+              const actor = messageActorLabel(message);
+              const showDay =
+                index === 0
+                || messageDayKey(messages[index - 1]!) !== messageDayKey(message);
+              const aiLike = message.origin === "AI" || message.origin === "UNKNOWN";
+              return (
+                <div key={message.messageId}>
+                  {showDay ? (
+                    <div className="my-3 flex justify-center">
+                      <span className="rounded-full border border-border bg-card/90 px-3 py-1 text-[10px] font-bold text-muted-foreground shadow-sm">
+                        {messageDayLabel(message)}
+                      </span>
+                    </div>
+                  ) : null}
+                  <div
+                    className={`max-w-[88%] rounded-[18px] px-4 py-2.5 text-sm leading-6 shadow-sm sm:max-w-[75%] ${
+                      outgoing
+                        ? aiLike
+                          ? "ms-auto rounded-br-md border border-cyan-500/10 bg-cyan-500/10 text-foreground"
+                          : "ms-auto rounded-br-md bg-primary text-primary-foreground"
+                        : "me-auto rounded-bl-md border border-border bg-card text-foreground"
+                    }`}
+                  >
+                    {actor ? (
+                      <div className="mb-1">
+                        <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${
+                          message.origin === "AI"
+                            ? "bg-cyan-500/15 text-cyan-700"
+                            : message.origin === "HUMAN"
+                              ? "bg-success-soft text-success"
+                              : "bg-secondary text-muted-foreground"
+                        }`}>
+                          {actor}
+                        </span>
+                      </div>
+                    ) : null}
+                    <p className="whitespace-pre-wrap break-words">
+                      {messageBodyDisplay({
+                        textContent: message.textContent,
+                        contentType: message.contentType,
+                      })}
+                    </p>
+                    <p
+                      className={`mt-1 text-[9px] ${
+                        outgoing && !aiLike
+                          ? "text-primary-foreground/65"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {formatTime(message.providerTimestampUtc || message.receivedAtUtc)}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </>
         )}
         <div ref={threadEndRef} />
       </div>
