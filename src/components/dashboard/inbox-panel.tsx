@@ -317,7 +317,7 @@ export function InboxPanel({
     startRefresh(async () => {
       if (!silent) setError(null);
       try {
-        const res = await fetch("/api/inbox/conversations?limit=200", {
+        const res = await fetch("/api/inbox/conversations?limit=500", {
           credentials: "same-origin",
           cache: "no-store",
         });
