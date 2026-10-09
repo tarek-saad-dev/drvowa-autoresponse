@@ -1045,7 +1045,7 @@ export async function listConversationsForBusiness(params: {
   businessId: string;
   limit?: number;
 }): Promise<ConversationListItem[]> {
-  const limit = Math.min(Math.max(params.limit ?? 50, 1), 100);
+  const limit = Math.min(Math.max(params.limit ?? 50, 1), 500);
   const result = await query<ConversationListRow>(
     `SELECT TOP (@limit)
         c.ConversationID, c.BusinessID, c.ChannelConnectionID, c.ContactID, c.Status,
