@@ -9,6 +9,23 @@ function iso(value: Date | null | undefined): string | null {
   return value ? value.toISOString() : null;
 }
 
+function parseBeforeCursor(url: URL): {
+  at: Date;
+  createdAtUtc: Date;
+  messageId: string;
+} | null {
+  const beforeAt = url.searchParams.get("beforeAt");
+  const beforeCreatedAt = url.searchParams.get("beforeCreatedAt");
+  const beforeMessageId = url.searchParams.get("beforeMessageId");
+  if (!beforeAt || !beforeCreatedAt || !beforeMessageId) return null;
+  const at = new Date(beforeAt);
+  const createdAtUtc = new Date(beforeCreatedAt);
+  if (Number.isNaN(at.getTime()) || Number.isNaN(createdAtUtc.getTime())) {
+    return null;
+  }
+  return { at, createdAtUtc, messageId: beforeMessageId };
+}
+
 export async function GET(request: Request, context: Context) {
   try {
     const integration = await authenticateExternalIntegration(
@@ -17,7 +34,8 @@ export async function GET(request: Request, context: Context) {
     const { conversationId } = await context.params;
     const url = new URL(request.url);
     const limitRaw = Number(url.searchParams.get("limit") ?? "150");
-    const limit = Math.max(1, Math.min(300, Number.isFinite(limitRaw) ? limitRaw : 150));
+    const limit = Math.max(1, Math.min(200, Number.isFinite(limitRaw) ? limitRaw : 100));
+    const before = parseBeforeCursor(url);
 
     const [all, messages, state] = await Promise.all([
       listInboxConversations({ businessId: integration.businessId, limit: 200 }),
@@ -25,6 +43,7 @@ export async function GET(request: Request, context: Context) {
         businessId: integration.businessId,
         conversationId,
         limit,
+        before,
       }),
       getInboxConversationAiState({
         businessId: integration.businessId,
@@ -51,10 +70,9 @@ export async function GET(request: Request, context: Context) {
         messages: messages.map((message) => ({
           messageId: message.messageId,
           direction: message.direction === "OUTBOUND" ? "outbound" : "inbound",
-          origin:
-            message.direction === "OUTBOUND"
-              ? "DRVOWA"
-              : "CUSTOMER",
+          origin: message.origin,
+          actorName: message.actorName,
+          actorUserId: message.actorUserId,
           text: message.textContent,
           occurredAt:
             iso(message.providerTimestampUtc)
@@ -62,7 +80,20 @@ export async function GET(request: Request, context: Context) {
             ?? iso(message.createdAtUtc)
             ?? new Date(0).toISOString(),
           deliveryStatus: null,
+          createdAtUtc: iso(message.createdAtUtc),
         })),
+        pageInfo: {
+          hasMore: messages.length === limit,
+          nextCursor: messages.length > 0
+            ? {
+                beforeAt:
+                  iso(messages[0]!.providerTimestampUtc)
+                  ?? iso(messages[0]!.createdAtUtc),
+                beforeCreatedAt: iso(messages[0]!.createdAtUtc),
+                beforeMessageId: messages[0]!.messageId,
+              }
+            : null,
+        },
       },
     });
   } catch (error) {

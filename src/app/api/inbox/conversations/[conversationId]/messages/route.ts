@@ -38,7 +38,7 @@ const postBodySchema = z.object({
 
 export async function GET(request: Request, context: RouteContext) {
   try {
-    const { businessId } = await requireApiBusiness();
+    const { businessId, user } = await requireApiBusiness();
     const { conversationId } = await context.params;
     const url = new URL(request.url);
     const limitRaw = Number(url.searchParams.get("limit") ?? "100");
@@ -69,6 +69,8 @@ export async function POST(request: Request, context: RouteContext) {
       conversationId,
       text: body.text,
       idempotencyKey: body.idempotencyKey,
+      actorUserId: user.userId,
+      actorName: user.fullName,
     });
 
     if (result.status === "FAILED") {

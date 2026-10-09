@@ -145,6 +145,7 @@ export type ChannelConnection = {
 export type ConversationStatus = "OPEN" | "CLOSED";
 export type MessageDirection = "INBOUND" | "OUTBOUND";
 export type MessageContentType = "TEXT" | "UNKNOWN";
+export type MessageOrigin = "CUSTOMER" | "AI" | "HUMAN" | "SYSTEM" | "UNKNOWN";
 
 export type Contact = {
   contactId: string;
@@ -181,6 +182,9 @@ export type Message = {
   providerMessageId: string;
   contentType: MessageContentType;
   textContent: string | null;
+  origin?: MessageOrigin;
+  actorUserId?: string | null;
+  actorName?: string | null;
   providerTimestampUtc: Date | null;
   receivedAtUtc: Date;
   createdAtUtc: Date;
