@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     );
     const url = new URL(request.url);
     const limitRaw = Number(url.searchParams.get("limit") ?? "100");
-    const limit = Math.max(1, Math.min(200, Number.isFinite(limitRaw) ? limitRaw : 100));
+    const limit = Math.max(1, Math.min(500, Number.isFinite(limitRaw) ? limitRaw : 100));
 
     const conversations = await listInboxConversations({
       businessId: integration.businessId,
