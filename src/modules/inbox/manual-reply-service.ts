@@ -49,6 +49,8 @@ export async function sendManualInboxReply(params: {
   text: string;
   /** Client-generated UUID — stable across retries of the same send. */
   idempotencyKey: string;
+  actorUserId?: string | null;
+  actorName?: string | null;
 }): Promise<ManualReplyResult> {
   const text = params.text.trim();
   if (!text) {
@@ -202,6 +204,9 @@ export async function sendManualInboxReply(params: {
         contactId: conversation.contactId,
         direction: "OUTBOUND",
         provider: "baileys",
+        origin: "HUMAN",
+        actorUserId: params.actorUserId ?? null,
+        actorName: params.actorName?.trim() || "موظف",
         providerMessageId,
         contentType: "TEXT",
         textContent: text,
@@ -226,6 +231,8 @@ export async function sendManualInboxReply(params: {
       metadata: {
         source: "manual_inbox",
         conversationId: params.conversationId,
+        actorUserId: params.actorUserId ?? null,
+        actorName: params.actorName?.trim() || null,
         providerMessageId,
       },
       trx,
