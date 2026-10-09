@@ -28,6 +28,7 @@ export async function GET(request: Request) {
       lastMessageAt: serializeDate(item.lastMessageAtUtc) ?? new Date(0).toISOString(),
       lastMessageDirection: item.lastMessageDirection,
       needsReply: item.lastMessageDirection === "INBOUND",
+      unread: item.unread,
       lastInboundAt: serializeDate(item.lastInboundAtUtc),
       lastOutboundAt: serializeDate(item.lastOutboundAtUtc),
       aiMode: item.aiMode,
