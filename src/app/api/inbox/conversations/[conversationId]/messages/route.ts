@@ -38,7 +38,7 @@ const postBodySchema = z.object({
 
 export async function GET(request: Request, context: RouteContext) {
   try {
-    const { businessId, user } = await requireApiBusiness();
+    const { businessId } = await requireApiBusiness();
     const { conversationId } = await context.params;
     const url = new URL(request.url);
     const limitRaw = Number(url.searchParams.get("limit") ?? "100");
@@ -58,7 +58,7 @@ export async function GET(request: Request, context: RouteContext) {
 
 export async function POST(request: Request, context: RouteContext) {
   try {
-    const { businessId } = await requireApiBusiness();
+    const { businessId, user } = await requireApiBusiness();
     const { conversationId } = await context.params;
     assertRateLimit(`manual-send:${businessId}`, RATE_LIMITS.manualSend);
     const raw = await parseJsonBody(request);
