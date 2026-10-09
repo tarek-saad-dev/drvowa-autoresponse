@@ -13,7 +13,7 @@ export default async function InboxPage() {
   );
   if (!businessId) redirect("/onboarding");
 
-  const conversations = await listInboxConversations({ businessId, limit: 200 });
+  const conversations = await listInboxConversations({ businessId, limit: 500 });
   const initialConversations = conversations.map((c) => ({
     conversationId: c.conversationId,
     contactExternalKey: c.contactExternalKey,
