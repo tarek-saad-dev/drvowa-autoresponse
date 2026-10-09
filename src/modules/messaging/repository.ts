@@ -55,6 +55,7 @@ type ConversationRow = {
   LastMessageAtUtc: Date | null;
   LastInboundAtUtc: Date | null;
   LastOutboundAtUtc: Date | null;
+  LastReadAtUtc?: Date | null;
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
@@ -141,6 +142,7 @@ function mapConversation(row: ConversationRow): Conversation {
     lastMessageAtUtc: row.LastMessageAtUtc,
     lastInboundAtUtc: row.LastInboundAtUtc,
     lastOutboundAtUtc: row.LastOutboundAtUtc,
+    lastReadAtUtc: row.LastReadAtUtc ?? null,
     createdAtUtc: row.CreatedAtUtc,
     updatedAtUtc: row.UpdatedAtUtc,
   };
@@ -537,7 +539,7 @@ export async function upsertOpenConversation(
 ): Promise<Conversation> {
   const existing = await trx.query<ConversationRow>(
     `SELECT ConversationID, BusinessID, ChannelConnectionID, ContactID, Status,
-            LastMessageAtUtc, LastInboundAtUtc, LastOutboundAtUtc,
+            LastMessageAtUtc, LastInboundAtUtc, LastOutboundAtUtc, LastReadAtUtc,
             CreatedAtUtc, UpdatedAtUtc
      FROM TblConversation
      WHERE BusinessID = @businessId
@@ -1049,7 +1051,7 @@ export async function listConversationsForBusiness(params: {
   const result = await query<ConversationListRow>(
     `SELECT TOP (@limit)
         c.ConversationID, c.BusinessID, c.ChannelConnectionID, c.ContactID, c.Status,
-        c.LastMessageAtUtc, c.LastInboundAtUtc, c.LastOutboundAtUtc,
+        c.LastMessageAtUtc, c.LastInboundAtUtc, c.LastOutboundAtUtc, c.LastReadAtUtc,
         c.CreatedAtUtc, c.UpdatedAtUtc,
         ct.ExternalContactKey AS ContactExternalKey,
         ct.DisplayName AS ContactDisplayName,
@@ -1133,6 +1135,10 @@ export async function listConversationsForBusiness(params: {
         : null,
       aiMode,
       aiPauseReason: row.AiPauseReason,
+      unread: Boolean(
+        row.LastInboundAtUtc
+        && (!row.LastReadAtUtc || row.LastInboundAtUtc > row.LastReadAtUtc)
+      ),
       aiReplyHealth: deriveAiReplyHealth(
         {
           aiMode,
@@ -1312,4 +1318,24 @@ export async function countMessagesForBusiness(params: {
     ],
   );
   return Number(result.recordset[0]?.Cnt ?? 0);
+}
+
+
+export async function markConversationRead(params: {
+  businessId: string;
+  conversationId: string;
+  at?: Date;
+}): Promise<void> {
+  await query(
+    `UPDATE dbo.TblConversation
+     SET LastReadAtUtc = @at,
+         UpdatedAtUtc = SYSUTCDATETIME()
+     WHERE BusinessID = @businessId
+       AND ConversationID = @conversationId`,
+    [
+      { name: "at", type: sql.DateTime2, value: params.at ?? new Date() },
+      { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+      { name: "conversationId", type: sql.UniqueIdentifier, value: params.conversationId },
+    ],
+  );
 }
