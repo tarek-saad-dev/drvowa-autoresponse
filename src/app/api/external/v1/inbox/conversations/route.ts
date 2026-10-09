@@ -26,6 +26,8 @@ export async function GET(request: Request) {
       displayName: item.contactDisplayName,
       lastMessagePreview: item.lastMessagePreview,
       lastMessageAt: serializeDate(item.lastMessageAtUtc) ?? new Date(0).toISOString(),
+      lastMessageDirection: item.lastMessageDirection,
+      needsReply: item.lastMessageDirection === "INBOUND",
       lastInboundAt: serializeDate(item.lastInboundAtUtc),
       lastOutboundAt: serializeDate(item.lastOutboundAtUtc),
       aiMode: item.aiMode,
