@@ -793,6 +793,8 @@ export async function processAiReplyJob(params: {
           contactId: job.contactId,
           direction: "OUTBOUND",
           provider: "baileys",
+          origin: "AI",
+          actorName: "AI",
           providerMessageId,
           contentType: "TEXT",
           textContent: replyText,
