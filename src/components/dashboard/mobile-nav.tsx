@@ -42,7 +42,7 @@ export function MobileNav({
                 className={cn(
                   "grid h-7 w-7 place-items-center text-base font-black transition",
                   item.href === "/dashboard/inbox"
-                    && "h-10 w-10 rounded-2xl bg-primary text-lg text-primary-foreground shadow-[0_8px_22px_rgba(15,118,110,.25)]",
+                    && "h-10 w-10 rounded-2xl bg-primary text-lg text-primary-foreground shadow-[0_8px_22px_rgba(0,117,154,.28)]",
                   item.href === "/dashboard/inbox" && active && "ring-4 ring-primary/10",
                 )}
               >
