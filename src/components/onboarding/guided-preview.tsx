@@ -958,7 +958,7 @@ export function GuidedOnboardingPreview({
   }
 
   return (
-    <main dir="rtl" className="relative min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_80%_0%,rgba(0,117,154,.14),transparent_35%),radial-gradient(circle_at_10%_90%,rgba(7,19,25,.05),transparent_35%),linear-gradient(180deg,#f8fbfc_0%,#f4f8fa_100%)] px-4 pb-28 pt-5 text-foreground sm:px-6 sm:pb-10">
+    <main dir="rtl" className="relative min-h-screen overflow-x-hidden bg-background/40 px-4 pb-28 pt-5 text-foreground sm:px-6 sm:pb-10">
       <div className="mx-auto flex w-full max-w-5xl flex-col">
         <header className="mb-7 flex items-center justify-between gap-4">
           <div>
