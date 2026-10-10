@@ -428,7 +428,7 @@ export function KnowledgeCopilot() {
               {proposalTree.map((group) => (
                 <section key={group.key} className="relative">
                   <div className="relative z-10 flex items-center gap-3">
-                    <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-2 border-slate-800 bg-slate-900 text-lg font-black text-white shadow-sm">
+                    <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-2 border-ink bg-ink text-lg font-black text-white shadow-sm">
                       ◉
                     </div>
                     <div className="min-w-0 rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 shadow-sm">
@@ -475,7 +475,7 @@ export function KnowledgeCopilot() {
                           <span className="absolute -right-8 top-10 h-[3px] w-8 bg-slate-200" />
                           <span className={`absolute -right-[2.18rem] top-[2.18rem] h-4 w-4 rounded-full border-2 border-white ring-4 ${dotTone}`} />
 
-                          <div className={`rounded-2xl border-2 px-4 py-4 shadow-[0_5px_16px_rgba(15,23,42,.04)] ${nodeTone}`}>
+                          <div className={`rounded-2xl border-2 px-4 py-4 shadow-[0_5px_16px_rgba(7,19,25,.04)] ${nodeTone}`}>
                             <div className="flex flex-wrap items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2 text-[10px] font-black text-slate-500">
@@ -581,7 +581,7 @@ export function KnowledgeCopilot() {
             </div>
           </div>
 
-          <div className="sticky bottom-20 z-10 rounded-[22px] border border-border bg-card/95 p-3 shadow-[0_16px_50px_rgba(15,28,36,.14)] backdrop-blur md:bottom-4">
+          <div className="sticky bottom-20 z-10 rounded-[22px] border border-border bg-card/95 p-3 shadow-[0_16px_50px_rgba(7,19,25,.14)] backdrop-blur md:bottom-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-black">

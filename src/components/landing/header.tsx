@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { Button } from "@/components/ui/button";
 import { APP_NAME } from "@/constants/app";
 
@@ -7,8 +8,8 @@ export function LandingHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <Link href="/" className="text-base font-semibold tracking-tight text-foreground">
-          {APP_NAME}
+        <Link href="/" aria-label={APP_NAME} className="shrink-0">
+          <BrandLogo priority className="h-8 sm:h-9" />
         </Link>
         <nav className="flex items-center gap-2">
           <Link

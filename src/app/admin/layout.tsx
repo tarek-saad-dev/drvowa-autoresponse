@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { AdminLogoutButton } from "@/components/admin/admin-logout-button";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { AuthError, ForbiddenError } from "@/lib/tenancy/errors";
 import { listBusinessesForUser } from "@/modules/businesses/service";
 import { requirePlatformAdmin } from "@/modules/platform-admin/service";
@@ -29,38 +30,39 @@ export default async function AdminLayout({
   const hasWorkspace = businesses.length > 0;
 
   return (
-    <div className="min-h-full bg-slate-950 text-slate-50">
-      <header className="border-b border-slate-800 bg-slate-900">
+    <div className="dark min-h-full bg-background text-foreground">
+      <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <div>
-            <p className="text-xs font-medium tracking-wide text-amber-400">
-              DRVOWA PLATFORM
+            <BrandLogo surface="dark" priority className="h-8" />
+            <p className="mt-2 text-xs font-medium tracking-wide text-primary">
+              PLATFORM ADMIN
             </p>
             <h1 className="text-lg font-semibold">لوحة إدارة المنصة</h1>
           </div>
           <nav className="flex flex-wrap items-center gap-2 text-sm">
             <Link
               href="/admin"
-              className="rounded-md px-3 py-1.5 hover:bg-slate-800"
+              className="rounded-md px-3 py-1.5 hover:bg-surface"
             >
               نظرة عامة
             </Link>
             <Link
               href="/admin/payments"
-              className="rounded-md px-3 py-1.5 hover:bg-slate-800"
+              className="rounded-md px-3 py-1.5 hover:bg-surface"
             >
               طلبات الدفع
             </Link>
             <Link
               href="/admin/whatsapp"
-              className="rounded-md px-3 py-1.5 hover:bg-slate-800"
+              className="rounded-md px-3 py-1.5 hover:bg-surface"
             >
               واتساب
             </Link>
             {hasWorkspace ? (
               <Link
                 href="/dashboard"
-                className="rounded-md px-3 py-1.5 text-slate-400 hover:bg-slate-800"
+                className="rounded-md px-3 py-1.5 text-muted-foreground hover:bg-surface"
               >
                 مساحة العمل
               </Link>

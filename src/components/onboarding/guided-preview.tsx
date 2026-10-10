@@ -958,7 +958,7 @@ export function GuidedOnboardingPreview({
   }
 
   return (
-    <main dir="rtl" className="relative min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_80%_0%,rgba(15,118,110,.15),transparent_35%),radial-gradient(circle_at_10%_90%,rgba(180,83,9,.10),transparent_35%),linear-gradient(180deg,#f8fbfc_0%,#eef4f6_100%)] px-4 pb-28 pt-5 text-foreground sm:px-6 sm:pb-10">
+    <main dir="rtl" className="relative min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_80%_0%,rgba(0,117,154,.14),transparent_35%),radial-gradient(circle_at_10%_90%,rgba(7,19,25,.05),transparent_35%),linear-gradient(180deg,#f8fbfc_0%,#f4f8fa_100%)] px-4 pb-28 pt-5 text-foreground sm:px-6 sm:pb-10">
       <div className="mx-auto flex w-full max-w-5xl flex-col">
         <header className="mb-7 flex items-center justify-between gap-4">
           <div>
@@ -999,7 +999,7 @@ export function GuidedOnboardingPreview({
                       className={cx(
                         "grid h-9 w-9 place-items-center rounded-xl border-2 text-xs font-black shadow-sm transition-all duration-300 sm:h-10 sm:w-10 sm:rounded-2xl sm:text-sm",
                         done && "border-primary bg-primary text-white",
-                        active && "scale-110 border-primary bg-white text-primary shadow-[0_10px_30px_rgba(15,118,110,.22)]",
+                        active && "scale-110 border-primary bg-white text-primary shadow-[0_10px_30px_rgba(0,117,154,.22)]",
                         !done && !active && "border-white bg-white/90 text-muted-foreground",
                       )}
                     >
@@ -1018,11 +1018,11 @@ export function GuidedOnboardingPreview({
         </section>
 
         <section className="mx-auto w-full max-w-[840px]">
-          <div className="overflow-hidden rounded-[30px] border border-white/80 bg-white/88 shadow-[0_24px_80px_rgba(15,28,36,.10)] backdrop-blur-xl">
+          <div className="overflow-hidden rounded-[30px] border border-white/80 bg-white/88 shadow-[0_24px_80px_rgba(7,19,25,.10)] backdrop-blur-xl">
             <div key={step} className="min-h-[540px] animate-[fadeIn_.28s_ease-out] p-6 sm:p-9 md:p-12">
               {step === "WELCOME" ? (
                 <div className="flex min-h-[450px] flex-col items-center justify-center text-center">
-                  <div className="mb-7 grid h-24 w-24 place-items-center rounded-[30px] bg-primary text-4xl text-primary-foreground shadow-[0_18px_50px_rgba(15,118,110,.28)]">✦</div>
+                  <div className="mb-7 grid h-24 w-24 place-items-center rounded-[30px] bg-primary text-4xl text-primary-foreground shadow-[0_18px_50px_rgba(0,117,154,.28)]">✦</div>
                   <span className="mb-3 rounded-full bg-success-soft px-3 py-1 text-xs font-bold text-success">هنمشي معاك خطوة بخطوة</span>
                   <h1 className="max-w-2xl text-3xl font-black leading-[1.25] tracking-[-0.035em] sm:text-4xl">خلينا نجهز موظف الاستقبال بتاعك</h1>
                   <p className="mt-4 max-w-xl text-base leading-8 text-muted-foreground sm:text-lg">في كام خطوة بسيطة، هنعلمه بيزنسك، نجرب ردوده، ونوصله بواتساب لحد أول رد حقيقي.</p>
@@ -1064,7 +1064,7 @@ export function GuidedOnboardingPreview({
                               className={cx(
                                 "rounded-2xl border-2 p-5 text-start text-sm font-black transition-all duration-200",
                                 selected
-                                  ? "border-primary bg-primary/8 text-primary shadow-[0_10px_28px_rgba(15,118,110,.12)]"
+                                  ? "border-primary bg-primary/8 text-primary shadow-[0_10px_28px_rgba(0,117,154,.12)]"
                                   : "border-border bg-white hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md",
                               )}
                             >
@@ -1227,7 +1227,7 @@ export function GuidedOnboardingPreview({
                             {knowledgeTreeGroups.map((group) => (
                               <div key={group.key} className="relative">
                                 <div className="relative z-10 flex items-center gap-3">
-                                  <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-2 border-slate-800 bg-slate-900 text-lg font-black text-white shadow-sm">
+                                  <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-2 border-ink bg-ink text-lg font-black text-white shadow-sm">
                                     ◉
                                   </div>
                                   <div className="min-w-0 rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 shadow-sm">
@@ -1294,7 +1294,7 @@ export function GuidedOnboardingPreview({
                                         )} />
 
                                         <div className={cx(
-                                          "relative rounded-2xl border-2 px-4 py-3.5 shadow-[0_5px_16px_rgba(15,23,42,.04)]",
+                                          "relative rounded-2xl border-2 px-4 py-3.5 shadow-[0_5px_16px_rgba(7,19,25,.04)]",
                                           nodeClasses,
                                         )}>
                                           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1600,7 +1600,7 @@ export function GuidedOnboardingPreview({
                       </div>
                     ))}
                   </div>
-                  <div className="mx-auto mt-7 w-full max-w-md rounded-[28px] border border-border bg-white p-5 shadow-[0_18px_55px_rgba(15,28,36,.10)]">
+                  <div className="mx-auto mt-7 w-full max-w-md rounded-[28px] border border-border bg-white p-5 shadow-[0_18px_55px_rgba(7,19,25,.10)]">
                     {qrImageDataUrl ? (
                       <Image
                         src={qrImageDataUrl}
@@ -1690,7 +1690,7 @@ export function GuidedOnboardingPreview({
 
               {step === "COMPLETED" ? (
                 <div className="mx-auto flex min-h-[460px] max-w-2xl flex-col items-center justify-center text-center">
-                  <div className="mb-6 grid h-24 w-24 place-items-center rounded-full bg-success text-4xl text-white shadow-[0_18px_55px_rgba(4,120,87,.28)]">✓</div>
+                  <div className="mb-6 grid h-24 w-24 place-items-center rounded-full bg-success text-4xl text-white shadow-[0_18px_55px_rgba(15,138,99,.28)]">✓</div>
                   <span className="rounded-full bg-accent-soft px-4 py-1.5 text-xs font-black text-accent">جاهز للشغل</span>
                   <h2 className="mt-4 text-3xl font-black tracking-[-0.035em] sm:text-4xl">موظف الاستقبال بتاعك جاهز 🎉</h2>
                   <div className="mt-7 grid w-full gap-2 text-start sm:grid-cols-2">
@@ -1739,16 +1739,16 @@ export function GuidedOnboardingPreview({
 
       {voiceFlowState !== "idle" ? (
         <div
-          className="voice-flow-overlay fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 px-5 backdrop-blur-md"
+          className="voice-flow-overlay fixed inset-0 z-[80] flex items-center justify-center bg-ink/45 px-5 backdrop-blur-md"
           role="dialog"
           aria-modal="true"
           aria-label={voiceFlowState === "recording" ? "جاري تسجيل الإجابة" : "جاري تجهيز الإجابة"}
         >
-          <div className="w-full max-w-md rounded-[32px] border border-white/60 bg-white/95 p-6 text-center shadow-[0_30px_100px_rgba(15,23,42,.30)] sm:p-8">
+          <div className="w-full max-w-md rounded-[32px] border border-white/60 bg-white/95 p-6 text-center shadow-[0_30px_100px_rgba(7,19,25,.30)] sm:p-8">
             {voiceFlowState === "recording" ? (
               <>
                 <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-destructive/10">
-                  <div className="grid h-14 w-14 place-items-center rounded-full bg-destructive text-2xl text-white shadow-[0_10px_35px_rgba(220,38,38,.28)]">
+                  <div className="grid h-14 w-14 place-items-center rounded-full bg-destructive text-2xl text-white shadow-[0_10px_35px_rgba(199,53,53,.28)]">
                     🎙️
                   </div>
                 </div>
@@ -1864,7 +1864,7 @@ export function GuidedOnboardingPreview({
         }
       `}</style>
 
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/70 bg-white/95 p-3 shadow-[0_-8px_30px_rgba(15,28,36,.08)] backdrop-blur sm:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/70 bg-white/95 p-3 shadow-[0_-8px_30px_rgba(7,19,25,.08)] backdrop-blur sm:hidden">
         <div className="mx-auto flex max-w-lg gap-2">
           {step !== "WELCOME" ? <Button type="button" variant="outline" className="w-24" onClick={previous}>السابق</Button> : null}
           <Button

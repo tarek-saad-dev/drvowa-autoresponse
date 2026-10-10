@@ -156,7 +156,7 @@ export default function HomePage() {
 
         <section className="pb-20">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
-            <div className="rounded-2xl border border-border bg-[linear-gradient(120deg,#0b1f26,#134e4a)] px-6 py-12 text-sidebar-foreground shadow-md sm:px-10">
+            <div className="rounded-2xl border border-border bg-[linear-gradient(120deg,#05090b,#071319_55%,#004a66)] px-6 py-12 text-sidebar-foreground shadow-md sm:px-10">
               <h2 className="text-2xl font-bold sm:text-3xl">
                 ابدأ إعداد موظف الاستقبال اليوم
               </h2>
@@ -167,7 +167,7 @@ export default function HomePage() {
                 <Link href="/signup">
                   <Button
                     size="lg"
-                    className="bg-accent text-accent-foreground hover:opacity-95"
+                    className="bg-accent text-accent-foreground hover:bg-[#149bc7]"
                   >
                     ابدأ الآن
                   </Button>

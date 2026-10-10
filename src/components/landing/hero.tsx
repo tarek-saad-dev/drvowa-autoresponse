@@ -31,7 +31,7 @@ export function LandingHero() {
         </div>
         <div
           aria-hidden
-          className="relative min-h-64 overflow-hidden rounded-2xl border border-border bg-[linear-gradient(145deg,#0b1f26_0%,#134e4a_55%,#b45309_140%)] shadow-md"
+          className="relative min-h-64 overflow-hidden rounded-2xl border border-border bg-[linear-gradient(145deg,#05090b_0%,#071319_45%,#004a66_100%)] shadow-md"
         >
           <div className="absolute inset-0 opacity-40 [background-image:radial-gradient(circle_at_20%_20%,white_0.8px,transparent_1px)] [background-size:18px_18px]" />
           <div className="relative flex h-full flex-col justify-end gap-3 p-6 text-sidebar-foreground sm:p-8">
@@ -41,7 +41,7 @@ export function LandingHero() {
                 مرحباً، أنا موظف الاستقبال الذكي. كيف يمكنني مساعدتك اليوم؟
               </p>
             </div>
-            <div className="ms-auto max-w-[85%] rounded-xl border border-amber-200/20 bg-amber-500/15 p-3 text-sm">
+            <div className="ms-auto max-w-[85%] rounded-xl border border-[#0b8bb5]/30 bg-[#0b8bb5]/20 p-3 text-sm">
               ما أوقات العمل؟ وأين موقعكم؟
             </div>
           </div>

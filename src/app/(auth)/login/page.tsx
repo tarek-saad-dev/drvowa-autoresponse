@@ -64,7 +64,7 @@ export default function LoginPage() {
     <Card>
       <CardHeader>
         <CardTitle>تسجيل الدخول</CardTitle>
-        <CardDescription>ادخل إلى مساحة عملك في DRVOWA AutoResponse</CardDescription>
+        <CardDescription>ادخل إلى مساحة عملك في DRVO AutoRespond</CardDescription>
       </CardHeader>
       <CardContent>
         <form className="space-y-4" onSubmit={onSubmit}>

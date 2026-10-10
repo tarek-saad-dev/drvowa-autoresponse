@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { DASHBOARD_NAV } from "@/constants/nav";
 import { APP_NAME } from "@/constants/app";
 import { cn } from "@/lib/utils/cn";
@@ -27,15 +28,10 @@ export function DashboardSidebar({
   return (
     <aside className="flex w-[17.5rem] shrink-0 flex-col border-e border-white/10 bg-sidebar px-3 py-4 text-sidebar-foreground">
       <div className="px-3 pb-5 pt-1">
-        <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-primary text-lg font-black text-white shadow-[0_8px_22px_rgba(0,117,154,.28)]">
-            D
-          </div>
-          <div>
-            <p className="text-sm font-black tracking-tight">{APP_NAME}</p>
-            <p className="mt-0.5 text-[11px] text-sidebar-muted">موظف الاستقبال الذكي</p>
-          </div>
-        </div>
+        <Link href="/dashboard" aria-label={APP_NAME} className="block">
+          <BrandLogo surface="dark" priority className="h-auto w-full max-w-[13rem]" />
+        </Link>
+        <p className="mt-2 text-[11px] text-sidebar-muted">موظف الاستقبال الذكي</p>
       </div>
 
       <nav className="flex-1 overflow-y-auto">
@@ -95,9 +91,9 @@ export function DashboardSidebar({
         {showPlatformAdminLink ? (
           <Link
             href="/admin"
-            className="mt-4 flex items-center gap-3 rounded-2xl border border-amber-500/30 px-3 py-3 text-sm font-bold text-amber-200/90 transition hover:bg-amber-500/10"
+            className="mt-4 flex items-center gap-3 rounded-2xl border border-[#0b8bb5]/40 px-3 py-3 text-sm font-bold text-[#149bc7] transition hover:bg-[#0b8bb5]/10"
           >
-            <span className="grid h-8 w-8 place-items-center rounded-xl bg-amber-500/10">◆</span>
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-[#0b8bb5]/15">◆</span>
             <span>إدارة المنصة</span>
           </Link>
         ) : null}

@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, .dark, .dark *));
+
 :root,
 html[data-theme="light"] {
   color-scheme: light;
@@ -50,7 +52,8 @@ html[data-theme="light"] {
     linear-gradient(180deg, #f8fbfc 0%, #eef5f7 100%);
 }
 
-html[data-theme="dark"] {
+html[data-theme="dark"],
+.dark {
   color-scheme: dark;
 
   --brand-teal: #0b8bb5;
@@ -110,6 +113,7 @@ html[data-theme="dark"] {
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-hover: var(--primary-hover);
+  --color-ink: var(--brand-ink);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-accent: var(--accent);

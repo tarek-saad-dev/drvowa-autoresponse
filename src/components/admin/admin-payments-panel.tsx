@@ -83,7 +83,7 @@ export function AdminPaymentsPanel({
   }
 
   if (initialItems.length === 0) {
-    return <p className="text-sm text-slate-400">لا توجد طلبات في هذا التصفية.</p>;
+    return <p className="text-sm text-muted-foreground">لا توجد طلبات في هذا التصفية.</p>;
   }
 
   return (
@@ -94,9 +94,9 @@ export function AdminPaymentsPanel({
         </p>
       ) : null}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-800">
+      <div className="overflow-x-auto rounded-xl border border-border">
         <table className="min-w-full text-sm">
-          <thead className="bg-slate-900 text-slate-400">
+          <thead className="bg-card text-muted-foreground">
             <tr>
               <th className="px-3 py-2 text-start font-medium">المرجع</th>
               <th className="px-3 py-2 text-start font-medium">النشاط</th>
@@ -111,19 +111,19 @@ export function AdminPaymentsPanel({
             {initialItems.map((item) => (
               <tr
                 key={item.paymentRequestId}
-                className="cursor-pointer border-t border-slate-800 hover:bg-slate-900/80"
+                className="cursor-pointer border-t border-border hover:bg-card/80"
                 onClick={() => {
                   setSelected(item);
                   setReviewNote("");
                 }}
               >
-                <td className="px-3 py-2 font-mono text-amber-300">
+                <td className="px-3 py-2 font-mono text-primary">
                   {item.paymentReference}
                 </td>
                 <td className="px-3 py-2">{item.businessName}</td>
                 <td className="px-3 py-2">
                   <div>{item.submitterName}</div>
-                  <div className="text-xs text-slate-500">
+                  <div className="text-xs text-muted-foreground">
                     {item.submitterEmail}
                   </div>
                 </td>
@@ -143,11 +143,11 @@ export function AdminPaymentsPanel({
 
       {selected ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-xl">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-lg font-semibold">مراجعة الدفع</h3>
-                <p className="mt-1 font-mono text-amber-300">
+                <p className="mt-1 font-mono text-primary">
                   {selected.paymentReference}
                 </p>
               </div>
@@ -157,64 +157,64 @@ export function AdminPaymentsPanel({
             </div>
             <dl className="mt-4 grid gap-2 text-sm">
               <div>
-                <dt className="text-slate-400">النشاط</dt>
+                <dt className="text-muted-foreground">النشاط</dt>
                 <dd>{selected.businessName}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">صاحب الحساب</dt>
+                <dt className="text-muted-foreground">صاحب الحساب</dt>
                 <dd>
                   {selected.submitterName} ({selected.submitterEmail})
                 </dd>
               </div>
               <div>
-                <dt className="text-slate-400">الخطة الحالية</dt>
+                <dt className="text-muted-foreground">الخطة الحالية</dt>
                 <dd>{selected.currentPlanName ?? "—"}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">الخطة المطلوبة</dt>
+                <dt className="text-muted-foreground">الخطة المطلوبة</dt>
                 <dd>{selected.requestedPlanName}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">المبلغ المتفق عليه (لقطة)</dt>
+                <dt className="text-muted-foreground">المبلغ المتفق عليه (لقطة)</dt>
                 <dd>
                   {selected.amount} {selected.currencyCode}
                 </dd>
               </div>
               {selected.liveRequestedPlanPrice != null
               && Number(selected.liveRequestedPlanPrice) !== Number(selected.amount) ? (
-                <div className="rounded-md border border-amber-700/60 bg-amber-950/40 p-2 text-amber-200">
+                <div className="rounded-md border border-warning/60 bg-warning-soft p-2 text-warning">
                   تنبيه: سعر الخطة الحالي ({selected.liveRequestedPlanPrice}{" "}
                   {selected.currencyCode}) يختلف عن لقطة الطلب. الاعتماد يطبّق
                   المبلغ المثبت في الطلب.
                 </div>
               ) : null}
               <div>
-                <dt className="text-slate-400">اسم المحوّل</dt>
+                <dt className="text-muted-foreground">اسم المحوّل</dt>
                 <dd>{selected.payerName ?? "—"}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">مرجع التحويل</dt>
+                <dt className="text-muted-foreground">مرجع التحويل</dt>
                 <dd>{selected.transferReference ?? "—"}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">ملاحظة العميل</dt>
+                <dt className="text-muted-foreground">ملاحظة العميل</dt>
                 <dd>{selected.customerNote ?? "—"}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">وقت الإرسال</dt>
+                <dt className="text-muted-foreground">وقت الإرسال</dt>
                 <dd>{selected.submittedAtLabel}</dd>
               </div>
             </dl>
 
             {selected.status === "PENDING" ? (
               <div className="mt-5 space-y-3">
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-muted-foreground">
                   تحقق يدوياً من حساب InstaPay خارج DRVOWA قبل الاعتماد.
                 </p>
                 <label className="block text-sm">
                   سبب للعميل (اختياري عند الرفض)
                   <textarea
-                    className="mt-1 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                     rows={3}
                     value={reviewNote}
                     onChange={(e) => setReviewNote(e.target.value)}
@@ -235,7 +235,7 @@ export function AdminPaymentsPanel({
                 </div>
               </div>
             ) : (
-              <p className="mt-4 text-sm text-slate-400">
+              <p className="mt-4 text-sm text-muted-foreground">
                 الحالة: {statusLabel(selected.status)}
               </p>
             )}

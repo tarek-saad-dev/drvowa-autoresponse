@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { WorkspaceSwitcher } from "@/components/dashboard/workspace-switcher";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -51,18 +52,11 @@ export function DashboardTopbar({
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b border-border bg-card/92 px-3 backdrop-blur-xl sm:h-16 sm:gap-3 sm:px-6">
       <div className="min-w-0">
-        <div className="flex items-center gap-2 sm:hidden">
-          <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary text-xs font-black text-primary-foreground shadow-sm">
-            D
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-black text-foreground">
-              {currentLabel}
-            </p>
-            <p className="truncate text-[10px] text-muted-foreground">
-              DRVOWA
-            </p>
-          </div>
+        <div className="min-w-0 sm:hidden">
+          <BrandLogo className="h-5" />
+          <p className="mt-1 truncate text-xs font-black text-foreground">
+            {currentLabel}
+          </p>
         </div>
 
         <div className="hidden sm:block">
