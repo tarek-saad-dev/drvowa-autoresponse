@@ -2,11 +2,15 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { BrandLogo } from "@/components/brand/brand-logo";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { APP_NAME } from "@/constants/app";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-full flex-1 flex-col">
+    <div className="relative flex min-h-full flex-1 flex-col">
+      <div className="absolute left-4 top-4 z-10">
+        <ThemeToggle />
+      </div>
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-12">
         <div className="mb-8 text-center">
           <Link href="/" aria-label={APP_NAME} className="inline-block">
