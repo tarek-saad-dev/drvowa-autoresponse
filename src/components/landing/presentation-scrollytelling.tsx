@@ -313,35 +313,48 @@ function SceneVisual({ scene, compact = false }: { scene: StoryScene; compact?: 
 
 export function PresentationScrollytelling() {
   const [activeIndex, setActiveIndex] = useState(0);
-  const triggerRefs = useRef<Array<HTMLElement | null>>([]);
-
-  const observer = useMemo(
-    () =>
-      typeof window === "undefined"
-        ? null
-        : new IntersectionObserver(
-            (entries) => {
-              const visible = entries
-                .filter((entry) => entry.isIntersecting)
-                .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-              if (!visible) return;
-              const index = Number((visible.target as HTMLElement).dataset.index ?? 0);
-              setActiveIndex(index);
-            },
-            {
-              rootMargin: "-32% 0px -48% 0px",
-              threshold: [0, 0.2, 0.5, 0.8, 1],
-            },
-          ),
-    [],
-  );
+  const desktopTriggerRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const mobileTriggerRefs = useRef<Array<HTMLElement | null>>([]);
 
   useEffect(() => {
-    if (!observer) return;
-    const refs = triggerRefs.current.filter(Boolean) as HTMLElement[];
-    refs.forEach((ref) => observer.observe(ref));
-    return () => observer.disconnect();
-  }, [observer]);
+    if (typeof window === "undefined") return;
+
+    const media = window.matchMedia("(min-width: 1024px)");
+    let observer: IntersectionObserver | null = null;
+
+    const connect = () => {
+      observer?.disconnect();
+
+      observer = new IntersectionObserver(
+        (entries) => {
+          const visible = entries
+            .filter((entry) => entry.isIntersecting)
+            .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+          if (!visible) return;
+          const index = Number((visible.target as HTMLElement).dataset.index ?? 0);
+          setActiveIndex(index);
+        },
+        {
+          rootMargin: media.matches ? "-28% 0px -46% 0px" : "-32% 0px -48% 0px",
+          threshold: [0, 0.15, 0.35, 0.6, 0.85, 1],
+        },
+      );
+
+      const refs = (
+        media.matches ? desktopTriggerRefs.current : mobileTriggerRefs.current
+      ).filter(Boolean) as HTMLElement[];
+
+      refs.forEach((ref) => observer?.observe(ref));
+    };
+
+    connect();
+    media.addEventListener("change", connect);
+
+    return () => {
+      media.removeEventListener("change", connect);
+      observer?.disconnect();
+    };
+  }, []);
 
   const active = steps[activeIndex] ?? steps[0];
 
@@ -374,7 +387,7 @@ export function PresentationScrollytelling() {
                     <button
                       type="button"
                       key={step.step}
-                      onClick={() => triggerRefs.current[index]?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                      onClick={() => desktopTriggerRefs.current[index]?.scrollIntoView({ behavior: "smooth", block: "center" })}
                       className={`h-1.5 rounded-full transition-all duration-500 ${
                         index === activeIndex
                           ? "w-10 bg-primary"
@@ -418,7 +431,7 @@ export function PresentationScrollytelling() {
               <div
                 key={step.step}
                 ref={(node) => {
-                  triggerRefs.current[index] = node;
+                  desktopTriggerRefs.current[index] = node;
                 }}
                 data-index={index}
                 className="h-[78svh] xl:h-[82svh]"
@@ -450,7 +463,7 @@ export function PresentationScrollytelling() {
           <article
             key={step.step}
             ref={(node) => {
-              triggerRefs.current[index] = node;
+              mobileTriggerRefs.current[index] = node;
             }}
             data-index={index}
             className={`mobile-story-chapter border-b border-border/60 px-3 py-5 transition-opacity duration-500 ${
