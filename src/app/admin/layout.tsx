@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { AdminLogoutButton } from "@/components/admin/admin-logout-button";
 import { BrandLogo } from "@/components/brand/brand-logo";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { AuthError, ForbiddenError } from "@/lib/tenancy/errors";
 import { listBusinessesForUser } from "@/modules/businesses/service";
 import { requirePlatformAdmin } from "@/modules/platform-admin/service";
@@ -30,11 +31,11 @@ export default async function AdminLayout({
   const hasWorkspace = businesses.length > 0;
 
   return (
-    <div className="dark min-h-full bg-background text-foreground">
+    <div className="min-h-full bg-background text-foreground">
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <div>
-            <BrandLogo surface="dark" priority className="h-8" />
+            <BrandLogo priority className="h-8" />
             <p className="mt-2 text-xs font-medium tracking-wide text-primary">
               PLATFORM ADMIN
             </p>
@@ -67,6 +68,7 @@ export default async function AdminLayout({
                 مساحة العمل
               </Link>
             ) : null}
+            <ThemeToggle />
             <AdminLogoutButton />
           </nav>
         </div>
