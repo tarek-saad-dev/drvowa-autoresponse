@@ -956,7 +956,7 @@ export function InboxPanel({
         </div>
       ) : null}
 
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto bg-[linear-gradient(180deg,#eef4f6_0%,#f4f7f8_100%)] px-3 py-5 sm:px-5">
+      <div className="flex flex-1 flex-col gap-2 overflow-y-auto bg-surface/65 px-3 py-5 sm:px-5">
         {!selectedId ? (
           <EmptyState
             className="my-auto border-0 bg-transparent"
@@ -1011,7 +1011,7 @@ export function InboxPanel({
                     className={`max-w-[88%] rounded-[18px] px-4 py-2.5 text-sm leading-6 shadow-sm sm:max-w-[75%] ${
                       outgoing
                         ? aiLike
-                          ? "ms-auto rounded-br-md border border-cyan-500/10 bg-cyan-500/10 text-foreground"
+                          ? "ms-auto rounded-br-md border border-primary/15 bg-primary/10 text-foreground"
                           : "ms-auto rounded-br-md bg-primary text-primary-foreground"
                         : "me-auto rounded-bl-md border border-border bg-card text-foreground"
                     }`}
@@ -1020,7 +1020,7 @@ export function InboxPanel({
                       <div className="mb-1">
                         <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${
                           message.origin === "AI"
-                            ? "bg-cyan-500/15 text-cyan-700"
+                            ? "bg-primary/15 text-primary"
                             : message.origin === "HUMAN"
                               ? "bg-success-soft text-success"
                               : "bg-secondary text-muted-foreground"
