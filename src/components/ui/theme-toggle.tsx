@@ -14,6 +14,19 @@ export function ThemeToggle() {
 
   useEffect(() => {
     setTheme(currentTheme());
+
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onSystemThemeChange = () => {
+      const saved = localStorage.getItem("drvo-theme");
+      if (saved === "light" || saved === "dark") return;
+      const next: ThemeMode = media.matches ? "dark" : "light";
+      document.documentElement.dataset.theme = next;
+      document.documentElement.style.colorScheme = next;
+      setTheme(next);
+    };
+
+    media.addEventListener("change", onSystemThemeChange);
+    return () => media.removeEventListener("change", onSystemThemeChange);
   }, []);
 
   function toggleTheme() {
