@@ -32,6 +32,7 @@ html[data-theme="light"] {
   --accent-soft: #dff3f9;
   --destructive: #c73535;
   --destructive-foreground: #ffffff;
+  --destructive-soft: #fdeaea;
   --success: #0f8a63;
   --success-soft: #dcf7ed;
   --warning: #b56d14;
@@ -39,6 +40,8 @@ html[data-theme="light"] {
   --info: #087ca3;
   --info-soft: #dff4fb;
   --surface: #edf5f7;
+  --whatsapp-bubble: #dcf8c6;
+  --whatsapp-bubble-text: #17331f;
   --sidebar: #071a22;
   --sidebar-foreground: #f4f9fb;
   --sidebar-muted: #8ba7b3;
@@ -81,6 +84,7 @@ html[data-theme="dark"],
   --accent-soft: #0c2c38;
   --destructive: #ef5b5b;
   --destructive-foreground: #ffffff;
+  --destructive-soft: #321416;
   --success: #35b98a;
   --success-soft: #0b2a21;
   --warning: #d99a41;
@@ -88,6 +92,8 @@ html[data-theme="dark"],
   --info: #35acd2;
   --info-soft: #0b2b36;
   --surface: #0d171c;
+  --whatsapp-bubble: #005c4b;
+  --whatsapp-bubble-text: #f2fbf7;
   --sidebar: #020607;
   --sidebar-foreground: #f7fbfc;
   --sidebar-muted: #78929d;
@@ -121,6 +127,7 @@ html[data-theme="dark"],
   --color-accent-soft: var(--accent-soft);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-soft: var(--destructive-soft);
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
