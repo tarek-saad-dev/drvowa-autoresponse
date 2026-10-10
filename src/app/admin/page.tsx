@@ -32,7 +32,7 @@ export default async function AdminHomePage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold">نظرة عامة</h2>
-        <p className="mt-1 text-sm text-slate-400">
+        <p className="mt-1 text-sm text-muted-foreground">
           أرقام حقيقية من قاعدة البيانات — راجع التحويلات خارج DRVOWA عبر InstaPay.
         </p>
       </div>
@@ -41,9 +41,9 @@ export default async function AdminHomePage() {
           <Link
             key={card.label}
             href={card.href}
-            className="rounded-xl border border-slate-800 bg-slate-900 p-5 transition hover:border-amber-500/40"
+            className="rounded-xl border border-border bg-card p-5 text-card-foreground shadow-sm transition hover:border-primary/35 hover:shadow-md"
           >
-            <p className="text-sm text-slate-400">{card.label}</p>
+            <p className="text-sm text-muted-foreground">{card.label}</p>
             <p className="mt-2 text-3xl font-bold tracking-tight">{card.value}</p>
           </Link>
         ))}
