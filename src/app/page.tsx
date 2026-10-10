@@ -3,7 +3,7 @@ import Link from "next/link";
 import { LandingFooter } from "@/components/landing/footer";
 import { LandingHeader } from "@/components/landing/header";
 import { LandingHero } from "@/components/landing/hero";
-import { PresentationStory3D } from "@/components/landing/presentation-story-3d";
+import { PresentationScrollytelling } from "@/components/landing/presentation-scrollytelling";
 import { Button } from "@/components/ui/button";
 
 export default function HomePage() {
@@ -13,22 +13,18 @@ export default function HomePage() {
       <main className="flex-1">
         <LandingHero />
 
-        <section id="story" className="scroll-mt-24 border-y border-border/55 bg-surface/30 py-8 sm:py-12">
+        <section className="border-y border-border/55 bg-surface/30 py-7 sm:py-9">
           <div className="mx-auto max-w-7xl px-4 text-center sm:px-6">
             <p className="text-[11px] font-black tracking-[.18em] text-primary">
-              01 → 12
+              SCROLL TO DISCOVER
             </p>
-            <h2 className="mx-auto mt-3 max-w-3xl text-3xl font-black tracking-[-0.04em] text-foreground sm:text-4xl">
-              افهم DRVO AutoRespond خطوة بخطوة.
+            <h2 className="mx-auto mt-2 max-w-3xl text-2xl font-black tracking-[-0.04em] text-foreground sm:text-3xl">
+              افهمه بصريًا… خطوة ورا خطوة.
             </h2>
-            <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
-              نفس ترتيب البريزينتيشن — لكن كرحلة تفاعلية 3D توضح الفكرة من أول
-              إعداد المساعد لحد الربط بالـ ERP وإدارة التشغيل اليومي.
-            </p>
           </div>
         </section>
 
-        <PresentationStory3D />
+        <PresentationScrollytelling />
 
         <section className="pb-20 pt-10 sm:pt-14">
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
