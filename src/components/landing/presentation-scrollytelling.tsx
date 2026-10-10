@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 type StoryScene =
   | "business"
@@ -124,7 +124,7 @@ function FloatCard({
   className = "",
   delay = "0s",
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   className?: string;
   delay?: string;
 }) {
@@ -291,7 +291,7 @@ function SceneVisual({ scene }: { scene: StoryScene }) {
               "right-[8%] bottom-[18%]",
               "left-1/2 top-[7%] -translate-x-1/2",
             ][i];
-            return <FloatCard key={label} className={pos} delay={`${i*.25}s`}>{label}</FloatCard>;
+            return <FloatCard key={label} className={pos ?? ""} delay={`${i*.25}s`}>{label}</FloatCard>;
           })}
         </>
       ) : null}
