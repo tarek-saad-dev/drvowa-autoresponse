@@ -138,9 +138,13 @@ function FloatCard({
   );
 }
 
-function SceneVisual({ scene }: { scene: StoryScene }) {
+function SceneVisual({ scene, compact = false }: { scene: StoryScene; compact?: boolean }) {
   return (
-    <div className="relative h-full min-h-[440px] overflow-hidden rounded-[34px] border border-white/10 bg-[linear-gradient(145deg,#04090c_0%,#071319_46%,#004a66_140%)] shadow-[0_36px_120px_rgba(0,74,102,.30)] sm:min-h-[520px]">
+    <div className={`relative h-full overflow-hidden border border-white/10 bg-[linear-gradient(145deg,#04090c_0%,#071319_46%,#004a66_140%)] shadow-[0_36px_120px_rgba(0,74,102,.30)] ${
+      compact
+        ? "min-h-[54svh] rounded-[28px]"
+        : "min-h-[440px] rounded-[34px] sm:min-h-[520px]"
+    }`}>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_55%_44%,rgba(30,190,235,.16),transparent_28%),radial-gradient(circle_at_15%_12%,rgba(0,117,154,.16),transparent_30%)]" />
       <div className="absolute inset-0 [background-image:radial-gradient(circle_at_center,rgba(255,255,255,.13)_0_1px,transparent_1px)] [background-size:24px_24px] opacity-[0.13]" />
 
@@ -158,7 +162,9 @@ function SceneVisual({ scene }: { scene: StoryScene }) {
 
       {scene === "agent" ? (
         <>
-          <div className="cinema-phone absolute left-1/2 top-1/2 h-[300px] w-[164px] -translate-x-1/2 -translate-y-1/2 rounded-[34px] border border-cyan-200/25 bg-black/35 p-3 shadow-[0_35px_80px_rgba(0,0,0,.38)] backdrop-blur">
+          <div className={`cinema-phone absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 ${
+            compact ? "h-[250px] w-[138px]" : "h-[300px] w-[164px]"
+          }` + " rounded-[34px] border border-cyan-200/25 bg-black/35 p-3 shadow-[0_35px_80px_rgba(0,0,0,.38)] backdrop-blur"} rounded-[34px] border border-cyan-200/25 bg-black/35 p-3 shadow-[0_35px_80px_rgba(0,0,0,.38)] backdrop-blur">
             <div className="h-full rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,139,181,.18),rgba(255,255,255,.035))] p-3">
               <div className="mx-auto mt-2 h-14 w-14 rounded-full border border-cyan-200/20 bg-cyan-400/10 shadow-[0_0_30px_rgba(11,139,181,.35)]" />
               <div className="mt-5 h-2 rounded-full bg-white/15" />
@@ -215,7 +221,9 @@ function SceneVisual({ scene }: { scene: StoryScene }) {
 
       {scene === "whatsapp" ? (
         <>
-          <div className="cinema-phone absolute left-[9%] top-1/2 h-[330px] w-[176px] -translate-y-1/2 rounded-[34px] border border-white/15 bg-black/45 p-2.5 shadow-2xl">
+          <div className={`cinema-phone absolute left-[9%] top-1/2 -translate-y-1/2 rounded-[34px] ${
+            compact ? "h-[280px] w-[150px]" : "h-[330px] w-[176px]"
+          }` + " border border-white/15 bg-black/45 p-2.5 shadow-2xl"} border border-white/15 bg-black/45 p-2.5 shadow-2xl">
             <div className="h-full rounded-[27px] bg-[#0b141a] p-3">
               <div className="mt-10 ml-auto w-[86%] rounded-2xl rounded-br-md bg-[#005c4b] px-3 py-2 text-[11px] font-bold text-white">كام سعر الخدمة؟</div>
               <div className="mt-3 mr-auto w-[88%] rounded-2xl rounded-bl-md bg-[#202c33] px-3 py-2 text-[11px] font-bold text-white">الخدمة تبدأ من 200 جنيه</div>
@@ -412,18 +420,52 @@ export function PresentationScrollytelling() {
       </div>
 
       <div className="lg:hidden">
-        {steps.map((step) => (
-          <article key={step.step} className="min-h-[92svh] border-b border-border/60 px-4 py-10">
-            <div className="mx-auto max-w-xl">
-              <div className="mb-5 flex items-center gap-3">
-                <span className="text-[10px] font-black tracking-[.18em] text-primary">{step.step}/12</span>
-                <span className="text-xs font-black text-muted-foreground">{step.kicker}</span>
+        <div className="sticky top-16 z-20 border-y border-border/60 bg-background/88 px-4 py-2.5 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-xl items-center gap-2">
+            <span className="text-[10px] font-black tracking-[.16em] text-primary">
+              {steps[activeIndex]?.step}/12
+            </span>
+            <div className="h-1 flex-1 overflow-hidden rounded-full bg-border/70">
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-500"
+                style={{ width: `${((activeIndex + 1) / steps.length) * 100}%` }}
+              />
+            </div>
+            <span className="text-[10px] font-bold text-muted-foreground">
+              {steps[activeIndex]?.kicker}
+            </span>
+          </div>
+        </div>
+
+        {steps.map((step, index) => (
+          <article
+            key={step.step}
+            ref={(node) => {
+              triggerRefs.current[index] = node;
+            }}
+            data-index={index}
+            className="mobile-story-chapter border-b border-border/60 px-3 py-5"
+          >
+            <div className="mx-auto flex min-h-[calc(100svh-4rem)] max-w-xl flex-col justify-center">
+              <div className="order-2 px-1 pb-3 pt-5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black tracking-[.16em] text-primary">
+                    {step.step}/12
+                  </span>
+                  <span className="h-px w-8 bg-primary/30" />
+                  <span className="text-[11px] font-black text-muted-foreground">{step.kicker}</span>
+                </div>
+                <h2 className="mt-3 text-[2rem] font-black leading-[1.05] tracking-[-0.05em] text-foreground">
+                  {step.title}
+                </h2>
+                <p className="mt-3 max-w-[34rem] text-sm leading-6 text-muted-foreground">
+                  {step.line}
+                </p>
               </div>
-              <SceneVisual scene={step.scene} />
-              <h2 className="mt-7 text-3xl font-black leading-[1.15] tracking-[-0.04em] text-foreground">
-                {step.title}
-              </h2>
-              <p className="mt-3 text-sm leading-7 text-muted-foreground">{step.line}</p>
+
+              <div className="order-1">
+                <SceneVisual scene={step.scene} compact />
+              </div>
             </div>
           </article>
         ))}
