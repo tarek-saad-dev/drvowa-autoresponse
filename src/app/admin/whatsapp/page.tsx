@@ -93,7 +93,7 @@ export default async function AdminWhatsAppPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold">WhatsApp compatibility</h2>
-        <p className="mt-1 text-sm text-slate-400">
+        <p className="mt-1 text-sm text-muted-foreground">
           Phase 1 observation only — no automatic engine switching.
         </p>
       </div>
