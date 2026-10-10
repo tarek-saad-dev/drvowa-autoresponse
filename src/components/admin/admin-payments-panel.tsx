@@ -89,7 +89,7 @@ export function AdminPaymentsPanel({
   return (
     <div className="space-y-5">
       {error ? (
-        <p className="text-sm text-red-300" role="alert">
+        <p className="text-sm text-destructive" role="alert">
           {error}
         </p>
       ) : null}
