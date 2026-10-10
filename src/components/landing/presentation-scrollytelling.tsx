@@ -313,7 +313,7 @@ function SceneVisual({ scene, compact = false }: { scene: StoryScene; compact?: 
 
 export function PresentationScrollytelling() {
   const [activeIndex, setActiveIndex] = useState(0);
-  const triggerRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const triggerRefs = useRef<Array<HTMLElement | null>>([]);
 
   const observer = useMemo(
     () =>
@@ -338,7 +338,7 @@ export function PresentationScrollytelling() {
 
   useEffect(() => {
     if (!observer) return;
-    const refs = triggerRefs.current.filter(Boolean) as HTMLDivElement[];
+    const refs = triggerRefs.current.filter(Boolean) as HTMLElement[];
     refs.forEach((ref) => observer.observe(ref));
     return () => observer.disconnect();
   }, [observer]);
