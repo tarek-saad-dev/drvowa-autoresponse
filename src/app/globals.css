@@ -275,3 +275,134 @@ a {
     animation: none;
   }
 }
+
+
+/* Cinematic landing scrollytelling */
+.cinema-copy-enter {
+  animation: cinema-copy-in 560ms cubic-bezier(.22,1,.36,1) both;
+}
+
+.cinema-orb {
+  animation:
+    cinema-orb-float 5.8s ease-in-out infinite,
+    cinema-orb-pulse 3.8s ease-in-out infinite;
+}
+
+.cinema-float {
+  animation: cinema-float 5.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+.cinema-stack {
+  animation: cinema-stack 5.2s ease-in-out infinite;
+  will-change: transform;
+}
+
+.cinema-phone {
+  animation: cinema-phone 6.2s ease-in-out infinite;
+  transform-style: preserve-3d;
+}
+
+.cinema-node {
+  animation: cinema-node 4.8s ease-in-out infinite;
+}
+
+.cinema-shield {
+  animation: cinema-shield 5.4s ease-in-out infinite;
+  filter: drop-shadow(0 20px 60px rgb(11 139 181 / .18));
+}
+
+@keyframes cinema-copy-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes cinema-orb-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(2deg);
+  }
+}
+
+@keyframes cinema-orb-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 68px rgb(11 139 181 / .52);
+  }
+  50% {
+    box-shadow: 0 0 108px rgb(11 139 181 / .78);
+  }
+}
+
+@keyframes cinema-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -9px, 0);
+  }
+}
+
+@keyframes cinema-stack {
+  0%,
+  100% {
+    transform: translateY(0) rotateX(0deg);
+  }
+  50% {
+    transform: translateY(-8px) rotateX(4deg);
+  }
+}
+
+@keyframes cinema-phone {
+  0%,
+  100% {
+    transform: translateY(-50%) rotateY(-7deg) rotateX(2deg);
+  }
+  50% {
+    transform: translateY(calc(-50% - 7px)) rotateY(4deg) rotateX(-1deg);
+  }
+}
+
+@keyframes cinema-node {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-7px) scale(1.025);
+  }
+}
+
+@keyframes cinema-shield {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.035);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cinema-copy-enter,
+  .cinema-orb,
+  .cinema-float,
+  .cinema-stack,
+  .cinema-phone,
+  .cinema-node,
+  .cinema-shield {
+    animation: none !important;
+  }
+}
