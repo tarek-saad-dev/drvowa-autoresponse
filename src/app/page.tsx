@@ -156,7 +156,7 @@ export default function HomePage() {
 
         <section className="pb-20">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
-            <div className="rounded-2xl border border-border bg-[linear-gradient(120deg,#0b1f26,#134e4a)] px-6 py-12 text-sidebar-foreground shadow-md sm:px-10">
+            <div className="brand-cta-surface rounded-2xl border border-white/10 px-6 py-12 text-sidebar-foreground shadow-md sm:px-10">
               <h2 className="text-2xl font-bold sm:text-3xl">
                 ابدأ إعداد موظف الاستقبال اليوم
               </h2>
