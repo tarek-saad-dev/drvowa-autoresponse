@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 type StoryItem = {
   step: string;
@@ -147,7 +147,7 @@ function useTilt() {
   return ref;
 }
 
-function MiniCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function MiniCard({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <div
       className={`rounded-2xl border border-white/12 bg-white/[0.065] px-3 py-2.5 text-[11px] font-black text-white/90 shadow-[0_16px_45px_rgba(0,0,0,.22)] backdrop-blur-xl ${className}`}
