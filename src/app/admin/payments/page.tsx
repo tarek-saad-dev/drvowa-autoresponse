@@ -20,7 +20,7 @@ export default async function AdminPaymentsPage({ searchParams }: PageProps) {
     <div className="space-y-4">
       <div>
         <h2 className="text-2xl font-bold">طلبات الدفع</h2>
-        <p className="mt-1 text-sm text-slate-400">
+        <p className="mt-1 text-sm text-muted-foreground">
           راجع التحويلات يدوياً في InstaPay ثم اعتمد أو ارفض الطلب.
         </p>
       </div>
@@ -38,8 +38,8 @@ export default async function AdminPaymentsPage({ searchParams }: PageProps) {
             href={`/admin/payments?status=${value}`}
             className={`rounded-md px-3 py-1.5 ${
               (params.status ?? "PENDING").toUpperCase() === value
-                ? "bg-amber-500 text-slate-950"
-                : "bg-slate-800 text-slate-200 hover:bg-slate-700"
+                ? "bg-primary text-primary-foreground"
+                : "bg-secondary text-secondary-foreground hover:bg-surface"
             }`}
           >
             {label}
