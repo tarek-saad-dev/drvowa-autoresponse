@@ -27,7 +27,7 @@ export function AdminLogoutButton() {
       size="sm"
       onClick={logout}
       disabled={pending}
-      className="border-slate-600 bg-transparent text-slate-100 hover:bg-slate-800 hover:text-white"
+      className="border-border bg-transparent text-foreground hover:bg-surface hover:text-foreground"
     >
       {pending ? "..." : "تسجيل الخروج"}
     </Button>
