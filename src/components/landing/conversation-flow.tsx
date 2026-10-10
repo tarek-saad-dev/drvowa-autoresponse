@@ -182,25 +182,25 @@ export function LandingConversationFlow() {
   }, []);
 
   return (
-    <div className="relative min-h-[360px] overflow-hidden rounded-[30px] border border-border/70 bg-card/70 shadow-[0_30px_90px_rgba(0,74,102,.18)] backdrop-blur-xl sm:min-h-[430px]">
+    <div className="relative min-h-[300px] overflow-hidden rounded-[26px] border border-border/70 bg-card/70 shadow-[0_26px_70px_rgba(0,74,102,.16)] backdrop-blur-xl sm:min-h-[430px] sm:rounded-[30px] sm:shadow-[0_30px_90px_rgba(0,74,102,.18)]">
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
 
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute right-4 top-5 max-w-[54%] rounded-2xl border border-border/80 bg-card/90 px-3 py-2.5 shadow-sm backdrop-blur sm:right-6 sm:top-7">
+        <div className="absolute right-3 top-4 max-w-[62%] rounded-2xl border border-border/80 bg-card/90 px-3 py-2 shadow-sm backdrop-blur sm:right-6 sm:top-7 sm:max-w-[54%] sm:py-2.5">
           <p className="text-[10px] font-black text-primary">رسالة داخلة</p>
           <p className="mt-1 text-xs font-bold text-foreground sm:text-sm">عاوز أحجز بكرة الساعة 7</p>
         </div>
 
-        <div className="absolute bottom-6 left-4 max-w-[58%] rounded-2xl border border-primary/15 bg-primary/10 px-3 py-2.5 shadow-sm backdrop-blur sm:bottom-8 sm:left-6">
+        <div className="absolute bottom-4 left-3 max-w-[66%] rounded-2xl border border-primary/15 bg-primary/10 px-3 py-2 shadow-sm backdrop-blur sm:bottom-8 sm:left-6 sm:max-w-[58%] sm:py-2.5">
           <p className="text-[10px] font-black text-primary">DRVO AutoRespond</p>
           <p className="mt-1 text-xs font-bold text-foreground sm:text-sm">متاح 7:15، أحجزهولك؟</p>
         </div>
 
-        <div className="absolute left-4 top-[42%] rounded-full border border-success/20 bg-success-soft px-3 py-1.5 text-[10px] font-black text-success shadow-sm sm:left-7">
+        <div className="absolute left-3 top-[42%] rounded-full border border-success/20 bg-success-soft px-2.5 py-1 text-[9px] font-black text-success shadow-sm sm:left-7 sm:px-3 sm:py-1.5 sm:text-[10px]">
           ERP متصل
         </div>
 
-        <div className="absolute bottom-[28%] right-4 rounded-full border border-border bg-card/90 px-3 py-1.5 text-[10px] font-black text-muted-foreground shadow-sm sm:right-7">
+        <div className="absolute bottom-[28%] right-3 rounded-full border border-border bg-card/90 px-2.5 py-1 text-[9px] font-black text-muted-foreground shadow-sm sm:right-7 sm:px-3 sm:py-1.5 sm:text-[10px]">
           موظف يقدر يستلم
         </div>
       </div>
