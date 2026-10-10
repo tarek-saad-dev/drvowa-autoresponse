@@ -448,7 +448,9 @@ export function PresentationScrollytelling() {
               triggerRefs.current[index] = node;
             }}
             data-index={index}
-            className="mobile-story-chapter border-b border-border/60 px-3 py-5"
+            className={`mobile-story-chapter border-b border-border/60 px-3 py-5 transition-opacity duration-500 ${
+              index === activeIndex ? "opacity-100" : "opacity-[0.72]"
+            }`}
           >
             <div className="mx-auto flex min-h-[calc(100svh-4rem)] max-w-xl flex-col justify-center">
               <div className="order-2 px-1 pb-3 pt-5">
@@ -467,7 +469,13 @@ export function PresentationScrollytelling() {
                 </p>
               </div>
 
-              <div className="order-1">
+              <div
+                className={`order-1 transition-all duration-700 [transition-timing-function:cubic-bezier(.22,1,.36,1)] ${
+                  index === activeIndex
+                    ? "translate-y-0 scale-100"
+                    : "translate-y-2 scale-[.985]"
+                }`}
+              >
                 <SceneVisual scene={step.scene} compact />
               </div>
             </div>
