@@ -431,15 +431,15 @@ export function KnowledgeCopilot() {
                     <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-2 border-ink bg-ink text-lg font-black text-white shadow-sm">
                       ◉
                     </div>
-                    <div className="min-w-0 rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 shadow-sm">
-                      <div className="truncate text-sm font-black text-slate-900">{group.title}</div>
-                      <div className="mt-1 text-[10px] font-bold text-slate-500">
+                    <div className="min-w-0 rounded-2xl border-2 border-border bg-card px-4 py-3 shadow-sm">
+                      <div className="truncate text-sm font-black text-foreground">{group.title}</div>
+                      <div className="mt-1 text-[10px] font-bold text-muted-foreground">
                         Parent node · {group.items.length} {group.items.length === 1 ? "child" : "children"}
                       </div>
                     </div>
                   </div>
 
-                  <div className="relative mr-6 mt-1 border-r-[3px] border-slate-200 pb-1 pr-8">
+                  <div className="relative mr-6 mt-1 border-r-[3px] border-border pb-1 pr-8">
                     {group.items.map((p, itemIndex) => {
                       const isCreate = p.action === "CREATE";
                       const isMerge = p.action === "MERGE";
@@ -452,7 +452,7 @@ export function KnowledgeCopilot() {
                           ? "border-amber-200 bg-amber-50/80"
                           : isConflict
                             ? "border-orange-200 bg-orange-50/80"
-                            : "border-slate-200 bg-slate-50";
+                            : "border-border bg-surface";
 
                       const dotTone = isCreate
                         ? "bg-green-500 ring-green-100"
@@ -460,7 +460,7 @@ export function KnowledgeCopilot() {
                           ? "bg-amber-500 ring-amber-100"
                           : isConflict
                             ? "bg-orange-500 ring-orange-100"
-                            : "bg-slate-400 ring-slate-100";
+                            : "bg-muted-foreground ring-border";
 
                       const statusTone = isCreate
                         ? "border-green-200 bg-green-100 text-green-800"
@@ -468,22 +468,22 @@ export function KnowledgeCopilot() {
                           ? "border-amber-200 bg-amber-100 text-amber-800"
                           : isConflict
                             ? "border-orange-200 bg-orange-100 text-orange-800"
-                            : "border-slate-200 bg-slate-100 text-slate-600";
+                            : "border-border bg-secondary text-muted-foreground";
 
                       return (
                         <div key={p.proposalId} className="relative pt-5">
-                          <span className="absolute -right-8 top-10 h-[3px] w-8 bg-slate-200" />
-                          <span className={`absolute -right-[2.18rem] top-[2.18rem] h-4 w-4 rounded-full border-2 border-white ring-4 ${dotTone}`} />
+                          <span className="absolute -right-8 top-10 h-[3px] w-8 bg-border" />
+                          <span className={`absolute -right-[2.18rem] top-[2.18rem] h-4 w-4 rounded-full border-2 border-card ring-4 ${dotTone}`} />
 
                           <div className={`rounded-2xl border-2 px-4 py-4 shadow-[0_5px_16px_rgba(7,19,25,.04)] ${nodeTone}`}>
                             <div className="flex flex-wrap items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <div className="flex items-center gap-2 text-[10px] font-black text-slate-500">
+                                <div className="flex items-center gap-2 text-[10px] font-black text-muted-foreground">
                                   <span>Child {itemIndex + 1}</span>
-                                  <span className="text-slate-300">/</span>
+                                  <span className="text-muted-foreground/50">/</span>
                                   <span>{knowledgeCategoryLabel(p.category)}</span>
                                 </div>
-                                <h4 className="mt-1.5 text-sm font-black leading-6 text-slate-900">
+                                <h4 className="mt-1.5 text-sm font-black leading-6 text-foreground">
                                   {p.proposedTitle}
                                 </h4>
                               </div>
@@ -495,7 +495,7 @@ export function KnowledgeCopilot() {
 
                             {p.action === "MERGE" || p.action === "CONFLICT" ? (
                               <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                                <div className="rounded-xl border border-white/70 bg-white/70 p-3">
+                                <div className="rounded-xl border border-border/70 bg-card/70 p-3">
                                   <p className="mb-1 text-[10px] font-black text-muted-foreground">
                                     المعلومة الحالية
                                   </p>
@@ -503,7 +503,7 @@ export function KnowledgeCopilot() {
                                     {p.existingContent || "—"}
                                   </p>
                                 </div>
-                                <div className="rounded-xl border border-white/70 bg-white/90 p-3">
+                                <div className="rounded-xl border border-border/70 bg-card/90 p-3">
                                   <p className="mb-1 text-[10px] font-black text-muted-foreground">
                                     المعلومة الجديدة
                                   </p>
@@ -576,7 +576,7 @@ export function KnowledgeCopilot() {
               ))}
             </div>
 
-            <div className="mt-7 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[11px] leading-6 text-slate-600">
+            <div className="mt-7 rounded-2xl border border-border bg-surface px-4 py-3 text-[11px] leading-6 text-muted-foreground">
               الأخضر = Node جديدة، الأصفر = Node موجودة اتعدلت، الأحمر = حذف صريح، والبرتقالي = تعارض محتاج قرار. الحذف الصريح لسه مش مفعّل في الـ backend الحالي، فمش هيظهر أحمر إلا بعد إضافة Delete action فعلية.
             </div>
           </div>
