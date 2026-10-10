@@ -105,18 +105,66 @@ const steps: StoryStep[] = [
   },
 ];
 
-const lottieByScene: Record<StoryScene, string> = {
-  business: "https://assets8.lottiefiles.com/packages/lf20_7pzyukmv.json",
-  agent: "https://assets2.lottiefiles.com/packages/lf20_muccxgoz.json",
-  learn: "https://assets2.lottiefiles.com/packages/lf20_muccxgoz.json",
-  guard: "https://assets3.lottiefiles.com/packages/lf20_msdmfngy.json",
-  handoff: "https://assets3.lottiefiles.com/packages/lf20_msdmfngy.json",
-  whatsapp: "https://assets8.lottiefiles.com/packages/lf20_7pzyukmv.json",
-  details: "https://assets2.lottiefiles.com/packages/lf20_cdwc9fys.json",
-  next: "https://assets2.lottiefiles.com/packages/lf20_cdwc9fys.json",
-  erp: "https://assets2.lottiefiles.com/packages/lf20_cdwc9fys.json",
-  daily: "https://assets2.lottiefiles.com/packages/lf20_muccxgoz.json",
-  summary: "https://assets8.lottiefiles.com/packages/lf20_7pzyukmv.json",
+const lottieByScene: Record<
+  StoryScene,
+  { src: string; label: string; speed?: number }
+> = {
+  // Every story step intentionally uses a different Lottie asset.
+  business: {
+    src: "https://assets4.lottiefiles.com/packages/lf20_22mjkcbb.json",
+    label: "Business growth and company overview",
+    speed: 0.85,
+  },
+  agent: {
+    src: "https://assets3.lottiefiles.com/packages/lf20_UJNc2t.json",
+    label: "AI assistant",
+    speed: 0.9,
+  },
+  learn: {
+    src: "https://assets1.lottiefiles.com/packages/lf20_u4j3xm6r.json",
+    label: "Learning and knowledge",
+    speed: 0.82,
+  },
+  guard: {
+    src: "https://assets3.lottiefiles.com/packages/lf20_msdmfngy.json",
+    label: "Security shield and permissions",
+    speed: 0.78,
+  },
+  handoff: {
+    src: "https://assets8.lottiefiles.com/packages/lf20_7pzyukmv.json",
+    label: "Team support and human handoff",
+    speed: 0.86,
+  },
+  whatsapp: {
+    src: "https://assets3.lottiefiles.com/packages/lf20_0apkn3k1.json",
+    label: "Messaging conversation",
+    speed: 0.9,
+  },
+  details: {
+    src: "https://assets6.lottiefiles.com/packages/lf20_l5o1uey5.json",
+    label: "Pricing and service details",
+    speed: 0.78,
+  },
+  next: {
+    src: "https://assets10.lottiefiles.com/packages/lf20_qmo9vzmq.json",
+    label: "Next action and customer journey",
+    speed: 0.88,
+  },
+  erp: {
+    src: "https://assets2.lottiefiles.com/packages/lf20_cdwc9fys.json",
+    label: "ERP data and system integration",
+    speed: 0.76,
+  },
+  daily: {
+    src: "https://assets4.lottiefiles.com/packages/lf20_q5pk6p1k.json",
+    label: "Daily automation workflow",
+    speed: 0.82,
+  },
+  summary: {
+    src: "https://assets1.lottiefiles.com/packages/lf20_jbrw3hcz.json",
+    label: "Success and completion",
+    speed: 0.9,
+  },
 };
 
 function SceneChrome({ scene }: { scene: StoryScene }) {
@@ -229,10 +277,10 @@ function SceneVisual({
 
       <div className="absolute inset-[7%] z-10 sm:inset-[6%]">
         <LottieAsset
-          src={lottieByScene[scene]}
+          src={lottieByScene[scene].src}
           className="h-full w-full"
-          speed={scene === "handoff" ? 0.8 : 1}
-          ariaLabel={`Lottie motion graphic for ${scene}`}
+          speed={lottieByScene[scene].speed ?? 1}
+          ariaLabel={lottieByScene[scene].label}
         />
       </div>
 
