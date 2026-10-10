@@ -182,7 +182,7 @@ export function LandingConversationFlow() {
   }, []);
 
   return (
-    <div className="relative min-h-[300px] overflow-hidden rounded-[26px] border border-border/70 bg-card/70 shadow-[0_26px_70px_rgba(0,74,102,.16)] backdrop-blur-xl sm:min-h-[430px] sm:rounded-[30px] sm:shadow-[0_30px_90px_rgba(0,74,102,.18)]">
+    <div className="relative min-h-[300px] overflow-hidden rounded-[26px] border border-border/70 bg-card/70 shadow-[0_26px_70px_rgba(0,74,102,.16)] backdrop-blur-xl sm:min-h-[430px] sm:rounded-[30px] sm:shadow-[0_30px_90px_rgba(0,74,102,.18)] lg:min-h-[500px] xl:min-h-[560px] 2xl:min-h-[610px]">
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
 
       <div className="pointer-events-none absolute inset-0">

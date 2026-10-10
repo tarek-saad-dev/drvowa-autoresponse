@@ -348,9 +348,9 @@ export function PresentationScrollytelling() {
   return (
     <section id="story" className="relative scroll-mt-20 bg-background">
       <div className="hidden lg:block">
-        <div className="relative mx-auto max-w-7xl px-6">
-          <div className="sticky top-16 z-10 flex h-[calc(100svh-4rem)] items-center py-8">
-            <div className="grid w-full grid-cols-[0.72fr_1.28fr] items-center gap-12">
+        <div className="relative mx-auto max-w-7xl px-6 xl:px-8 2xl:max-w-[1480px]">
+          <div className="sticky top-16 z-10 flex h-[calc(100svh-4rem)] items-center py-5 xl:py-7">
+            <div className="grid w-full grid-cols-[0.70fr_1.30fr] items-center gap-8 xl:grid-cols-[0.66fr_1.34fr] xl:gap-14">
               <div className="relative z-20">
                 <div className="flex items-center gap-3">
                   <span className="text-[11px] font-black tracking-[.2em] text-primary">
@@ -361,10 +361,10 @@ export function PresentationScrollytelling() {
                 </div>
 
                 <div key={active.step} className="cinema-copy-enter">
-                  <h2 className="mt-5 max-w-xl text-5xl font-black leading-[1.08] tracking-[-0.055em] text-foreground xl:text-6xl">
+                  <h2 className="mt-5 max-w-xl text-[3.25rem] font-black leading-[1.05] tracking-[-0.055em] text-foreground xl:text-[4rem] 2xl:text-[4.45rem]">
                     {active.title}
                   </h2>
-                  <p className="mt-5 max-w-lg text-lg leading-8 text-muted-foreground">
+                  <p className="mt-5 max-w-lg text-[1.05rem] leading-8 text-muted-foreground xl:text-lg xl:leading-9">
                     {active.line}
                   </p>
                 </div>
@@ -388,7 +388,12 @@ export function PresentationScrollytelling() {
                 </div>
               </div>
 
-              <div className="relative h-[76vh] min-h-[560px] max-h-[760px]">
+              <div className="relative h-[72vh] min-h-[500px] max-h-[720px] xl:h-[77vh] xl:min-h-[590px] xl:max-h-[820px] 2xl:h-[80vh]">
+                <div className="pointer-events-none absolute -left-3 top-1/2 z-20 hidden -translate-y-1/2 flex-col items-center gap-3 xl:flex">
+                  <span className="text-[10px] font-black tracking-[.18em] text-primary">{active.step}</span>
+                  <span className="h-14 w-px bg-[linear-gradient(180deg,var(--primary),transparent)]" />
+                  <span className="text-[9px] font-bold text-muted-foreground">12</span>
+                </div>
                 {steps.map((step, index) => (
                   <div
                     key={step.step}
@@ -416,7 +421,7 @@ export function PresentationScrollytelling() {
                   triggerRefs.current[index] = node;
                 }}
                 data-index={index}
-                className="h-[82svh]"
+                className="h-[78svh] xl:h-[82svh]"
               />
             ))}
           </div>
