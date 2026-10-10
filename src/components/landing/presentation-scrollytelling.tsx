@@ -107,13 +107,13 @@ const steps: StoryStep[] = [
 
 const lottieByScene: Record<StoryScene, string> = {
   business: "https://assets8.lottiefiles.com/packages/lf20_7pzyukmv.json",
-  agent: "https://raw.githubusercontent.com/xvrh/lottie-flutter/master/example/assets/lottiefiles/brain__.json",
+  agent: "https://assets2.lottiefiles.com/packages/lf20_muccxgoz.json",
   learn: "https://assets2.lottiefiles.com/packages/lf20_muccxgoz.json",
   guard: "https://assets3.lottiefiles.com/packages/lf20_msdmfngy.json",
-  handoff: "https://raw.githubusercontent.com/xvrh/lottie-flutter/master/example/assets/lottiefiles/notification_request.json",
-  whatsapp: "https://raw.githubusercontent.com/xvrh/lottie-flutter/master/example/assets/lottiefiles/typing%20dot.json",
+  handoff: "https://assets3.lottiefiles.com/packages/lf20_msdmfngy.json",
+  whatsapp: "https://assets8.lottiefiles.com/packages/lf20_7pzyukmv.json",
   details: "https://assets2.lottiefiles.com/packages/lf20_cdwc9fys.json",
-  next: "https://raw.githubusercontent.com/xvrh/lottie-flutter/master/example/assets/lottiefiles/iphone_x_loading.json",
+  next: "https://assets2.lottiefiles.com/packages/lf20_cdwc9fys.json",
   erp: "https://assets2.lottiefiles.com/packages/lf20_cdwc9fys.json",
   daily: "https://assets2.lottiefiles.com/packages/lf20_muccxgoz.json",
   summary: "https://assets8.lottiefiles.com/packages/lf20_7pzyukmv.json",
