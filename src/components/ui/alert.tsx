@@ -8,7 +8,7 @@ const variantClass: Record<AlertVariant, string> = {
   info: "border-info/30 bg-info-soft text-info",
   success: "border-success/30 bg-success-soft text-success",
   warning: "border-warning/30 bg-warning-soft text-warning",
-  error: "border-destructive/30 bg-destructive-foreground text-destructive",
+  error: "border-destructive/30 bg-destructive-soft text-destructive",
 };
 
 export type AlertProps = HTMLAttributes<HTMLDivElement> & {
