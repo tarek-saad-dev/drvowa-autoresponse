@@ -1,43 +1,100 @@
 @import "tailwindcss";
 
-:root {
-  --background: #f4f7f8;
-  --foreground: #0f1c24;
-  --muted: #5b6b76;
-  --muted-foreground: #64748b;
+:root,
+html[data-theme="light"] {
+  color-scheme: light;
+
+  /* DRVO AutoRespond brand */
+  --brand-teal: #00759a;
+  --brand-teal-strong: #005f80;
+  --brand-teal-deep: #004a66;
+  --brand-ink: #071319;
+  --brand-white: #f8fbfc;
+
+  --background: #f4f8fa;
+  --foreground: #08171e;
+  --muted: #5b6f79;
+  --muted-foreground: #6b7f89;
   --card: #ffffff;
-  --card-foreground: #0f1c24;
-  --border: #d7e0e5;
-  --input: #d7e0e5;
-  --ring: #0f766e;
-  --primary: #0f766e;
-  --primary-foreground: #f8fafc;
-  --primary-hover: #0d9488;
-  --secondary: #e8eef1;
-  --secondary-foreground: #1e3340;
-  --accent: #b45309;
-  --accent-foreground: #fffbeb;
-  --accent-soft: #fef3c7;
-  --destructive: #b91c1c;
-  --destructive-foreground: #fef2f2;
-  --success: #047857;
-  --success-soft: #d1fae5;
-  --warning: #b45309;
-  --warning-soft: #fef3c7;
-  --info: #0e7490;
-  --info-soft: #cffafe;
-  --surface: #eef4f6;
-  --sidebar: #0b1f26;
-  --sidebar-foreground: #e2e8f0;
-  --sidebar-muted: #94a3b8;
-  --sidebar-active: #134e4a;
+  --card-foreground: #08171e;
+  --border: #d9e6eb;
+  --input: #d6e4e9;
+  --ring: var(--brand-teal);
+  --primary: var(--brand-teal);
+  --primary-foreground: #ffffff;
+  --primary-hover: var(--brand-teal-strong);
+  --secondary: #e9f2f5;
+  --secondary-foreground: #17323e;
+  --accent: #0a87ad;
+  --accent-foreground: #ffffff;
+  --accent-soft: #dff3f9;
+  --destructive: #c73535;
+  --destructive-foreground: #ffffff;
+  --success: #0f8a63;
+  --success-soft: #dcf7ed;
+  --warning: #b56d14;
+  --warning-soft: #fff2d9;
+  --info: #087ca3;
+  --info-soft: #dff4fb;
+  --surface: #edf5f7;
+  --sidebar: #071a22;
+  --sidebar-foreground: #f4f9fb;
+  --sidebar-muted: #8ba7b3;
+  --sidebar-active: #0a4f68;
   --radius: 0.75rem;
-  --shadow-sm: 0 1px 2px rgb(15 28 36 / 0.06);
-  --shadow-md: 0 8px 24px rgb(15 28 36 / 0.08);
+  --shadow-sm: 0 1px 2px rgb(7 19 25 / 0.06);
+  --shadow-md: 0 12px 32px rgb(7 34 46 / 0.10);
   --atmosphere:
-    radial-gradient(ellipse 80% 50% at 100% -10%, rgb(15 118 110 / 0.12), transparent 55%),
-    radial-gradient(ellipse 60% 40% at 0% 100%, rgb(180 83 9 / 0.08), transparent 50%),
-    linear-gradient(180deg, #f7fafb 0%, #eef4f6 100%);
+    radial-gradient(ellipse 76% 48% at 100% -10%, rgb(0 117 154 / 0.13), transparent 58%),
+    radial-gradient(ellipse 55% 34% at 0% 100%, rgb(0 95 128 / 0.08), transparent 55%),
+    linear-gradient(180deg, #f8fbfc 0%, #eef5f7 100%);
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --brand-teal: #0b8bb5;
+  --brand-teal-strong: #149bc7;
+  --brand-teal-deep: #006b8f;
+  --brand-ink: #05090b;
+  --brand-white: #f7fbfc;
+
+  --background: #05090b;
+  --foreground: #f5f9fa;
+  --muted: #8ca0aa;
+  --muted-foreground: #8fa4ae;
+  --card: #0a1115;
+  --card-foreground: #f5f9fa;
+  --border: #1c2c34;
+  --input: #23343c;
+  --ring: #0b8bb5;
+  --primary: #0b8bb5;
+  --primary-foreground: #ffffff;
+  --primary-hover: #149bc7;
+  --secondary: #101b20;
+  --secondary-foreground: #dce8ec;
+  --accent: #149bc7;
+  --accent-foreground: #ffffff;
+  --accent-soft: #0c2c38;
+  --destructive: #ef5b5b;
+  --destructive-foreground: #ffffff;
+  --success: #35b98a;
+  --success-soft: #0b2a21;
+  --warning: #d99a41;
+  --warning-soft: #2f2412;
+  --info: #35acd2;
+  --info-soft: #0b2b36;
+  --surface: #0d171c;
+  --sidebar: #020607;
+  --sidebar-foreground: #f7fbfc;
+  --sidebar-muted: #78929d;
+  --sidebar-active: #07394b;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.28);
+  --shadow-md: 0 16px 44px rgb(0 0 0 / 0.34);
+  --atmosphere:
+    radial-gradient(ellipse 78% 48% at 100% -10%, rgb(0 117 154 / 0.18), transparent 58%),
+    radial-gradient(ellipse 55% 36% at 0% 100%, rgb(0 71 96 / 0.16), transparent 55%),
+    linear-gradient(180deg, #05090b 0%, #071116 100%);
 }
 
 @theme inline {
@@ -86,6 +143,7 @@
 
 html {
   scroll-behavior: smooth;
+  background: var(--background);
 }
 
 body {
@@ -94,10 +152,11 @@ body {
   color: var(--foreground);
   font-family: var(--font-ibm-plex-arabic), "Segoe UI", Tahoma, sans-serif;
   min-height: 100%;
+  transition: background-color 180ms ease, color 180ms ease;
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--primary) 28%, white);
+  background: color-mix(in srgb, var(--primary) 30%, transparent);
   color: var(--foreground);
 }
 
