@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 
 import { WorkspaceSwitcher } from "@/components/dashboard/workspace-switcher";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { DASHBOARD_NAV } from "@/constants/nav";
 import type { Business } from "@/types/domain";
 
@@ -79,6 +80,7 @@ export function DashboardTopbar({
           businesses={businesses}
           activeBusinessId={activeBusinessId}
         />
+        <ThemeToggle />
         <Link
           href="/dashboard/settings"
           className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-border bg-card text-sm text-muted-foreground transition hover:bg-surface hover:text-foreground"
