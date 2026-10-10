@@ -1,50 +1,67 @@
+"use client";
+
 import Link from "next/link";
 
+import { LandingConversationFlow } from "@/components/landing/conversation-flow";
 import { Button } from "@/components/ui/button";
-import { APP_NAME } from "@/constants/app";
 
 export function LandingHero() {
   return (
     <section className="relative overflow-hidden">
-      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:py-24">
-        <div>
-          <p className="text-sm font-semibold tracking-wide text-primary">
-            {APP_NAME}
-          </p>
-          <h1 className="mt-4 max-w-xl text-4xl font-bold leading-tight tracking-tight text-foreground sm:text-5xl">
-            موظف استقبال ذكي لنشاطك التجاري
+      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[36rem] bg-[radial-gradient(circle_at_72%_18%,rgba(0,117,154,.16),transparent_34%),radial-gradient(circle_at_16%_12%,rgba(11,139,181,.10),transparent_30%)]" />
+
+      <div className="mx-auto grid max-w-7xl gap-10 px-4 pb-16 pt-12 sm:px-6 sm:pt-16 lg:grid-cols-[0.92fr_1.08fr] lg:items-center lg:gap-14 lg:pb-24 lg:pt-20">
+        <div className="relative z-10">
+          <div className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/7 px-3 py-1.5 text-[11px] font-black text-primary">
+            <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_0_5px_rgba(0,117,154,.08)]" />
+            AI Receptionist + WhatsApp + ERP
+          </div>
+
+          <h1 className="mt-5 max-w-2xl text-4xl font-black leading-[1.16] tracking-[-0.045em] text-foreground sm:text-5xl lg:text-[3.8rem]">
+            كل رسالة داخلة،
+            <span className="block bg-[linear-gradient(90deg,#00759A,#0B8BB5)] bg-clip-text text-transparent">
+              تتحول لتصرف.
+            </span>
           </h1>
-          <p className="mt-5 max-w-lg text-base leading-7 text-muted-foreground sm:text-lg">
-            منصة SaaS تساعدك على إعداد موظف استقبال ذكي يرد على عملائك عبر
-            واتساب بمعرفة نشاطك — مع تحكم كامل للموظف من صندوق الوارد.
+
+          <p className="mt-5 max-w-xl text-base leading-8 text-muted-foreground sm:text-lg">
+            DRVO AutoRespond يفهم العميل، يرد من معرفة نشاطك، ينفّذ من الـ ERP،
+            ويسلّم المحادثة للموظف وقت ما تحتاج.
           </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
+
+          <div className="mt-7 flex flex-wrap items-center gap-3">
             <Link href="/signup">
-              <Button size="lg">ابدأ الآن</Button>
+              <Button size="lg" className="min-w-36 rounded-xl">
+                ابدأ الآن
+              </Button>
             </Link>
             <Link href="#how-it-works">
-              <Button size="lg" variant="outline">
-                شاهد كيف يعمل
+              <Button size="lg" variant="outline" className="rounded-xl">
+                شوف بيشتغل إزاي
               </Button>
             </Link>
           </div>
-        </div>
-        <div
-          aria-hidden
-          className="relative min-h-64 overflow-hidden rounded-2xl border border-border bg-[linear-gradient(145deg,#05090b_0%,#071319_45%,#004a66_100%)] shadow-md"
-        >
-          <div className="absolute inset-0 opacity-40 [background-image:radial-gradient(circle_at_20%_20%,white_0.8px,transparent_1px)] [background-size:18px_18px]" />
-          <div className="relative flex h-full flex-col justify-end gap-3 p-6 text-sidebar-foreground sm:p-8">
-            <div className="rounded-xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
-              <p className="text-xs text-sidebar-muted">مثال على الرد</p>
-              <p className="mt-2 text-sm leading-6">
-                مرحباً، أنا موظف الاستقبال الذكي. كيف يمكنني مساعدتك اليوم؟
-              </p>
-            </div>
-            <div className="ms-auto max-w-[85%] rounded-xl border border-[#0b8bb5]/30 bg-[#0b8bb5]/20 p-3 text-sm">
-              ما أوقات العمل؟ وأين موقعكم؟
-            </div>
+
+          <div className="mt-8 grid max-w-xl grid-cols-3 gap-2">
+            {[
+              ["24/7", "رد تلقائي"],
+              ["AI + Human", "استلام ذكي"],
+              ["ERP", "قراءة وتنفيذ"],
+            ].map(([value, label]) => (
+              <div
+                key={value}
+                className="rounded-2xl border border-border/70 bg-card/60 px-3 py-3 backdrop-blur"
+              >
+                <div className="text-sm font-black text-foreground">{value}</div>
+                <div className="mt-0.5 text-[10px] font-bold text-muted-foreground">{label}</div>
+              </div>
+            ))}
           </div>
+        </div>
+
+        <div className="relative">
+          <div className="absolute inset-8 -z-10 rounded-full bg-primary/10 blur-3xl" />
+          <LandingConversationFlow />
         </div>
       </div>
     </section>
