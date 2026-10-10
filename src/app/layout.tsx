@@ -22,13 +22,35 @@ type RootLayoutProps = Readonly<{
   children: ReactNode;
 }>;
 
+const themeBootScript = `
+  (() => {
+    try {
+      const saved = localStorage.getItem("drvo-theme");
+      const theme =
+        saved === "light" || saved === "dark"
+          ? saved
+          : window.matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark"
+            : "light";
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.style.colorScheme = theme;
+    } catch {
+      document.documentElement.dataset.theme = "light";
+    }
+  })();
+`;
+
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html
       lang="ar"
       dir="rtl"
+      suppressHydrationWarning
       className={`${ibmPlexArabic.variable} h-full antialiased`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+      </head>
       <body className="flex min-h-full flex-col font-sans">{children}</body>
     </html>
   );

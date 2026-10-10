@@ -20,7 +20,7 @@ export function DashboardSidebar({
     cn(
       "group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold transition-all duration-200",
       active
-        ? "bg-white text-sidebar shadow-sm"
+        ? "bg-primary text-white shadow-[0_10px_28px_rgba(0,117,154,.24)]"
         : "text-sidebar-muted hover:bg-white/5 hover:text-sidebar-foreground",
     );
 
@@ -28,7 +28,7 @@ export function DashboardSidebar({
     <aside className="flex w-[17.5rem] shrink-0 flex-col border-e border-white/10 bg-sidebar px-3 py-4 text-sidebar-foreground">
       <div className="px-3 pb-5 pt-1">
         <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-white text-lg font-black text-sidebar">
+          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-primary text-lg font-black text-white shadow-[0_8px_22px_rgba(0,117,154,.28)]">
             D
           </div>
           <div>
@@ -54,13 +54,13 @@ export function DashboardSidebar({
                 <span
                   className={cn(
                     "grid h-8 w-8 shrink-0 place-items-center rounded-xl text-base transition",
-                    active ? "bg-sidebar text-white" : "bg-white/6",
+                    active ? "bg-white/15 text-white" : "bg-white/6",
                   )}
                 >
                   {item.icon}
                 </span>
                 <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                {active ? <span className="h-2 w-2 rounded-full bg-primary" /> : null}
+                {active ? <span className="h-2 w-2 rounded-full bg-white" /> : null}
               </Link>
             );
           })}
@@ -81,7 +81,7 @@ export function DashboardSidebar({
                 <span
                   className={cn(
                     "grid h-8 w-8 shrink-0 place-items-center rounded-xl text-sm",
-                    active ? "bg-sidebar text-white" : "bg-white/6",
+                    active ? "bg-white/15 text-white" : "bg-white/6",
                   )}
                 >
                   {item.icon}
@@ -110,7 +110,7 @@ export function DashboardSidebar({
         <div className="mt-2 grid gap-2">
           <Link
             href="/dashboard/inbox"
-            className="flex items-center justify-between gap-2 rounded-xl bg-white px-3 py-2.5 text-xs font-black text-sidebar transition hover:bg-white/90"
+            className="flex items-center justify-between gap-2 rounded-xl bg-primary px-3 py-2.5 text-xs font-black text-white transition hover:bg-primary-hover"
           >
             <span className="flex items-center gap-2">
               <span>💬</span>
