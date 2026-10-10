@@ -8,7 +8,7 @@ import { APP_NAME } from "@/constants/app";
 export function LandingHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 xl:px-8">
         <Link href="/" aria-label={APP_NAME} className="shrink-0">
           <BrandLogo priority className="h-8 sm:h-9" />
         </Link>
