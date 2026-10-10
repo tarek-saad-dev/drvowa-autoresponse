@@ -958,21 +958,21 @@ export function GuidedOnboardingPreview({
   }
 
   return (
-    <main dir="rtl" className="relative min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_80%_0%,rgba(0,117,154,.14),transparent_35%),radial-gradient(circle_at_10%_90%,rgba(7,19,25,.05),transparent_35%),linear-gradient(180deg,#f8fbfc_0%,#f4f8fa_100%)] px-4 pb-28 pt-5 text-foreground sm:px-6 sm:pb-10">
+    <main dir="rtl" className="relative min-h-screen overflow-x-hidden bg-background/40 px-4 pb-28 pt-5 text-foreground sm:px-6 sm:pb-10">
       <div className="mx-auto flex w-full max-w-5xl flex-col">
         <header className="mb-7 flex items-center justify-between gap-4">
           <div>
             <div className="text-lg font-black tracking-[-0.03em] text-primary">DRVOWA</div>
             <div className="mt-0.5 text-[11px] font-medium text-muted-foreground">إعداد موظف الاستقبال</div>
           </div>
-          <div className="rounded-full border border-border/70 bg-white/75 px-3 py-1.5 text-xs font-semibold text-muted-foreground shadow-sm backdrop-blur">
+          <div className="rounded-full border border-border/70 bg-card/75 px-3 py-1.5 text-xs font-semibold text-muted-foreground shadow-sm backdrop-blur">
             {Math.min(index + 1, FLOW.length)} من {FLOW.length}
           </div>
         </header>
 
         <section aria-label="تقدم الإعداد" className="mb-8">
           <div className="relative mx-auto max-w-4xl">
-            <div className="absolute left-[6%] right-[6%] top-5 h-1 rounded-full bg-white/80 shadow-inner" />
+            <div className="absolute left-[6%] right-[6%] top-5 h-1 rounded-full bg-card/80 shadow-inner" />
             <div
               className="absolute right-[6%] top-5 h-1 rounded-full bg-primary transition-[width] duration-700 ease-out"
               style={{ width: `${progress * 0.88}%` }}
@@ -999,8 +999,8 @@ export function GuidedOnboardingPreview({
                       className={cx(
                         "grid h-9 w-9 place-items-center rounded-xl border-2 text-xs font-black shadow-sm transition-all duration-300 sm:h-10 sm:w-10 sm:rounded-2xl sm:text-sm",
                         done && "border-primary bg-primary text-white",
-                        active && "scale-110 border-primary bg-white text-primary shadow-[0_10px_30px_rgba(0,117,154,.22)]",
-                        !done && !active && "border-white bg-white/90 text-muted-foreground",
+                        active && "scale-110 border-primary bg-card text-primary shadow-[0_10px_30px_rgba(0,117,154,.22)]",
+                        !done && !active && "border-white bg-card/90 text-muted-foreground",
                       )}
                     >
                       {done ? "✓" : itemIndex === FLOW.length - 1 ? "★" : itemIndex + 1}
@@ -1018,7 +1018,7 @@ export function GuidedOnboardingPreview({
         </section>
 
         <section className="mx-auto w-full max-w-[840px]">
-          <div className="overflow-hidden rounded-[30px] border border-white/80 bg-white/88 shadow-[0_24px_80px_rgba(7,19,25,.10)] backdrop-blur-xl">
+          <div className="overflow-hidden rounded-[30px] border border-white/80 bg-card/88 shadow-[0_24px_80px_rgba(7,19,25,.10)] backdrop-blur-xl">
             <div key={step} className="min-h-[540px] animate-[fadeIn_.28s_ease-out] p-6 sm:p-9 md:p-12">
               {step === "WELCOME" ? (
                 <div className="flex min-h-[450px] flex-col items-center justify-center text-center">
@@ -1065,7 +1065,7 @@ export function GuidedOnboardingPreview({
                                 "rounded-2xl border-2 p-5 text-start text-sm font-black transition-all duration-200",
                                 selected
                                   ? "border-primary bg-primary/8 text-primary shadow-[0_10px_28px_rgba(0,117,154,.12)]"
-                                  : "border-border bg-white hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md",
+                                  : "border-border bg-card hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md",
                               )}
                             >
                               <span className="mb-3 block text-2xl">{choice === "صالون" ? "✂️" : choice === "عيادة" ? "🩺" : choice === "مطعم" ? "🍽️" : choice === "متجر" ? "🛍️" : choice === "خدمات" ? "🧩" : "✨"}</span>
@@ -1082,7 +1082,7 @@ export function GuidedOnboardingPreview({
                               setBusiness((prev) => ({ ...prev, customType: event.target.value }))
                             }
                             placeholder="اكتب نوع النشاط بالتحديد، مثال: أكاديمية تعليم، شركة عقارات، مركز صيانة..."
-                            className="h-14 rounded-2xl border-2 bg-white px-4 text-base"
+                            className="h-14 rounded-2xl border-2 bg-card px-4 text-base"
                             autoFocus
                           />
                           <p className="mt-2 text-xs leading-6 text-muted-foreground">
@@ -1106,7 +1106,7 @@ export function GuidedOnboardingPreview({
                               "rounded-2xl border-2 px-3 py-5 text-center text-sm font-black transition-all duration-200",
                               selected
                                 ? "border-primary bg-primary text-white shadow-lg"
-                                : "border-border bg-white hover:border-primary/50",
+                                : "border-border bg-card hover:border-primary/50",
                             )}
                           >
                             {choice.label}
@@ -1127,7 +1127,7 @@ export function GuidedOnboardingPreview({
                               "rounded-2xl border-2 px-3 py-5 text-center text-sm font-black transition-all duration-200",
                               selected
                                 ? "border-primary bg-primary text-white shadow-lg"
-                                : "border-border bg-white hover:border-primary/50",
+                                : "border-border bg-card hover:border-primary/50",
                             )}
                           >
                             {choice}
@@ -1141,7 +1141,7 @@ export function GuidedOnboardingPreview({
                       value={business[currentBusinessQuestion.key] ?? ""}
                       onChange={(event) => setBusiness((prev) => ({ ...prev, [currentBusinessQuestion.key]: event.target.value }))}
                       placeholder={currentBusinessQuestion.placeholder}
-                      className="h-16 rounded-2xl border-2 bg-white px-5 text-lg font-semibold shadow-sm focus:border-primary"
+                      className="h-16 rounded-2xl border-2 bg-card px-5 text-lg font-semibold shadow-sm focus:border-primary"
                     />
                   )}
                   <div className="mt-5 flex gap-2">
@@ -1175,7 +1175,7 @@ export function GuidedOnboardingPreview({
                   ) : mockState === "loading" ? (
                     <div className="mt-8 space-y-3 rounded-[24px] border border-primary/20 bg-primary/5 p-6">
                       {["بقرأ المعلومات…", "بنظم الخدمات والأسعار…", "بفهم السياسات والمواعيد…", "بنجهز موظف الاستقبال…"].map((label, i) => (
-                        <div key={label} className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm">
+                        <div key={label} className="flex items-center gap-3 rounded-2xl bg-card p-4 shadow-sm">
                           <span className={cx("grid h-8 w-8 place-items-center rounded-full text-sm font-black", i < 2 ? "bg-success-soft text-success" : "bg-secondary text-muted-foreground")}>{i < 2 ? "✓" : "…"}</span>
                           <span className="font-bold">{label}</span>
                         </div>
@@ -1200,7 +1200,7 @@ export function GuidedOnboardingPreview({
                           ["CUSTOM", "معلومات إضافية"],
                         ].filter(([key]) => (knowledgeSummary[key] ?? 0) > 0)
                           .map(([key, label]) => (
-                            <div key={key} className="rounded-2xl bg-white/85 p-3 text-center">
+                            <div key={key} className="rounded-2xl bg-card/85 p-3 text-center">
                               <div className="text-lg font-black">{knowledgeSummary[key]}</div>
                               <div className="mt-1 text-[11px] font-bold text-muted-foreground">{label}</div>
                             </div>
@@ -1208,7 +1208,7 @@ export function GuidedOnboardingPreview({
                       </div>
 
                       {knowledgeTreeGroups.length > 0 ? (
-                        <div className="mt-6 rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+                        <div className="mt-6 rounded-[26px] border border-border bg-card p-4 shadow-sm sm:p-6">
                           <div className="flex flex-wrap items-start justify-between gap-4">
                             <div>
                               <div className="text-base font-black">خريطة التغييرات في المعرفة</div>
@@ -1230,15 +1230,15 @@ export function GuidedOnboardingPreview({
                                   <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-2 border-ink bg-ink text-lg font-black text-white shadow-sm">
                                     ◉
                                   </div>
-                                  <div className="min-w-0 rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 shadow-sm">
-                                    <div className="truncate text-sm font-black text-slate-900">{group.title}</div>
-                                    <div className="mt-1 text-[10px] font-bold text-slate-500">
+                                  <div className="min-w-0 rounded-2xl border-2 border-border bg-card px-4 py-3 shadow-sm">
+                                    <div className="truncate text-sm font-black text-foreground">{group.title}</div>
+                                    <div className="mt-1 text-[10px] font-bold text-muted-foreground">
                                       Parent node · {group.items.length} {group.items.length === 1 ? "child" : "children"}
                                     </div>
                                   </div>
                                 </div>
 
-                                <div className="relative mr-6 mt-1 border-r-[3px] border-slate-200 pb-1 pr-8">
+                                <div className="relative mr-6 mt-1 border-r-[3px] border-border pb-1 pr-8">
                                   {group.items.map((item, itemIndex) => {
                                     const isCreate = item.action === "CREATE";
                                     const isMerge = item.action === "MERGE";
@@ -1253,7 +1253,7 @@ export function GuidedOnboardingPreview({
                                           ? "border-red-200 bg-red-50/80"
                                           : isConflict
                                             ? "border-orange-200 bg-orange-50/80"
-                                            : "border-slate-200 bg-slate-50";
+                                            : "border-border bg-surface";
 
                                     const dotClasses = isCreate
                                       ? "bg-green-500 ring-green-100"
@@ -1263,7 +1263,7 @@ export function GuidedOnboardingPreview({
                                           ? "bg-red-500 ring-red-100"
                                           : isConflict
                                             ? "bg-orange-500 ring-orange-100"
-                                            : "bg-slate-400 ring-slate-100";
+                                            : "bg-muted-foreground ring-border";
 
                                     const badgeClasses = isCreate
                                       ? "border-green-200 bg-green-100 text-green-800"
@@ -1273,7 +1273,7 @@ export function GuidedOnboardingPreview({
                                           ? "border-red-200 bg-red-100 text-red-800"
                                           : isConflict
                                             ? "border-orange-200 bg-orange-100 text-orange-800"
-                                            : "border-slate-200 bg-slate-100 text-slate-600";
+                                            : "border-border bg-secondary text-muted-foreground";
 
                                     const statusLabel = isCreate
                                       ? "جديد"
@@ -1287,9 +1287,9 @@ export function GuidedOnboardingPreview({
 
                                     return (
                                       <div key={item.proposalId} className="relative pt-5">
-                                        <span className="absolute -right-8 top-10 h-[3px] w-8 bg-slate-200" />
+                                        <span className="absolute -right-8 top-10 h-[3px] w-8 bg-border" />
                                         <span className={cx(
-                                          "absolute -right-[2.18rem] top-[2.18rem] h-4 w-4 rounded-full border-2 border-white ring-4",
+                                          "absolute -right-[2.18rem] top-[2.18rem] h-4 w-4 rounded-full border-2 border-card ring-4",
                                           dotClasses,
                                         )} />
 
@@ -1300,13 +1300,13 @@ export function GuidedOnboardingPreview({
                                           <div className="flex flex-wrap items-start justify-between gap-3">
                                             <div className="min-w-0">
                                               <div className="flex items-center gap-2">
-                                                <span className="text-[10px] font-black text-slate-400">
+                                                <span className="text-[10px] font-black text-muted-foreground">
                                                   Child {itemIndex + 1}
                                                 </span>
-                                                <span className="text-[10px] text-slate-300">/</span>
-                                                <span className="text-[10px] font-black text-slate-500">{item.category}</span>
+                                                <span className="text-[10px] text-muted-foreground/50">/</span>
+                                                <span className="text-[10px] font-black text-muted-foreground">{item.category}</span>
                                               </div>
-                                              <div className="mt-1.5 text-sm font-black leading-6 text-slate-900">
+                                              <div className="mt-1.5 text-sm font-black leading-6 text-foreground">
                                                 {item.title}
                                               </div>
                                             </div>
@@ -1320,8 +1320,8 @@ export function GuidedOnboardingPreview({
                                           </div>
 
                                           {group.items.length > 1 ? (
-                                            <div className="mt-2.5 flex items-center gap-2 text-[10px] font-bold text-slate-500">
-                                              <span className="text-slate-300">↳</span>
+                                            <div className="mt-2.5 flex items-center gap-2 text-[10px] font-bold text-muted-foreground">
+                                              <span className="text-muted-foreground/50">↳</span>
                                               مرتبط بـ {group.title}
                                             </div>
                                           ) : null}
@@ -1334,7 +1334,7 @@ export function GuidedOnboardingPreview({
                             ))}
                           </div>
 
-                          <div className="mt-7 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[11px] leading-6 text-slate-600">
+                          <div className="mt-7 rounded-2xl border border-border bg-surface px-4 py-3 text-[11px] leading-6 text-muted-foreground">
                             اللون بيوضح نوع التغيير: الأخضر إضافة جديدة، الأصفر تعديل على معرفة موجودة، والأحمر حذف صريح. التعارض بيظهر برتقالي للمراجعة ومش بيتحسب حذف.
                           </div>
                         </div>
@@ -1349,7 +1349,7 @@ export function GuidedOnboardingPreview({
                           className={cx(
                             "rounded-xl px-4 py-3 text-sm font-black transition",
                             knowledgeMode === "guided"
-                              ? "bg-white text-primary shadow-sm"
+                              ? "bg-card text-primary shadow-sm"
                               : "text-muted-foreground",
                           )}
                         >
@@ -1361,7 +1361,7 @@ export function GuidedOnboardingPreview({
                           className={cx(
                             "rounded-xl px-4 py-3 text-sm font-black transition",
                             knowledgeMode === "freeform"
-                              ? "bg-white text-primary shadow-sm"
+                              ? "bg-card text-primary shadow-sm"
                               : "text-muted-foreground",
                           )}
                         >
@@ -1383,7 +1383,7 @@ export function GuidedOnboardingPreview({
                                   {discoveryCovered.length > 0 ? (
                                     <div className="mt-4 flex flex-wrap gap-2">
                                       {discoveryCovered.map((key) => (
-                                        <span key={key} className="rounded-full bg-white px-3 py-1.5 text-[11px] font-black text-success">
+                                        <span key={key} className="rounded-full bg-card px-3 py-1.5 text-[11px] font-black text-success">
                                           {discoveryLabels[key] || key} ✓
                                         </span>
                                       ))}
@@ -1407,7 +1407,7 @@ export function GuidedOnboardingPreview({
                                       جاوب براحتك وبالتفاصيل. كل إجابة بتحدد السؤال اللي بعدها، فمش هنسألك حاجات ملهاش علاقة بنشاطك.
                                     </p>
                                   </div>
-                                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-sm font-black text-primary shadow-sm">
+                                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-card text-sm font-black text-primary shadow-sm">
                                     {discoveryTurns.length + 1}
                                   </span>
                                 </div>
@@ -1419,7 +1419,7 @@ export function GuidedOnboardingPreview({
                                     discoveryInputRef.current = event.target.value;
                                   }}
                                   placeholder="احكي براحتك... كل تفصيلة صغيرة ممكن تفرق في رد موظف الاستقبال."
-                                  className="mt-5 min-h-36 rounded-[20px] border-2 bg-white p-4 text-base leading-8 shadow-sm focus:border-primary"
+                                  className="mt-5 min-h-36 rounded-[20px] border-2 bg-card p-4 text-base leading-8 shadow-sm focus:border-primary"
                                 />
 
                                 <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -1457,7 +1457,7 @@ export function GuidedOnboardingPreview({
                               </div>
 
                               {discoveryTurns.length > 0 ? (
-                                <div className="mt-4 rounded-2xl border border-border/70 bg-white p-4">
+                                <div className="mt-4 rounded-2xl border border-border/70 bg-card p-4">
                                   <div className="flex items-center justify-between gap-3">
                                     <span className="text-xs font-black">اللي عرفناه لحد دلوقتي</span>
                                     <span className="text-[11px] font-bold text-muted-foreground">
@@ -1487,7 +1487,7 @@ export function GuidedOnboardingPreview({
                             value={knowledge}
                             onChange={(event) => setKnowledge(event.target.value)}
                             placeholder="مثال: عندنا فرعين، بنفتح يوميًا من 11 الصبح، خدمة الشعر بـ200 جنيه، الحجز متاح من الموقع..."
-                            className="mt-5 min-h-56 rounded-[24px] border-2 bg-white p-5 text-base leading-8 shadow-sm focus:border-primary"
+                            className="mt-5 min-h-56 rounded-[24px] border-2 bg-card p-5 text-base leading-8 shadow-sm focus:border-primary"
                           />
                           <div className="mt-4 rounded-[22px] border border-primary/15 bg-primary/5 p-4">
                             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1546,7 +1546,7 @@ export function GuidedOnboardingPreview({
                         key={question}
                         type="button"
                         onClick={() => void askPreview(question)}
-                        className="rounded-full border border-border bg-white px-4 py-2 text-sm font-bold shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:text-primary hover:shadow-md"
+                        className="rounded-full border border-border bg-card px-4 py-2 text-sm font-bold shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:text-primary hover:shadow-md"
                       >
                         {question}
                       </button>
@@ -1554,7 +1554,7 @@ export function GuidedOnboardingPreview({
                   </div>
                   <div className="mt-6 rounded-[26px] border border-border bg-surface/50 p-4 sm:p-6">
                     <div className="space-y-4">
-                      <div className="mr-auto max-w-[82%] translate-y-0 rounded-2xl rounded-bl-md bg-white p-4 text-sm shadow-sm transition-all">{previewQuestion}</div>
+                      <div className="mr-auto max-w-[82%] translate-y-0 rounded-2xl rounded-bl-md bg-card p-4 text-sm shadow-sm transition-all">{previewQuestion}</div>
                       <div className="ml-auto max-w-[86%] rounded-2xl rounded-br-md bg-primary p-4 text-sm leading-7 text-primary-foreground shadow-md">
                         {previewReply}
                         <div className="mt-2 text-[10px] font-semibold text-primary-foreground/70">رد حقيقي من موظفك التجريبي</div>
@@ -1569,7 +1569,7 @@ export function GuidedOnboardingPreview({
                           setStep("KNOWLEDGE");
                           setMockState("default");
                         }}
-                        className="rounded-xl bg-white px-3 py-2 text-xs font-black text-muted-foreground shadow-sm"
+                        className="rounded-xl bg-card px-3 py-2 text-xs font-black text-muted-foreground shadow-sm"
                       >
                         عدّل المعلومة
                       </button>
@@ -1600,7 +1600,7 @@ export function GuidedOnboardingPreview({
                       </div>
                     ))}
                   </div>
-                  <div className="mx-auto mt-7 w-full max-w-md rounded-[28px] border border-border bg-white p-5 shadow-[0_18px_55px_rgba(7,19,25,.10)]">
+                  <div className="mx-auto mt-7 w-full max-w-md rounded-[28px] border border-border bg-card p-5 shadow-[0_18px_55px_rgba(7,19,25,.10)]">
                     {qrImageDataUrl ? (
                       <Image
                         src={qrImageDataUrl}
@@ -1608,7 +1608,7 @@ export function GuidedOnboardingPreview({
                         width={208}
                         height={208}
                         unoptimized
-                        className="mx-auto h-52 w-52 rounded-3xl border border-border bg-white p-2"
+                        className="mx-auto h-52 w-52 rounded-3xl border border-border bg-card p-2"
                       />
                     ) : (
                       <div className="mx-auto grid h-52 w-52 place-items-center rounded-3xl border border-dashed border-border bg-surface">
@@ -1654,12 +1654,12 @@ export function GuidedOnboardingPreview({
                   <span className="text-xs font-black text-primary">أول تجربة حقيقية</span>
                   <h2 className="mt-2 text-3xl font-black tracking-[-0.035em]">يلا نجربه بجد</h2>
                   <p className="mt-3 leading-7 text-muted-foreground">من أي رقم واتساب تاني ابعت لرقم البيزنس:</p>
-                  <div className="mx-auto mt-5 w-fit rounded-2xl rounded-bl-md bg-[#dcf8c6] px-6 py-4 text-lg font-black shadow-sm">السلام عليكم</div>
+                  <div className="mx-auto mt-5 w-fit rounded-2xl rounded-bl-md bg-[var(--whatsapp-bubble)] text-[var(--whatsapp-bubble-text)] px-6 py-4 text-lg font-black shadow-sm">السلام عليكم</div>
                   <div className="mt-8 space-y-3 text-start">
                     {["مستني الرسالة", "وصلت الرسالة", "الموظف فهمها", "جهز الرد", "تم الرد"].map((label, i) => {
                       const active = firstMessageStage >= i + 1 || (i === 0 && firstMessageStage === 0);
                       return (
-                        <div key={label} className="flex items-center gap-4 rounded-2xl border border-border/70 bg-white p-4 shadow-sm">
+                        <div key={label} className="flex items-center gap-4 rounded-2xl border border-border/70 bg-card p-4 shadow-sm">
                           <span className={cx("grid h-9 w-9 place-items-center rounded-full font-black", active ? "bg-success text-white" : "bg-secondary text-muted-foreground")}>{active ? "✓" : "○"}</span>
                           <span className="font-black">{label}</span>
                         </div>
@@ -1705,7 +1705,7 @@ export function GuidedOnboardingPreview({
               ) : null}
             </div>
 
-            <div className="hidden items-center justify-between gap-3 border-t border-border/70 bg-white/75 px-6 py-5 sm:flex sm:px-9 md:px-12">
+            <div className="hidden items-center justify-between gap-3 border-t border-border/70 bg-card/75 px-6 py-5 sm:flex sm:px-9 md:px-12">
               <Button type="button" variant="ghost" disabled={step === "WELCOME"} onClick={previous}>السابق</Button>
               <Button
                 type="button"
@@ -1728,7 +1728,7 @@ export function GuidedOnboardingPreview({
         </section>
 
         {process.env.NODE_ENV !== "production" ? <div className="mt-6 hidden justify-center md:flex">
-          <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-white/75 p-2 shadow-sm backdrop-blur">
+          <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-card/75 p-2 shadow-sm backdrop-blur">
             <span className="px-2 text-[11px] font-bold text-muted-foreground">Preview state</span>
             {(["default", "loading", "success", "error", "compatibility-warning"] as MockState[]).map((state) => (
               <button key={state} type="button" onClick={() => setMockState(state)} className={cx("rounded-xl px-2.5 py-1.5 text-[10px] font-bold transition", mockState === state ? "bg-primary text-white" : "text-muted-foreground hover:bg-secondary")}>{state}</button>
@@ -1744,7 +1744,7 @@ export function GuidedOnboardingPreview({
           aria-modal="true"
           aria-label={voiceFlowState === "recording" ? "جاري تسجيل الإجابة" : "جاري تجهيز الإجابة"}
         >
-          <div className="w-full max-w-md rounded-[32px] border border-white/60 bg-white/95 p-6 text-center shadow-[0_30px_100px_rgba(7,19,25,.30)] sm:p-8">
+          <div className="w-full max-w-md rounded-[32px] border border-white/60 bg-card/95 p-6 text-center shadow-[0_30px_100px_rgba(7,19,25,.30)] sm:p-8">
             {voiceFlowState === "recording" ? (
               <>
                 <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-destructive/10">
@@ -1864,7 +1864,7 @@ export function GuidedOnboardingPreview({
         }
       `}</style>
 
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/70 bg-white/95 p-3 shadow-[0_-8px_30px_rgba(7,19,25,.08)] backdrop-blur sm:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/70 bg-card/95 p-3 shadow-[0_-8px_30px_rgba(7,19,25,.08)] backdrop-blur sm:hidden">
         <div className="mx-auto flex max-w-lg gap-2">
           {step !== "WELCOME" ? <Button type="button" variant="outline" className="w-24" onClick={previous}>السابق</Button> : null}
           <Button

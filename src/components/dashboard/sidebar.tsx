@@ -91,9 +91,9 @@ export function DashboardSidebar({
         {showPlatformAdminLink ? (
           <Link
             href="/admin"
-            className="mt-4 flex items-center gap-3 rounded-2xl border border-[#0b8bb5]/40 px-3 py-3 text-sm font-bold text-[#149bc7] transition hover:bg-[#0b8bb5]/10"
+            className="mt-4 flex items-center gap-3 rounded-2xl border border-primary/35 px-3 py-3 text-sm font-bold text-primary transition hover:bg-primary/10"
           >
-            <span className="grid h-8 w-8 place-items-center rounded-xl bg-[#0b8bb5]/15">◆</span>
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary/15">◆</span>
             <span>إدارة المنصة</span>
           </Link>
         ) : null}

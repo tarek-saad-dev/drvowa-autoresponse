@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { APP_NAME } from "@/constants/app";
 
 export function LandingHeader() {
@@ -12,6 +13,7 @@ export function LandingHeader() {
           <BrandLogo priority className="h-8 sm:h-9" />
         </Link>
         <nav className="flex items-center gap-2">
+          <ThemeToggle />
           <Link
             href="/login"
             className="hidden rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:text-foreground sm:inline-flex"
