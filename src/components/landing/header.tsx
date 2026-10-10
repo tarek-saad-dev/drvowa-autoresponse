@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { APP_NAME } from "@/constants/app";
 
 export function LandingHeader() {
@@ -11,6 +12,7 @@ export function LandingHeader() {
           {APP_NAME}
         </Link>
         <nav className="flex items-center gap-2">
+          <ThemeToggle />
           <Link
             href="/login"
             className="hidden rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:text-foreground sm:inline-flex"
