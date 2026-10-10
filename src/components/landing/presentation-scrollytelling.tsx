@@ -162,9 +162,11 @@ function SceneVisual({ scene, compact = false }: { scene: StoryScene; compact?: 
 
       {scene === "agent" ? (
         <>
-          <div className={`cinema-phone absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 ${
-            compact ? "h-[250px] w-[138px]" : "h-[300px] w-[164px]"
-          }` + " rounded-[34px] border border-cyan-200/25 bg-black/35 p-3 shadow-[0_35px_80px_rgba(0,0,0,.38)] backdrop-blur"} rounded-[34px] border border-cyan-200/25 bg-black/35 p-3 shadow-[0_35px_80px_rgba(0,0,0,.38)] backdrop-blur">
+          <div
+            className={`cinema-phone absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-[34px] border border-cyan-200/25 bg-black/35 p-3 shadow-[0_35px_80px_rgba(0,0,0,.38)] backdrop-blur ${
+              compact ? "h-[250px] w-[138px]" : "h-[300px] w-[164px]"
+            }`}
+          >
             <div className="h-full rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,139,181,.18),rgba(255,255,255,.035))] p-3">
               <div className="mx-auto mt-2 h-14 w-14 rounded-full border border-cyan-200/20 bg-cyan-400/10 shadow-[0_0_30px_rgba(11,139,181,.35)]" />
               <div className="mt-5 h-2 rounded-full bg-white/15" />
@@ -221,9 +223,11 @@ function SceneVisual({ scene, compact = false }: { scene: StoryScene; compact?: 
 
       {scene === "whatsapp" ? (
         <>
-          <div className={`cinema-phone absolute left-[9%] top-1/2 -translate-y-1/2 rounded-[34px] ${
-            compact ? "h-[280px] w-[150px]" : "h-[330px] w-[176px]"
-          }` + " border border-white/15 bg-black/45 p-2.5 shadow-2xl"} border border-white/15 bg-black/45 p-2.5 shadow-2xl">
+          <div
+            className={`cinema-phone absolute left-[9%] top-1/2 -translate-y-1/2 rounded-[34px] border border-white/15 bg-black/45 p-2.5 shadow-2xl ${
+              compact ? "h-[280px] w-[150px]" : "h-[330px] w-[176px]"
+            }`}
+          >
             <div className="h-full rounded-[27px] bg-[#0b141a] p-3">
               <div className="mt-10 ml-auto w-[86%] rounded-2xl rounded-br-md bg-[#005c4b] px-3 py-2 text-[11px] font-bold text-white">كام سعر الخدمة؟</div>
               <div className="mt-3 mr-auto w-[88%] rounded-2xl rounded-bl-md bg-[#202c33] px-3 py-2 text-[11px] font-bold text-white">الخدمة تبدأ من 200 جنيه</div>
