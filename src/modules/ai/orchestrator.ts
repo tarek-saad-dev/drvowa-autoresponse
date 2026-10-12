@@ -1,5 +1,4 @@
 import { withTransaction } from "@/lib/db";
-import { createEscalation } from "@/modules/escalations/service";
 import { getAgent } from "@/modules/agents/service";
 import {
   consumeQuotaReservation,
@@ -276,6 +275,7 @@ export async function processAiReplyJob(params: {
       || errorCode.startsWith("PLAN_");
     if (importantFailure) {
       try {
+        const { createEscalation } = await import("@/modules/escalations/service");
         await createEscalation({
           businessId,
           conversationId: job.conversationId,
