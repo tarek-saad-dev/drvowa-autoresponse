@@ -23,7 +23,9 @@ jobs:
         run: npm ci
       - name: Typecheck
         run: npm run typecheck
-      - name: Unit tests
-        run: npm test
       - name: Production build
         run: npm run build
+      - name: Resume catch-up unit tests
+        run: npx vitest run tests/unit/resume-catch-up.test.ts tests/unit/resume-catch-up-service.test.ts
+      - name: Full test suite
+        run: npm test
