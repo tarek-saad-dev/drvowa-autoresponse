@@ -1086,11 +1086,21 @@ export async function listConversationsForBusiness(params: {
       : filter === "AUTO"
         ? "AND (ai.Mode = N'AUTO' OR ai.Mode IS NULL)"
         : "";
+  // Resolve the anchor's full DATETIME2 precision on SQL Server. JavaScript
+  // Date JSON loses sub-millisecond precision and can otherwise skip chats.
   const cursorSql = before
     ? `AND (
-         ISNULL(c.LastMessageAtUtc, c.CreatedAtUtc) < @beforeAt
+         ISNULL(c.LastMessageAtUtc, c.CreatedAtUtc) < (
+           SELECT ISNULL(anchor.LastMessageAtUtc, anchor.CreatedAtUtc)
+           FROM dbo.TblConversation anchor
+           WHERE anchor.BusinessID = @businessId AND anchor.ConversationID = @beforeId
+         )
          OR (
-           ISNULL(c.LastMessageAtUtc, c.CreatedAtUtc) = @beforeAt
+           ISNULL(c.LastMessageAtUtc, c.CreatedAtUtc) = (
+             SELECT ISNULL(anchor.LastMessageAtUtc, anchor.CreatedAtUtc)
+             FROM dbo.TblConversation anchor
+             WHERE anchor.BusinessID = @businessId AND anchor.ConversationID = @beforeId
+           )
            AND c.ConversationID < @beforeId
          )
        )`
@@ -1177,7 +1187,6 @@ export async function listConversationsForBusiness(params: {
       },
       { name: "limit", type: sql.Int, value: limit },
       ...(before ? [
-        { name: "beforeAt", type: sql.DateTime2, value: before.at },
         { name: "beforeId", type: sql.UniqueIdentifier, value: before.conversationId },
       ] : []),
       ...(search ? [{ name: "search", type: sql.NVarChar(96), value: search }] : []),
