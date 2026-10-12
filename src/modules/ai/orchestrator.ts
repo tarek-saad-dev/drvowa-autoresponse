@@ -1,4 +1,5 @@
 import { withTransaction } from "@/lib/db";
+import { createEscalation } from "@/modules/escalations/service";
 import { getAgent } from "@/modules/agents/service";
 import {
   consumeQuotaReservation,
@@ -261,6 +262,34 @@ export async function processAiReplyJob(params: {
       errorCode,
       ...logFields,
     }, logger);
+    // Escalate definitive customer-impacting failures, not stale/paused jobs.
+    // Failure to enqueue an owner alert must never change AI job accounting.
+    const humanReasons = new Set([
+      "GEMINI_FAILED", "GEMINI_EMPTY", "AGENT_NOT_AVAILABLE",
+      "DESTINATION_UNAVAILABLE", "LOOP_GUARD_ACTIVE",
+      "NOT_READY", "LOGGED_OUT", "NOT_STARTED", "SEND_FAILED",
+      "ACCOUNT_KEY_MISSING", "OUTBOUND_RESULT_UNKNOWN_FINAL",
+    ]);
+    const importantFailure = humanReasons.has(errorCode)
+      || errorCode.startsWith("GEMINI_")
+      || errorCode.includes("QUOTA_EXCEEDED")
+      || errorCode.startsWith("PLAN_");
+    if (importantFailure) {
+      try {
+        await createEscalation({
+          businessId,
+          conversationId: job.conversationId,
+          reasonCode: "AI_REPLY_FAILED",
+          reason: "الموظف الذكي لم يتمكن من إرسال رد للعميل: " + errorCode,
+          pauseAi: true,
+        });
+      } catch (alertError) {
+        logger.warn("[ai-worker] escalation_enqueue_failed", {
+          jobId: job.aiReplyJobId,
+          code: alertError instanceof Error ? alertError.name : "UNKNOWN",
+        });
+      }
+    }
     return { status, errorCode };
   }
 
