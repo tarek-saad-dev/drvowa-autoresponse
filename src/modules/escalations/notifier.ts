@@ -84,6 +84,7 @@ export async function deliverNextEscalationNotification(
       return "FAILED";
     }
     const message = escalationMessage({
+      businessId: job.BusinessID,
       businessName: business?.name ?? "البيزنس",
       customerPhone: contact.phoneNormalized,
       conversationId: job.ConversationID,
