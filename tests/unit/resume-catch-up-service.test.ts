@@ -97,12 +97,19 @@ describe("manual AI resume catch-up integration", () => {
       enabledAtUtc: new Date("2026-01-01T00:00:00Z"),
     });
     guardMocks.evaluateConversationLoopGuard.mockResolvedValue({ allow: true });
-    jobsMocks.scheduleOrCoalesceJob.mockResolvedValue({ coalesced: false });
+    jobsMocks.scheduleOrCoalesceJob.mockResolvedValue({
+      coalesced: false,
+      job: { aiReplyJobId: "55555555-5555-5555-5555-555555555555" },
+    });
   });
 
   it("queues one immediate job for the latest two unanswered messages", async () => {
     const result = await resumeInboxConversationAiWithCatchUp(ids);
-    expect(result.catchUp).toEqual({ scheduled: true, pendingCount: 2 });
+    expect(result.catchUp).toEqual({
+      scheduled: true,
+      pendingCount: 2,
+      jobId: "55555555-5555-5555-5555-555555555555",
+    });
     expect(jobsMocks.scheduleOrCoalesceJob).toHaveBeenCalledOnce();
     expect(jobsMocks.scheduleOrCoalesceJob).toHaveBeenCalledWith(
       expect.objectContaining({ triggerMessageId: "latest", debounceMs: 0 }),

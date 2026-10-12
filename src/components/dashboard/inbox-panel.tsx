@@ -52,6 +52,59 @@ type MessageRow = {
   createdAtUtc: string;
 };
 
+type InboxJobResult = {
+  jobId: string;
+  status: "PENDING" | "PROCESSING" | "SENT" | "SKIPPED" | "FAILED" | "COALESCED";
+  errorCode: string | null;
+  createdAtUtc: string;
+  notBeforeUtc: string;
+  completedAtUtc: string | null;
+  hasOutboundProviderMessage: boolean;
+};
+
+/** Worker reason codes must never be mistaken for a successful WhatsApp send. */
+export function aiDeliveryNotice(job: InboxJobResult | null, now: number = Date.now()): string {
+  if (!job) return "لسه مفيش محاولة رد مسجلة للمحادثة.";
+  if (job.status === "SENT") return "تم إرسال رد الموظف الذكي على واتساب وتسجيله في المحادثة.";
+  if (job.status === "PENDING" || job.status === "PROCESSING") {
+    const started = new Date(job.createdAtUtc).getTime();
+    const stalled = Number.isFinite(started) && now - started > 120_000;
+    return stalled
+      ? "الرد لسه " + (job.status === "PENDING" ? "في قائمة الانتظار" : "قيد المعالجة") + " من أكتر من دقيقتين. محتاج مراجعة حالة الـAI Worker."
+      : job.status === "PENDING"
+        ? "تمت جدولة الرد، ومستني الـAI Worker يستلمه. لم يُرسل بعد."
+        : "الموظف الذكي بيجهّز الرد أو بيحاول إرساله. لم يتأكد الإرسال بعد.";
+  }
+  const reason = (job.errorCode ?? "").toUpperCase();
+  const hints: Record<string, string> = {
+    AI_DISABLED: "الرد التلقائي متوقف في الإعدادات",
+    AI_DISABLED_BEFORE_SEND: "الرد التلقائي اتوقف قبل الإرسال",
+    AGENT_NOT_AVAILABLE: "الموظف الذكي غير متاح",
+    DESTINATION_UNAVAILABLE: "رقم العميل غير متاح للإرسال",
+    HUMAN_TAKEOVER_BEFORE_SEND: "المحادثة رجعت لموظف بشري قبل الإرسال",
+    CONVERSATION_SAFETY_PAUSED: "تم إيقاف المحادثة لأسباب أمان",
+    STALE_CONVERSATION_ACTIVATION: "تم منع Job قديم بسبب توقيت استئناف البوت",
+    STALE_ACTIVATION: "الرد أقدم من تفعيل الـAI",
+    LOOP_GUARD_ACTIVE: "منع التكرار أوقف الإرسال",
+    NOT_READY: "اتصال واتساب مش جاهز",
+    LOGGED_OUT: "واتساب محتاج إعادة اتصال",
+    NOT_STARTED: "WhatsApp Runtime مش شغال",
+    ACCOUNT_KEY_MISSING: "إعدادات حساب واتساب ناقصة",
+    SEND_FAILED: "واتساب رفض إرسال الرسالة",
+    GEMINI_EMPTY: "الـAI رجّع رد فارغ",
+    GEMINI_FAILED: "توليد الرد فشل",
+    QUOTA_EXCEEDED: "حصة الردود خلصت",
+  };
+  const detail = hints[reason]
+    ?? (reason.startsWith("GEMINI_") ? "توليد الرد فشل"
+      : reason.includes("QUOTA") || reason.startsWith("PLAN_") ? "حصة الباقة لا تسمح بالإرسال"
+      : reason.startsWith("OUTBOUND_RESULT_UNKNOWN") ? "نتيجة الإرسال غير مؤكدة؛ ممنوع إعادة الإرسال تلقائيًا"
+      : reason ? "سبب التوقف: " + reason : "السبب غير معروف");
+  return job.status === "COALESCED"
+    ? "تم دمج الطلب في Job آخر، ولم يتأكد إرسال هذا الطلب."
+    : "الرد لم يتم إرساله. " + detail + " (" + job.status + ").";
+}
+
 type MessageCursor = {
   beforeAt: string;
   beforeCreatedAt: string;
@@ -298,6 +351,8 @@ export function InboxPanel({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const [resuming, setResuming] = useState(false);
+  const [checkingAi, setCheckingAi] = useState(false);
+  const [trackedReply, setTrackedReply] = useState<{ conversationId: string; jobId: string; startedAt: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
@@ -522,6 +577,7 @@ export function InboxPanel({
     setMobileThread(true);
     setDetailsOpen(false);
     setNotice(null);
+    setTrackedReply(null);
     setError(null);
     setMessages([]);
     setHasOlder(false);
@@ -695,7 +751,7 @@ export function InboxPanel({
       );
       const data = await res.json() as {
         state?: { mode: ConversationAiMode; pauseReason: string | null };
-        catchUp?: { scheduled: boolean; pendingCount: number; reason?: string };
+        catchUp?: { scheduled: boolean; pendingCount: number; jobId?: string; reason?: string };
         error?: string;
       };
       if (!res.ok) throw new Error(mapUserFacingError(data, "تعذر إرجاع الرد التلقائي"));
@@ -707,8 +763,11 @@ export function InboxPanel({
         aiPauseReason: data.state?.pauseReason ?? null,
       }));
       const result = data.catchUp;
+      if (result?.scheduled && result.jobId) {
+        setTrackedReply({ conversationId: id, jobId: result.jobId, startedAt: Date.now() });
+      }
       setNotice(result?.scheduled
-        ? "تم تسليم المحادثة للموظف الذكي، والرد على " + result.pendingCount + " رسالة متعلقة اتجدول."
+        ? "البوت استلم المحادثة. رد " + result.pendingCount + " رسالة اتجدول، ولسه بنتأكد من الإرسال."
         : result?.reason === "AI_DISABLED"
           ? "تم تسليم المحادثة، لكن الرد الآلي مقفول من إعدادات الرقم."
           : result?.reason === "REPLY_IN_FLIGHT"
@@ -720,6 +779,61 @@ export function InboxPanel({
       setError(err instanceof Error ? err.message : "تعذر تشغيل الموظف الذكي");
     } finally { setResuming(false); }
   }, [conversations, resuming]);
+
+  const checkAiDelivery = useCallback(async (id: string, jobId?: string) => {
+    const params = new URLSearchParams({ includeJob: "1" });
+    if (jobId) params.set("jobId", jobId);
+    const response = await fetch(
+      "/api/inbox/conversations/" + encodeURIComponent(id) + "/ai?" + params.toString(),
+      { credentials: "same-origin", cache: "no-store" },
+    );
+    const data = await response.json() as { job?: InboxJobResult | null; error?: string };
+    if (!response.ok) throw new Error(mapUserFacingError(data, "تعذر متابعة حالة الرد"));
+    if (selectedIdRef.current !== id) return null;
+    setNotice(aiDeliveryNotice(data.job ?? null));
+    if (data.job?.status === "SENT") void loadMessages(id, true);
+    return data.job ?? null;
+  }, [loadMessages]);
+
+  useEffect(() => {
+    if (!trackedReply) return;
+    let closed = false;
+    let busy = false;
+    const { conversationId, jobId, startedAt } = trackedReply;
+    const poll = async () => {
+      if (closed || busy || document.hidden || selectedIdRef.current !== conversationId) return;
+      busy = true;
+      try {
+        const result = await checkAiDelivery(conversationId, jobId);
+        if (closed) return;
+        if (result && !["PENDING", "PROCESSING"].includes(result.status)) {
+          setTrackedReply(prev => prev?.jobId === jobId ? null : prev);
+        } else if (Date.now() - startedAt > 150_000) {
+          setTrackedReply(prev => prev?.jobId === jobId ? null : prev);
+        }
+      } catch {
+        if (!closed && selectedIdRef.current === conversationId) {
+          setNotice("تعذر التأكد من إرسال الرد. راجع حالة الـAI Job قبل ما تحاول تبعت تاني.");
+        }
+      } finally { busy = false; }
+    };
+    void poll();
+    const interval = window.setInterval(() => void poll(), 3500);
+    return () => { closed = true; window.clearInterval(interval); };
+  }, [trackedReply, checkAiDelivery]);
+
+  const checkLastAiDelivery = useCallback(async () => {
+    const id = selectedIdRef.current;
+    if (!id || checkingAi) return;
+    setCheckingAi(true);
+    try {
+      await checkAiDelivery(id);
+    } catch (error) {
+      if (selectedIdRef.current === id) {
+        setNotice(error instanceof Error ? error.message : "تعذر متابعة حالة الـAI");
+      }
+    } finally { setCheckingAi(false); }
+  }, [checkAiDelivery, checkingAi]);
 
   const actionFilters: Array<{ id: InboxFilter; label: string; count?: number }> = [
     { id: "ALL", label: "الكل", count: counts.total },
@@ -914,6 +1028,11 @@ export function InboxPanel({
                 {error && <p role="alert" className="font-bold text-red-600">{error}</p>}
                 {notice && <p role="status" className="font-bold text-[#087c6a] dark:text-[#82dbc1]">{notice}</p>}
                 {!error && !notice && status.attention && <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300"><Glyph name="alert" size={15} />{status.detail}{selected.aiMode === "AUTO" ? " — تقدر ترد بنفسك من تحت." : ""}</div>}
+                {selected.aiMode === "AUTO" && (status.attention || Boolean(notice)) && (
+                  <button type="button" onClick={() => void checkLastAiDelivery()} disabled={checkingAi}
+                    className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border border-[#c6e0d5] px-2.5 py-1.5 font-bold text-[#087c6a] hover:bg-[#e6f5ed] disabled:opacity-60 dark:border-[#426a58] dark:text-[#8cd9b7]"
+                  ><Glyph name="refresh" size={14} />{checkingAi ? "جاري فحص الرد..." : "تحقق من آخر محاولة رد"}</button>
+                )}
               </div>
             )}
 

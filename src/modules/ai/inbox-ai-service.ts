@@ -1,5 +1,5 @@
 import { NotFoundError, ForbiddenError } from "@/lib/tenancy/errors";
-import { sql, withTransaction } from "@/lib/db";
+import { query, sql, withTransaction } from "@/lib/db";
 import * as messagingRepo from "@/modules/messaging/repository";
 import type { ConversationAiState } from "@/types/domain";
 import { evaluateConversationLoopGuard } from "./guard-repository";
@@ -42,6 +42,7 @@ export async function getInboxConversationAiState(params: {
 export type ResumeCatchUp = {
   scheduled: boolean;
   pendingCount: number;
+  jobId?: string;
   reason?: string;
 };
 
@@ -192,7 +193,7 @@ export async function resumeInboxConversationAiWithCatchUp(params: {
       inputs,
     );
 
-    await scheduleOrCoalesceJob({
+    const queued = await scheduleOrCoalesceJob({
       businessId: params.businessId,
       channelConnectionId: conversation.ChannelConnectionID,
       conversationId: params.conversationId,
@@ -203,9 +204,75 @@ export async function resumeInboxConversationAiWithCatchUp(params: {
 
     return {
       state,
-      catchUp: { scheduled: true, pendingCount: candidate.pendingCount },
+      catchUp: {
+        scheduled: true,
+        pendingCount: candidate.pendingCount,
+        jobId: queued.job.aiReplyJobId,
+      },
     };
   });
+}
+
+export type InboxAiJobStatus = {
+  jobId: string;
+  triggerMessageId: string;
+  status: "PENDING" | "PROCESSING" | "SENT" | "SKIPPED" | "FAILED" | "COALESCED";
+  errorCode: string | null;
+  createdAtUtc: string;
+  notBeforeUtc: string;
+  completedAtUtc: string | null;
+  hasOutboundProviderMessage: boolean;
+};
+
+/**
+ * A queued reply is not a delivered reply. Expose only safe, tenant-scoped
+ * job fields so the inbox can report the actual result of a manual handback.
+ * No generated message text, phone, secrets or internal worker logs are exposed.
+ */
+export async function getInboxAiJobStatus(params: {
+  businessId: string;
+  conversationId: string;
+  jobId?: string;
+}): Promise<InboxAiJobStatus | null> {
+  await assertConversationOwned(params);
+  const result = await query<{
+    AiReplyJobID: string;
+    TriggerMessageID: string;
+    Status: InboxAiJobStatus["status"];
+    LastErrorCode: string | null;
+    CreatedAtUtc: Date;
+    NotBeforeUtc: Date;
+    CompletedAtUtc: Date | null;
+    OutboundProviderMessageID: string | null;
+  }>(
+    `SELECT TOP (1)
+       j.AiReplyJobID, j.TriggerMessageID, j.Status, j.LastErrorCode,
+       j.CreatedAtUtc, j.NotBeforeUtc, j.CompletedAtUtc,
+       j.OutboundProviderMessageID
+     FROM dbo.TblAiReplyJob j
+     WHERE j.BusinessID = @businessId AND j.ConversationID = @conversationId
+       ${params.jobId ? "AND j.AiReplyJobID = @jobId" : ""}
+     ORDER BY j.CreatedAtUtc DESC, j.AiReplyJobID DESC`,
+    [
+      { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+      { name: "conversationId", type: sql.UniqueIdentifier, value: params.conversationId },
+      ...(params.jobId ? [
+        { name: "jobId", type: sql.UniqueIdentifier, value: params.jobId },
+      ] : []),
+    ],
+  );
+  const row = result.recordset[0];
+  if (!row) return null;
+  return {
+    jobId: row.AiReplyJobID,
+    triggerMessageId: row.TriggerMessageID,
+    status: row.Status,
+    errorCode: row.LastErrorCode,
+    createdAtUtc: row.CreatedAtUtc.toISOString(),
+    notBeforeUtc: row.NotBeforeUtc.toISOString(),
+    completedAtUtc: row.CompletedAtUtc?.toISOString() ?? null,
+    hasOutboundProviderMessage: Boolean(row.OutboundProviderMessageID),
+  };
 }
 
 /** Compatible API for callers only interested in the state. */
