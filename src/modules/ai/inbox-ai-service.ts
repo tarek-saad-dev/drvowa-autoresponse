@@ -70,8 +70,13 @@ export async function resumeInboxConversationAiWithCatchUp(params: {
     ];
 
     // Exclusive lock is held through the state transition and job insert.
-    const locked = await trx.query<{ ConversationID: string }>(
-      `SELECT ConversationID FROM dbo.TblConversation WITH (UPDLOCK, HOLDLOCK)
+    const locked = await trx.query<{
+      ConversationID: string;
+      ChannelConnectionID: string;
+      ContactID: string;
+    }>(
+      `SELECT ConversationID, ChannelConnectionID, ContactID
+       FROM dbo.TblConversation WITH (UPDLOCK, HOLDLOCK)
        WHERE BusinessID = @businessId AND ConversationID = @conversationId`,
       inputs,
     );
@@ -140,12 +145,11 @@ export async function resumeInboxConversationAiWithCatchUp(params: {
       return { state, catchUp: { ...base, reason: "STALE_INBOUND" } };
     }
 
-    const conversation = await messagingRepo.getConversationForBusiness(params);
-    if (!conversation) throw new NotFoundError("Conversation not found");
+    const conversation = locked.recordset[0];
 
     const setting = await getChannelAiSettingByConnection({
       businessId: params.businessId,
-      channelConnectionId: conversation.channelConnectionId,
+      channelConnectionId: conversation.ChannelConnectionID,
     }, trx);
     if (!setting?.autoReplyEnabled || !setting.enabledAtUtc) {
       return { state, catchUp: { ...base, reason: "AI_DISABLED" } };
@@ -192,7 +196,7 @@ export async function resumeInboxConversationAiWithCatchUp(params: {
       businessId: params.businessId,
       channelConnectionId: conversation.channelConnectionId,
       conversationId: params.conversationId,
-      contactId: conversation.contactId,
+      contactId: conversation.ContactID,
       triggerMessageId: candidate.triggerMessageId,
       debounceMs: 0,
     }, trx);
