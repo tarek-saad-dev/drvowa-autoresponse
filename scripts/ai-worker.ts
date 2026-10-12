@@ -11,6 +11,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { getPool } from "../src/lib/db";
+import { deliverNextEscalationNotification } from "../src/modules/escalations/notifier";
 import { createAiWorkerRunner } from "../src/modules/ai/worker-runner";
 import {
   resolveHeartbeatMs,
@@ -72,10 +73,33 @@ async function main(): Promise<void> {
     shutdownDeadlineMs: resolveShutdownDeadlineMs(),
   });
 
-  process.once("SIGINT", () => runner.requestShutdown());
-  process.once("SIGTERM", () => runner.requestShutdown());
+  // Dedicated durable notification queue: no AI generation and no inbound replay.
+  let stoppingNotifications = false;
+  let notificationBusy = false;
+  const notificationTick = async () => {
+    if (stoppingNotifications || notificationBusy) return;
+    notificationBusy = true;
+    try {
+      await deliverNextEscalationNotification();
+    } catch (error) {
+      console.error("[escalation-worker] tick_failed", {
+        code: error instanceof Error ? error.name : "UNKNOWN",
+      });
+    } finally { notificationBusy = false; }
+  };
+  const notificationTimer = setInterval(() => void notificationTick(), 5_000);
+  void notificationTick();
+  const shutdown = () => {
+    stoppingNotifications = true;
+    clearInterval(notificationTimer);
+    runner.requestShutdown();
+  };
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
 
   const result = await runner.loop();
+  stoppingNotifications = true;
+  clearInterval(notificationTimer);
   if (result.reason === "deadline_exceeded") {
     process.exitCode = 1;
     // Force exit so OS stops heartbeats; jobs recover via lease expiry.
