@@ -20,7 +20,7 @@ export function DashboardShell({
   return (
     <div className={
       isInbox
-        ? "flex h-[100dvh] min-h-0 min-w-0 flex-1 overflow-hidden bg-background"
+        ? "fixed inset-0 z-40 flex h-[100dvh] w-screen min-h-0 min-w-0 overflow-hidden overscroll-none bg-background"
         : "flex min-h-full flex-1 bg-background"
     }>
       {!isInbox && <div className="hidden md:flex">{sidebar}</div>}
@@ -28,7 +28,7 @@ export function DashboardShell({
         {!isInbox && topbar}
         <main className={
           isInbox
-            ? "min-h-0 min-w-0 flex-1 overflow-hidden p-0"
+            ? "flex min-h-0 min-w-0 flex-1 overflow-hidden p-0"
             : "flex-1 overflow-auto p-4 pb-24 sm:p-6 sm:pb-24 md:pb-6"
         }>
           {children}
