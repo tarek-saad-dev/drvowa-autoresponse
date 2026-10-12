@@ -3,7 +3,7 @@ import { handleApiError, jsonOk } from "@/lib/api/http";
 import {
   getInboxConversationAiState,
   pauseInboxConversationAi,
-  resumeInboxConversationAi,
+  resumeInboxConversationAiWithCatchUp,
 } from "@/modules/ai/inbox-ai-service";
 
 type RouteContext = {
@@ -30,7 +30,7 @@ export async function GET(_request: Request, context: RouteContext) {
       businessId,
       conversationId,
     });
-    return jsonOk({ state: serializeState(state) });
+    return jsonOk({ state: serializeState(state), catchUp });
   } catch (error) {
     return handleApiError(error);
   }
@@ -61,7 +61,7 @@ export async function POST(request: Request, context: RouteContext) {
       return jsonOk({ state: serializeState(state) });
     }
 
-    const state = await resumeInboxConversationAi({
+    const { state, catchUp } = await resumeInboxConversationAiWithCatchUp({
       businessId,
       conversationId,
     });
