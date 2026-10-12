@@ -9,7 +9,7 @@ export default defineConfig({
   test: {
     environment: "node",
     setupFiles: ["./tests/setup.ts"],
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
     // Integration suites hit SQL Server; 5s default flakes under local load.
     testTimeout: 30_000,
     hookTimeout: 60_000,
