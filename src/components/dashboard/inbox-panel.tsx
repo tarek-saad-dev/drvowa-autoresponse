@@ -290,6 +290,7 @@ export function InboxPanel({
   const [error, setError] = useState<string | null>(null);
   const [refreshing, startRefresh] = useTransition();
   const [resuming, setResuming] = useState(false);
+  const [resumeNotice, setResumeNotice] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const [query, setQuery] = useState("");
@@ -488,6 +489,7 @@ export function InboxPanel({
   const selectConversation = useCallback(
     (conversationId: string) => {
       setSelectedId(conversationId);
+      setResumeNotice(null);
       setMobileShowThread(true);
       setShowDetails(false);
       setMessages([]);
@@ -522,6 +524,7 @@ export function InboxPanel({
     if (!selectedId) return;
     setResuming(true);
     setError(null);
+    setResumeNotice(null);
     try {
       const res = await fetch(
         `/api/inbox/conversations/${encodeURIComponent(selectedId)}/ai/resume`,
@@ -533,6 +536,7 @@ export function InboxPanel({
       );
       const data = (await res.json()) as {
         state?: { mode: ConversationAiMode; pauseReason: string | null };
+        catchUp?: { scheduled: boolean; pendingCount: number; reason?: string };
         error?: string;
         code?: string;
       };
@@ -540,6 +544,21 @@ export function InboxPanel({
         throw new Error(mapUserFacingError(data, "تعذر استئناف الرد الآلي"));
       }
       const mode = data.state?.mode ?? "AUTO";
+      setResumeNotice(
+        data.catchUp?.scheduled
+          ? `الرد التلقائي رجع، وهيبدأ يرد على ${data.catchUp.pendingCount} رسالة معلقة من العميل.`
+          : data.catchUp?.reason === "AI_DISABLED"
+            ? "اترجعت المحادثة للبوت، لكن الرد التلقائي متعطّل في إعدادات واتساب."
+            : data.catchUp?.reason === "REPLY_IN_FLIGHT"
+              ? "البوت رجع، لكن فيه رد قيد المعالجة. اتجنب إرسال رد تاني قبل ما تتأكد."
+              : data.catchUp?.reason === "LOOP_GUARD_ACTIVE"
+                ? "البوت رجع، لكن حماية الردود المتكررة مانعة إرسال رد دلوقتي."
+                : data.catchUp?.reason === "STALE_INBOUND" || data.catchUp?.reason === "STALE_ACTIVATION"
+                  ? "البوت رجع، لكن الرسائل السابقة قديمة ومش هيتم الرد عليها تلقائيًا."
+                  : data.catchUp?.reason === "ALREADY_ANSWERED"
+                    ? "البوت رجع، والرسالة الأخيرة اتسجل لها رد بالفعل."
+                    : "الرد التلقائي رجع. مفيش رسائل نصية معلقة محتاجة رد دلوقتي.",
+      );
       setConversations((prev) =>
         prev.map((c) =>
           c.conversationId === selectedId
@@ -896,7 +915,11 @@ export function InboxPanel({
                   disabled={resuming}
                   className="shrink-0 rounded-xl"
                 >
-                  {resuming ? "..." : "رجّع الرد التلقائي"}
+                  {resuming
+                    ? "..."
+                    : selected.aiMode === "HUMAN_PAUSED" && selected.lastMessageDirection === "INBOUND"
+                      ? "رجّع البوت ورد على العميل"
+                      : "رجّع الرد التلقائي"}
                 </Button>
               )}
               </div>
@@ -933,6 +956,11 @@ export function InboxPanel({
       {error ? (
         <div className="border-b border-border bg-destructive/5 px-4 py-2.5 text-xs font-bold text-destructive" role="alert">
           {error}
+        </div>
+      ) : null}
+      {resumeNotice ? (
+        <div className="border-b border-success/20 bg-success-soft/35 px-4 py-2.5 text-xs font-bold text-success" role="status">
+          {resumeNotice}
         </div>
       ) : null}
 
@@ -1171,7 +1199,9 @@ export function InboxPanel({
                   ? "..."
                   : selected.aiMode === "SAFETY_PAUSED"
                     ? "راجع وشغّل الرد"
-                    : "رجّع الرد التلقائي"}
+                    : selected.lastMessageDirection === "INBOUND"
+                      ? "رجّع البوت ورد على العميل"
+                      : "رجّع الرد التلقائي"}
               </Button>
             )}
           </div>

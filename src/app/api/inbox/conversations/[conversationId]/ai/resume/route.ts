@@ -1,6 +1,6 @@
 import { requireApiBusiness } from "@/lib/api/auth-context";
 import { handleApiError, jsonOk } from "@/lib/api/http";
-import { resumeInboxConversationAi } from "@/modules/ai/inbox-ai-service";
+import { resumeInboxConversationAiWithCatchUp } from "@/modules/ai/inbox-ai-service";
 
 type RouteContext = {
   params: Promise<{ conversationId: string }>;
@@ -14,11 +14,12 @@ export async function POST(_request: Request, context: RouteContext) {
   try {
     const { businessId } = await requireApiBusiness();
     const { conversationId } = await context.params;
-    const state = await resumeInboxConversationAi({
+    const { state, catchUp } = await resumeInboxConversationAiWithCatchUp({
       businessId,
       conversationId,
     });
     return jsonOk({
+      catchUp,
       state: {
         conversationId: state.conversationId,
         mode: state.mode,
