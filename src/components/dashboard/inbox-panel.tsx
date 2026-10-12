@@ -910,8 +910,6 @@ export function InboxPanel({
                     ? "..."
                     : selected.aiMode === "HUMAN_PAUSED" && selected.lastMessageDirection === "INBOUND"
                       ? "رجّع البوت ورد على العميل"
-                      : selected.lastMessageDirection === "INBOUND"
-                      ? "رجّع البوت ورد على العميل"
                       : "رجّع الرد التلقائي"}
                 </Button>
               )}
