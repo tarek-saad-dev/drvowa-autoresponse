@@ -6,6 +6,7 @@ import { evaluateConversationLoopGuard } from "./guard-repository";
 import { scheduleOrCoalesceJob } from "./jobs-repository";
 import { getChannelAiSettingByConnection } from "./settings-repository";
 import { selectPendingCustomerTail } from "./resume-catch-up";
+import { MAX_HISTORY_MESSAGES } from "./provider";
 
 import {
   getEffectiveConversationAiState,
@@ -111,13 +112,13 @@ export async function resumeInboxConversationAiWithCatchUp(params: {
       TextContent: string | null;
       ReceivedAtUtc: Date;
     }>(
-      `SELECT TOP (40)
+      `SELECT TOP (@historyLimit)
          MessageID, Direction, ContentType, TextContent, ReceivedAtUtc
        FROM dbo.TblMessage
        WHERE BusinessID = @businessId AND ConversationID = @conversationId
        ORDER BY ISNULL(ProviderTimestampUtc, CreatedAtUtc) DESC,
                 CreatedAtUtc DESC, MessageID DESC`,
-      inputs,
+      [...inputs, { name: "historyLimit", type: sql.Int, value: MAX_HISTORY_MESSAGES }],
     );
     const candidate = selectPendingCustomerTail(
       latest.recordset.map((m) => ({
@@ -158,19 +159,21 @@ export async function resumeInboxConversationAiWithCatchUp(params: {
       return { state, catchUp: { ...base, reason: "STALE_ACTIVATION" } };
     }
 
-    // A SENT job for this exact inbound is proof it was already answered.
-    // Prefer a missed reply to an unsafe duplicate if outbound sync is delayed.
-    const alreadySent = await trx.query<{ AiReplyJobID: string }>(
-      `SELECT TOP (1) AiReplyJobID FROM dbo.TblAiReplyJob
+    // A SENT reply for the same message or any PROCESSING reply in the
+    // conversation may already be on the wire. Do not risk a second send.
+    const activeReply = await trx.query<{ Status: string }>(
+      `SELECT TOP (1) Status FROM dbo.TblAiReplyJob
        WHERE BusinessID = @businessId AND ConversationID = @conversationId
-         AND TriggerMessageID = @triggerMessageId AND Status = N'SENT'`,
+         AND ((TriggerMessageID = @triggerMessageId AND Status = N'SENT')
+              OR Status = N'PROCESSING')`,
       [
         ...inputs,
         { name: "triggerMessageId", type: sql.UniqueIdentifier, value: candidate.triggerMessageId },
       ],
     );
-    if (alreadySent.recordset.length) {
-      return { state, catchUp: { ...base, reason: "ALREADY_ANSWERED" } };
+    if (activeReply.recordset.length) {
+      return { state, catchUp: { ...base, reason:
+        activeReply.recordset[0].Status === "SENT" ? "ALREADY_ANSWERED" : "REPLY_IN_FLIGHT" } };
     }
 
     const guard = await evaluateConversationLoopGuard(params, trx);
@@ -178,18 +181,15 @@ export async function resumeInboxConversationAiWithCatchUp(params: {
       return { state, catchUp: { ...base, reason: guard.reason ?? "LOOP_GUARD_ACTIVE" } };
     }
 
-    // An older pending job would be fenced by the resume watermark at send
-    // time. Retire it before scheduling a fresh (post-resume) job.
+    // Every existing PENDING job was created while AI was paused (or before
+    // the new watermark) and is stale. Retire it before creating a fresh job.
     await trx.execute(
       `UPDATE dbo.TblAiReplyJob
        SET Status = N'SKIPPED', CompletedAtUtc = SYSUTCDATETIME(),
            LastErrorCode = N'RESUMED_REPLACED', UpdatedAtUtc = SYSUTCDATETIME()
        WHERE BusinessID = @businessId AND ConversationID = @conversationId
-         AND Status = N'PENDING' AND CreatedAtUtc < @resumedAtUtc`,
-      [
-        ...inputs,
-        { name: "resumedAtUtc", type: sql.DateTime2, value: state.resumedAtUtc ?? new Date() },
-      ],
+         AND Status = N'PENDING'`,
+      inputs,
     );
 
     await scheduleOrCoalesceJob({
