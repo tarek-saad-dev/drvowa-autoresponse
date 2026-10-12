@@ -18,13 +18,14 @@ describe("human escalations", () => {
 
   it("provides both WhatsApp and tenant-authorized DRVO deep links", () => {
     const msg = escalationMessage({
+      businessId: "11111111-1111-1111-1111-111111111111",
       businessName: "Cut Salon",
       customerPhone: "201005536320",
       conversationId: "22222222-2222-2222-2222-222222222222",
       reason: "طلب متابعة",
     });
     expect(msg).toContain("https://wa.me/201005536320");
-    expect(msg).toContain("https://app.drvotech.com/dashboard/inbox?conversationId=22222222-2222-2222-2222-222222222222");
+    expect(msg).toContain("https://app.drvotech.com/dashboard/inbox?businessId=11111111-1111-1111-1111-111111111111&conversationId=22222222-2222-2222-2222-222222222222");
     expect(msg).not.toContain("Authorization");
   });
 });
