@@ -1391,7 +1391,9 @@ export async function markConversationRead(params: {
 }): Promise<void> {
   await query(
     `UPDATE dbo.TblConversation
-     SET LastReadAtUtc = @at,
+     SET LastReadAtUtc = CASE
+           WHEN LastReadAtUtc IS NULL OR LastReadAtUtc < @at THEN @at
+           ELSE LastReadAtUtc END,
          UpdatedAtUtc = SYSUTCDATETIME()
      WHERE BusinessID = @businessId
        AND ConversationID = @conversationId`,
