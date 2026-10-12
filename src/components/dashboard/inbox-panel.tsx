@@ -301,6 +301,7 @@ export function InboxPanel({
 
   const selectedIdRef = useRef<string | null>(null);
   const mobileThreadRef = useRef(false);
+  const readWatermarksRef = useRef<Map<string, string>>(new Map());
   const listRequestRef = useRef(0);
   const listBusyRef = useRef(false);
   const listScroller = useRef<HTMLDivElement | null>(null);
@@ -446,7 +447,7 @@ export function InboxPanel({
       .filter(Boolean)
       .sort();
     const upTo = received.at(-1);
-    if (!upTo || document.hidden) return;
+    if (!upTo || document.hidden || readWatermarksRef.current.get(id) === upTo) return;
     if (window.matchMedia("(max-width: 767px)").matches && !mobileThreadRef.current) return;
     try {
       const res = await fetch(
@@ -456,6 +457,7 @@ export function InboxPanel({
           body: JSON.stringify({ upTo: new Date(upTo).toISOString() }) },
       );
       if (res.ok && selectedIdRef.current === id) {
+        readWatermarksRef.current.set(id, upTo);
         setConversations(prev => prev.map(c => c.conversationId === id ? { ...c, unread: false } : c));
         setSelectedSnapshot(prev => prev?.conversationId === id ? { ...prev, unread: false } : prev);
         // Exact server counts refresh on next list poll.
