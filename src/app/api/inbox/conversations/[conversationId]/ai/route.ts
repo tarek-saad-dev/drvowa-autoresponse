@@ -1,7 +1,9 @@
+import { z } from "zod";
 import { requireApiBusiness } from "@/lib/api/auth-context";
 import { handleApiError, jsonOk } from "@/lib/api/http";
 import {
   getInboxConversationAiState,
+  getInboxAiJobStatus,
   pauseInboxConversationAi,
   resumeInboxConversationAiWithCatchUp,
 } from "@/modules/ai/inbox-ai-service";
@@ -22,15 +24,20 @@ function serializeState(state: Awaited<ReturnType<typeof getInboxConversationAiS
   };
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   try {
     const { businessId } = await requireApiBusiness();
     const { conversationId } = await context.params;
-    const state = await getInboxConversationAiState({
-      businessId,
-      conversationId,
-    });
-    return jsonOk({ state: serializeState(state) });
+    const url = new URL(request.url);
+    const jobIdRaw = url.searchParams.get("jobId");
+    const jobId = jobIdRaw ? z.string().uuid().parse(jobIdRaw) : undefined;
+    const [state, job] = await Promise.all([
+      getInboxConversationAiState({ businessId, conversationId }),
+      url.searchParams.has("includeJob") || jobId
+        ? getInboxAiJobStatus({ businessId, conversationId, jobId })
+        : Promise.resolve(undefined),
+    ]);
+    return jsonOk({ state: serializeState(state), ...(job !== undefined ? { job } : {}) });
   } catch (error) {
     return handleApiError(error);
   }
