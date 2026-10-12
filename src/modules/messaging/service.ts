@@ -182,8 +182,17 @@ export async function ingestWhatsAppInbound(
 export async function listInboxConversations(params: {
   businessId: string;
   limit?: number;
+  before?: repo.ConversationPageCursor | null;
+  search?: string;
+  filter?: repo.ConversationFilter;
 }): Promise<ConversationListItem[]> {
   return repo.listConversationsForBusiness(params);
+}
+
+export async function getInboxConversationCounts(params: {
+  businessId: string;
+}): Promise<{ total: number; unread: number }> {
+  return repo.countConversationsForBusiness(params);
 }
 
 export async function listInboxMessages(params: {
