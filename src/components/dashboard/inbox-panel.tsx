@@ -323,12 +323,13 @@ function Avatar({ c, size = "md" }: { c: ConversationRow; size?: "sm" | "md" | "
 }
 
 export function InboxPanel({
-  initialConversations, initialCounts, initialHasMore, initialCursor,
+  initialConversations, initialCounts, initialHasMore, initialCursor, initialSelectedId,
 }: {
   initialConversations: ConversationRow[];
   initialCounts: Counts;
   initialHasMore: boolean;
   initialCursor: ConversationCursor | null;
+  initialSelectedId?: string | null;
 }) {
   const [conversations, setConversations] = useState(initialConversations);
   const [counts, setCounts] = useState(initialCounts);
@@ -348,6 +349,8 @@ export function InboxPanel({
   const [hasOlder, setHasOlder] = useState(false);
   const [olderCursor, setOlderCursor] = useState<MessageCursor | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [escalation, setEscalation] = useState<{ id: string; status: "OPEN" | "ACKNOWLEDGED"; reason: string; notificationStatus: string; notificationError?: string | null } | null>(null);
+  const [escalating, setEscalating] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const [resuming, setResuming] = useState(false);
@@ -358,6 +361,7 @@ export function InboxPanel({
   const [showScrollDown, setShowScrollDown] = useState(false);
 
   const selectedIdRef = useRef<string | null>(null);
+  const initialDeepLinkOpened = useRef(false);
   const mobileThreadRef = useRef(false);
   const readWatermarksRef = useRef<Map<string, string>>(new Map());
   const listRequestRef = useRef(0);
@@ -576,6 +580,7 @@ export function InboxPanel({
     mobileThreadRef.current = true;
     setMobileThread(true);
     setDetailsOpen(false);
+    setEscalation(null);
     setNotice(null);
     setTrackedReply(null);
     setError(null);
@@ -585,6 +590,79 @@ export function InboxPanel({
     shouldStickBottom.current = true;
     void loadMessages(id);
   }, [loadMessages, conversations]);
+
+  const fetchEscalation = useCallback(async (id: string) => {
+    try {
+      const res = await fetch("/api/inbox/conversations/" + encodeURIComponent(id) + "/escalation",
+        { credentials: "same-origin", cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json() as { escalation?: typeof escalation };
+      if (selectedIdRef.current === id) setEscalation(data.escalation ?? null);
+    } catch { /* Noncritical: chat still works. */ }
+  }, []);
+
+  useEffect(() => {
+    const id = selectedIdRef.current;
+    if (id) void fetchEscalation(id);
+  }, [selectedId, fetchEscalation]);
+
+  useEffect(() => {
+    if (!initialSelectedId || initialDeepLinkOpened.current) return;
+    if (!conversations.some(c => c.conversationId === initialSelectedId)) return;
+    initialDeepLinkOpened.current = true;
+    selectConversation(initialSelectedId);
+  }, [initialSelectedId, conversations, selectConversation]);
+
+  const escalateConversation = useCallback(async () => {
+    const id = selectedIdRef.current;
+    if (!id || escalating) return;
+    const reason = window.prompt("سبب التدخل البشري المطلوب (مثال: العميل طلب مدير أو مساعدة خاصة):");
+    if (!reason?.trim()) return;
+    setEscalating(true);
+    try {
+      const res = await fetch("/api/inbox/conversations/" + encodeURIComponent(id) + "/escalation", {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reason.trim() }),
+      });
+      const data = await res.json() as { escalation?: typeof escalation; error?: string; created?: boolean };
+      if (!res.ok) throw new Error(mapUserFacingError(data, "تعذر تصعيد المحادثة"));
+      if (selectedIdRef.current === id) {
+        setEscalation(data.escalation ?? null);
+        setNotice(data.created
+          ? "تم فتح حالة تدخل بشري. إرسال إشعار المالك بيتابع في الخلفية عند تفعيل الرقم."
+          : "المحادثة لها بالفعل حالة تدخل بشري مفتوحة؛ مش هيتبعت تنبيه مكرر.");
+        setConversations(prev => prev.map(row => row.conversationId === id
+          ? { ...row, aiMode: "HUMAN_PAUSED", aiPauseReason: "ESCALATION" } : row));
+        setSelectedSnapshot(prev => prev?.conversationId === id
+          ? { ...prev, aiMode: "HUMAN_PAUSED", aiPauseReason: "ESCALATION" } : prev);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "تعذر تصعيد المحادثة");
+    } finally { setEscalating(false); }
+  }, [escalating]);
+
+  const updateEscalation = useCallback(async (status: "ACKNOWLEDGED" | "RESOLVED") => {
+    const id = selectedIdRef.current;
+    if (!id) return;
+    setEscalating(true);
+    try {
+      const res = await fetch("/api/inbox/conversations/" + encodeURIComponent(id) + "/escalation", {
+        method: "PATCH", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const data = await res.json() as { escalation?: typeof escalation; error?: string };
+      if (!res.ok) throw new Error(mapUserFacingError(data, "تعذر تحديث التصعيد"));
+      if (selectedIdRef.current === id) {
+        setEscalation(data.escalation ?? null);
+        setNotice(status === "RESOLVED"
+          ? "تم إغلاق حالة التدخل. تقدر ترجع البوت من أعلى المحادثة لما تكون جاهز."
+          : "تم تأكيد استلام الحالة. صاحب البيزنس يعرف إنها قيد المتابعة.");
+      }
+    } catch (err) { setError(err instanceof Error ? err.message : "تعذر تحديث التصعيد"); }
+    finally { setEscalating(false); }
+  }, []);
 
   const loadOlder = useCallback(async () => {
     const id = selectedIdRef.current;
@@ -1019,10 +1097,28 @@ export function InboxPanel({
                     <Glyph name="spark" size={16} /><span className="hidden sm:inline">{resuming ? "جارٍ التشغيل" : "رجّع البوت"}</span><span className="sm:hidden">AI</span>
                   </button>
                 ) : <div className="hidden items-center gap-1.5 rounded-full bg-[#e2f3e8] px-3 py-2 text-[10px] font-bold text-[#16805e] sm:flex dark:bg-[#204338] dark:text-[#9be1bb]"><Glyph name="bot" size={15} />AI بيتابع</div>}
+                {!escalation ? (
+                  <button type="button" onClick={() => void escalateConversation()} disabled={escalating}
+                    className="rounded-xl border border-amber-300 px-2 py-2 text-[11px] font-bold text-amber-800 hover:bg-amber-50 disabled:opacity-50 dark:text-amber-300"
+                    title="فتح حالة تدخل بشري وإخطار المالك">تدخل بشري</button>
+                ) : null}
                 <ActionIcon name="info" title="تفاصيل العميل" active={detailsOpen} onClick={() => setDetailsOpen(v => !v)} />
               </div>
             </header>
 
+            {escalation && (
+              <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+                <strong>تدخل بشري: {escalation.status === "OPEN" ? "مفتوح" : "قيد المتابعة"}</strong>
+                <span className="min-w-0 flex-1 truncate">{escalation.reason}</span>
+                <span className="text-[10px]">إشعار المالك: {escalation.notificationStatus}</span>
+                {escalation.status === "OPEN" ? (
+                  <button type="button" disabled={escalating} className="rounded-lg border border-amber-400 px-2 py-1 font-bold"
+                    onClick={() => void updateEscalation("ACKNOWLEDGED")}>استلمت الحالة</button>
+                ) : null}
+                <button type="button" disabled={escalating} className="rounded-lg bg-amber-700 px-2 py-1 font-bold text-white"
+                  onClick={() => void updateEscalation("RESOLVED")}>تم الحل</button>
+              </div>
+            )}
             {(error || notice || status.attention) && (
               <div className="z-10 shrink-0 border-b border-[#e5eae4] bg-white/90 px-4 py-2 text-xs dark:border-[#2c4035] dark:bg-[#1b2b24]">
                 {error && <p role="alert" className="font-bold text-red-600">{error}</p>}
