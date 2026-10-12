@@ -194,7 +194,7 @@ export async function resumeInboxConversationAiWithCatchUp(params: {
 
     await scheduleOrCoalesceJob({
       businessId: params.businessId,
-      channelConnectionId: conversation.channelConnectionId,
+      channelConnectionId: conversation.ChannelConnectionID,
       conversationId: params.conversationId,
       contactId: conversation.ContactID,
       triggerMessageId: candidate.triggerMessageId,
