@@ -45,9 +45,10 @@ describe("inbox server-side pagination", () => {
     });
     const [sql, inputs] = mocks.query.mock.calls[0];
     expect(sql).toContain("c.ConversationID < @beforeId");
-    expect(sql).toContain("ISNULL(c.LastMessageAtUtc, c.CreatedAtUtc) < @beforeAt");
+    expect(sql).toContain("ISNULL(c.LastMessageAtUtc, c.CreatedAtUtc) < (");
+    expect(sql).toContain("anchor.ConversationID = @beforeId");
     expect(inputs).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: "beforeAt", value: at }),
+      expect.objectContaining({ name: "beforeId", value: "22222222-2222-2222-2222-222222222222" }),
     ]));
   });
 
