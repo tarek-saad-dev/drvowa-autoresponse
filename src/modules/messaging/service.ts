@@ -4,6 +4,8 @@ import {
   NotFoundError,
 } from "@/lib/tenancy/errors";
 import { maybeScheduleAiReplyAfterInbound } from "@/modules/ai/schedule";
+import { pauseConversationAi } from "@/modules/ai/conversation-state-repository";
+import { createEscalation, isEscalationOwnerPhone, requestsHumanAgent } from "@/modules/escalations/service";
 import type { ConversationListItem, Message } from "@/types/domain";
 
 import {
@@ -82,8 +84,11 @@ export async function ingestWhatsAppInbound(
   const receivedAtUtc =
     parseOptionalUtc(dto.receivedAt) ?? new Date();
   const messageAt = providerTimestampUtc ?? receivedAtUtc;
+  const ownerMessage = await isEscalationOwnerPhone(businessId, phoneNormalized);
+  const wantsHuman = !ownerMessage && normalized.contentType === "TEXT"
+    && Boolean(normalized.textContent && requestsHumanAgent(normalized.textContent));
 
-  return withTransaction(async (trx) => {
+  const outcome = await withTransaction(async (trx) => {
     const contact = await repo.upsertContact(
       {
         businessId,
@@ -156,18 +161,27 @@ export async function ingestWhatsAppInbound(
       trx,
     );
 
-    await maybeScheduleAiReplyAfterInbound(
-      {
+    if (wantsHuman) {
+      await pauseConversationAi({
         businessId,
-        channelConnectionId,
         conversationId: conversation.conversationId,
-        contactId: contact.contactId,
-        triggerMessageId: message.messageId,
-        contentType: normalized.contentType,
-        messageReceivedAt: receivedAtUtc,
-      },
-      trx,
-    );
+        mode: "HUMAN_PAUSED",
+        pauseReason: "ESCALATION",
+      }, trx);
+    } else if (!ownerMessage) {
+      await maybeScheduleAiReplyAfterInbound(
+        {
+          businessId,
+          channelConnectionId,
+          conversationId: conversation.conversationId,
+          contactId: contact.contactId,
+          triggerMessageId: message.messageId,
+          contentType: normalized.contentType,
+          messageReceivedAt: receivedAtUtc,
+        },
+        trx,
+      );
+    }
 
     return {
       outcome: "accepted" as const,
@@ -177,6 +191,23 @@ export async function ingestWhatsAppInbound(
       businessId,
     };
   });
+  if (outcome.outcome === "accepted" && wantsHuman) {
+    // Explicit request already paused the AI transactionally. Notification
+    // creation is isolated so a transient alert issue never loses inbound.
+    try {
+      await createEscalation({
+        businessId,
+        conversationId: outcome.conversationId,
+        reasonCode: "CUSTOMER_REQUEST",
+        reason: "العميل طلب التحدث مع موظف بشري أو مسؤول.",
+      });
+    } catch (error) {
+      console.warn("[inbound] escalation_enqueue_failed", {
+        reason: error instanceof Error ? error.name : "UNKNOWN",
+      });
+    }
+  }
+  return outcome;
 }
 
 export async function listInboxConversations(params: {
