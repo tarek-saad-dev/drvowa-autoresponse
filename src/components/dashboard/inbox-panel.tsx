@@ -290,6 +290,7 @@ export function InboxPanel({
   const [error, setError] = useState<string | null>(null);
   const [refreshing, startRefresh] = useTransition();
   const [resuming, setResuming] = useState(false);
+  const [resumeNotice, setResumeNotice] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const [query, setQuery] = useState("");
@@ -522,6 +523,7 @@ export function InboxPanel({
     if (!selectedId) return;
     setResuming(true);
     setError(null);
+    setResumeNotice(null);
     try {
       const res = await fetch(
         `/api/inbox/conversations/${encodeURIComponent(selectedId)}/ai/resume`,
@@ -533,6 +535,7 @@ export function InboxPanel({
       );
       const data = (await res.json()) as {
         state?: { mode: ConversationAiMode; pauseReason: string | null };
+        catchUp?: { scheduled: boolean; pendingCount: number; reason?: string };
         error?: string;
         code?: string;
       };
@@ -540,6 +543,13 @@ export function InboxPanel({
         throw new Error(mapUserFacingError(data, "تعذر استئناف الرد الآلي"));
       }
       const mode = data.state?.mode ?? "AUTO";
+      setResumeNotice(
+        data.catchUp?.scheduled
+          ? `الرد التلقائي رجع، وهيبدأ يرد على ${data.catchUp.pendingCount} رسالة معلقة من العميل.`
+          : data.catchUp?.reason === "AI_DISABLED"
+            ? "اترجعت المحادثة للبوت، لكن الرد التلقائي متعطّل في إعدادات واتساب."
+            : "الرد التلقائي رجع. مفيش رسائل نصية معلقة محتاجة رد دلوقتي.",
+      );
       setConversations((prev) =>
         prev.map((c) =>
           c.conversationId === selectedId
@@ -896,7 +906,13 @@ export function InboxPanel({
                   disabled={resuming}
                   className="shrink-0 rounded-xl"
                 >
-                  {resuming ? "..." : "رجّع الرد التلقائي"}
+                  {resuming
+                    ? "..."
+                    : selected.aiMode === "HUMAN_PAUSED" && selected.lastMessageDirection === "INBOUND"
+                      ? "رجّع البوت ورد على العميل"
+                      : selected.lastMessageDirection === "INBOUND"
+                      ? "رجّع البوت ورد على العميل"
+                      : "رجّع الرد التلقائي"}
                 </Button>
               )}
               </div>
@@ -933,6 +949,11 @@ export function InboxPanel({
       {error ? (
         <div className="border-b border-border bg-destructive/5 px-4 py-2.5 text-xs font-bold text-destructive" role="alert">
           {error}
+        </div>
+      ) : null}
+      {resumeNotice ? (
+        <div className="border-b border-success/20 bg-success-soft/35 px-4 py-2.5 text-xs font-bold text-success" role="status">
+          {resumeNotice}
         </div>
       ) : null}
 
