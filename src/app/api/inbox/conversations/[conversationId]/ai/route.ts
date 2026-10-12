@@ -30,7 +30,7 @@ export async function GET(_request: Request, context: RouteContext) {
       businessId,
       conversationId,
     });
-    return jsonOk({ state: serializeState(state), catchUp });
+    return jsonOk({ state: serializeState(state) });
   } catch (error) {
     return handleApiError(error);
   }
@@ -65,7 +65,7 @@ export async function POST(request: Request, context: RouteContext) {
       businessId,
       conversationId,
     });
-    return jsonOk({ state: serializeState(state) });
+    return jsonOk({ state: serializeState(state), catchUp });
   } catch (error) {
     return handleApiError(error);
   }
