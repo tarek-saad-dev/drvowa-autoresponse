@@ -604,6 +604,11 @@ export function InboxPanel({
   useEffect(() => {
     const id = selectedIdRef.current;
     if (id) void fetchEscalation(id);
+    const timer = window.setInterval(() => {
+      const currentId = selectedIdRef.current;
+      if (currentId && !document.hidden) void fetchEscalation(currentId);
+    }, 15_000);
+    return () => window.clearInterval(timer);
   }, [selectedId, fetchEscalation]);
 
   useEffect(() => {
@@ -630,7 +635,9 @@ export function InboxPanel({
       if (selectedIdRef.current === id) {
         setEscalation(data.escalation ?? null);
         setNotice(data.created
-          ? "تم فتح حالة تدخل بشري. إرسال إشعار المالك بيتابع في الخلفية عند تفعيل الرقم."
+          ? data.escalation?.notificationStatus === "PENDING"
+            ? "اتفتحت حالة تدخل بشري واتجدول إشعار واتساب للمالك."
+            : "اتفتحت حالة تدخل بشري، لكن إشعارات المالك مش مفعلة أو الرقم مش مؤكد."
           : "المحادثة لها بالفعل حالة تدخل بشري مفتوحة؛ مش هيتبعت تنبيه مكرر.");
         setConversations(prev => prev.map(row => row.conversationId === id
           ? { ...row, aiMode: "HUMAN_PAUSED", aiPauseReason: "ESCALATION" } : row));
@@ -1110,7 +1117,7 @@ export function InboxPanel({
               <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100">
                 <strong>تدخل بشري: {escalation.status === "OPEN" ? "مفتوح" : "قيد المتابعة"}</strong>
                 <span className="min-w-0 flex-1 truncate">{escalation.reason}</span>
-                <span className="text-[10px]">إشعار المالك: {escalation.notificationStatus}</span>
+                <span className="text-[10px]" title={escalation.notificationError ?? undefined}>إشعار المالك: {escalation.notificationStatus === "SENT" ? "تم الإرسال" : escalation.notificationStatus === "PENDING" ? "منتظر الإرسال" : escalation.notificationStatus === "SENDING" ? "جارٍ الإرسال" : escalation.notificationStatus === "CANCELLED" ? "غير مُفعّل" : escalation.notificationStatus === "UNKNOWN" ? "النتيجة غير مؤكدة" : "فشل الإرسال"}</span>
                 {escalation.status === "OPEN" ? (
                   <button type="button" disabled={escalating} className="rounded-lg border border-amber-400 px-2 py-1 font-bold"
                     onClick={() => void updateEscalation("ACKNOWLEDGED")}>استلمت الحالة</button>
