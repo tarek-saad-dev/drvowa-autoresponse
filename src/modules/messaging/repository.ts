@@ -1043,11 +1043,75 @@ export async function insertUsageEventInTrx(
   );
 }
 
+export type ConversationFilter = "ALL" | "UNREAD" | "HUMAN" | "AUTO";
+
+export type ConversationPageCursor = {
+  at: Date;
+  conversationId: string;
+};
+
+export async function countConversationsForBusiness(params: {
+  businessId: string;
+}): Promise<{ total: number; unread: number }> {
+  const result = await query<{ TotalCount: number; UnreadCount: number }>(
+    `SELECT COUNT(1) AS TotalCount,
+            COUNT(CASE WHEN LastInboundAtUtc IS NOT NULL
+              AND (LastReadAtUtc IS NULL OR LastInboundAtUtc > LastReadAtUtc)
+              THEN 1 END) AS UnreadCount
+       FROM dbo.TblConversation
+       WHERE BusinessID = @businessId`,
+    [{ name: "businessId", type: sql.UniqueIdentifier, value: params.businessId }],
+  );
+  return {
+    total: Number(result.recordset[0]?.TotalCount ?? 0),
+    unread: Number(result.recordset[0]?.UnreadCount ?? 0),
+  };
+}
+
 export async function listConversationsForBusiness(params: {
   businessId: string;
   limit?: number;
+  before?: ConversationPageCursor | null;
+  search?: string;
+  filter?: ConversationFilter;
 }): Promise<ConversationListItem[]> {
   const limit = Math.min(Math.max(params.limit ?? 50, 1), 500);
+  const before = params.before ?? null;
+  const search = params.search?.trim().slice(0, 96) ?? "";
+  const filter = params.filter ?? "ALL";
+  const filterSql = filter === "UNREAD"
+    ? "AND c.LastInboundAtUtc IS NOT NULL AND (c.LastReadAtUtc IS NULL OR c.LastInboundAtUtc > c.LastReadAtUtc)"
+    : filter === "HUMAN"
+      ? "AND ai.Mode IN (N'HUMAN_PAUSED', N'SAFETY_PAUSED')"
+      : filter === "AUTO"
+        ? "AND (ai.Mode = N'AUTO' OR ai.Mode IS NULL)"
+        : "";
+  // Resolve the anchor's full DATETIME2 precision on SQL Server. JavaScript
+  // Date JSON loses sub-millisecond precision and can otherwise skip chats.
+  const cursorSql = before
+    ? `AND (
+         ISNULL(c.LastMessageAtUtc, c.CreatedAtUtc) < (
+           SELECT ISNULL(anchor.LastMessageAtUtc, anchor.CreatedAtUtc)
+           FROM dbo.TblConversation anchor
+           WHERE anchor.BusinessID = @businessId AND anchor.ConversationID = @beforeId
+         )
+         OR (
+           ISNULL(c.LastMessageAtUtc, c.CreatedAtUtc) = (
+             SELECT ISNULL(anchor.LastMessageAtUtc, anchor.CreatedAtUtc)
+             FROM dbo.TblConversation anchor
+             WHERE anchor.BusinessID = @businessId AND anchor.ConversationID = @beforeId
+           )
+           AND c.ConversationID < @beforeId
+         )
+       )`
+    : "";
+  const searchSql = search
+    ? `AND (
+         CHARINDEX(@search, COALESCE(ct.DisplayName, N'')) > 0
+         OR CHARINDEX(@search, COALESCE(ct.PhoneNormalized, N'')) > 0
+         OR CHARINDEX(@search, COALESCE(ct.ExternalContactKey, N'')) > 0
+       )`
+    : "";
   const result = await query<ConversationListRow>(
     `SELECT TOP (@limit)
         c.ConversationID, c.BusinessID, c.ChannelConnectionID, c.ContactID, c.Status,
@@ -1110,7 +1174,11 @@ export async function listConversationsForBusiness(params: {
        ORDER BY j.CreatedAtUtc DESC
      ) lj
      WHERE c.BusinessID = @businessId
-     ORDER BY ISNULL(c.LastMessageAtUtc, c.CreatedAtUtc) DESC`,
+       ${filterSql}
+       ${cursorSql}
+       ${searchSql}
+     ORDER BY ISNULL(c.LastMessageAtUtc, c.CreatedAtUtc) DESC,
+              c.ConversationID DESC`,
     [
       {
         name: "businessId",
@@ -1118,6 +1186,10 @@ export async function listConversationsForBusiness(params: {
         value: params.businessId,
       },
       { name: "limit", type: sql.Int, value: limit },
+      ...(before ? [
+        { name: "beforeId", type: sql.UniqueIdentifier, value: before.conversationId },
+      ] : []),
+      ...(search ? [{ name: "search", type: sql.NVarChar(96), value: search }] : []),
     ],
   );
 
@@ -1328,7 +1400,9 @@ export async function markConversationRead(params: {
 }): Promise<void> {
   await query(
     `UPDATE dbo.TblConversation
-     SET LastReadAtUtc = @at,
+     SET LastReadAtUtc = CASE
+           WHEN LastReadAtUtc IS NULL OR LastReadAtUtc < @at THEN @at
+           ELSE LastReadAtUtc END,
          UpdatedAtUtc = SYSUTCDATETIME()
      WHERE BusinessID = @businessId
        AND ConversationID = @conversationId`,
