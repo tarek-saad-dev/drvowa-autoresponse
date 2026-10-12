@@ -646,6 +646,7 @@ export function InboxPanel({
       }
       if (!res.ok) throw new Error(mapUserFacingError(data, "تعذر إرسال الرسالة"));
       setDrafts(prev => ({ ...prev, [id]: "" }));
+      if (textArea.current) textArea.current.style.height = "auto";
       const newManualState = {
         aiMode: "HUMAN_PAUSED" as const,
         aiPauseReason: "HUMAN_TAKEOVER",
@@ -977,7 +978,13 @@ export function InboxPanel({
               <div className="mx-auto flex max-w-[940px] items-end gap-2">
                 <div className="flex min-h-[48px] min-w-0 flex-1 items-end gap-2 rounded-2xl border border-[#e4ebe4] bg-white px-4 py-2 shadow-[0_2px_14px_rgba(21,69,49,.04)] focus-within:border-[#75bba7] dark:border-[#365144] dark:bg-[#263a30]">
                   <textarea
-                    ref={textArea} value={draft} onChange={e => setDraft(e.target.value)}
+                    ref={textArea} value={draft}
+                    onChange={e => setDraft(e.target.value)}
+                    onInput={e => {
+                      const el = e.currentTarget;
+                      el.style.height = "auto";
+                      el.style.height = Math.min(el.scrollHeight, 144) + "px";
+                    }}
                     rows={1} maxLength={4000}
                     aria-label="اكتب رسالة واتساب"
                     placeholder="اكتب رسالة للعميل..."
