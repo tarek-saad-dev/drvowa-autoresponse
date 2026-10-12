@@ -202,11 +202,12 @@ export async function confirmOwnerVerification(businessId: string, userId: strin
 }
 
 export function escalationMessage(params: {
-  businessName: string; customerPhone: string; conversationId: string; reason: string;
+  businessId: string; businessName: string; customerPhone: string; conversationId: string; reason: string;
 }): string {
   const safeReason = params.reason.replace(/[\r\n\t]+/g, " ").slice(0, 200);
   const wa = "https://wa.me/" + encodeURIComponent(params.customerPhone);
-  const app = "https://app.drvotech.com/dashboard/inbox?conversationId=" + encodeURIComponent(params.conversationId);
+  const app = "https://app.drvotech.com/dashboard/inbox?businessId=" + encodeURIComponent(params.businessId)
+    + "&conversationId=" + encodeURIComponent(params.conversationId);
   return "⚠️ DRVO | عميل محتاج متابعة بشرية\n"
     + "البيزنس: " + params.businessName.slice(0, 100) + "\n"
     + "رقم العميل: +" + params.customerPhone + "\n"
