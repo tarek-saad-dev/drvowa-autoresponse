@@ -15,6 +15,15 @@ type Claimed = {
 export async function deliverNextEscalationNotification(
   send: typeof sendAccountMessage = sendAccountMessage,
 ): Promise<"IDLE" | "SENT" | "RETRY" | "UNKNOWN" | "FAILED"> {
+  // Crash recovery is observation-only: never replay potentially sent messages.
+  await query(
+    `UPDATE dbo.TblHumanEscalation
+     SET NotificationStatus = N'UNKNOWN',
+         NotificationLastErrorCode = N'WORKER_CRASH_SEND_UNCERTAIN',
+         UpdatedAtUtc = SYSUTCDATETIME()
+     WHERE NotificationStatus = N'SENDING'
+       AND NotificationClaimedAtUtc < DATEADD(minute, -10, SYSUTCDATETIME())`,
+  );
   // An uncertain in-flight request is never reclaimed automatically: the runtime
   // may have sent it just before the worker died.
   const r = await query<Claimed>(
