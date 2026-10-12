@@ -154,13 +154,16 @@ export async function requestOwnerVerification(businessId: string, userId: strin
     return setting.OwnerPhone;
   });
   // Explicit verification send only, not an escalation; unknown sends aren't retried automatically.
-  await sendAccountMessage({
+  const outcome = await sendAccountMessage({
     accountKey: channel.externalAccountKey,
     phone: sent,
     message: "DRVO AutoResponse: كود تأكيد رقم مسؤول إشعارات البيزنس هو " + code
       + ". صالح لمدة 10 دقائق. لا تشارك الكود مع أي شخص.",
     idempotencyKey: "owner-verify:" + businessId + ":" + verificationDigest(businessId, sent, code).slice(0, 30),
   });
+  if (!outcome.success || !outcome.messageId) {
+    throw new ValidationError("تعذر تأكيد إرسال الكود على واتساب. راجع اتصال الرقم.");
+  }
   return { sent: true };
 }
 
