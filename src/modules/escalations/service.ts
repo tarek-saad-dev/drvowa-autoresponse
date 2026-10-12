@@ -49,6 +49,25 @@ export function normalizeOwnerPhone(phone: string): string {
   return normalized;
 }
 
+/** Only explicit requests for a real human are auto-escalated; do not guess from sentiment. */
+export function requestsHumanAgent(text: string): boolean {
+  const normalized = text.trim().toLowerCase().replace(/[أإآ]/g, "ا").replace(/ى/g, "ي");
+  return /(?:عايز|عاوز|ممكن|اريد|محتاج)\s+(?:اكلم|اتكلم مع|اتواصل مع|كلموني|حد من|موظف|المدير|مسؤول|انسان|شخص حقيقي)/u.test(normalized)
+    || /(?:اكلم|اتواصل مع)\s+(?:موظف|المدير|المسؤول|حد حقيقي|حد من الادارة)/u.test(normalized)
+    || /(?:human agent|real person|talk to (?:a )?(?:person|manager|human)|customer support)/i.test(text);
+}
+
+/** Business owner replies should be stored, but never become AI customer prompts. */
+export async function isEscalationOwnerPhone(businessId: string, phone: string | null): Promise<boolean> {
+  if (!phone) return false;
+  const res = await query<{ Found: number }>(
+    `SELECT 1 AS Found FROM dbo.TblHumanEscalationSetting
+      WHERE BusinessID = @businessId AND OwnerPhone = @phone`,
+    [...businessParam(businessId), { name: "phone", type: sql.NVarChar(20), value: phone }],
+  );
+  return Boolean(res.recordset[0]);
+}
+
 export async function requireEscalationAdmin(businessId: string, userId: string): Promise<void> {
   const m = await getMembership({ businessId, userId });
   if (!m || m.status !== "ACTIVE" || !["OWNER", "ADMIN"].includes(m.role)) {
