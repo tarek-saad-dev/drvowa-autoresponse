@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { OwnerEscalationSettings } from "@/components/dashboard/owner-escalation-settings";
+import { getMembership } from "@/modules/businesses/repository";
+import { getEscalationSetting } from "@/modules/escalations/service";
 import { BusinessSettingsForm } from "@/components/dashboard/business-settings-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +31,10 @@ export default async function SettingsPage() {
     listLocations({ businessId }),
   ]);
 
+  const membership = await getMembership({ businessId, userId: user.userId });
+  const canManageEscalation = membership?.status === "ACTIVE" && ["OWNER", "ADMIN"].includes(membership.role);
+  const escalationSetting = canManageEscalation ? await getEscalationSetting(businessId) : null;
+
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
       <section className="rounded-[28px] border border-border bg-card p-5 shadow-sm sm:p-7">
@@ -51,6 +58,8 @@ export default async function SettingsPage() {
             </div>
             <BusinessSettingsForm business={business} />
           </section>
+
+          {escalationSetting ? <OwnerEscalationSettings initial={escalationSetting} /> : null}
 
           <Card>
             <CardHeader className="pb-3">
