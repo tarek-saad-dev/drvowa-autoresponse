@@ -19,7 +19,7 @@ type InboxFilter = "ALL" | "UNREAD" | "HUMAN" | "AUTO";
 type GlyphName =
   | "chat" | "back" | "search" | "refresh" | "settings" | "bot"
   | "book" | "send" | "info" | "close" | "check" | "alert"
-  | "chevron" | "menu" | "home" | "spark" | "arrow-down";
+  | "chevron" | "menu" | "home" | "spark" | "arrow-down" | "user";
 
 type ConversationCursor = { beforeAt: string; beforeId: string };
 type Counts = { total: number; unread: number };
@@ -64,6 +64,7 @@ const LIST_POLL_MS = 12_000;
 const THREAD_POLL_MS = 5_000;
 
 const shapes: Record<GlyphName, ReactNode> = {
+  user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
   chat: <><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5c-1.3 0-2.5-.3-3.6-.9L4 20l1.6-4.8A7.5 7.5 0 1 1 20 11.5Z" /><path d="M8 10h8M8 13h5" /></>,
   back: <><path d="m15 18-6-6 6-6" /></>,
   search: <><circle cx="10.7" cy="10.7" r="6.5" /><path d="m16 16 4.2 4.2" /></>,
@@ -102,8 +103,10 @@ function contactLabel(c: ConversationRow): string {
   return matched ? matched[1] : c.contactExternalKey;
 }
 
-function contactInitial(c: ConversationRow): string {
-  return contactLabel(c).trim().slice(0, 1).toUpperCase() || "؟";
+function contactInitial(c: ConversationRow): string | null {
+  const name = c.contactDisplayName?.trim();
+  // Phone numbers and WhatsApp LIDs have no meaningful first-letter avatar.
+  return name && /^[\p{L}]/u.test(name) ? Array.from(name)[0]!.toUpperCase() : null;
 }
 
 function avatarTone(key: string) {
@@ -259,11 +262,11 @@ function ActionIcon({
 
 function Avatar({ c, size = "md" }: { c: ConversationRow; size?: "sm" | "md" | "lg" }) {
   const shape = size === "lg" ? "h-[76px] w-[76px] text-[30px]"
-    : size === "sm" ? "h-10 w-10 text-base" : "h-[46px] w-[46px] text-lg";
+    : size === "sm" ? "h-10 w-10 text-base" : "h-11 w-11 text-base";
   return <div className={
     "grid shrink-0 place-items-center rounded-full font-bold select-none " +
     shape + " " + avatarTone(c.conversationId)
-  }>{contactInitial(c)}</div>;
+  }>{contactInitial(c) ?? <Glyph name="user" size={size === "lg" ? 32 : 20} />}</div>;
 }
 
 export function InboxPanel({
@@ -730,8 +733,8 @@ export function InboxPanel({
   const failedCount = grouped.filter(c => conversationStatus(c).attention).length;
 
   return (
-    <div dir="rtl" className="flex h-full min-h-0 w-full overflow-hidden bg-[#f7f9f7] font-[family-name:var(--font-alexandria)] text-[#172824] dark:bg-[#101b19] dark:text-[#eaf1ee]">
-      <nav className="hidden w-[68px] shrink-0 flex-col items-center justify-between border-l border-[#dce6e1] bg-[#edf3ef] py-4 md:flex dark:border-[#263b34] dark:bg-[#162722]" aria-label="التنقل السريع">
+    <div dir="rtl" className="flex h-full min-h-0 min-w-0 w-full isolate overflow-hidden overscroll-none bg-[#f7f9f7] font-sans text-[#172824] dark:bg-[#101b19] dark:text-[#eaf1ee]">
+      <nav className="hidden h-full w-[60px] shrink-0 flex-col items-center justify-between border-l border-[#dce6e1] bg-[#edf3ef] py-4 md:flex dark:border-[#263b34] dark:bg-[#162722]" aria-label="التنقل السريع">
         <div className="flex w-full flex-col items-center gap-4">
           <Link href="/dashboard" className="grid h-11 w-11 place-items-center rounded-2xl bg-[#087f76] text-xl font-black text-white shadow-sm" aria-label="DRVO الرئيسية">D</Link>
           <div className="my-1 h-px w-7 bg-[#d2ded8] dark:bg-[#355147]" />
@@ -748,16 +751,16 @@ export function InboxPanel({
       </nav>
 
       <aside className={
-        "flex h-full min-h-0 w-full shrink-0 flex-col border-l border-[#dbe5e0] bg-white md:w-[350px] xl:w-[392px] dark:border-[#273d35] dark:bg-[#182622] " +
+        "flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden border-l border-[#dbe5e0] bg-white md:w-[350px] lg:w-[370px] xl:w-[392px] dark:border-[#273d35] dark:bg-[#182622] " +
         (mobileThread ? "hidden md:flex" : "flex")
       } aria-label="قائمة المحادثات">
-        <header className="shrink-0 border-b border-[#ecf0ed] px-4 pb-3 pt-4 dark:border-[#2b4038]">
+        <header className="shrink-0 border-b border-[#ecf0ed] px-4 pb-3 pt-3 dark:border-[#2b4038]">
           <div className="mb-3 flex items-center justify-between gap-2">
             <div className="flex items-center gap-3">
               <Link href="/dashboard" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#e3f1ed] text-[#078b7b] md:hidden dark:bg-[#24483c]" aria-label="الرجوع للرئيسية"><Glyph name="home" /></Link>
               <div>
                 <h1 className="text-[21px] font-extrabold tracking-tight">المحادثات</h1>
-                <p className="mt-0.5 text-[11px] text-[#83908a] dark:text-[#94aaa1]">
+                <p className="mt-0.5 text-xs text-[#627d70] dark:text-[#abc1b3]">
                   {counts.total.toLocaleString("ar-EG")} محادثة محفوظة في DRVO
                 </p>
               </div>
@@ -774,7 +777,7 @@ export function InboxPanel({
               onChange={e => setSearchText(e.target.value)}
               placeholder="ابحث بالاسم أو الرقم..."
               aria-label="بحث في جميع المحادثات"
-              className="h-full min-w-0 flex-1 bg-transparent text-[13px] font-medium outline-none placeholder:text-[#8a9a93]"
+              className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-[#869b8d]"
             />
             {searchText ? <button type="button" title="مسح البحث" aria-label="مسح البحث" onClick={() => setSearchText("")}><Glyph name="close" size={16} /></button> : <kbd className="hidden text-[10px] text-[#99a7a1] lg:block">Ctrl K</kbd>}
           </div>
@@ -821,7 +824,7 @@ export function InboxPanel({
                       type="button" onClick={() => selectConversation(c.conversationId)}
                       aria-current={active ? "true" : undefined}
                       className={
-                        "group flex w-full items-center gap-3 border-b border-[#f1f4f1] px-4 py-3 text-right transition-colors hover:bg-[#f4f8f4] dark:border-[#25382f] dark:hover:bg-[#20372d] " +
+                        "group flex min-h-[70px] w-full items-center gap-3 border-b border-[#f1f4f1] px-4 py-2.5 text-right transition-colors hover:bg-[#f4f8f4] focus-visible:bg-[#e8f6ee] dark:border-[#25382f] dark:hover:bg-[#20372d] " +
                         (active ? "bg-[#e2f2ed] shadow-[inset_3px_0_0_#0c9f89] dark:bg-[#23483e]" : "") +
                         (c.unread ? " font-bold" : "")
                       }
@@ -829,7 +832,10 @@ export function InboxPanel({
                       <Avatar c={c} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="min-w-0 truncate text-[13px] font-bold">{contactLabel(c)}</span>
+                          <span className="min-w-0 truncate text-[14px] font-semibold" dir="auto">{contactLabel(c)}</span>
+                          {s.attention ? (
+                            <span className={"h-2 w-2 shrink-0 rounded-full " + s.dot} title={s.label} aria-label={s.label} />
+                          ) : null}
                           <time className={
                             "shrink-0 text-[10px] tabular-nums " +
                             (c.unread ? "font-bold text-[#079e84]" : "font-medium text-[#9aa8a1] dark:text-[#90a39a]")
@@ -837,8 +843,8 @@ export function InboxPanel({
                         </div>
                         <div className="mt-1 flex items-center gap-2">
                           <p className={
-                            "min-w-0 flex-1 truncate text-[11.5px] leading-5 " +
-                            (c.unread ? "text-[#405b51] dark:text-[#d6e4dc]" : "text-[#84978e] dark:text-[#9cb0a5]")
+                            "min-w-0 flex-1 truncate text-[12.5px] leading-5 " +
+                            (c.unread ? "text-[#405b51] dark:text-[#d6e4dc]" : "text-[#62796d] dark:text-[#b1c7b8]")
                           } dir="auto">
                             {c.lastMessageDirection === "OUTBOUND" ? "✓ " : ""}
                             {c.lastMessagePreview?.trim() || "مرفق أو رسالة بدون نص"}
@@ -847,10 +853,8 @@ export function InboxPanel({
                             : s.attention ? <span className={"h-[7px] w-[7px] shrink-0 rounded-full " + s.dot} aria-label={s.label} />
                               : null}
                         </div>
-                        {(c.aiMode !== "AUTO" || s.attention || c.aiReplyHealth?.state === "REPLYING") && (
-                          <span className={"mt-1 inline-flex items-center gap-1 text-[10px] font-medium " + s.color}>
-                            <span className={"h-1.5 w-1.5 rounded-full " + s.dot} />{s.label}
-                          </span>
+                        {s.attention && (
+                          <span className="sr-only">{s.label}</span>
                         )}
                       </div>
                     </button>
@@ -874,18 +878,18 @@ export function InboxPanel({
       </aside>
 
       <main className={
-        "relative min-h-0 min-w-0 flex-1 flex-col bg-[#f3f5ef] dark:bg-[#0d1916] " +
+        "relative h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f3f5ef] dark:bg-[#0d1916] " +
         (mobileThread ? "flex" : "hidden md:flex")
       } aria-label="محتوى المحادثة">
         {selected && status ? (
           <>
-            <header className="z-10 flex h-[74px] shrink-0 items-center justify-between gap-3 border-b border-[#dfe8df] bg-[#fafdFA] px-3 sm:px-5 dark:border-[#293d33] dark:bg-[#1b2a24]">
+            <header className="z-10 flex h-[64px] shrink-0 items-center justify-between gap-3 border-b border-[#dfe8df] bg-[#fafdfa] px-3 sm:px-5 dark:border-[#293d33] dark:bg-[#1b2a24]">
               <div className="flex min-w-0 items-center gap-2.5">
                 <button type="button" onClick={() => setMobileThread(false)} className="grid h-9 w-9 place-items-center rounded-xl hover:bg-[#e8efe9] md:hidden" aria-label="رجوع لقائمة المحادثات"><Glyph name="back" /></button>
                 <Avatar c={selected} size="sm" />
                 <div className="min-w-0">
-                  <h2 className="truncate text-[14px] font-extrabold">{contactLabel(selected)}</h2>
-                  <p className="mt-0.5 flex items-center gap-2 text-[11px] text-[#7d9185]">
+                  <h2 className="truncate text-[15px] font-bold">{contactLabel(selected)}</h2>
+                  <p className="mt-0.5 flex items-center gap-2 text-xs text-[#6d8877]">
                     <span className={"h-1.5 w-1.5 shrink-0 rounded-full " + status.dot} />
                     <span className={"truncate " + status.color}>{status.label}</span>
                     {selected.contactPhoneNormalized && <span className="hidden truncate opacity-75 sm:inline" dir="ltr">{selected.contactPhoneNormalized}</span>}
@@ -906,14 +910,14 @@ export function InboxPanel({
             </header>
 
             {(error || notice || status.attention) && (
-              <div className="z-10 border-b border-[#e5eae4] bg-white/90 px-4 py-2 text-[11px] dark:border-[#2c4035] dark:bg-[#1b2b24]">
+              <div className="z-10 shrink-0 border-b border-[#e5eae4] bg-white/90 px-4 py-2 text-xs dark:border-[#2c4035] dark:bg-[#1b2b24]">
                 {error && <p role="alert" className="font-bold text-red-600">{error}</p>}
                 {notice && <p role="status" className="font-bold text-[#087c6a] dark:text-[#82dbc1]">{notice}</p>}
                 {!error && !notice && status.attention && <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300"><Glyph name="alert" size={15} />{status.detail}{selected.aiMode === "AUTO" ? " — تقدر ترد بنفسك من تحت." : ""}</div>}
               </div>
             )}
 
-            <div className="relative flex min-h-0 flex-1 flex-col">
+            <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               <div
                 ref={messageScroller}
                 onScroll={e => {
@@ -922,7 +926,7 @@ export function InboxPanel({
                   shouldStickBottom.current = nearBottom;
                   setShowScrollDown(!nearBottom);
                 }}
-                className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 [scrollbar-width:thin] sm:px-7"
+                className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 [scrollbar-width:thin] sm:px-8 lg:px-10"
                 style={{
                   backgroundColor: "transparent",
                   backgroundImage: "radial-gradient(circle at 2px 2px, rgba(110,143,121,.075) 1px, transparent 0)",
@@ -958,7 +962,7 @@ export function InboxPanel({
                                         {m.origin === "AI" ? "الموظف الذكي" : m.origin === "HUMAN" ? (m.actorName || "الفريق") : "رسالة صادرة"}
                                       </div>
                                     )}
-                                    <p dir="auto" className="whitespace-pre-wrap break-words text-[12.5px] leading-[1.95] sm:text-[13px]">
+                                    <p dir="auto" className="whitespace-pre-wrap break-words text-[14px] leading-[1.75]">
                                       {messageBodyDisplay({ textContent: m.textContent, contentType: m.contentType })}
                                     </p>
                                     <div className="mt-1 flex items-center justify-end gap-1 text-[9px] opacity-60" dir="ltr">
@@ -976,7 +980,7 @@ export function InboxPanel({
               {showScrollDown && <button type="button" onClick={scrollToBottom} aria-label="آخر الرسائل" title="آخر الرسائل" className="absolute bottom-3 left-4 grid h-10 w-10 place-items-center rounded-full bg-white text-[#45856a] shadow-md dark:bg-[#2b4337]"><Glyph name="arrow-down" size={18} /></button>}
             </div>
 
-            <footer className="z-10 shrink-0 border-t border-[#e5e9e3] bg-[#f7f9f5] px-3 py-3 dark:border-[#2c4035] dark:bg-[#1a2b24]">
+            <footer className="z-10 shrink-0 border-t border-[#e5e9e3] bg-[#f7f9f5] px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 dark:border-[#2c4035] dark:bg-[#1a2b24]">
               <div className="mx-auto flex max-w-[940px] items-end gap-2">
                 <div className="flex min-h-[48px] min-w-0 flex-1 items-end gap-2 rounded-2xl border border-[#e4ebe4] bg-white px-4 py-2 shadow-[0_2px_14px_rgba(21,69,49,.04)] focus-within:border-[#75bba7] dark:border-[#365144] dark:bg-[#263a30]">
                   <textarea
@@ -996,7 +1000,7 @@ export function InboxPanel({
                         void sendManual();
                       }
                     }}
-                    className="min-h-[30px] max-h-36 w-full resize-none bg-transparent py-1 text-[13px] leading-6 outline-none placeholder:text-[#9baca0]"
+                    className="min-h-[30px] max-h-36 w-full resize-none overflow-y-auto bg-transparent py-1 text-sm leading-6 outline-none placeholder:text-[#839c8a]"
                     style={{ height: "auto" }}
                   />
                 </div>
@@ -1006,7 +1010,7 @@ export function InboxPanel({
                   title="إرسال الرسالة" aria-label="إرسال الرسالة"
                 ><Glyph name="send" size={20} /></button>
               </div>
-              <p className="mx-auto mt-1.5 max-w-[940px] text-[10px] text-[#8b9c8f]">
+              <p className="mx-auto mt-1.5 hidden max-w-[940px] text-[11px] text-[#698473] sm:block">
                 {selected.aiMode === "AUTO"
                   ? "أول رد يدوي منك هيوقف الـAI في المحادثة دي تلقائيًا."
                   : selected.aiMode === "HUMAN_PAUSED"

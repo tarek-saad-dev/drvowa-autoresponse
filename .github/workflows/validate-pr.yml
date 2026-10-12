@@ -27,5 +27,7 @@ jobs:
         run: npm run build
       - name: Resume catch-up unit tests
         run: npx vitest run tests/unit/resume-catch-up.test.ts tests/unit/resume-catch-up-service.test.ts
+      - name: Inbox viewport regression tests
+        run: npx vitest run tests/unit/inbox-layout-contract.test.tsx
       - name: Full test suite
         run: npm test
