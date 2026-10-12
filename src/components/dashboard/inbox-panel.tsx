@@ -284,6 +284,7 @@ export function InboxPanel({
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filter, setFilter] = useState<InboxFilter>("ALL");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedSnapshot, setSelectedSnapshot] = useState<ConversationRow | null>(null);
   const [mobileThread, setMobileThread] = useState(false);
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [loadingThread, setLoadingThread] = useState(false);
@@ -299,6 +300,7 @@ export function InboxPanel({
   const [showScrollDown, setShowScrollDown] = useState(false);
 
   const selectedIdRef = useRef<string | null>(null);
+  const mobileThreadRef = useRef(false);
   const listRequestRef = useRef(0);
   const listBusyRef = useRef(false);
   const listScroller = useRef<HTMLDivElement | null>(null);
@@ -310,7 +312,8 @@ export function InboxPanel({
   const previousMessageKey = useRef("");
   const restoringOlder = useRef<{ height: number; top: number } | null>(null);
 
-  const selected = conversations.find(c => c.conversationId === selectedId) ?? null;
+  const selected = conversations.find(c => c.conversationId === selectedId)
+    ?? (selectedSnapshot?.conversationId === selectedId ? selectedSnapshot : null);
   const draft = selectedId ? drafts[selectedId] ?? "" : "";
   const status = selected ? conversationStatus(selected) : null;
 
@@ -321,6 +324,7 @@ export function InboxPanel({
   }, []);
 
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
+  useEffect(() => { mobileThreadRef.current = mobileThread; }, [mobileThread]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(searchText.trim()), 250);
@@ -355,6 +359,8 @@ export function InboxPanel({
         return sortRows([...byId.values()]);
       });
       if (data.counts) setCounts(data.counts);
+      const updatedSelection = latest.find(c => c.conversationId === selectedIdRef.current);
+      if (updatedSelection) setSelectedSnapshot(updatedSelection);
       if (!silent) {
         setCursor(data.nextCursor ?? null);
         setHasMore(Boolean(data.hasMore));
@@ -396,6 +402,8 @@ export function InboxPanel({
       setHasMore(Boolean(data.hasMore));
       setCursor(data.nextCursor ?? null);
       if (data.counts) setCounts(data.counts);
+      const updatedSelection = next.find(c => c.conversationId === selectedIdRef.current);
+      if (updatedSelection) setSelectedSnapshot(updatedSelection);
     } catch (err) {
       if (requestId === listRequestRef.current) {
         setError(err instanceof Error ? err.message : "تعذر تحميل محادثات أكثر");
@@ -438,7 +446,8 @@ export function InboxPanel({
       .filter(Boolean)
       .sort();
     const upTo = received.at(-1);
-    if (!upTo) return;
+    if (!upTo || document.hidden) return;
+    if (window.matchMedia("(max-width: 767px)").matches && !mobileThreadRef.current) return;
     try {
       const res = await fetch(
         "/api/inbox/conversations/" + encodeURIComponent(id) + "/read",
@@ -448,6 +457,7 @@ export function InboxPanel({
       );
       if (res.ok && selectedIdRef.current === id) {
         setConversations(prev => prev.map(c => c.conversationId === id ? { ...c, unread: false } : c));
+        setSelectedSnapshot(prev => prev?.conversationId === id ? { ...prev, unread: false } : prev);
         // Exact server counts refresh on next list poll.
       }
     } catch {
@@ -502,6 +512,8 @@ export function InboxPanel({
   const selectConversation = useCallback((id: string) => {
     selectedIdRef.current = id;
     setSelectedId(id);
+    setSelectedSnapshot(conversations.find(c => c.conversationId === id) ?? null);
+    mobileThreadRef.current = true;
     setMobileThread(true);
     setDetailsOpen(false);
     setNotice(null);
@@ -511,7 +523,7 @@ export function InboxPanel({
     setOlderCursor(null);
     shouldStickBottom.current = true;
     void loadMessages(id);
-  }, [loadMessages]);
+  }, [loadMessages, conversations]);
 
   const loadOlder = useCallback(async () => {
     const id = selectedIdRef.current;
@@ -634,6 +646,15 @@ export function InboxPanel({
       }
       if (!res.ok) throw new Error(mapUserFacingError(data, "تعذر إرسال الرسالة"));
       setDrafts(prev => ({ ...prev, [id]: "" }));
+      const newManualState = {
+        aiMode: "HUMAN_PAUSED" as const,
+        aiPauseReason: "HUMAN_TAKEOVER",
+        aiReplyHealth: null,
+        lastMessagePreview: text,
+        lastMessageDirection: "OUTBOUND" as const,
+        lastMessageAtUtc: new Date().toISOString(),
+      };
+      setSelectedSnapshot(prev => prev?.conversationId === id ? { ...prev, ...newManualState } : prev);
       setConversations(prev => sortRows(prev.map(c => c.conversationId !== id ? c : {
         ...c,
         aiMode: "HUMAN_PAUSED" as const,
@@ -672,6 +693,9 @@ export function InboxPanel({
         error?: string;
       };
       if (!res.ok) throw new Error(mapUserFacingError(data, "تعذر إرجاع الرد التلقائي"));
+      setSelectedSnapshot(prev => prev?.conversationId === id
+        ? { ...prev, aiMode: data.state?.mode ?? "AUTO", aiPauseReason: data.state?.pauseReason ?? null }
+        : prev);
       setConversations(prev => prev.map(item => item.conversationId !== id ? item : {
         ...item, aiMode: data.state?.mode ?? "AUTO",
         aiPauseReason: data.state?.pauseReason ?? null,
