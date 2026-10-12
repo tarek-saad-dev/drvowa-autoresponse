@@ -13,6 +13,7 @@ export {
 export {
   ingestWhatsAppInbound,
   listInboxConversations,
+  getInboxConversationCounts,
   listInboxMessages,
   resolveChannelByExternalAccountKey,
   type IngestOutcome,
