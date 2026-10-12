@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
 import { MobileNav } from "@/components/dashboard/mobile-nav";
 import { DashboardTopbar } from "@/components/dashboard/topbar";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { AuthError } from "@/lib/tenancy/errors";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
@@ -37,21 +38,18 @@ export default async function DashboardLayout({
   const showPlatformAdminLink = await isPlatformAdminUser(user.userId);
 
   return (
-    <div className="flex min-h-full flex-1 bg-background">
-      <div className="hidden md:flex">
-        <DashboardSidebar showPlatformAdminLink={showPlatformAdminLink} />
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col">
+    <DashboardShell
+      sidebar={<DashboardSidebar showPlatformAdminLink={showPlatformAdminLink} />}
+      topbar={
         <DashboardTopbar
           userName={user.fullName}
           businesses={businesses}
           activeBusinessId={activeBusinessId}
         />
-        <main className="flex-1 overflow-auto p-4 pb-24 sm:p-6 sm:pb-24 md:pb-6">
-          {children}
-        </main>
-        <MobileNav showPlatformAdminLink={showPlatformAdminLink} />
-      </div>
-    </div>
+      }
+      mobileNav={<MobileNav showPlatformAdminLink={showPlatformAdminLink} />}
+    >
+      {children}
+    </DashboardShell>
   );
 }
