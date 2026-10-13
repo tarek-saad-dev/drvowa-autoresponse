@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { BrandLogo } from "@/components/brand/brand-logo";
+import { LandingMotion } from "./landing-motion";
 import { LandingPricing } from "./pricing";
 import s from "./landing.module.css";
 
@@ -165,7 +166,7 @@ function HeroScene() {
 }
 export function MarketingPage() {
   return (
-    <div className={s.page}>
+    <LandingMotion>
       <a className={s.skip} href="#main">
         انتقل للمحتوى
       </a>
@@ -411,6 +412,6 @@ export function MarketingPage() {
         </nav>
         <small>DRVO TECH © {new Date().getFullYear()}</small>
       </footer>
-    </div>
+    </LandingMotion>
   );
 }
