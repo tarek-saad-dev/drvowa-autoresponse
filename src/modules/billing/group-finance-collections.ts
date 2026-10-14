@@ -111,9 +111,10 @@ export async function listApprovedCollectionsForGroupFinance(
       reference: row.PaymentReference,
     })),
     hasMore,
-    nextCursor: hasMore && last ? encodeCollectionCursor({
+    // Keep the last seen cursor even when caught up, so future polls can resume.
+    nextCursor: last ? encodeCollectionCursor({
       reviewedAtUtc: new Date(last.ReviewedAtUtc).toISOString(),
       paymentRequestId: String(last.PaymentRequestID),
-    }) : null,
+    }) : (params.after ?? null),
   };
 }
