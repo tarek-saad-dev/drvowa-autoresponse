@@ -21,7 +21,7 @@ export function DashboardSidebar({
     cn(
       "group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold transition-all duration-200",
       active
-        ? "bg-primary text-white shadow-[0_10px_28px_rgba(0,117,154,.24)]"
+        ? "bg-primary text-primary-foreground shadow-[0_10px_28px_rgba(0,117,154,.24)]"
         : "text-sidebar-muted hover:bg-white/5 hover:text-sidebar-foreground",
     );
 
@@ -106,7 +106,7 @@ export function DashboardSidebar({
         <div className="mt-2 grid gap-2">
           <Link
             href="/dashboard/inbox"
-            className="flex items-center justify-between gap-2 rounded-xl bg-primary px-3 py-2.5 text-xs font-black text-white transition hover:bg-primary-hover"
+            className="flex items-center justify-between gap-2 rounded-xl bg-primary px-3 py-2.5 text-xs font-black text-primary-foreground transition hover:bg-primary-hover"
           >
             <span className="flex items-center gap-2">
               <span>💬</span>
