@@ -11,6 +11,10 @@ on:
       - "src/app/api/internal/group-finance/**"
       - ".github/workflows/group-finance-ci.yml"
       - "tests/group-finance-*.test.ts"
+      - "tests/admin-dashboard-read-model.test.ts"
+      - "src/modules/billing/admin-*.ts"
+      - "src/components/admin/admin-*.tsx"
+      - "src/app/api/admin/financials/**"
   workflow_dispatch:
 
 permissions:
@@ -34,8 +38,8 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
       - name: Finance contract unit tests
-        run: npx vitest run tests/group-finance-contract.test.ts tests/group-finance-export.test.ts
+        run: npx vitest run tests/group-finance-contract.test.ts tests/group-finance-export.test.ts tests/admin-dashboard-read-model.test.ts
       - name: Lint changed finance modules
-        run: npx eslint src/modules/billing/admin-financial-report.ts src/modules/billing/group-finance-*.ts src/components/admin/admin-financial-dashboard.tsx src/app/admin/page.tsx src/app/admin/financials/page.tsx src/app/api/internal/group-finance/v1
+        run: npx eslint src/modules/billing/admin-*.ts src/modules/billing/group-finance-*.ts src/components/admin/admin-*.tsx src/app/admin/page.tsx src/app/admin/financials/page.tsx src/app/admin/subscriptions/page.tsx src/app/api/admin/financials src/app/api/internal/group-finance/v1
       - name: Production build
         run: npm run build
