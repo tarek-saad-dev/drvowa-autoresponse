@@ -93,6 +93,25 @@ export function isKnowledgeCategory(value: string): value is KnowledgeCategory {
   return (ALL_KNOWLEDGE_CATEGORIES as string[]).includes(value);
 }
 
+/**
+ * Conservative Arabic opening-hours paraphrase match. Only the same named
+ * location with the same explicit time numbers can be collapsed; different
+ * opening times, unrelated facts, and closing-only statements stay separate.
+ */
+function matchingOpeningHours(a: string, b: string): boolean {
+  const openingHint = /(بنفتح|يفتح|تفتح|فاتح|مواعيد|الساعه|ساعات|صباح)/;
+  const closingHint = /(بنقفل|بيقفل|تقفل|اغلاق|تغلق|نقفل)/;
+  const x = normalizeText(a);
+  const y = normalizeText(b);
+  if (!openingHint.test(x) || !openingHint.test(y)) return false;
+  if (closingHint.test(x) || closingHint.test(y)) return false;
+  const numbersA = [...x.matchAll(/\d+/g)].map((m) => m[0]);
+  const numbersB = [...y.matchAll(/\d+/g)].map((m) => m[0]);
+  return numbersA.length > 0
+    && numbersA.length === numbersB.length
+    && numbersA.every((num, i) => num === numbersB[i]);
+}
+
 /** Collapse near-duplicate facts within the same import. */
 export function dedupeExtractedFacts(facts: ExtractedFact[]): ExtractedFact[] {
   const out: ExtractedFact[] = [];
@@ -115,7 +134,10 @@ export function dedupeExtractedFacts(facts: ExtractedFact[]): ExtractedFact[] {
       const existingTopic = normalizeTopicKey(existing.topicKey || existing.topicTitle);
       const incomingTopic = normalizeTopicKey(fact.topicKey || fact.topicTitle);
       const sameTopic = existingTopic != null && existingTopic === incomingTopic;
-      if (score >= 0.72 || (sameSubject && sameTopic) || urlOverlap) {
+      const openingHoursParaphrase = sameSubject
+        && fact.category === "LOCATION_INFO"
+        && matchingOpeningHours(existing.content, fact.content);
+      if (score >= 0.72 || (sameSubject && sameTopic) || urlOverlap || openingHoursParaphrase) {
         const combinedContent = mergeContents(existing.content, fact.content);
         out[i] = {
           ...existing,
