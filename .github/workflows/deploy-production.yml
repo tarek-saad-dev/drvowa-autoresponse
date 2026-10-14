@@ -71,6 +71,9 @@ jobs:
             echo "==> Applying database migrations"
             npm run db:migrate
 
+            echo "==> Validating admin financial reports against the production database (read-only)"
+            npx tsx scripts/admin-financial-smoke.ts
+
             echo "==> Restarting app service"
             systemctl restart drvowa.service
 
