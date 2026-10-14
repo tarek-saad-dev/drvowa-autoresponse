@@ -1048,7 +1048,7 @@ export function InboxPanel({
                             {c.lastMessageDirection === "OUTBOUND" ? "✓ " : ""}
                             {c.lastMessagePreview?.trim() || "مرفق أو رسالة بدون نص"}
                           </p>
-                          {c.unread ? <span className="grid h-[19px] min-w-[19px] place-items-center rounded-full bg-[#069b83] px-1 text-[10px] text-white" aria-label="رسالة غير مقروءة">●</span>
+                          {c.unread ? <span className="grid h-[19px] min-w-[19px] place-items-center rounded-full bg-[#087f76] px-1 text-[10px] text-white" aria-label="رسالة غير مقروءة">●</span>
                             : s.attention ? <span className={"h-[7px] w-[7px] shrink-0 rounded-full " + s.dot} aria-label={s.label} />
                               : null}
                         </div>
