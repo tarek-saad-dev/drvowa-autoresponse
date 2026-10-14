@@ -8,7 +8,7 @@ function isProduction(): boolean {
   return process.env.NODE_ENV === "production";
 }
 
-export async function setSessionCookie(token: string): Promise<void> {
+export async function setSessionCookie(token: string, rememberMe = true): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.set({
     name: SESSION_COOKIE_NAME,
@@ -17,7 +17,8 @@ export async function setSessionCookie(token: string): Promise<void> {
     secure: isProduction(),
     sameSite: "lax",
     path: "/",
-    maxAge: SESSION_MAX_AGE_SECONDS,
+    // Without Remember me, let the browser end the session when it closes.
+    ...(rememberMe ? { maxAge: SESSION_MAX_AGE_SECONDS } : {}),
   });
 }
 
