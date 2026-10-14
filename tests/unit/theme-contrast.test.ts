@@ -47,6 +47,7 @@ const requiredPairs = [
   ["accent-foreground", "accent"],
   ["destructive-foreground", "destructive"],
   ["destructive", "destructive-soft"],
+  ["success-foreground", "success"],
   ["success", "success-soft"],
   ["warning", "warning-soft"],
   ["info", "info-soft"],
