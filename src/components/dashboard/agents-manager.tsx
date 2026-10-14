@@ -235,7 +235,7 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
                     key={label}
                     type="button"
                     onClick={() => applyStylePreset(dialect, tone)}
-                    className="rounded-full border border-border bg-white px-3 py-2 text-[11px] font-black transition hover:border-primary/40 hover:text-primary"
+                    className="rounded-full border border-border bg-card px-3 py-2 text-[11px] font-black text-foreground transition hover:border-primary/40 hover:bg-surface hover:text-primary"
                   >
                     {label}
                   </button>
