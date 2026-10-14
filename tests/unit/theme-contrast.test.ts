@@ -87,6 +87,17 @@ describe("site-wide color contrast", () => {
     expect(stylesheet.match(/\ba\s*\{\s*color:\s*inherit;/g)).toHaveLength(1);
   });
 
+  it("keeps the custom marketing chat action readable on its solid background", () => {
+    const landing = readFileSync(
+      join(process.cwd(), "src/components/landing/landing.module.css"), "utf8",
+    );
+    const styles = /\\.chatInput b\\s*\\{([^}]+)\\}/.exec(landing)?.[1];
+    expect(styles).toBeTruthy();
+    const background = /background:\\s*(#[\\da-f]{6})/i.exec(styles!)?.[1];
+    expect(background).toMatch(/^#[\\da-f]{6}$/i);
+    expect(contrast("#ffffff", background!)).toBeGreaterThanOrEqual(4.5);
+  });
+
   it("uses the semantic foreground for primary and destructive buttons", () => {
     const button = readFileSync(
       join(process.cwd(), "src/components/ui/button.tsx"), "utf8",
