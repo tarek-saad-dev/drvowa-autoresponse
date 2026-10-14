@@ -99,7 +99,7 @@ export function KnowledgePageClient({
         <div className="grid gap-5 md:grid-cols-[1fr_auto] md:items-center">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-white/80 px-3 py-1 text-[11px] font-black text-primary shadow-sm">
+              <span className="rounded-full bg-card/90 px-3 py-1 text-[11px] font-black text-primary shadow-sm">
                 ذاكرة موظف الاستقبال
               </span>
               <span className="text-xs font-bold text-muted-foreground">
@@ -113,7 +113,7 @@ export function KnowledgePageClient({
             </p>
           </div>
 
-          <div className="grid min-w-44 grid-cols-2 gap-2 rounded-2xl border border-white/70 bg-white/75 p-2 shadow-sm">
+          <div className="grid min-w-44 grid-cols-2 gap-2 rounded-2xl border border-border bg-card/90 p-2 shadow-sm">
             <button
               type="button"
               onClick={() => setMode("ai")}
@@ -169,7 +169,7 @@ export function KnowledgePageClient({
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             {missingSuggestions.map((suggestion) => (
-              <div key={suggestion.title} className="rounded-2xl bg-white/80 p-4 shadow-sm">
+              <div key={suggestion.title} className="rounded-2xl border border-border bg-card/90 p-4 shadow-sm">
                 <p className="text-sm font-black">{suggestion.title}</p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   {suggestion.description}

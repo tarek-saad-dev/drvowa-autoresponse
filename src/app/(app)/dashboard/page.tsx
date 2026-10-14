@@ -201,14 +201,14 @@ export default async function DashboardOverviewPage({
                   className={`rounded-2xl border p-4 transition hover:-translate-y-0.5 hover:shadow-sm ${
                     task.done
                       ? "border-success/15 bg-success-soft/40"
-                      : "border-border bg-white hover:border-primary/40"
+                      : "border-border bg-card hover:border-primary/40"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <span
                       className={`grid h-8 w-8 place-items-center rounded-full text-xs font-black ${
                         task.done
-                          ? "bg-success text-white"
+                          ? "bg-success text-success-foreground"
                           : "bg-secondary text-muted-foreground"
                       }`}
                     >
@@ -267,7 +267,7 @@ export default async function DashboardOverviewPage({
               href={action.href}
               className="group rounded-[22px] border border-border bg-card p-5 shadow-sm transition-all hover:-translate-y-1 hover:border-primary/30 hover:shadow-md"
             >
-              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-primary/8 text-xl text-primary transition group-hover:bg-primary group-hover:text-white">
+              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-primary/8 text-xl text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
                 {action.icon}
               </div>
               <div className="mt-4 text-base font-black">{action.title}</div>

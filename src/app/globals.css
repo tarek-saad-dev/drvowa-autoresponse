@@ -16,7 +16,7 @@ html[data-theme="light"] {
   --background: #f4f8fa;
   --foreground: #08171e;
   --muted: #5b6f79;
-  --muted-foreground: #6b7f89;
+  --muted-foreground: #586d77;
   --card: #ffffff;
   --card-foreground: #08171e;
   --border: #d9e6eb;
@@ -27,17 +27,18 @@ html[data-theme="light"] {
   --primary-hover: var(--brand-teal-strong);
   --secondary: #e9f2f5;
   --secondary-foreground: #17323e;
-  --accent: #0a87ad;
+  --accent: #007b9f;
   --accent-foreground: #ffffff;
   --accent-soft: #dff3f9;
   --destructive: #c73535;
   --destructive-foreground: #ffffff;
   --destructive-soft: #fdeaea;
-  --success: #0f8a63;
+  --success: #0a7552;
+  --success-foreground: #ffffff;
   --success-soft: #dcf7ed;
-  --warning: #b56d14;
+  --warning: #94570e;
   --warning-soft: #fff2d9;
-  --info: #087ca3;
+  --info: #096784;
   --info-soft: #dff4fb;
   --surface: #edf5f7;
   --whatsapp-bubble: #dcf8c6;
@@ -75,17 +76,18 @@ html[data-theme="dark"],
   --input: #23343c;
   --ring: #0b8bb5;
   --primary: #0b8bb5;
-  --primary-foreground: #ffffff;
+  --primary-foreground: #061319;
   --primary-hover: #149bc7;
   --secondary: #101b20;
   --secondary-foreground: #dce8ec;
   --accent: #149bc7;
-  --accent-foreground: #ffffff;
+  --accent-foreground: #061319;
   --accent-soft: #0c2c38;
   --destructive: #ef5b5b;
-  --destructive-foreground: #ffffff;
+  --destructive-foreground: #061319;
   --destructive-soft: #321416;
   --success: #35b98a;
+  --success-foreground: #061319;
   --success-soft: #0b2a21;
   --warning: #d99a41;
   --warning-soft: #2f2412;
@@ -129,6 +131,7 @@ html[data-theme="dark"],
   --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive-soft: var(--destructive-soft);
   --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
   --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
@@ -148,8 +151,21 @@ html[data-theme="dark"],
   --shadow-md: var(--shadow-md);
 }
 
-* {
-  border-color: var(--border);
+/*
+ * Tailwind v4 utilities live in the utilities cascade layer. Keeping generic
+ * element rules unlayered used to override text-* on <a> links and border-*
+ * utilities across the app (including white hero CTAs on dark backgrounds).
+ * Base rules belong in the base layer so explicit component utilities win.
+ */
+@layer base {
+  *, ::before, ::after {
+    border-color: var(--border);
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 }
 
 html {
@@ -169,11 +185,6 @@ body {
 ::selection {
   background: color-mix(in srgb, var(--primary) 30%, transparent);
   color: var(--foreground);
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
 }
 
 :focus-visible {
