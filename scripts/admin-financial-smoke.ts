@@ -4,11 +4,39 @@
  * Runs after the production build, before service restart. Does not mutate
  * subscriptions or approve payments.
  */
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { closePool } from "../src/lib/db";
+
+function loadProductionDbEnvironment(): void {
+  // Mirror db-migrate's safe env-loader: standalone tsx scripts do not receive
+  // Next's automatic .env.production.local loading.
+  for (const name of [".env.production.local", ".env"]) {
+    const file = resolve(process.cwd(), name);
+    if (!existsSync(file)) continue;
+    const lines = readFileSync(file, "utf8").split(/\r?\n/);
+    for (const line of lines) {
+      const entry = line.trim();
+      if (!entry || entry.startsWith("#")) continue;
+      const eq = entry.indexOf("=");
+      if (eq <= 0) continue;
+      const key = entry.slice(0, eq).trim();
+      let value = entry.slice(eq + 1).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      if (process.env[key] === undefined) process.env[key] = value;
+    }
+  }
+}
+
 import { getAdminFinancialReport } from "../src/modules/billing/admin-financial-report";
 import { listAdminSubscriptions } from "../src/modules/billing/admin-subscriptions";
 
 async function main() {
+  loadProductionDbEnvironment();
   const report = await getAdminFinancialReport({ months: 6 });
   const subscriptions = await listAdminSubscriptions({ page: 1 });
   const month = new Date().toISOString().slice(0, 7);
