@@ -5,8 +5,22 @@ import { describe, expect, it } from "vitest";
 const stylesheet = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
 
 function tokens(block: string): Record<string, string> {
+  const declarations = Object.fromEntries(
+    [...block.matchAll(/--([\w-]+):\s*(#[\da-f]{6}|var\(--[\w-]+\))\s*;/gi)]
+      .map((m) => [m[1], m[2]]),
+  ) as Record<string, string>;
+
+  function resolve(name: string, visited = new Set<string>()): string {
+    if (visited.has(name)) return "";
+    visited.add(name);
+    const value = declarations[name] ?? "";
+    if (value.startsWith("#")) return value;
+    const reference = /^var\(--([\w-]+)\)$/.exec(value)?.[1];
+    return reference ? resolve(reference, visited) : "";
+  }
+
   return Object.fromEntries(
-    [...block.matchAll(/--([\w-]+):\s*(#[\da-f]{6})\s*;/gi)].map((m) => [m[1], m[2]]),
+    Object.keys(declarations).map((key) => [key, resolve(key)]),
   );
 }
 
