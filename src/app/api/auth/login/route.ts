@@ -14,6 +14,8 @@ import { isPlatformAdminUser } from "@/modules/platform-admin/service";
 const loginSchema = z.object({
   email: z.string().email("Valid email is required"),
   password: z.string().min(1, "Password is required"),
+  // Preserve the historical persistent-session default for API clients without this field.
+  rememberMe: z.boolean().optional().default(true),
 });
 
 export async function POST(request: Request) {
