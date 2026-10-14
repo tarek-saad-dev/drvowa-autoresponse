@@ -147,7 +147,7 @@ export default async function DashboardOverviewPage({
             </div>
           </div>
 
-          <div className="rounded-[24px] border border-white/70 bg-white/75 p-5 shadow-sm backdrop-blur">
+          <div className="rounded-[24px] border border-border bg-card/85 p-5 shadow-sm backdrop-blur">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-bold text-muted-foreground">آخر نشاط</p>
@@ -403,8 +403,11 @@ export default async function DashboardOverviewPage({
                 />
               </div>
               <p className="text-[11px] text-muted-foreground">
-                التجديد {formatUsageRenewalAr(billing.usagePeriod.usagePeriodEndUtc)}
+                تجديد رصيد الاستخدام {formatUsageRenewalAr(billing.usagePeriod.usagePeriodEndUtc)}
               </p>
+              <Link href="/dashboard/billing" className="inline-flex rounded-xl border border-border px-3 py-2 text-xs font-black text-primary transition-colors hover:bg-surface">
+                الاشتراك والفوترة ←
+              </Link>
             </CardContent>
           </Card>
         </div>
