@@ -134,7 +134,7 @@ export async function getAdminFinancialReport(params: {
           THEN Amount ELSE 0 END), 0) AS PreviousMonthEgp,
         COALESCE(SUM(CASE WHEN Status = N'APPROVED' AND CurrencyCode = N'EGP'
           THEN Amount ELSE 0 END), 0) AS AllTimeCollectedEgp,
-        COUNT(CASE WHEN Status = N'APPROVED'
+        COUNT(CASE WHEN Status = N'APPROVED' AND CurrencyCode = N'EGP'
           AND ReviewedAtUtc >= @monthStart AND ReviewedAtUtc < @nextStart THEN 1 END) AS ApprovedCount,
         COUNT(CASE WHEN Status = N'PENDING' THEN 1 END) AS PendingCount,
         COALESCE(SUM(CASE WHEN Status = N'PENDING' AND CurrencyCode = N'EGP'
