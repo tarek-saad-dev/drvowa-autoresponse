@@ -93,6 +93,9 @@ export function AdminFinancialDashboard({
               <Link href="/admin/financials" className="rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/20">
                 التقارير المالية
               </Link>
+              <Link href="/admin/subscriptions" className="rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/20">
+                العملاء والاشتراكات
+              </Link>
             </div>
           </div>
           <div className="rounded-2xl border border-white/15 bg-white/10 p-5 lg:min-w-60">
@@ -129,12 +132,12 @@ export function AdminFinancialDashboard({
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Kpi label="المتحصلات هذا الشهر" value={money(o.collectedEgp)} hint={number.format(o.approvedCount) + " عملية دفع معتمدة"} accent href="/admin/payments?status=APPROVED" />
           <Kpi label="القيمة الشهرية للخطط النشطة" value={money(o.estimatedMonthlyRunRateEgp)} hint="تقدير بالأسعار الحالية، وليس إيرادًا تم تحصيله" />
-          <Kpi label="اشتراكات مدفوعة نشطة" value={number.format(o.activePaid)} hint="الخطط المدفوعة السارية فقط" href="/admin/financials#plans" />
+          <Kpi label="اشتراكات مدفوعة نشطة" value={number.format(o.activePaid)} hint="الخطط المدفوعة السارية فقط" href="/admin/subscriptions?status=PAID" />
           <Kpi label="طلبات دفع بانتظار المراجعة" value={number.format(o.pendingCount)} hint={money(o.pendingAmountEgp) + " لم تُحتسب كمتحصلات"} href="/admin/payments?status=PENDING" />
           <Kpi label="كل المتحصلات المعتمدة" value={money(o.allTimeCollectedEgp)} hint="إجمالي المدفوعات المعتمدة المسجلة (EGP)" href="/admin/payments?status=APPROVED" />
-          <Kpi label="مساحات العمل" value={number.format(o.businesses)} hint={number.format(o.activeFree) + " اشتراك مجاني نشط"} />
-          <Kpi label="تجربة مجانية" value={number.format(o.trialing)} hint="اشتراكات في فترة التجربة الحالية" />
-          <Kpi label="اشتراكات تحتاج متابعة" value={number.format(o.pastDue + o.expiringSoon)} hint={number.format(o.pastDue) + " متأخرة · " + number.format(o.expiringSoon) + " تنتهي خلال 7 أيام"} href="/admin/financials#renewals" />
+          <Kpi label="مساحات العمل" value={number.format(o.businesses)} hint={number.format(o.activeFree) + " اشتراك مجاني نشط"} href="/admin/subscriptions" />
+          <Kpi label="تجربة مجانية" value={number.format(o.trialing)} hint="اشتراكات في فترة التجربة الحالية" href="/admin/subscriptions?status=TRIAL" />
+          <Kpi label="اشتراكات تحتاج متابعة" value={number.format(o.pastDue + o.expiringSoon)} hint={number.format(o.pastDue) + " متأخرة · " + number.format(o.expiringSoon) + " تنتهي خلال 7 أيام"} href="/admin/subscriptions?status=EXPIRING" />
         </div>
       </section>
 
@@ -145,9 +148,17 @@ export function AdminFinancialDashboard({
               <h2 id="monthly-trend" className="text-lg font-black">اتجاه التحصيلات</h2>
               <p className="mt-1 text-xs leading-6 text-muted-foreground">المدفوعات المعتمدة شهريًا • بدون الطلبات المعلّقة</p>
             </div>
-            <div className="flex rounded-xl border border-border bg-surface p-1 text-xs font-bold">
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href={"/api/admin/financials/export?range=" + report.months}
+                className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold text-primary transition hover:bg-surface"
+              >
+                تصدير CSV ↓
+              </a>
+              <div className="flex rounded-xl border border-border bg-surface p-1 text-xs font-bold">
               <Link href={detail ? "/admin/financials?range=6#monthly-trend" : "/admin#monthly-trend"} className={"rounded-lg px-3 py-2 " + (report.months === 6 ? "bg-card text-primary shadow-sm" : "text-muted-foreground")}>6 شهور</Link>
               <Link href="/admin/financials?range=12#monthly-trend" className={"rounded-lg px-3 py-2 " + (report.months === 12 ? "bg-card text-primary shadow-sm" : "text-muted-foreground")}>سنة</Link>
+              </div>
             </div>
           </div>
           <div className="mt-7 flex h-56 items-end gap-2 border-b border-border pb-0 sm:gap-3" role="img" aria-label="رسم بياني لمتحصلات الأشهر المحددة">
