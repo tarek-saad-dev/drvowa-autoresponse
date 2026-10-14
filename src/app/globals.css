@@ -34,6 +34,7 @@ html[data-theme="light"] {
   --destructive-foreground: #ffffff;
   --destructive-soft: #fdeaea;
   --success: #0a7552;
+  --success-foreground: #ffffff;
   --success-soft: #dcf7ed;
   --warning: #94570e;
   --warning-soft: #fff2d9;
@@ -86,6 +87,7 @@ html[data-theme="dark"],
   --destructive-foreground: #061319;
   --destructive-soft: #321416;
   --success: #35b98a;
+  --success-foreground: #061319;
   --success-soft: #0b2a21;
   --warning: #d99a41;
   --warning-soft: #2f2412;
@@ -129,6 +131,7 @@ html[data-theme="dark"],
   --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive-soft: var(--destructive-soft);
   --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
   --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
