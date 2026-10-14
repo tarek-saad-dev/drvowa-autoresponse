@@ -323,9 +323,10 @@ function Avatar({ c, size = "md" }: { c: ConversationRow; size?: "sm" | "md" | "
 }
 
 export function InboxPanel({
-  initialConversations, initialCounts, initialHasMore, initialCursor, initialSelectedId,
+  initialConversations, initialCounts, initialHasMore, initialCursor, initialSelectedId, canResumeAll = false,
 }: {
   initialConversations: ConversationRow[];
+  canResumeAll?: boolean;
   initialCounts: Counts;
   initialHasMore: boolean;
   initialCursor: ConversationCursor | null;
@@ -354,6 +355,8 @@ export function InboxPanel({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const [resuming, setResuming] = useState(false);
+  const [resumingAll, setResumingAll] = useState(false);
+  const [bulkFeedback, setBulkFeedback] = useState<string | null>(null);
   const [checkingAi, setCheckingAi] = useState(false);
   const [trackedReply, setTrackedReply] = useState<{ conversationId: string; jobId: string; startedAt: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -865,6 +868,34 @@ export function InboxPanel({
     } finally { setResuming(false); }
   }, [conversations, resuming]);
 
+  const resumeAllAi = useCallback(async () => {
+    if (resumingAll || !canResumeAll) return;
+    if (!window.confirm(
+      "ترجع كل المحادثات المستلمة بواسطة الفريق للبوت؟\\n" +
+      "الرد التلقائي هيشتغل على الرسائل الجديدة فقط، ومش هيعيد الرد على الرسائل القديمة.\\n" +
+      "المحادثات المتصعدة لتدخل بشري أو المتوقفة لأسباب أمان مش هتتغيّر.",
+    )) return;
+    setResumingAll(true);
+    setBulkFeedback(null);
+    setError(null);
+    try {
+      const response = await fetch("/api/inbox/conversations/ai/resume-all", {
+        method: "POST", credentials: "same-origin",
+      });
+      const data = await response.json() as { resumed?: number; error?: string };
+      if (!response.ok) throw new Error(mapUserFacingError(data, "تعذر إرجاع المحادثات للبوت"));
+      const total = data.resumed ?? 0;
+      setBulkFeedback(total > 0
+        ? "تم إرجاع " + total.toLocaleString("ar-EG") + " محادثة للبوت. هيرد على الرسائل الجديدة فقط."
+        : "مفيش محادثات متاحة للإرجاع. حالات التدخل البشري المفتوحة وإيقاف الأمان مستثناة.");
+      await loadFirstPage();
+    } catch (err) {
+      setBulkFeedback(err instanceof Error ? err.message : "تعذر إرجاع المحادثات");
+    } finally {
+      setResumingAll(false);
+    }
+  }, [canResumeAll, resumingAll, loadFirstPage]);
+
   const checkAiDelivery = useCallback(async (id: string, jobId?: string) => {
     const params = new URLSearchParams({ includeJob: "1" });
     if (jobId) params.set("jobId", jobId);
@@ -969,6 +1000,17 @@ export function InboxPanel({
               <Link href="/dashboard/agent" className="grid h-10 w-10 place-items-center rounded-xl text-[#087f76] hover:bg-[#e5f5f0] dark:text-[#91dfc8] dark:hover:bg-white/10" title="إعدادات الموظف الذكي"><Glyph name="spark" /></Link>
             </div>
           </div>
+          {canResumeAll && (
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <button type="button" onClick={() => void resumeAllAi()} disabled={resumingAll}
+                className="inline-flex min-h-9 items-center gap-2 rounded-xl bg-[#087f76] px-3 py-2 text-xs font-bold text-white transition hover:bg-[#066b63] disabled:opacity-60">
+                <Glyph name="bot" size={17} />
+                {resumingAll ? "جاري إرجاع المحادثات..." : "إرجاع جميع الشاتات للبوت"}
+              </button>
+              <span className="text-[10px] text-[#73897d] dark:text-[#a0b6a9]">إرجاع تلقائي كل يوم 12 منتصف الليل</span>
+            </div>
+          )}
+          {bulkFeedback && <p role="status" className="mb-2 rounded-lg bg-[#e8f6ef] px-3 py-2 text-xs font-semibold text-[#0c7567] dark:bg-[#264738] dark:text-[#a0e6cf]">{bulkFeedback}</p>}
           <div className="flex h-11 items-center gap-2 rounded-xl bg-[#f1f5f2] px-3 ring-1 ring-transparent focus-within:ring-[#43b5a3] dark:bg-[#233630]">
             <Glyph name="search" size={19} className="shrink-0 text-[#7f8f89]" />
             <input

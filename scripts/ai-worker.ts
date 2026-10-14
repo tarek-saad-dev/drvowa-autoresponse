@@ -13,6 +13,7 @@ import { resolve } from "node:path";
 import { getPool } from "../src/lib/db";
 import { deliverNextEscalationNotification } from "../src/modules/escalations/notifier";
 import { createAiWorkerRunner } from "../src/modules/ai/worker-runner";
+import { resumePreviousDayConversations } from "../src/modules/ai/bulk-resume-service";
 import {
   resolveHeartbeatMs,
   resolveLeaseSeconds,
@@ -89,9 +90,30 @@ async function main(): Promise<void> {
   };
   const notificationTimer = setInterval(() => void notificationTick(), 5_000);
   void notificationTick();
+  
+  // Tenant-local midnight handback: runs even without another inbound message.
+  // Repeated ticks and restarts are safe because only HUMAN_PAUSED rows are updated.
+  let stoppingDailyResume = false;
+  let dailyResumeBusy = false;
+  const dailyResumeTick = async () => {
+    if (stoppingDailyResume || dailyResumeBusy) return;
+    dailyResumeBusy = true;
+    try {
+      const result = await resumePreviousDayConversations();
+      if (result.resumed > 0) console.info("[ai-worker] daily_handoff_completed", result);
+    } catch (error) {
+      console.error("[ai-worker] daily_handoff_failed", {
+        code: error instanceof Error ? error.name : "UNKNOWN",
+      });
+    } finally { dailyResumeBusy = false; }
+  };
+  const dailyResumeTimer = setInterval(() => void dailyResumeTick(), 60_000);
+  void dailyResumeTick();
   const shutdown = () => {
     stoppingNotifications = true;
     clearInterval(notificationTimer);
+    stoppingDailyResume = true;
+    clearInterval(dailyResumeTimer);
     runner.requestShutdown();
   };
   process.once("SIGINT", shutdown);
@@ -100,6 +122,8 @@ async function main(): Promise<void> {
   const result = await runner.loop();
   stoppingNotifications = true;
   clearInterval(notificationTimer);
+  stoppingDailyResume = true;
+  clearInterval(dailyResumeTimer);
   if (result.reason === "deadline_exceeded") {
     process.exitCode = 1;
     // Force exit so OS stops heartbeats; jobs recover via lease expiry.
