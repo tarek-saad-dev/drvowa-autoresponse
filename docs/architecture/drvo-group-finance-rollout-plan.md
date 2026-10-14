@@ -94,3 +94,7 @@ Do not overwrite aggregate event truth with the latest snapshot; they have diffe
 ## What is *not* yet implemented
 
 This repo contains neither DRVO Tech's database nor DRVO Coach's data. This is **not** a live group rollup, automated transfer, or recognized-revenue ledger. Group ingestion, background polling, financial adjustments and cross-product dashboard require their respective repositories/deployments.
+
+## Dashboard release verification (2026-10-14)
+
+The AutoResponse dashboard is the scope of the current rollout. DRVO Tech synchronization is **not activated**; the group-finance export token remains unset. New owner pages: `/admin`, `/admin/financials`, `/admin/subscriptions`, `/admin/payments` and `/admin/whatsapp`. CSV approval export requires platform-admin RBAC. The release workflow includes a read-only database smoke gate before app restart. Only publish after the latest full PR CI finishes successfully against the current `main` branch.
