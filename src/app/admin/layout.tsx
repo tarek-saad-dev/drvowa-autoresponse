@@ -49,6 +49,12 @@ export default async function AdminLayout({
               نظرة عامة
             </Link>
             <Link
+              href="/admin/financials"
+              className="rounded-md px-3 py-1.5 hover:bg-surface"
+            >
+              المالية والاشتراكات
+            </Link>
+            <Link
               href="/admin/payments"
               className="rounded-md px-3 py-1.5 hover:bg-surface"
             >
