@@ -3,83 +3,57 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { AdminLogoutButton } from "@/components/admin/admin-logout-button";
+import { AdminNavigation } from "@/components/admin/admin-navigation";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { AuthError, ForbiddenError } from "@/lib/tenancy/errors";
 import { listBusinessesForUser } from "@/modules/businesses/service";
 import { requirePlatformAdmin } from "@/modules/platform-admin/service";
 
-export default async function AdminLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export default async function AdminLayout({ children }: { children: ReactNode }) {
   let adminCtx;
   try {
     adminCtx = await requirePlatformAdmin();
   } catch (error) {
-    if (error instanceof AuthError) {
-      redirect("/login");
-    }
-    if (error instanceof ForbiddenError) {
-      redirect("/dashboard");
-    }
+    if (error instanceof AuthError) redirect("/login");
+    if (error instanceof ForbiddenError) redirect("/dashboard");
     throw error;
   }
 
   const businesses = await listBusinessesForUser(adminCtx.userId);
-  const hasWorkspace = businesses.length > 0;
 
   return (
-    <div className="min-h-full bg-background text-foreground">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
-          <div>
-            <BrandLogo priority className="h-8" />
-            <p className="mt-2 text-xs font-medium tracking-wide text-primary">
-              PLATFORM ADMIN
-            </p>
-            <h1 className="text-lg font-semibold">لوحة إدارة المنصة</h1>
-          </div>
-          <nav className="flex flex-wrap items-center gap-2 text-sm">
-            <Link
-              href="/admin"
-              className="rounded-md px-3 py-1.5 hover:bg-surface"
-            >
-              نظرة عامة
-            </Link>
-            <Link
-              href="/admin/financials"
-              className="rounded-md px-3 py-1.5 hover:bg-surface"
-            >
-              المالية والاشتراكات
-            </Link>
-            <Link
-              href="/admin/payments"
-              className="rounded-md px-3 py-1.5 hover:bg-surface"
-            >
-              طلبات الدفع
-            </Link>
-            <Link
-              href="/admin/whatsapp"
-              className="rounded-md px-3 py-1.5 hover:bg-surface"
-            >
-              واتساب
-            </Link>
-            {hasWorkspace ? (
-              <Link
-                href="/dashboard"
-                className="rounded-md px-3 py-1.5 text-muted-foreground hover:bg-surface"
-              >
-                مساحة العمل
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="sticky top-0 z-30 border-b border-border bg-card/95 shadow-sm backdrop-blur-xl">
+        <div className="mx-auto max-w-7xl px-4 pt-3 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-4 pb-3">
+            <div className="flex min-w-0 items-center gap-4">
+              <Link href="/admin" aria-label="الرئيسية - DRVO AutoResponse">
+                <BrandLogo priority className="h-8 max-w-[170px] object-contain sm:h-9" />
               </Link>
-            ) : null}
-            <ThemeToggle />
-            <AdminLogoutButton />
-          </nav>
+              <div className="hidden border-r border-border pr-4 sm:block">
+                <p className="text-[10px] font-black tracking-[0.18em] text-primary" dir="ltr">
+                  PLATFORM ADMIN
+                </p>
+                <p className="mt-0.5 text-xs font-black">إدارة DRVO AutoResponse</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {businesses.length > 0 ? (
+                <Link href="/dashboard" className="rounded-lg border border-border px-3 py-2 text-xs font-bold text-muted-foreground hover:bg-surface hover:text-foreground">
+                  مساحة العمل
+                </Link>
+              ) : null}
+              <ThemeToggle />
+              <AdminLogoutButton />
+            </div>
+          </div>
+          <AdminNavigation />
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">{children}</main>
+      <main id="main-content" className="mx-auto min-w-0 max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+        {children}
+      </main>
     </div>
   );
 }
