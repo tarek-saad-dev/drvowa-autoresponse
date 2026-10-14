@@ -61,6 +61,22 @@ describe("knowledge-ai normalize", () => {
     expect(facts).toHaveLength(1);
   });
 
+  it("does not collapse two different opening hours for the same location", () => {
+    const facts = dedupeExtractedFacts([
+      { tempId: "a", category: "LOCATION_INFO", title: "فرع جليم", subject: "فرع جليم", content: "بنفتح 11 صباحا" },
+      { tempId: "b", category: "LOCATION_INFO", title: "فرع جليم", subject: "فرع جليم", content: "مواعيدنا من الساعة 12" },
+    ]);
+    expect(facts).toHaveLength(2);
+  });
+
+  it("does not collapse opening and closing details for the same location", () => {
+    const facts = dedupeExtractedFacts([
+      { tempId: "a", category: "LOCATION_INFO", title: "فرع جليم", subject: "فرع جليم", content: "بنفتح 11 صباحا" },
+      { tempId: "b", category: "LOCATION_INFO", title: "فرع جليم", subject: "فرع جليم", content: "بنقفل 11 مساء" },
+    ]);
+    expect(facts).toHaveLength(2);
+  });
+
   it("hashes input stably", () => {
     expect(hashInput("abc")).toBe(hashInput("abc"));
     expect(hashInput("abc")).not.toBe(hashInput("abd"));
