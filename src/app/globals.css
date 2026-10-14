@@ -27,7 +27,7 @@ html[data-theme="light"] {
   --primary-hover: var(--brand-teal-strong);
   --secondary: #e9f2f5;
   --secondary-foreground: #17323e;
-  --accent: #0a87ad;
+  --accent: #007b9f;
   --accent-foreground: #ffffff;
   --accent-soft: #dff3f9;
   --destructive: #c73535;
@@ -80,10 +80,10 @@ html[data-theme="dark"],
   --secondary: #101b20;
   --secondary-foreground: #dce8ec;
   --accent: #149bc7;
-  --accent-foreground: #ffffff;
+  --accent-foreground: #061319;
   --accent-soft: #0c2c38;
   --destructive: #ef5b5b;
-  --destructive-foreground: #ffffff;
+  --destructive-foreground: #061319;
   --destructive-soft: #321416;
   --success: #35b98a;
   --success-soft: #0b2a21;
