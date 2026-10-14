@@ -264,7 +264,7 @@
   grid-template-columns: 0.83fr 1.18fr 0.87fr;
   gap: 13px;
   align-items: center;
-  direction: ltr;
+  direction: rtl;
 }
 .glassCard {
   direction: rtl;
@@ -1449,11 +1449,15 @@
 .scene[data-active="true"] .glassCard {
   animation: cardFloat 4s ease-in-out 1;
 }
+/* Stagger the cards in reading order: right (01) to left (03). */
+.scene[data-active="true"] .knowledgeCard {
+  animation-delay: 0s;
+}
 .scene[data-active="true"] .chatCard {
-  animation-delay: -2s;
+  animation-delay: 0.2s;
 }
 .scene[data-active="true"] .alertCard {
-  animation-delay: -4s;
+  animation-delay: 0.4s;
 }
 .scene[data-active="true"] .sceneTop i {
   animation: statusPulse 2.4s ease-in-out 2;
