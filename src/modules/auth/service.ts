@@ -112,6 +112,7 @@ export async function signup(params: {
 export async function login(params: {
   email: string;
   password: string;
+  rememberMe?: boolean;
 }): Promise<{ user: User; session: AuthSessionView }> {
   const email = normalizeEmail(params.email);
   const result = await query<UserAuthRow>(
@@ -133,7 +134,7 @@ export async function login(params: {
 
   const user = mapUser(row);
   const { token, session } = await createSession({ userId: user.userId });
-  await setSessionCookie(token);
+  await setSessionCookie(token, params.rememberMe ?? true);
 
   return {
     user,
