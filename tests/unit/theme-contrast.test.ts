@@ -91,10 +91,12 @@ describe("site-wide color contrast", () => {
     const landing = readFileSync(
       join(process.cwd(), "src/components/landing/landing.module.css"), "utf8",
     );
-    const styles = /\\.chatInput b\\s*\\{([^}]+)\\}/.exec(landing)?.[1];
-    expect(styles).toBeTruthy();
-    const background = /background:\\s*(#[\\da-f]{6})/i.exec(styles!)?.[1];
-    expect(background).toMatch(/^#[\\da-f]{6}$/i);
+    const start = landing.indexOf(".chatInput b {");
+    expect(start).toBeGreaterThan(-1);
+    const end = landing.indexOf("}", start);
+    const styles = landing.slice(start, end);
+    const background = styles.match(/#[0-9a-f]{6}/i)?.[0];
+    expect(background).toMatch(/^#[0-9a-f]{6}$/i);
     expect(contrast("#ffffff", background!)).toBeGreaterThanOrEqual(4.5);
   });
 
