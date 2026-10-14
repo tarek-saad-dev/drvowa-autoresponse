@@ -24,6 +24,7 @@ export default function LoginPage() {
     const payload = {
       email: String(form.get("email") ?? ""),
       password: String(form.get("password") ?? ""),
+      rememberMe: form.has("rememberMe"),
     };
 
     try {
@@ -92,11 +93,20 @@ export default function LoginPage() {
               dir="ltr"
               className="text-start"
             />
-            <p className="mt-1 text-end text-xs">
-              <Link href="/forgot-password" className="text-primary hover:underline">
-                نسيت كلمة المرور؟
-              </Link>
-            </p>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <label htmlFor="rememberMe" className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
+              <input
+                id="rememberMe"
+                name="rememberMe"
+                type="checkbox"
+                className="h-4 w-4 cursor-pointer accent-primary"
+              />
+              تذكرني
+            </label>
+            <Link href="/forgot-password" className="text-xs text-primary hover:underline">
+              نسيت كلمة المرور؟
+            </Link>
           </div>
           <Button type="submit" className="w-full" disabled={pending}>
             {pending ? "جارٍ الدخول..." : "دخول"}
