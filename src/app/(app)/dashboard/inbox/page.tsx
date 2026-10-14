@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getConversationForBusiness, getContactForBusiness } from "@/modules/messaging/repository";
 import { getInboxConversationAiState } from "@/modules/ai/inbox-ai-service";
 import { InboxPanel } from "@/components/dashboard/inbox-panel";
+import { getMembership } from "@/modules/businesses/repository";
 import { resolveActiveBusiness, setActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import {
@@ -26,6 +27,9 @@ export default async function InboxPage({ searchParams }: {
     // Subsequent inbox API calls now use the selected business workspace.
     await setActiveBusiness({ userId: user.userId, sessionId: user.sessionId, businessId });
   }
+
+  const membership = await getMembership({ userId: user.userId, businessId });
+  const canResumeAll = membership?.status === "ACTIVE" && ["OWNER", "ADMIN"].includes(membership.role);
 
   const [batch, counts] = await Promise.all([
     listInboxConversations({ businessId, limit: INITIAL_PAGE_SIZE + 1 }),
@@ -62,6 +66,7 @@ export default async function InboxPage({ searchParams }: {
 
   return (
     <InboxPanel
+      canResumeAll={canResumeAll}
       initialSelectedId={deepLinkId}
       initialConversations={conversations.map((c) => ({
         conversationId: c.conversationId,
