@@ -16,7 +16,7 @@ html[data-theme="light"] {
   --background: #f4f8fa;
   --foreground: #08171e;
   --muted: #5b6f79;
-  --muted-foreground: #6b7f89;
+  --muted-foreground: #586d77;
   --card: #ffffff;
   --card-foreground: #08171e;
   --border: #d9e6eb;
@@ -33,11 +33,11 @@ html[data-theme="light"] {
   --destructive: #c73535;
   --destructive-foreground: #ffffff;
   --destructive-soft: #fdeaea;
-  --success: #0f8a63;
+  --success: #0a7552;
   --success-soft: #dcf7ed;
-  --warning: #b56d14;
+  --warning: #94570e;
   --warning-soft: #fff2d9;
-  --info: #087ca3;
+  --info: #096784;
   --info-soft: #dff4fb;
   --surface: #edf5f7;
   --whatsapp-bubble: #dcf8c6;
@@ -75,7 +75,7 @@ html[data-theme="dark"],
   --input: #23343c;
   --ring: #0b8bb5;
   --primary: #0b8bb5;
-  --primary-foreground: #ffffff;
+  --primary-foreground: #061319;
   --primary-hover: #149bc7;
   --secondary: #101b20;
   --secondary-foreground: #dce8ec;
@@ -148,8 +148,21 @@ html[data-theme="dark"],
   --shadow-md: var(--shadow-md);
 }
 
-* {
-  border-color: var(--border);
+/*
+ * Tailwind v4 utilities live in the utilities cascade layer. Keeping generic
+ * element rules unlayered used to override text-* on <a> links and border-*
+ * utilities across the app (including white hero CTAs on dark backgrounds).
+ * Base rules belong in the base layer so explicit component utilities win.
+ */
+@layer base {
+  *, ::before, ::after {
+    border-color: var(--border);
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 }
 
 html {
@@ -169,11 +182,6 @@ body {
 ::selection {
   background: color-mix(in srgb, var(--primary) 30%, transparent);
   color: var(--foreground);
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
 }
 
 :focus-visible {
