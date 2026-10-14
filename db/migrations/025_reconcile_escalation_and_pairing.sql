@@ -63,7 +63,6 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.TblHu
   ON dbo.TblHumanEscalation(NotificationStatus, NotificationNotBeforeUtc, CreatedAtUtc)
   INCLUDE (BusinessID, ConversationID, ChannelConnectionID);
 GO
-GO
 -- The 022 record may alternatively refer to human escalation, leaving ERP
 -- pairing unapplied. Its IF OBJECT_ID guard makes replay safe.
 -- @include: 022_integration_pairing.sql
