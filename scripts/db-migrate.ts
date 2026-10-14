@@ -72,6 +72,7 @@ function listMigrationFiles(): MigrationFile[] {
     .filter((f) => /^\d{3}_.+\.sql$/i.test(f))
     .sort((a, b) => a.localeCompare(b, "en"));
 
+  const seenVersions = new Map<string, string>();
   return files.map((fileName) => {
     const match = /^(\d{3})_(.+)\.sql$/i.exec(fileName);
     if (!match) {
@@ -79,6 +80,14 @@ function listMigrationFiles(): MigrationFile[] {
         code: "DB_MIGRATE",
       });
     }
+
+    const previous = seenVersions.get(match[1]);
+    if (previous) {
+      throw new DbError(`Duplicate migration version ${match[1]}: ${previous}, ${fileName}`, {
+        code: "DB_MIGRATE",
+      });
+    }
+    seenVersions.set(match[1], fileName);
 
     return {
       version: match[1],

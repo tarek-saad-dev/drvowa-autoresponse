@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { isMissingObjectError } from "@/lib/db";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import { getBusinessById } from "@/modules/businesses/service";
@@ -33,7 +34,18 @@ export default async function SettingsPage() {
 
   const membership = await getMembership({ businessId, userId: user.userId });
   const canManageEscalation = membership?.status === "ACTIVE" && ["OWNER", "ADMIN"].includes(membership.role);
-  const escalationSetting = canManageEscalation ? await getEscalationSetting(businessId) : null;
+  let escalationSetting = null;
+  let escalationSettingsUnavailable = false;
+  if (canManageEscalation) {
+    try {
+      escalationSetting = await getEscalationSetting(businessId);
+    } catch (error) {
+      if (!isMissingObjectError(error)) throw error;
+      // Optional notification settings should not break the whole business page.
+      console.error("[dashboard/settings] Escalation settings table missing; check schema migrations.");
+      escalationSettingsUnavailable = true;
+    }
+  }
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
@@ -60,6 +72,16 @@ export default async function SettingsPage() {
           </section>
 
           {escalationSetting ? <OwnerEscalationSettings initial={escalationSetting} /> : null}
+          {escalationSettingsUnavailable ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>تنبيهات التدخل البشري غير متاحة مؤقتًا</CardTitle>
+                <CardDescription>
+                  باقي إعدادات النشاط شغالة. محتاجين تحديث قاعدة البيانات لتفعيل إعدادات التنبيهات.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          ) : null}
 
           <Card>
             <CardHeader className="pb-3">

@@ -1,3 +1,8 @@
+-- Repair the duplicate 022 migration version collision.
+-- Historical deployments may have marked 022 applied for ERP pairing before
+-- the human escalation tables were introduced. Run both idempotent setups here
+-- so either historical 022 state converges on the complete schema.
+
 -- DRVO owner WhatsApp escalation V1.
 -- Notification dispatch remains disabled until the owner verifies their phone.
 IF OBJECT_ID(N'dbo.TblHumanEscalationSetting', N'U') IS NULL
@@ -58,3 +63,6 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.TblHu
   ON dbo.TblHumanEscalation(NotificationStatus, NotificationNotBeforeUtc, CreatedAtUtc)
   INCLUDE (BusinessID, ConversationID, ChannelConnectionID);
 GO
+-- The 022 record may alternatively refer to human escalation, leaving ERP
+-- pairing unapplied. Its IF OBJECT_ID guard makes replay safe.
+-- @include: 022_integration_pairing.sql
