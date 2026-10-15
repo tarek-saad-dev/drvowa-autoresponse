@@ -22,13 +22,13 @@ export async function GET(_: Request, context: { params: Promise<{ messageId: st
     let buffer;
     try { buffer = await readFile(join(root, media.MediaStorageKey)); }
     catch { return jsonError("Media unavailable", 404); }
-    const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif", "audio/ogg", "audio/mpeg", "audio/mp4", "video/mp4", "video/webm", "application/pdf"];
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif", "audio/ogg", "audio/mpeg", "audio/mp4", "audio/aac", "audio/webm", "video/mp4", "video/webm", "application/pdf"];
     const mime = allowed.includes(media.MediaMimeType || "") ? media.MediaMimeType! : "application/octet-stream";
     const name = (media.MediaFileName || "attachment").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 90);
     return new Response(new Uint8Array(buffer), { headers: {
       "Content-Type": mime,
       "Content-Length": String(buffer.length),
-      "Content-Disposition": "attachment; filename=" + name,
+      "Content-Disposition": (mime.startsWith("image/") || mime.startsWith("audio/") || mime.startsWith("video/") ? "inline" : "attachment") + "; filename=" + name,
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
     } });
