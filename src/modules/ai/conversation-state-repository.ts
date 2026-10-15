@@ -16,10 +16,7 @@ import type {
 } from "@/types/domain";
 
 import { logAiSafety } from "./guard-repository";
-import {
-  DEFAULT_HUMAN_TAKEOVER_RESUME_POLICY,
-  shouldAutoResumeHumanTakeover,
-} from "./safety-policy";
+import { shouldAutoResumeHumanTakeover } from "./safety-policy";
 
 type StateRow = {
   BusinessID: string;
