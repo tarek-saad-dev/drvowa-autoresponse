@@ -56,6 +56,8 @@ type ConversationRow = {
   LastInboundAtUtc: Date | null;
   LastOutboundAtUtc: Date | null;
   LastReadAtUtc?: Date | null;
+  IsArchived?: boolean | number;
+  IsPinned?: boolean | number;
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
@@ -74,6 +76,12 @@ type MessageRow = {
   Origin?: string | null;
   ActorUserID?: string | null;
   ActorName?: string | null;
+  MediaMimeType?: string | null;
+  MediaFileName?: string | null;
+  MediaSizeBytes?: number | null;
+  MediaStorageKey?: string | null;
+  QuotedProviderMessageID?: string | null;
+  IsHistorical?: boolean | number;
   ProviderTimestampUtc: Date | null;
   ReceivedAtUtc: Date;
   CreatedAtUtc: Date;
@@ -143,6 +151,8 @@ function mapConversation(row: ConversationRow): Conversation {
     lastInboundAtUtc: row.LastInboundAtUtc,
     lastOutboundAtUtc: row.LastOutboundAtUtc,
     lastReadAtUtc: row.LastReadAtUtc ?? null,
+    isArchived: Boolean(row.IsArchived),
+    isPinned: Boolean(row.IsPinned),
     createdAtUtc: row.CreatedAtUtc,
     updatedAtUtc: row.UpdatedAtUtc,
   };
@@ -163,6 +173,12 @@ function mapMessage(row: MessageRow): Message {
     origin: (row.Origin as MessageOrigin | null) ?? (row.Direction === "INBOUND" ? "CUSTOMER" : "UNKNOWN"),
     actorUserId: row.ActorUserID ? normalizeUuid(row.ActorUserID) : null,
     actorName: row.ActorName ?? null,
+    mediaMimeType: row.MediaMimeType ?? null,
+    mediaFileName: row.MediaFileName ?? null,
+    mediaSizeBytes: row.MediaSizeBytes != null ? Number(row.MediaSizeBytes) : null,
+    mediaAvailable: Boolean(row.MediaStorageKey),
+    quotedProviderMessageId: row.QuotedProviderMessageID ?? null,
+    isHistorical: Boolean(row.IsHistorical),
     providerTimestampUtc: row.ProviderTimestampUtc,
     receivedAtUtc: row.ReceivedAtUtc,
     createdAtUtc: row.CreatedAtUtc,
@@ -1043,7 +1059,7 @@ export async function insertUsageEventInTrx(
   );
 }
 
-export type ConversationFilter = "ALL" | "UNREAD" | "HUMAN" | "AUTO";
+export type ConversationFilter = "ALL" | "UNREAD" | "HUMAN" | "AUTO" | "ARCHIVED" | "PINNED";
 
 export type ConversationPageCursor = {
   at: Date;
@@ -1079,13 +1095,16 @@ export async function listConversationsForBusiness(params: {
   const before = params.before ?? null;
   const search = params.search?.trim().slice(0, 96) ?? "";
   const filter = params.filter ?? "ALL";
-  const filterSql = filter === "UNREAD"
+  const filterSql = filter === "ARCHIVED" ? "AND c.IsArchived=1"
+    : filter === "PINNED" ? "AND c.IsPinned=1 AND c.IsArchived=0"
+    : filter === "UNREAD"
     ? "AND c.LastInboundAtUtc IS NOT NULL AND (c.LastReadAtUtc IS NULL OR c.LastInboundAtUtc > c.LastReadAtUtc)"
     : filter === "HUMAN"
       ? "AND ai.Mode IN (N'HUMAN_PAUSED', N'SAFETY_PAUSED')"
       : filter === "AUTO"
         ? "AND (ai.Mode = N'AUTO' OR ai.Mode IS NULL)"
         : "";
+  const visibleSql = filter === "ARCHIVED" ? "" : "AND c.IsArchived=0";
   // Resolve the anchor's full DATETIME2 precision on SQL Server. JavaScript
   // Date JSON loses sub-millisecond precision and can otherwise skip chats.
   const cursorSql = before
@@ -1116,6 +1135,7 @@ export async function listConversationsForBusiness(params: {
     `SELECT TOP (@limit)
         c.ConversationID, c.BusinessID, c.ChannelConnectionID, c.ContactID, c.Status,
         c.LastMessageAtUtc, c.LastInboundAtUtc, c.LastOutboundAtUtc, c.LastReadAtUtc,
+        c.IsArchived, c.IsPinned,
         c.CreatedAtUtc, c.UpdatedAtUtc,
         ct.ExternalContactKey AS ContactExternalKey,
         ct.DisplayName AS ContactDisplayName,
@@ -1162,7 +1182,7 @@ export async function listConversationsForBusiness(params: {
        FROM TblMessage m
        WHERE m.BusinessID = c.BusinessID
          AND m.ConversationID = c.ConversationID
-         AND m.Direction = N'INBOUND'
+         AND m.Direction = N'INBOUND' AND m.IsHistorical=0
        ORDER BY m.CreatedAtUtc DESC
      ) li
      OUTER APPLY (
@@ -1174,6 +1194,7 @@ export async function listConversationsForBusiness(params: {
        ORDER BY j.CreatedAtUtc DESC
      ) lj
      WHERE c.BusinessID = @businessId
+       ${visibleSql}
        ${filterSql}
        ${cursorSql}
        ${searchSql}
@@ -1282,7 +1303,8 @@ export async function listMessagesForConversation(params: {
            SELECT TOP (@limit)
               MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
               Direction, Provider, ProviderMessageID, ContentType, TextContent,
-              Origin, ActorUserID, ActorName,
+              Origin, ActorUserID, ActorName, MediaMimeType, MediaFileName,
+              MediaSizeBytes, MediaStorageKey, QuotedProviderMessageID, IsHistorical,
               ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
            FROM TblMessage
            WHERE BusinessID = @businessId
@@ -1311,7 +1333,8 @@ export async function listMessagesForConversation(params: {
            SELECT TOP (@limit)
               MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
               Direction, Provider, ProviderMessageID, ContentType, TextContent,
-              Origin, ActorUserID, ActorName,
+              Origin, ActorUserID, ActorName, MediaMimeType, MediaFileName,
+              MediaSizeBytes, MediaStorageKey, QuotedProviderMessageID, IsHistorical,
               ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
            FROM TblMessage
            WHERE BusinessID = @businessId
