@@ -40,6 +40,14 @@ export const DASHBOARD_NAV = [
     primary: true,
   },
   {
+    href: "/dashboard/reliability",
+    label: "رقابة أداء البوت",
+    mobileLabel: "الرقابة",
+    key: "Reliability",
+    icon: "◈",
+    primary: false,
+  },
+  {
     href: "/dashboard/locations",
     label: "الفروع والمواقع",
     mobileLabel: "الفروع",
