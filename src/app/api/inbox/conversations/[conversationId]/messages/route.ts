@@ -34,6 +34,7 @@ function parseBeforeCursor(url: URL): {
 const postBodySchema = z.object({
   text: z.string().min(1).max(4000),
   idempotencyKey: z.string().uuid(),
+  quotedMessageId: z.string().uuid().optional(),
 });
 
 export async function GET(request: Request, context: RouteContext) {
@@ -69,6 +70,7 @@ export async function POST(request: Request, context: RouteContext) {
       conversationId,
       text: body.text,
       idempotencyKey: body.idempotencyKey,
+      quotedMessageId: body.quotedMessageId,
       actorUserId: user.userId,
       actorName: user.fullName,
     });
