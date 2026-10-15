@@ -9,10 +9,9 @@ BEGIN
     LastHumanReplyAtUtc DATETIME2 NOT NULL,
     ResumedAtUtc DATETIME2 NOT NULL,
     ResumeReason NVARCHAR(32) NOT NULL CONSTRAINT DF_HandoffReturn_Reason DEFAULT N'AUTO_30_MIN',
-    CONSTRAINT PK_TblReliabilityHandoffReturn PRIMARY KEY(HandoffReturnID),
-    CONSTRAINT UQ_HandoffReturn_Conversation_Reply UNIQUE (BusinessID, ConversationID, LastHumanReplyAtUtc),
-    CONSTRAINT FK_HandoffReturn_Business FOREIGN KEY(BusinessID) REFERENCES dbo.TblBusiness(BusinessID),
-    CONSTRAINT FK_HandoffReturn_Conversation FOREIGN KEY(ConversationID) REFERENCES dbo.TblConversation(ConversationID)
+    -- SQL Server OUTPUT INTO cannot target a table with FK/CHECK constraints.
+    -- Source values come atomically from existing TblConversationAiState rows.
+    CONSTRAINT PK_TblReliabilityHandoffReturn PRIMARY KEY(HandoffReturnID)
   );
 END;
 GO
