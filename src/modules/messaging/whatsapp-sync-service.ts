@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { query, sql, withTransaction, type TransactionClient } from "@/lib/db";
+import { sql, withTransaction, type TransactionClient } from "@/lib/db";
 import { NotFoundError } from "@/lib/tenancy/errors";
 import { parseOptionalUtc } from "@/modules/messaging/content";
 import { canonicalizeWhatsAppContactIdentity } from "@/modules/messaging/whatsapp-identity";
@@ -108,8 +108,7 @@ export async function ingestWhatsAppSync(input: WhatsappSyncInput): Promise<{
 
       await trx.execute(
         `UPDATE dbo.TblMessage SET
-           IsHistorical = CASE WHEN @historical=1 AND IsHistorical=1 THEN 1
-                               WHEN @historical=0 THEN 0 ELSE IsHistorical END,
+           IsHistorical = CASE WHEN @newMessage=1 THEN @historical ELSE IsHistorical END,
            MediaMimeType = COALESCE(MediaMimeType,@mimeType),
            MediaFileName = COALESCE(MediaFileName,@fileName),
            MediaSizeBytes = COALESCE(MediaSizeBytes,@fileSize),
@@ -119,6 +118,7 @@ export async function ingestWhatsAppSync(input: WhatsappSyncInput): Promise<{
           { name: "businessId", type: sql.UniqueIdentifier, value: channel.businessId },
           { name: "messageId", type: sql.UniqueIdentifier, value: insertedMessage.message.messageId },
           { name: "historical", type: sql.Bit, value: event.historical },
+          { name: "newMessage", type: sql.Bit, value: insertedMessage.inserted },
           { name: "mimeType", type: sql.NVarChar(128), value: event.mimeType ?? null },
           { name: "fileName", type: sql.NVarChar(256), value: event.fileName ?? null },
           { name: "fileSize", type: sql.BigInt, value: event.fileSize ?? null },
