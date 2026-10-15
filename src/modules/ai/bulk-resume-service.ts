@@ -101,3 +101,28 @@ export async function resumePreviousDayConversations(now = new Date()): Promise<
   }
   return { businesses: result.recordset.length, resumed };
 }
+
+/**
+ * Reliability handback: only human-answered conversations become eligible.
+ * An unresolved escalation or SAFETY_PAUSED never transitions here.
+ * Predicate + UPDATE are atomic; repeating the sweep cannot duplicate a return.
+ */
+export async function resumeDueHumanConversations(now = new Date()): Promise<number> {
+  const res = await query(
+    `UPDATE s
+     SET Mode = N'AUTO', PausedAtUtc = NULL, PauseReason = NULL,
+         LastHumanReplyAtUtc = NULL, ResumedAtUtc = @now, UpdatedAtUtc = @now
+     FROM dbo.TblConversationAiState s WITH (UPDLOCK)
+     WHERE s.Mode = N'HUMAN_PAUSED'
+       AND s.PauseReason = N'HUMAN_TAKEOVER'
+       AND s.LastHumanReplyAtUtc IS NOT NULL
+       AND s.LastHumanReplyAtUtc <= DATEADD(minute, -30, @now)
+       AND NOT EXISTS (
+         SELECT 1 FROM dbo.TblHumanEscalation e
+         WHERE e.BusinessID = s.BusinessID AND e.ConversationID = s.ConversationID
+           AND e.ResolvedAtUtc IS NULL
+       )`,
+    [{ name: "now", type: sql.DateTime2, value: now }],
+  );
+  return res.rowsAffected.reduce((sum, n) => sum + n, 0);
+}
