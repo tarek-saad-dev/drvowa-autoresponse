@@ -15,7 +15,7 @@ import { mapUserFacingError } from "@/lib/ui/user-errors";
 import type { AiReplyHealth, AiReplyHealthReason } from "@/types/domain";
 
 export type ConversationAiMode = "AUTO" | "HUMAN_PAUSED" | "SAFETY_PAUSED";
-type InboxFilter = "ALL" | "UNREAD" | "HUMAN" | "AUTO";
+type InboxFilter = "ALL" | "UNREAD" | "HUMAN" | "AUTO" | "ARCHIVED" | "PINNED";
 type GlyphName =
   | "chat" | "back" | "search" | "refresh" | "settings" | "bot"
   | "book" | "send" | "info" | "close" | "check" | "alert"
@@ -32,6 +32,8 @@ export type ConversationRow = {
   lastMessagePreview: string | null;
   lastMessageDirection: "INBOUND" | "OUTBOUND" | null;
   lastMessageAtUtc: string | null;
+  isArchived?: boolean;
+  isPinned?: boolean;
   status: string;
   aiMode: ConversationAiMode;
   aiPauseReason: string | null;
@@ -44,6 +46,13 @@ type MessageRow = {
   direction: "INBOUND" | "OUTBOUND";
   contentType: string;
   textContent: string | null;
+  providerMessageId?: string;
+  mediaMimeType?: string | null;
+  mediaFileName?: string | null;
+  mediaSizeBytes?: number | null;
+  mediaAvailable?: boolean;
+  quotedProviderMessageId?: string | null;
+  isHistorical?: boolean;
   origin: "CUSTOMER" | "AI" | "HUMAN" | "SYSTEM" | "UNKNOWN";
   actorUserId: string | null;
   actorName: string | null;
@@ -271,6 +280,8 @@ export function serializeConversations(rows: Array<{
   lastMessagePreview: string | null;
   lastMessageDirection: "INBOUND" | "OUTBOUND" | null;
   lastMessageAtUtc: string | Date | null;
+  isArchived?: boolean;
+  isPinned?: boolean;
   status: string;
   aiMode?: ConversationAiMode | null;
   aiPauseReason?: string | null;
@@ -286,6 +297,8 @@ export function serializeConversations(rows: Array<{
     lastMessageDirection: c.lastMessageDirection,
     lastMessageAtUtc: c.lastMessageAtUtc ? new Date(c.lastMessageAtUtc).toISOString() : null,
     status: c.status,
+    isArchived: Boolean(c.isArchived),
+    isPinned: Boolean(c.isPinned),
     aiMode: c.aiMode ?? "AUTO",
     aiPauseReason: c.aiPauseReason ?? null,
     aiReplyHealth: c.aiReplyHealth ?? null,
@@ -773,6 +786,30 @@ export function InboxPanel({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [mobileThread]);
 
+  const updateChatMetadata = useCallback(async (field: "archived" | "pinned", value: boolean) => {
+    const id = selectedIdRef.current;
+    if (!id) return;
+    try {
+      const result = await fetch("/api/inbox/conversations/" + encodeURIComponent(id) + "/metadata", {
+        method: "PATCH", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      });
+      if (!result.ok) {
+        const response = await result.json() as { code?: string; error?: string };
+        throw new Error(mapUserFacingError(response, "تعذر تحديث المحادثة"));
+      }
+      const fieldName = field === "archived" ? "isArchived" : "isPinned";
+      setConversations(prev => prev.map(row => row.conversationId === id ? { ...row, [fieldName]: value } : row));
+      setSelectedSnapshot(prev => prev?.conversationId === id ? { ...prev, [fieldName]: value } : prev);
+      setNotice(field === "archived" ? value ? "المحادثة اتحفظت في الأرشيف." : "المحادثة رجعت للقائمة."
+        : value ? "تم تثبيت المحادثة." : "تم إلغاء التثبيت.");
+      void loadFirstPage(true);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "تعذر تحديث المحادثة");
+    }
+  }, [loadFirstPage]);
+
   const sendManual = useCallback(async () => {
     const id = selectedIdRef.current;
     const text = (id ? drafts[id] ?? "" : "").trim();
@@ -956,6 +993,8 @@ export function InboxPanel({
     { id: "UNREAD", label: "غير مقروء", count: counts.unread },
     { id: "HUMAN", label: "مع الفريق" },
     { id: "AUTO", label: "الرد الآلي" },
+    { id: "PINNED", label: "المثبتة" },
+    { id: "ARCHIVED", label: "المؤرشفة" },
   ];
 
   const grouped = useMemo(() => sortRows(conversations), [conversations]);
@@ -1074,6 +1113,7 @@ export function InboxPanel({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <span className="min-w-0 truncate text-[14px] font-semibold" dir="auto">{contactLabel(c)}</span>
+                          {c.isPinned && <span title="محادثة مثبتة" className="text-[10px] text-[#087f76]">📌</span>}
                           {s.attention ? (
                             <span className={"h-2 w-2 shrink-0 rounded-full " + s.dot} title={s.label} aria-label={s.label} />
                           ) : null}
@@ -1214,7 +1254,7 @@ export function InboxPanel({
                               <div key={m.messageId}>
                                 {showDay && <div className="my-5 flex justify-center"><span className="rounded-lg bg-white/85 px-3 py-1.5 text-[10px] font-bold text-[#7e9486] shadow-sm dark:bg-[#26382f] dark:text-[#adc4b5]">{messageDay(m)}</span></div>}
                                 <div className={"mb-2 flex " + (outgoing ? "justify-start" : "justify-end")}>
-                                  <article dir="rtl" className={
+                                  <article id={"message-" + m.messageId} dir="rtl" className={
                                     "max-w-[88%] rounded-[13px] px-3.5 py-2 shadow-[0_1px_1px_rgba(0,0,0,.045)] sm:max-w-[76%] " +
                                     (outgoing
                                       ? "rounded-tr-[3px] bg-[#d8f1e0] text-[#1b3a2c] dark:bg-[#255444] dark:text-[#e7f8ed]"
@@ -1226,9 +1266,48 @@ export function InboxPanel({
                                         {m.origin === "AI" ? "الموظف الذكي" : m.origin === "HUMAN" ? (m.actorName || "الفريق") : "رسالة صادرة"}
                                       </div>
                                     )}
-                                    <p dir="auto" className="whitespace-pre-wrap break-words text-[14px] leading-[1.75]">
+                                    {m.isHistorical && <span className="mb-1 block text-[9px] opacity-65">من سجل واتساب السابق</span>}
+                                    {m.quotedProviderMessageId && (
+                                      <div className="mb-2 rounded-lg border-r-2 border-[#087f76] bg-black/[.035] px-2 py-1 text-[11px] dark:bg-white/[.06]">
+                                        <span className="opacity-60">رد على رسالة سابقة</span>
+                                        <p className="truncate" dir="auto">{messages.find(prev =>
+                                          prev.providerMessageId === m.quotedProviderMessageId ||
+                                          prev.providerMessageId?.endsWith("_" + m.quotedProviderMessageId)
+                                        )?.textContent || "الرسالة المشار إليها"}</p>
+                                      </div>
+                                    )}
+                                    {m.contentType !== "TEXT" && m.contentType !== "UNKNOWN" && (
+                                      <div className="mb-2 rounded-lg bg-black/[.04] p-2 text-xs dark:bg-white/[.06]">
+                                        <p className="font-bold">{m.contentType === "IMAGE" ? "📷 صورة" :
+                                          m.contentType === "VIDEO" ? "🎬 فيديو" :
+                                          m.contentType === "AUDIO" ? "🎤 رسالة صوتية" :
+                                          m.contentType === "DOCUMENT" ? "📎 ملف" : "ملصق"}</p>
+                                        {m.mediaFileName && <p className="max-w-[250px] truncate" dir="auto">{m.mediaFileName}</p>}
+                                        {m.mediaAvailable ? (
+                                          <div className="mt-2">
+                                            {m.contentType === "IMAGE" || m.contentType === "STICKER" ? (
+                                              <a href={"/api/inbox/media/" + m.messageId} target="_blank" rel="noreferrer">
+                                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                <img src={"/api/inbox/media/" + m.messageId}
+                                                  alt={m.mediaFileName || "صورة واتساب"} loading="lazy"
+                                                  className="max-h-[290px] max-w-[270px] rounded-lg object-contain" />
+                                              </a>
+                                            ) : m.contentType === "AUDIO" ? (
+                                              <audio controls preload="none" className="max-w-[240px]"
+                                                src={"/api/inbox/media/" + m.messageId}>رسالة صوتية</audio>
+                                            ) : m.contentType === "VIDEO" ? (
+                                              <video controls preload="metadata" className="max-h-[290px] max-w-[270px] rounded-lg"
+                                                src={"/api/inbox/media/" + m.messageId}>فيديو واتساب</video>
+                                            ) : null}
+                                            <a href={"/api/inbox/media/" + m.messageId} target="_blank" rel="noreferrer"
+                                              className="mt-1 block font-bold underline">فتح المرفق</a>
+                                          </div>
+                                        ) : <p className="mt-1 text-[10px] opacity-70">المرفق لم يُحفظ على DRVO بعد</p>}
+                                      </div>
+                                    )}
+                                    {(m.textContent || m.contentType === "TEXT" || m.contentType === "UNKNOWN") && <p dir="auto" className="whitespace-pre-wrap break-words text-[14px] leading-[1.75]">
                                       {messageBodyDisplay({ textContent: m.textContent, contentType: m.contentType })}
-                                    </p>
+                                    </p>}
                                     <div className="mt-1 flex items-center justify-end gap-1 text-[9px] opacity-60" dir="ltr">
                                       <time>{messageClock(m.providerTimestampUtc || m.receivedAtUtc)}</time>
                                       {outgoing && <Glyph name="check" size={13} />}
@@ -1319,6 +1398,16 @@ export function InboxPanel({
                 <h4 className="mb-2 text-[11px] font-bold text-[#9cae9f]">آخر نشاط</h4>
                 <p className="text-sm font-bold">{timeLabel(selected.lastMessageAtUtc)}</p>
                 <p className="mt-1 text-[11px] text-[#899b8c]">{selected.unread ? "في رسالة غير مقروءة" : "تم عرض الرسائل المسجلة"}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => void updateChatMetadata("pinned", !selected.isPinned)}
+                  className="rounded-xl border border-[#cde4d5] px-3 py-2.5 text-xs font-bold text-[#087c6a] dark:border-[#3b6850] dark:text-[#a0e6cf]">
+                  {selected.isPinned ? "إلغاء التثبيت" : "📌 تثبيت"}
+                </button>
+                <button type="button" onClick={() => void updateChatMetadata("archived", !selected.isArchived)}
+                  className="rounded-xl border border-[#cde4d5] px-3 py-2.5 text-xs font-bold text-[#087c6a] dark:border-[#3b6850] dark:text-[#a0e6cf]">
+                  {selected.isArchived ? "إلغاء الأرشفة" : "أرشفة الشات"}
+                </button>
               </div>
               <button
                 type="button"
