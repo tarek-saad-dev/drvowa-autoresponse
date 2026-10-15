@@ -144,7 +144,7 @@ export type ChannelConnection = {
 
 export type ConversationStatus = "OPEN" | "CLOSED";
 export type MessageDirection = "INBOUND" | "OUTBOUND";
-export type MessageContentType = "TEXT" | "UNKNOWN";
+export type MessageContentType = "TEXT" | "UNKNOWN" | "IMAGE" | "AUDIO" | "VIDEO" | "DOCUMENT" | "STICKER";
 export type MessageOrigin = "CUSTOMER" | "AI" | "HUMAN" | "SYSTEM" | "UNKNOWN";
 
 export type Contact = {
@@ -168,6 +168,8 @@ export type Conversation = {
   lastInboundAtUtc: Date | null;
   lastOutboundAtUtc: Date | null;
   lastReadAtUtc?: Date | null;
+  isArchived?: boolean;
+  isPinned?: boolean;
   createdAtUtc: Date;
   updatedAtUtc: Date;
 };
@@ -186,6 +188,12 @@ export type Message = {
   origin?: MessageOrigin;
   actorUserId?: string | null;
   actorName?: string | null;
+  mediaMimeType?: string | null;
+  mediaFileName?: string | null;
+  mediaSizeBytes?: number | null;
+  mediaAvailable?: boolean;
+  quotedProviderMessageId?: string | null;
+  isHistorical?: boolean;
   providerTimestampUtc: Date | null;
   receivedAtUtc: Date;
   createdAtUtc: Date;
