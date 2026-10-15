@@ -1075,7 +1075,7 @@ export async function countConversationsForBusiness(params: {
               AND (LastReadAtUtc IS NULL OR LastInboundAtUtc > LastReadAtUtc)
               THEN 1 END) AS UnreadCount
        FROM dbo.TblConversation
-       WHERE BusinessID = @businessId`,
+       WHERE BusinessID = @businessId AND IsArchived=0`,
     [{ name: "businessId", type: sql.UniqueIdentifier, value: params.businessId }],
   );
   return {
