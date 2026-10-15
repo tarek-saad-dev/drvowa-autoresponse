@@ -45,36 +45,7 @@ type WhatsAppReadiness = {
 };
 
 const TAKEOVER_OPTIONS = [
-  {
-    value: "AFTER_30_MIN",
-    label: "30 دقيقة",
-    description: "للأنشطة السريعة والردود القصيرة.",
-  },
-  {
-    value: "AFTER_60_MIN",
-    label: "ساعة",
-    description: "وقت كفاية لمتابعة سريعة من الفريق.",
-  },
-  {
-    value: "AFTER_120_MIN",
-    label: "ساعتين",
-    description: "الاختيار المتوازن والمقترح لمعظم الأنشطة.",
-  },
-  {
-    value: "AFTER_240_MIN",
-    label: "4 ساعات",
-    description: "للمحادثات اللي محتاجة متابعة أطول.",
-  },
-  {
-    value: "END_OF_DAY",
-    label: "لحد نهاية اليوم",
-    description: "الـ AI يرجع من أول رسالة في يوم جديد.",
-  },
-  {
-    value: "MANUAL",
-    label: "يدوي فقط",
-    description: "مش هيرجع إلا لما الفريق يفعّله بنفسه.",
-  },
+  { value: "AFTER_30_MIN", label: "30 دقيقة", description: "يبدأ العد من آخر رد فعلي للموظف، مع استثناء التصعيد المفتوح وإيقاف الأمان." },
 ] as const;
 
 type TakeoverPolicy = (typeof TAKEOVER_OPTIONS)[number]["value"];
@@ -329,7 +300,7 @@ export function AiAutoReplyPanel({
             </div>
 
             <p className="mt-3 text-[11px] leading-5 text-muted-foreground">
-              لو اخترت نهاية اليوم، بنستخدم المنطقة الزمنية المسجلة للبيزنس.
+              رجوع البوت يتم بعد 30 دقيقة من آخر رد بشري. بنستخدم المنطقة الزمنية المسجلة للبيزنس.
             </p>
           </div>
         ) : null}
