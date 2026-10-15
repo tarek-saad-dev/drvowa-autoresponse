@@ -112,6 +112,10 @@ export async function resumeDueHumanConversations(now = new Date()): Promise<num
     `UPDATE s
      SET Mode = N'AUTO', PausedAtUtc = NULL, PauseReason = NULL,
          LastHumanReplyAtUtc = NULL, ResumedAtUtc = @now, UpdatedAtUtc = @now
+     OUTPUT deleted.BusinessID, deleted.ConversationID,
+            deleted.LastHumanReplyAtUtc, inserted.ResumedAtUtc
+       INTO dbo.TblReliabilityHandoffReturn
+            (BusinessID, ConversationID, LastHumanReplyAtUtc, ResumedAtUtc)
      FROM dbo.TblConversationAiState s WITH (UPDLOCK)
      WHERE s.Mode = N'HUMAN_PAUSED'
        AND s.PauseReason = N'HUMAN_TAKEOVER'

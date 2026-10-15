@@ -24,6 +24,8 @@ describe("reliability 30-minute handback", () => {
     expect(statement).toContain("e.ResolvedAtUtc IS NULL");
     expect(statement).toContain("s.Mode = N'HUMAN_PAUSED'");
     expect(statement).not.toContain("END_OF_DAY");
+    expect(statement).toContain("OUTPUT deleted.BusinessID");
+    expect(statement).toContain("INTO dbo.TblReliabilityHandoffReturn");
     expect(statement).not.toContain("TblAiReplyJob");
     expect(inputs).toEqual([{ name: "now", type: "datetime", value: at }]);
   });

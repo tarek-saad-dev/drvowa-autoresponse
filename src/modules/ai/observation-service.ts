@@ -227,8 +227,9 @@ export async function ingestWhatsAppOutboundObserved(
       };
     }
 
+    let pausedNow = false;
     if (conversationId) {
-      await pauseConversationAi(
+      const nextAiState = await pauseConversationAi(
         {
           businessId,
           conversationId,
@@ -239,25 +240,30 @@ export async function ingestWhatsAppOutboundObserved(
         },
         trx,
       );
-      await skipPendingJobsForConversation(
-        {
-          businessId,
-          conversationId,
-          errorCode: "HUMAN_TAKEOVER",
-        },
-        trx,
-      );
-      logAiSafety(
-        "human_takeover",
-        {
-          businessId,
-          conversationId,
-          providerMessageId: dto.providerMessageId,
-          origin: "HUMAN_MANUAL",
-          reason: "HUMAN_TAKEOVER",
-        },
-        logger,
-      );
+      pausedNow = nextAiState.mode === "HUMAN_PAUSED";
+      // Ignore stale/out-of-order WhatsApp echoes after a newer AI resumption,
+      // and never override SAFETY_PAUSED with HUMAN_TAKEOVER.
+      if (pausedNow) {
+        await skipPendingJobsForConversation(
+          {
+            businessId,
+            conversationId,
+            errorCode: "HUMAN_TAKEOVER",
+          },
+          trx,
+        );
+        logAiSafety(
+          "human_takeover",
+          {
+            businessId,
+            conversationId,
+            providerMessageId: dto.providerMessageId,
+            origin: "HUMAN_MANUAL",
+            reason: "HUMAN_TAKEOVER",
+          },
+          logger,
+        );
+      }
     }
 
     logObservation(
@@ -276,7 +282,7 @@ export async function ingestWhatsAppOutboundObserved(
       origin: "HUMAN_MANUAL" as const,
       observationId: observation.outboundObservationId,
       conversationId,
-      paused: Boolean(conversationId),
+      paused: pausedNow,
     };
   });
 }

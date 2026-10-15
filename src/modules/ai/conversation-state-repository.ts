@@ -162,10 +162,14 @@ export async function pauseConversationAi(params: {
      USING (SELECT @businessId AS BusinessID, @conversationId AS ConversationID) AS src
        ON target.BusinessID = src.BusinessID
       AND target.ConversationID = src.ConversationID
-     WHEN MATCHED THEN
-       UPDATE SET
+     WHEN MATCHED
+       AND (@mode = N'SAFETY_PAUSED' OR target.Mode <> N'SAFETY_PAUSED')
+       AND (@pauseReason <> N'HUMAN_TAKEOVER'
+            OR target.ResumedAtUtc IS NULL OR @pausedAtUtc > target.ResumedAtUtc)
+     THEN UPDATE SET
          Mode = @mode,
-         PausedAtUtc = @pausedAtUtc,
+         PausedAtUtc = CASE WHEN target.PausedAtUtc > @pausedAtUtc
+           AND target.Mode = @mode THEN target.PausedAtUtc ELSE @pausedAtUtc END,
          PauseReason = @pauseReason,
          ResumedAtUtc = NULL,
          LastHumanReplyAtUtc = CASE

@@ -14,7 +14,7 @@ export default async function ReliabilityPage() {
   const businessId = await resolveActiveBusiness(user.userId, user.activeBusinessId);
   if (!businessId) redirect("/onboarding");
   const { counters, incidents } = await getReliabilityOverview(businessId);
-  const c = counters ?? { captured: 0, stored: 0, missing: 0, unacknowledged: 0, openIncidents: 0, aiSent: 0, aiFailed: 0, handoffPending: 0 };
+  const c = counters ?? { captured: 0, stored: 0, missing: 0, unacknowledged: 0, openIncidents: 0, aiSent: 0, aiFailed: 0, handoffPending: 0, escalations: 0, escalationNotificationsSent: 0, escalationsAcknowledged: 0, escalationsAnswered: 0, autoResumed: 0, resumedOnTime: 0, overdueResumes: 0 };
   const tiles = [
     { label: "رسائل Runtime المرصودة (24 ساعة)", value: c.captured },
     { label: "تمت مطابقتها في DRVO", value: c.stored },
@@ -24,9 +24,22 @@ export default async function ReliabilityPage() {
     { label: "AI Jobs فشلت", value: c.aiFailed },
     { label: "محادثات مع الفريق", value: c.handoffPending },
     { label: "حوادث مفتوحة", value: c.openIncidents },
+    { label: "تصعيدات للتدخل البشري (24 ساعة)", value: c.escalations },
+    { label: "إشعارات المالك التي أُرسلت", value: c.escalationNotificationsSent },
+    { label: "تصعيدات تم تأكيد استلامها", value: c.escalationsAcknowledged },
+    { label: "تصعيدات تلاها رد بشري", value: c.escalationsAnswered },
+    { label: "عودة تلقائية بعد 30 دقيقة", value: c.autoResumed },
+    { label: "عودة تلقائية خلال 32 دقيقة", value: c.resumedOnTime },
+    { label: "محادثات متأخرة عن موعد العودة", value: c.overdueResumes },
   ];
   const captureCoverage = Number(c.captured) > 0
     ? ((Number(c.stored) / Number(c.captured)) * 100).toFixed(1) + "%"
+    : "—";
+  const resumedWithinSla = Number(c.autoResumed) > 0
+    ? ((Number(c.resumedOnTime) / Number(c.autoResumed)) * 100).toFixed(1) + "%"
+    : "—";
+  const acknowledgedRate = Number(c.escalations) > 0
+    ? ((Number(c.escalationsAcknowledged) / Number(c.escalations)) * 100).toFixed(1) + "%"
     : "—";
   return (
     <div dir="rtl" className="mx-auto max-w-7xl space-y-6 pb-12">
@@ -42,6 +55,18 @@ export default async function ReliabilityPage() {
         <p className="text-xs font-bold text-muted-foreground">نسبة مطابقة عينات الـ Runtime المسجلة</p>
         <p className="mt-2 text-3xl font-black tabular-nums" dir="ltr">{captureCoverage}</p>
         <p className="mt-2 text-xs leading-6 text-muted-foreground">دي نسبة تغطية السجلات اللي وصلنا إثبات التقاطها فقط. مش ضمان إن كل الرسائل على واتساب اتشافَت أثناء انقطاع الاتصال. نجاح الإرسال لا يثبت وصوله لهاتف العميل.</p>
+      </section>
+      <section className="grid gap-3 md:grid-cols-2">
+        <article className="rounded-2xl border border-border bg-card p-5">
+          <p className="text-xs font-bold text-muted-foreground">تأكيد استلام التصعيدات خلال آخر 24 ساعة</p>
+          <p className="mt-2 text-3xl font-black tabular-nums" dir="ltr">{acknowledgedRate}</p>
+          <p className="mt-2 text-xs text-muted-foreground">تأكيد الاستلام من الموظف، مش مجرد إرسال إشعار واتساب.</p>
+        </article>
+        <article className="rounded-2xl border border-border bg-card p-5">
+          <p className="text-xs font-bold text-muted-foreground">عودة تلقائية خلال المهلة (30 دقيقة + دقيقتين سماح)</p>
+          <p className="mt-2 text-3xl font-black tabular-nums" dir="ltr">{resumedWithinSla}</p>
+          <p className="mt-2 text-xs text-muted-foreground">من المحادثات التي عادت تلقائيًا في آخر 24 ساعة. لا تشمل الاستئناف اليدوي أو التصعيد المفتوح.</p>
+        </article>
       </section>
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {tiles.map(tile => (
