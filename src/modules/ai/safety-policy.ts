@@ -20,7 +20,7 @@ export type HumanTakeoverResumePolicy =
   (typeof HUMAN_TAKEOVER_RESUME_POLICIES)[number];
 
 export const DEFAULT_HUMAN_TAKEOVER_RESUME_POLICY: HumanTakeoverResumePolicy =
-  "AFTER_120_MIN";
+  "AFTER_30_MIN";
 
 /** Backward-compatible alias for the default policy duration. */
 export const HUMAN_TAKEOVER_PAUSE_MS = 2 * 60 * 60 * 1000;
