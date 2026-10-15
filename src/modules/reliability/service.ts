@@ -185,7 +185,7 @@ export async function runReliabilityAudit(): Promise<{ receiptIncidents: number;
        AND cfg.AutoReplyEnabled=1 AND cfg.EnabledAtUtc <= m.ReceivedAtUtc
      LEFT JOIN dbo.TblConversationAiState state ON state.BusinessID=m.BusinessID
        AND state.ConversationID=m.ConversationID
-     WHERE m.Direction=N'INBOUND' AND m.ContentType=N'TEXT'
+     WHERE m.Direction=N'INBOUND' AND m.ContentType=N'TEXT' AND m.IsHistorical=0
        AND m.ReceivedAtUtc BETWEEN DATEADD(hour,-24,SYSUTCDATETIME())
          AND DATEADD(minute,-2,SYSUTCDATETIME())
        AND (state.Mode IS NULL OR state.Mode=N'AUTO')
@@ -197,7 +197,7 @@ export async function runReliabilityAudit(): Promise<{ receiptIncidents: number;
          AND newer.Direction=N'INBOUND' AND newer.CreatedAtUtc>m.CreatedAtUtc)
        AND NOT EXISTS (SELECT 1 FROM dbo.TblMessage sent WHERE
          sent.BusinessID=m.BusinessID AND sent.ConversationID=m.ConversationID
-         AND sent.Direction=N'OUTBOUND' AND sent.CreatedAtUtc>=m.CreatedAtUtc)
+         AND sent.Direction=N'OUTBOUND' AND sent.IsHistorical=0 AND sent.CreatedAtUtc>=m.CreatedAtUtc)
        AND NOT EXISTS (SELECT 1 FROM dbo.TblAiReplyJob j WHERE
          j.BusinessID=m.BusinessID AND j.ConversationID=m.ConversationID
          AND j.TriggerMessageID=m.MessageID AND j.Status IN
@@ -227,7 +227,7 @@ export async function runReliabilityAudit(): Promise<{ receiptIncidents: number;
          AND j.Status IN (N'PENDING',N'PROCESSING',N'SENT',N'COALESCED'))
        OR EXISTS (SELECT 1 FROM dbo.TblMessage m JOIN dbo.TblMessage sent
           ON sent.BusinessID=m.BusinessID AND sent.ConversationID=m.ConversationID
-          AND sent.Direction=N'OUTBOUND' AND sent.CreatedAtUtc>=m.CreatedAtUtc
+          AND sent.Direction=N'OUTBOUND' AND sent.IsHistorical=0 AND sent.CreatedAtUtc>=m.CreatedAtUtc
           WHERE m.BusinessID=i.BusinessID AND m.MessageID=TRY_CONVERT(uniqueidentifier,i.ReferenceKey)))`,
   );
   return { receiptIncidents: r.recordset.length, aiIncidents: missing.recordset.length };
