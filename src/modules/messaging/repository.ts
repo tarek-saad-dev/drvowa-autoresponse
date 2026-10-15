@@ -1163,7 +1163,7 @@ export async function listConversationsForBusiness(params: {
           FROM TblMessage mo
           WHERE mo.BusinessID = c.BusinessID
             AND mo.ConversationID = c.ConversationID
-            AND mo.Direction = N'OUTBOUND'
+            AND mo.Direction = N'OUTBOUND' AND mo.IsHistorical=0
             AND mo.CreatedAtUtc >= li.CreatedAtUtc
         ) THEN 1 ELSE 0 END AS AnsweredAfterLastInbound,
         lj.Status AS LastInboundJobStatus,
