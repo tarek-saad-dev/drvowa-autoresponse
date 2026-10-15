@@ -95,8 +95,7 @@ async function getHumanTakeoverResumeContext(params: {
 
   const row = result.recordset[0];
   return {
-    policy: (row?.HumanTakeoverResumePolicy
-      ?? DEFAULT_HUMAN_TAKEOVER_RESUME_POLICY) as HumanTakeoverResumePolicy,
+    policy: "AFTER_30_MIN",
     businessTimezone: row?.Timezone?.trim() || "UTC",
   };
 }
