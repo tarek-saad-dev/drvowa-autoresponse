@@ -54,7 +54,7 @@ describe("reliability receipts and watchdog", () => {
     const scans = q.mock.calls.map(call => call[0]).join("\n");
     expect(scans).toContain("newer.Direction=N'INBOUND'");
     expect(scans).toContain("state.ResumedAtUtc");
-    expect(scans).toContain("Sent");
+    expect(scans).toContain("sent.Direction");
     expect(scans).not.toContain("sendAccountMessage");
   });
 });
