@@ -109,7 +109,7 @@ export function AiAutoReplyPanel({
   );
   const [humanTakeoverResumePolicy, setHumanTakeoverResumePolicy] =
     useState<TakeoverPolicy>(
-      initialSetting?.humanTakeoverResumePolicy ?? "AFTER_120_MIN",
+      "AFTER_30_MIN",
     );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -167,7 +167,7 @@ export function AiAutoReplyPanel({
       );
       if (data.setting?.agentId) setAgentId(data.setting.agentId);
       if (data.setting?.humanTakeoverResumePolicy) {
-        setHumanTakeoverResumePolicy(data.setting.humanTakeoverResumePolicy);
+        setHumanTakeoverResumePolicy("AFTER_30_MIN");
       }
       setMessage(
         data.warning
