@@ -288,6 +288,7 @@ export type ConversationAiState = {
   pauseReason: string | null;
   resumedAtUtc: Date | null;
   lastHumanOutboundProviderMessageId: string | null;
+  lastHumanReplyAtUtc: Date | null;
   createdAtUtc: Date;
   updatedAtUtc: Date;
 };
