@@ -1292,8 +1292,24 @@ export function InboxPanel({
                                           m.contentType === "DOCUMENT" ? "📎 ملف" : "ملصق"}</p>
                                         {m.mediaFileName && <p className="max-w-[250px] truncate" dir="auto">{m.mediaFileName}</p>}
                                         {m.mediaAvailable ? (
-                                          <a href={"/api/inbox/media/" + m.messageId} target="_blank" rel="noreferrer"
-                                            className="mt-1 inline-block font-bold underline">فتح المرفق</a>
+                                          <div className="mt-2">
+                                            {m.contentType === "IMAGE" || m.contentType === "STICKER" ? (
+                                              <a href={"/api/inbox/media/" + m.messageId} target="_blank" rel="noreferrer">
+                                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                <img src={"/api/inbox/media/" + m.messageId}
+                                                  alt={m.mediaFileName || "صورة واتساب"} loading="lazy"
+                                                  className="max-h-[290px] max-w-[270px] rounded-lg object-contain" />
+                                              </a>
+                                            ) : m.contentType === "AUDIO" ? (
+                                              <audio controls preload="none" className="max-w-[240px]"
+                                                src={"/api/inbox/media/" + m.messageId}>رسالة صوتية</audio>
+                                            ) : m.contentType === "VIDEO" ? (
+                                              <video controls preload="metadata" className="max-h-[290px] max-w-[270px] rounded-lg"
+                                                src={"/api/inbox/media/" + m.messageId}>فيديو واتساب</video>
+                                            ) : null}
+                                            <a href={"/api/inbox/media/" + m.messageId} target="_blank" rel="noreferrer"
+                                              className="mt-1 block font-bold underline">فتح المرفق</a>
+                                          </div>
                                         ) : <p className="mt-1 text-[10px] opacity-70">المرفق لم يُحفظ على DRVO بعد</p>}
                                       </div>
                                     )}
