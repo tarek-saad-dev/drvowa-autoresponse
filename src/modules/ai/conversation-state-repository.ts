@@ -16,10 +16,7 @@ import type {
 } from "@/types/domain";
 
 import { logAiSafety } from "./guard-repository";
-import {
-  DEFAULT_HUMAN_TAKEOVER_RESUME_POLICY,
-  shouldAutoResumeHumanTakeover,
-} from "./safety-policy";
+import { shouldAutoResumeHumanTakeover } from "./safety-policy";
 
 type StateRow = {
   BusinessID: string;
@@ -29,6 +26,7 @@ type StateRow = {
   PauseReason: string | null;
   ResumedAtUtc: Date | null;
   LastHumanOutboundProviderMessageID: string | null;
+  LastHumanReplyAtUtc: Date | null;
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
@@ -42,6 +40,7 @@ function mapState(row: StateRow): ConversationAiState {
     pauseReason: row.PauseReason,
     resumedAtUtc: row.ResumedAtUtc,
     lastHumanOutboundProviderMessageId: row.LastHumanOutboundProviderMessageID,
+    lastHumanReplyAtUtc: row.LastHumanReplyAtUtc,
     createdAtUtc: row.CreatedAtUtc,
     updatedAtUtc: row.UpdatedAtUtc,
   };
@@ -93,8 +92,7 @@ async function getHumanTakeoverResumeContext(params: {
 
   const row = result.recordset[0];
   return {
-    policy: (row?.HumanTakeoverResumePolicy
-      ?? DEFAULT_HUMAN_TAKEOVER_RESUME_POLICY) as HumanTakeoverResumePolicy,
+    policy: "AFTER_30_MIN",
     businessTimezone: row?.Timezone?.trim() || "UTC",
   };
 }
@@ -113,6 +111,7 @@ export function defaultConversationAiState(params: {
     pauseReason: null,
     resumedAtUtc: null,
     lastHumanOutboundProviderMessageId: null,
+    lastHumanReplyAtUtc: null,
     createdAtUtc: now,
     updatedAtUtc: now,
   };
@@ -124,7 +123,7 @@ export async function getConversationAiState(params: {
 }, trx?: TransactionClient): Promise<ConversationAiState | null> {
   const result = await db(trx).query<StateRow>(
     `SELECT BusinessID, ConversationID, Mode, PausedAtUtc, PauseReason,
-            ResumedAtUtc, LastHumanOutboundProviderMessageID,
+            ResumedAtUtc, LastHumanOutboundProviderMessageID, LastHumanReplyAtUtc,
             CreatedAtUtc, UpdatedAtUtc
      FROM TblConversationAiState
      WHERE BusinessID = @businessId AND ConversationID = @conversationId`,
@@ -169,6 +168,12 @@ export async function pauseConversationAi(params: {
          PausedAtUtc = @pausedAtUtc,
          PauseReason = @pauseReason,
          ResumedAtUtc = NULL,
+         LastHumanReplyAtUtc = CASE
+           WHEN @pauseReason = N'HUMAN_TAKEOVER' AND @lastHumanOutboundProviderMessageId IS NOT NULL
+             THEN CASE WHEN target.LastHumanReplyAtUtc > @pausedAtUtc
+               THEN target.LastHumanReplyAtUtc ELSE @pausedAtUtc END
+           WHEN @pauseReason = N'HUMAN_TAKEOVER' THEN target.LastHumanReplyAtUtc
+           ELSE NULL END,
          LastHumanOutboundProviderMessageID = COALESCE(
            @lastHumanOutboundProviderMessageId,
            target.LastHumanOutboundProviderMessageID
@@ -177,11 +182,12 @@ export async function pauseConversationAi(params: {
      WHEN NOT MATCHED THEN
        INSERT (
          BusinessID, ConversationID, Mode, PausedAtUtc, PauseReason,
-         ResumedAtUtc, LastHumanOutboundProviderMessageID,
+         ResumedAtUtc, LastHumanOutboundProviderMessageID, LastHumanReplyAtUtc,
          CreatedAtUtc, UpdatedAtUtc
        ) VALUES (
          @businessId, @conversationId, @mode, @pausedAtUtc, @pauseReason,
          NULL, @lastHumanOutboundProviderMessageId,
+         CASE WHEN @pauseReason = N'HUMAN_TAKEOVER' AND @lastHumanOutboundProviderMessageId IS NOT NULL THEN @pausedAtUtc ELSE NULL END,
          SYSUTCDATETIME(), SYSUTCDATETIME()
        );`,
     [
@@ -224,16 +230,17 @@ export async function resumeConversationAi(params: {
          Mode = N'AUTO',
          PausedAtUtc = NULL,
          PauseReason = NULL,
+         LastHumanReplyAtUtc = NULL,
          ResumedAtUtc = ISNULL(@resumedAtUtc, SYSUTCDATETIME()),
          UpdatedAtUtc = SYSUTCDATETIME()
      WHEN NOT MATCHED THEN
        INSERT (
          BusinessID, ConversationID, Mode, PausedAtUtc, PauseReason,
-         ResumedAtUtc, LastHumanOutboundProviderMessageID,
+         ResumedAtUtc, LastHumanOutboundProviderMessageID, LastHumanReplyAtUtc,
          CreatedAtUtc, UpdatedAtUtc
        ) VALUES (
          @businessId, @conversationId, N'AUTO', NULL, NULL,
-         ISNULL(@resumedAtUtc, SYSUTCDATETIME()), NULL,
+         ISNULL(@resumedAtUtc, SYSUTCDATETIME()), NULL, NULL,
          SYSUTCDATETIME(), SYSUTCDATETIME()
        );`,
     [
@@ -286,7 +293,7 @@ export async function evaluateConversationAiScheduleGate(params: {
   if (
     state.mode === "HUMAN_PAUSED"
     && state.pauseReason === "HUMAN_TAKEOVER"
-    && state.pausedAtUtc
+    && state.lastHumanReplyAtUtc
   ) {
     const resumeContext = await getHumanTakeoverResumeContext(
       {
@@ -295,7 +302,7 @@ export async function evaluateConversationAiScheduleGate(params: {
       },
       trx,
     );
-    const pausedAtUtc = state.pausedAtUtc;
+    const pausedAtUtc = state.lastHumanReplyAtUtc;
 
     if (
       shouldAutoResumeHumanTakeover({
@@ -305,6 +312,18 @@ export async function evaluateConversationAiScheduleGate(params: {
         businessTimezone: resumeContext.businessTimezone,
       })
     ) {
+      const unresolvedEscalation = await db(trx).query<{ EscalationID: string }>(
+        `SELECT TOP 1 EscalationID FROM dbo.TblHumanEscalation
+         WHERE BusinessID = @businessId AND ConversationID = @conversationId
+           AND ResolvedAtUtc IS NULL`,
+        [
+          { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+          { name: "conversationId", type: sql.UniqueIdentifier, value: params.conversationId },
+        ],
+      );
+      if (unresolvedEscalation.recordset.length) {
+        return { allow: false, reason: "ACTIVE_ESCALATION", state };
+      }
       // The inbound that expired the takeover must itself be answered, so the
       // watermark cannot be later than its receive time.
       state = await resumeConversationAi(

@@ -58,7 +58,8 @@ export async function upsertWhatsAppAiSetting(params: {
     agentId: agent.agentId,
     autoReplyEnabled: params.autoReplyEnabled,
     debounceMs: params.debounceMs,
-    humanTakeoverResumePolicy: params.humanTakeoverResumePolicy,
+    // DRVO-wide reliability policy: 30 minutes from the last human reply.
+    humanTakeoverResumePolicy: "AFTER_30_MIN",
   });
 }
 

@@ -13,7 +13,8 @@ import { resolve } from "node:path";
 import { getPool } from "../src/lib/db";
 import { deliverNextEscalationNotification } from "../src/modules/escalations/notifier";
 import { createAiWorkerRunner } from "../src/modules/ai/worker-runner";
-import { resumePreviousDayConversations } from "../src/modules/ai/bulk-resume-service";
+import { resumeDueHumanConversations } from "../src/modules/ai/bulk-resume-service";
+import { runReliabilityAudit } from "../src/modules/reliability/service";
 import {
   resolveHeartbeatMs,
   resolveLeaseSeconds,
@@ -91,16 +92,16 @@ async function main(): Promise<void> {
   const notificationTimer = setInterval(() => void notificationTick(), 5_000);
   void notificationTick();
   
-  // Tenant-local midnight handback: runs even without another inbound message.
-  // Repeated ticks and restarts are safe because only HUMAN_PAUSED rows are updated.
+  // 30 minutes since the last human reply, never from midnight or initial handoff.
+  // Each sweep is idempotent and refuses open escalations / safety pauses.
   let stoppingDailyResume = false;
   let dailyResumeBusy = false;
   const dailyResumeTick = async () => {
     if (stoppingDailyResume || dailyResumeBusy) return;
     dailyResumeBusy = true;
     try {
-      const result = await resumePreviousDayConversations();
-      if (result.resumed > 0) console.info("[ai-worker] daily_handoff_completed", result);
+      const resumed = await resumeDueHumanConversations();
+      if (resumed > 0) console.info("[ai-worker] human_timeout_resumed", { resumed });
     } catch (error) {
       console.error("[ai-worker] daily_handoff_failed", {
         code: error instanceof Error ? error.name : "UNKNOWN",
@@ -109,11 +110,28 @@ async function main(): Promise<void> {
   };
   const dailyResumeTimer = setInterval(() => void dailyResumeTick(), 60_000);
   void dailyResumeTick();
+  // Read-only reconciliation; never blindly resend ambiguous WhatsApp results.
+  let stoppingAudit = false;
+  let auditBusy = false;
+  const auditTick = async () => {
+    if (stoppingAudit || auditBusy) return;
+    auditBusy = true;
+    try {
+      const result = await runReliabilityAudit();
+      if (result.receiptIncidents || result.aiIncidents) console.info("[reliability] incidents_detected", result);
+    } catch (error) {
+      console.error("[reliability] audit_failed", { code: error instanceof Error ? error.name : "UNKNOWN" });
+    } finally { auditBusy = false; }
+  };
+  const auditTimer = setInterval(() => void auditTick(), 60_000);
+  void auditTick();
   const shutdown = () => {
     stoppingNotifications = true;
     clearInterval(notificationTimer);
     stoppingDailyResume = true;
     clearInterval(dailyResumeTimer);
+    stoppingAudit = true;
+    clearInterval(auditTimer);
     runner.requestShutdown();
   };
   process.once("SIGINT", shutdown);
@@ -124,6 +142,8 @@ async function main(): Promise<void> {
   clearInterval(notificationTimer);
   stoppingDailyResume = true;
   clearInterval(dailyResumeTimer);
+  stoppingAudit = true;
+  clearInterval(auditTimer);
   if (result.reason === "deadline_exceeded") {
     process.exitCode = 1;
     // Force exit so OS stops heartbeats; jobs recover via lease expiry.
