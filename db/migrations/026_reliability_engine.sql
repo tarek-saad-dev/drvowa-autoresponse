@@ -52,3 +52,9 @@ IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.TblRelia
   CREATE INDEX IX_ReliabilityIncident_Open ON dbo.TblReliabilityIncident(BusinessID,Status,DetectedAtUtc DESC)
   INCLUDE (IncidentKind,ReferenceKey,ConversationID,DetailCode);
 GO
+
+-- Upgrade all existing channel policies to the approved fixed 30-minute handback.
+UPDATE dbo.TblChannelAiSetting
+SET HumanTakeoverResumePolicy = N'AFTER_30_MIN', UpdatedAtUtc = SYSUTCDATETIME()
+WHERE HumanTakeoverResumePolicy <> N'AFTER_30_MIN';
+GO
