@@ -66,6 +66,9 @@ export async function getReliabilityOverview(businessId: string) {
       captured: number; stored: number; missing: number;
       unacknowledged: number; openIncidents: number;
       aiSent: number; aiFailed: number; handoffPending: number;
+      escalations: number; escalationNotificationsSent: number;
+      escalationsAcknowledged: number; escalationsAnswered: number;
+      autoResumed: number; resumedOnTime: number; overdueResumes: number;
     }>(
       `SELECT
        (SELECT COUNT(*) FROM dbo.TblRuntimeInboundReceipt r
@@ -91,7 +94,38 @@ export async function getReliabilityOverview(businessId: string) {
          WHERE j.BusinessID=@businessId AND j.CreatedAtUtc >= DATEADD(hour,-24,SYSUTCDATETIME())
            AND j.Status=N'FAILED') AS aiFailed,
        (SELECT COUNT(*) FROM dbo.TblConversationAiState s
-         WHERE s.BusinessID=@businessId AND s.Mode=N'HUMAN_PAUSED') AS handoffPending`,
+         WHERE s.BusinessID=@businessId AND s.Mode=N'HUMAN_PAUSED') AS handoffPending,
+       (SELECT COUNT(*) FROM dbo.TblHumanEscalation e
+         WHERE e.BusinessID=@businessId AND e.CreatedAtUtc >= DATEADD(hour,-24,SYSUTCDATETIME())) AS escalations,
+       (SELECT COUNT(*) FROM dbo.TblHumanEscalation e
+         WHERE e.BusinessID=@businessId AND e.CreatedAtUtc >= DATEADD(hour,-24,SYSUTCDATETIME())
+           AND e.NotificationStatus=N'SENT') AS escalationNotificationsSent,
+       (SELECT COUNT(*) FROM dbo.TblHumanEscalation e
+         WHERE e.BusinessID=@businessId AND e.CreatedAtUtc >= DATEADD(hour,-24,SYSUTCDATETIME())
+           AND e.AcknowledgedAtUtc IS NOT NULL) AS escalationsAcknowledged,
+       (SELECT COUNT(*) FROM dbo.TblHumanEscalation e
+         WHERE e.BusinessID=@businessId AND e.CreatedAtUtc >= DATEADD(hour,-24,SYSUTCDATETIME())
+         AND (
+           EXISTS (SELECT 1 FROM dbo.TblMessage m
+             WHERE m.BusinessID=e.BusinessID AND m.ConversationID=e.ConversationID
+               AND m.Direction=N'OUTBOUND' AND m.Origin=N'HUMAN'
+               AND m.CreatedAtUtc >= e.CreatedAtUtc)
+           OR EXISTS (SELECT 1 FROM dbo.TblWhatsappOutboundObservation o
+             WHERE o.BusinessID=e.BusinessID AND o.ConversationID=e.ConversationID
+               AND o.Origin=N'HUMAN_MANUAL' AND o.CreatedAtUtc >= e.CreatedAtUtc)
+         )) AS escalationsAnswered,
+       (SELECT COUNT(*) FROM dbo.TblReliabilityHandoffReturn h
+         WHERE h.BusinessID=@businessId AND h.ResumedAtUtc >= DATEADD(hour,-24,SYSUTCDATETIME())) AS autoResumed,
+       (SELECT COUNT(*) FROM dbo.TblReliabilityHandoffReturn h
+         WHERE h.BusinessID=@businessId AND h.ResumedAtUtc >= DATEADD(hour,-24,SYSUTCDATETIME())
+           AND h.ResumedAtUtc <= DATEADD(minute,32,h.LastHumanReplyAtUtc)) AS resumedOnTime,
+       (SELECT COUNT(*) FROM dbo.TblConversationAiState s
+         WHERE s.BusinessID=@businessId AND s.Mode=N'HUMAN_PAUSED'
+           AND s.PauseReason=N'HUMAN_TAKEOVER' AND s.LastHumanReplyAtUtc IS NOT NULL
+           AND s.LastHumanReplyAtUtc <= DATEADD(minute,-32,SYSUTCDATETIME())
+           AND NOT EXISTS (SELECT 1 FROM dbo.TblHumanEscalation e
+             WHERE e.BusinessID=s.BusinessID AND e.ConversationID=s.ConversationID
+               AND e.ResolvedAtUtc IS NULL)) AS overdueResumes`,
       args,
     ),
     query<{
