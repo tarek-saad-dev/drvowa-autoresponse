@@ -280,6 +280,8 @@ export function serializeConversations(rows: Array<{
   lastMessagePreview: string | null;
   lastMessageDirection: "INBOUND" | "OUTBOUND" | null;
   lastMessageAtUtc: string | Date | null;
+  isArchived?: boolean;
+  isPinned?: boolean;
   status: string;
   aiMode?: ConversationAiMode | null;
   aiPauseReason?: string | null;
@@ -1295,9 +1297,9 @@ export function InboxPanel({
                                         ) : <p className="mt-1 text-[10px] opacity-70">المرفق لم يُحفظ على DRVO بعد</p>}
                                       </div>
                                     )}
-                                    <p dir="auto" className="whitespace-pre-wrap break-words text-[14px] leading-[1.75]">
+                                    {(m.textContent || m.contentType === "TEXT" || m.contentType === "UNKNOWN") && <p dir="auto" className="whitespace-pre-wrap break-words text-[14px] leading-[1.75]">
                                       {messageBodyDisplay({ textContent: m.textContent, contentType: m.contentType })}
-                                    </p>
+                                    </p>}
                                     <div className="mt-1 flex items-center justify-end gap-1 text-[9px] opacity-60" dir="ltr">
                                       <time>{messageClock(m.providerTimestampUtc || m.receivedAtUtc)}</time>
                                       {outgoing && <Glyph name="check" size={13} />}
