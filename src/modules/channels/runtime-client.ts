@@ -316,6 +316,7 @@ export async function sendAccountMessage(params: {
   phone: string;
   message: string;
   idempotencyKey: string;
+  quotedMessage?: { providerMessageId: string; direction: "INBOUND" | "OUTBOUND"; text: string };
   timeoutMs?: number;
 }): Promise<RuntimeSendResult> {
   if (!params.idempotencyKey.trim()) {
@@ -332,6 +333,7 @@ export async function sendAccountMessage(params: {
       phone: params.phone,
       message: params.message,
       idempotencyKey: params.idempotencyKey,
+      ...(params.quotedMessage ? { quotedMessage: params.quotedMessage } : {}),
     },
     { timeoutMs: params.timeoutMs ?? 10_000 },
   );
