@@ -1191,14 +1191,6 @@ export function InboxPanel({
                     className="rounded-xl border border-amber-300 px-2 py-2 text-[11px] font-bold text-amber-800 hover:bg-amber-50 disabled:opacity-50 dark:text-amber-300"
                     title="فتح حالة تدخل بشري وإخطار المالك">تدخل بشري</button>
                 ) : null}
-                <button type="button" title={selected.isPinned ? "إلغاء تثبيت المحادثة" : "تثبيت المحادثة"}
-                  onClick={() => void updateChatMetadata("pinned", !selected.isPinned)}
-                  className="rounded-lg border border-[#cbded3] px-2 py-1.5 text-[10px] font-bold hover:bg-[#e6f5ed] dark:border-[#4e705e]"
-                >{selected.isPinned ? "إلغاء التثبيت" : "تثبيت"}</button>
-                <button type="button" title={selected.isArchived ? "إلغاء أرشفة المحادثة" : "أرشفة المحادثة"}
-                  onClick={() => void updateChatMetadata("archived", !selected.isArchived)}
-                  className="rounded-lg border border-[#cbded3] px-2 py-1.5 text-[10px] font-bold hover:bg-[#e6f5ed] dark:border-[#4e705e]"
-                >{selected.isArchived ? "إلغاء الأرشفة" : "أرشفة"}</button>
                 <ActionIcon name="info" title="تفاصيل العميل" active={detailsOpen} onClick={() => setDetailsOpen(v => !v)} />
               </div>
             </header>
@@ -1406,6 +1398,16 @@ export function InboxPanel({
                 <h4 className="mb-2 text-[11px] font-bold text-[#9cae9f]">آخر نشاط</h4>
                 <p className="text-sm font-bold">{timeLabel(selected.lastMessageAtUtc)}</p>
                 <p className="mt-1 text-[11px] text-[#899b8c]">{selected.unread ? "في رسالة غير مقروءة" : "تم عرض الرسائل المسجلة"}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => void updateChatMetadata("pinned", !selected.isPinned)}
+                  className="rounded-xl border border-[#cde4d5] px-3 py-2.5 text-xs font-bold text-[#087c6a] dark:border-[#3b6850] dark:text-[#a0e6cf]">
+                  {selected.isPinned ? "إلغاء التثبيت" : "📌 تثبيت"}
+                </button>
+                <button type="button" onClick={() => void updateChatMetadata("archived", !selected.isArchived)}
+                  className="rounded-xl border border-[#cde4d5] px-3 py-2.5 text-xs font-bold text-[#087c6a] dark:border-[#3b6850] dark:text-[#a0e6cf]">
+                  {selected.isArchived ? "إلغاء الأرشفة" : "أرشفة الشات"}
+                </button>
               </div>
               <button
                 type="button"
