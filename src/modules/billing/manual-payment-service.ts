@@ -28,6 +28,7 @@ import {
   isSubscriptionPeriodExpired,
 } from "./subscription-period";
 import { reconcileExpiredPaidSubscription } from "./subscription-entitlement-lifecycle";
+import { captureApprovedManualPayment } from "./saas-financial-outbox";
 
 function trimOrNull(value: string | null | undefined, max: number): string | null {
   if (value == null) return null;
@@ -423,6 +424,8 @@ export async function approveManualPayment(params: {
       },
       trx,
     );
+
+    await captureApprovedManualPayment(locked.paymentRequestId, trx);
 
     const approved =
       (await paymentRepo.getPaymentRequestById(
