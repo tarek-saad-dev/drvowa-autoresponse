@@ -12,6 +12,7 @@ import {
 } from "@/modules/billing/manual-payment-service";
 import { getCurrentSubscription, getPlanByCode } from "@/modules/billing/entitlements";
 import { eventIdForManualPaymentConfirmation } from "@/modules/billing/saas-financial-contract";
+import { claimFinancialEvent, settleFinancialEvent } from "@/modules/billing/saas-financial-delivery-repository";
 
 // Opt in only after the operator has verified a disposable SQL Server database
 // with migration 029 applied. No test here executes migrations.
@@ -97,6 +98,8 @@ describe.runIf(isolated)("financial outbox on verified isolated SQL Server", () 
 
   it("captures once across concurrent and repeated approvals with exact facts", async () => {
     captureConfig();
+    const claimSource = `AUTORESPOND_LEASE_TEST_${randomUUID().slice(0, 12)}`;
+    vi.stubEnv("DRVO_SAAS_FINANCIAL_SOURCE_KEY", claimSource);
     const ctx = await context();
     const payment = await submitManualPaymentRequest({
       businessId: ctx.businessId, userId: ctx.userId,
@@ -124,6 +127,28 @@ describe.runIf(isolated)("financial outbox on verified isolated SQL Server", () 
       `UPDATE dbo.TblSaasFinancialOutbox SET Payload = N'{}' WHERE EventID = @eventId`,
       [{ name: "eventId", type: sql.NVarChar(150), value: event.event_id }],
     )).rejects.toThrow();
+
+    const [first, concurrent] = await Promise.all([
+      claimFinancialEvent(claimSource, 60), claimFinancialEvent(claimSource, 60),
+    ]);
+    expect([first, concurrent].filter(Boolean)).toHaveLength(1);
+    const owned = first ?? concurrent!;
+    expect(owned.eventId).toBe(event.event_id);
+    await query(
+      `UPDATE dbo.TblSaasFinancialOutbox SET LeaseUntilUtc = DATEADD(second, -1, SYSUTCDATETIME())
+       WHERE EventID = @eventId`,
+      [{ name: "eventId", type: sql.NVarChar(150), value: event.event_id }],
+    );
+    const recovered = await claimFinancialEvent(claimSource, 60);
+    expect(recovered?.leaseToken).not.toBe(owned.leaseToken);
+    expect(recovered?.attemptCount).toBe(2);
+    expect(await settleFinancialEvent(owned, { state: "ACCEPTED", errorCode: null })).toBe(false);
+    expect(await settleFinancialEvent(recovered!, { state: "PENDING", errorCode: "UNCERTAIN_RESPONSE", delayMs: 0 })).toBe(true);
+    const restartClaim = await claimFinancialEvent(claimSource, 60);
+    expect(restartClaim?.eventId).toBe(event.event_id);
+    expect(restartClaim?.attemptCount).toBe(3);
+    expect(await settleFinancialEvent(restartClaim!, { state: "ACCEPTED", errorCode: null })).toBe(true);
+    expect(await claimFinancialEvent(claimSource, 60)).toBeNull();
   });
 
   it("rolls back payment and subscription changes when outbox insert fails", async () => {

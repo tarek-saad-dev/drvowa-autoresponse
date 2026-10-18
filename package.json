@@ -16,6 +16,7 @@
     "ai:worker": "tsx scripts/ai-worker.ts",
     "ai:worker:check": "tsx scripts/ai-worker.ts --check",
     "ai:worker:status": "tsx scripts/ai-worker-status.ts",
+    "saas-financial:worker": "node --import tsx scripts/saas-financial-worker.ts",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:migration-gate": "tsx scripts/release-migration-gate.ts"
