@@ -190,8 +190,9 @@ export async function finishScan(run: ScanRun, findings: Finding[]): Promise<voi
       else await trx.execute(`INSERT dbo.TblSaasFinancialReconciliationCase
         (CaseID,SourceKey,SubjectKey,Code) VALUES (@case,@source,@subject,@code)`,
         [{ name: "case", type: sql.UniqueIdentifier, value: id }, ...inputs]);
-      await trx.execute(`INSERT dbo.TblSaasFinancialReconciliationFinding(RunID,CaseID)
-        VALUES (@run,@case)`, [runInput(run.RunID), { name: "case", type: sql.UniqueIdentifier, value: id }]);
+      await trx.execute(`INSERT dbo.TblSaasFinancialReconciliationFinding(RunID,CaseID,SourceKey)
+        VALUES (@run,@case,@source)`, [runInput(run.RunID),
+        { name: "case", type: sql.UniqueIdentifier, value: id }, sourceInput(run.SourceKey)]);
     }
     const affected = await trx.execute(`UPDATE dbo.TblSaasFinancialReconciliationRun
       SET Status=@status,CompletedAtUtc=SYSUTCDATETIME(),UpdatedAtUtc=SYSUTCDATETIME()

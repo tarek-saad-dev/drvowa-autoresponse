@@ -15,7 +15,7 @@ import { eventIdForManualPaymentConfirmation } from "@/modules/billing/saas-fina
 import { claimFinancialEvent, settleFinancialEvent } from "@/modules/billing/saas-financial-delivery-repository";
 
 // Opt in only after the operator has verified a disposable SQL Server database
-// with migration 029 applied. No test here executes migrations.
+// with migrations 029–031 applied. No test here executes migrations.
 const isolated = process.env.DRVO_TEST_ISOLATED_DB === "1"
   && /(?:test|isolated)/i.test(process.env.DB_NAME ?? "");
 
@@ -83,6 +83,9 @@ describe.runIf(isolated)("financial outbox on verified isolated SQL Server", () 
       "SELECT OBJECT_ID(N'dbo.TblSaasFinancialOutbox', N'U') AS Id",
     );
     if (!result.recordset[0]?.Id) throw new Error("Apply migration 029 to the isolated test DB first");
+    const hardening = await query<{ Version: string }>(
+      "SELECT Version FROM dbo.TblSchemaMigration WHERE Version = N'031'");
+    if (!hardening.recordset.length) throw new Error("Apply migration 031 to the isolated test DB first");
     const scales = await query<{ Name: string; Scale: number }>(
       `SELECT c.name AS Name, c.scale AS Scale
        FROM sys.columns c
@@ -173,21 +176,62 @@ describe.runIf(isolated)("financial outbox on verified isolated SQL Server", () 
         { name: "businessId", type: sql.UniqueIdentifier, value: ctx.businessId },
       ],
     );
-    try {
-      await expect(approveManualPayment({
-        paymentRequestId: payment.paymentRequestId, reviewerUserId: ctx.adminId,
-      })).rejects.toThrow();
-      const status = await query<{ Status: string }>(
-        "SELECT Status FROM dbo.TblManualPaymentRequest WHERE PaymentRequestID = @id",
-        [{ name: "id", type: sql.UniqueIdentifier, value: payment.paymentRequestId }],
-      );
-      expect(status.recordset[0].Status).toBe("PENDING");
-      const free = await getPlanByCode("FREE");
-      expect((await getCurrentSubscription(ctx.businessId))?.planId).toBe(free?.planId);
-    } finally {
-      await query("DELETE FROM dbo.TblSaasFinancialOutbox WHERE EventID = @eventId",
-        [{ name: "eventId", type: sql.NVarChar(150), value: eventId }]);
-    }
+    // The disposable database retains this evidence until the database is discarded.
+    await expect(approveManualPayment({
+      paymentRequestId: payment.paymentRequestId, reviewerUserId: ctx.adminId,
+    })).rejects.toThrow();
+    const status = await query<{ Status: string }>(
+      "SELECT Status FROM dbo.TblManualPaymentRequest WHERE PaymentRequestID = @id",
+      [{ name: "id", type: sql.UniqueIdentifier, value: payment.paymentRequestId }],
+    );
+    expect(status.recordset[0].Status).toBe("PENDING");
+    const free = await getPlanByCode("FREE");
+    expect((await getCurrentSubscription(ctx.businessId))?.planId).toBe(free?.planId);
+  });
+
+  it("keeps differently cased sources separate and rejects fact edits and deletion", async () => {
+    const source = `OUTBOX_CASE_${randomUUID().slice(0, 12)}`;
+    const sourcePaymentId = `payment:${randomUUID()}`;
+    const insertFor = async (sourceKey: string) => {
+      const ctx = await context();
+      const payment = await submitManualPaymentRequest({
+        businessId: ctx.businessId, userId: ctx.userId,
+        planCode: "STARTER", payerName: "Source case",
+      });
+      const eventId = `event:${randomUUID()}`;
+      await query(`INSERT dbo.TblSaasFinancialOutbox
+        (EventID,SourcePaymentID,PaymentRequestID,BusinessID,SourceKey,
+         EventType,SchemaVersion,AmountMinor,CurrencyCode,OccurredAtUtc,Payload,NextAttemptAtUtc)
+        VALUES (@event,@payment,@request,@business,@source,N'payment.confirmed',
+         1,100,N'EGP',SYSUTCDATETIME(),N'{}',SYSUTCDATETIME())`, [
+        { name: "event", type: sql.NVarChar(150), value: eventId },
+        { name: "payment", type: sql.NVarChar(150), value: sourcePaymentId },
+        { name: "request", type: sql.UniqueIdentifier, value: payment.paymentRequestId },
+        { name: "business", type: sql.UniqueIdentifier, value: ctx.businessId },
+        { name: "source", type: sql.NVarChar(100), value: sourceKey },
+      ]);
+      return eventId;
+    };
+    const lowerEvent = await insertFor(source.toLowerCase());
+    const upperEvent = await insertFor(source.toUpperCase());
+    await expect(insertFor(source.toLowerCase())).rejects.toThrow();
+
+    const exact = await query<{ EventID: string }>(
+      "SELECT EventID FROM dbo.TblSaasFinancialOutbox WHERE SourceKey=@source AND SourcePaymentID=@payment",
+      [{ name: "source", type: sql.NVarChar(100), value: source.toLowerCase() },
+        { name: "payment", type: sql.NVarChar(150), value: sourcePaymentId }]);
+    expect(exact.recordset.map(row => row.EventID)).toEqual([lowerEvent]);
+    expect((await claimFinancialEvent(source.toLowerCase(), 60))?.eventId).toBe(lowerEvent);
+    expect((await claimFinancialEvent(source.toUpperCase(), 60))?.eventId).toBe(upperEvent);
+
+    const target = [{ name: "event", type: sql.NVarChar(150), value: lowerEvent }];
+    await expect(query("UPDATE dbo.TblSaasFinancialOutbox SET AmountMinor=101 WHERE EventID=@event", target))
+      .rejects.toThrow();
+    await expect(query("DELETE FROM dbo.TblSaasFinancialOutbox WHERE EventID=@event", target))
+      .rejects.toThrow();
+    expect((await query<{ AmountMinor: string }>(
+      "SELECT CONVERT(varchar(20),AmountMinor) AS AmountMinor FROM dbo.TblSaasFinancialOutbox WHERE EventID=@event",
+      target)).recordset).toEqual([{ AmountMinor: "100" }]);
   });
 
   it("excludes open, canceled, rejected, and pre-cutoff requests; renewals and upgrades still work", async () => {
