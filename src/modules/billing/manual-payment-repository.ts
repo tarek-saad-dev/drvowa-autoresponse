@@ -388,7 +388,9 @@ export async function markPaymentApproved(
         type: sql.UniqueIdentifier,
         value: params.reviewedByUserId,
       },
-      { name: "reviewedAtUtc", type: sql.DateTime2, value: now },
+      // The financial occurrence is captured from this persisted approval time.
+      // Explicit millisecond scale prevents any DATETIME2(7) sub-ms drift.
+      { name: "reviewedAtUtc", type: sql.DateTime2(3), value: now },
       {
         name: "reviewNote",
         type: sql.NVarChar(1000),
