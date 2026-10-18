@@ -6,16 +6,17 @@ import { SAAS_FINANCIAL_EVENT_PATH } from "./saas-financial-contract";
 export type HubResponse = { status: number; body: string; headers: IncomingHttpHeaders };
 export type HubTransport = (endpoint: string, body: Buffer, headers: Record<string, string>) => Promise<HubResponse>;
 
-export function signHubRequest(body: Buffer, timestamp: string, nonce: string, secret: string): string {
+export function signHubRequest(body: Buffer, timestamp: string, nonce: string, secret: string,
+  path: string = SAAS_FINANCIAL_EVENT_PATH): string {
   const digest = createHash("sha256").update(body).digest("hex");
-  const canonical = `POST\n${SAAS_FINANCIAL_EVENT_PATH}\n${timestamp}\n${nonce}\n${digest}`;
+  const canonical = `POST\n${path}\n${timestamp}\n${nonce}\n${digest}`;
   return `sha256=${createHmac("sha256", secret).update(canonical, "utf8").digest("hex")}`;
 }
 
 /** No redirects; capped connect, total request, and response size. */
 export const hubHttpsTransport: HubTransport = (endpoint, body, headers) => new Promise((resolve, reject) => {
   const url = new URL(endpoint);
-  if (url.protocol !== "https:" || url.pathname !== SAAS_FINANCIAL_EVENT_PATH
+  if (url.protocol !== "https:" || ![SAAS_FINANCIAL_EVENT_PATH, "/api/saas-financial/v1/reconciliation/events"].includes(url.pathname)
     || url.search || url.hash || url.username || url.password) {
     reject(new Error("INVALID_HUB_ENDPOINT"));
     return;
