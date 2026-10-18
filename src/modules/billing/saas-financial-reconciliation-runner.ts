@@ -66,6 +66,7 @@ export async function runFinancialReconciliation(env: Environment = process.env,
     run = await begin(config.sourceKey!, config.sourceActivatedAt!, config.captureCutoffAt!, requestedWindow, 20);
     const window = run.AcceptedFromText && run.AcceptedBeforeText
       ? { accepted_from: run.AcceptedFromText + "Z", accepted_before: run.AcceptedBeforeText + "Z" } : null;
+    // Both completion paths must await this before finally closes the SQL pool.
     const complete = async () => {
       const evidence = await local(config.sourceKey!, config.captureCutoffAt!);
       const hub = await observed(run!);
@@ -78,7 +79,7 @@ export async function runFinancialReconciliation(env: Environment = process.env,
         { runId: run!.RunID, status, pages: run!.PagesRead, events: run!.EventsRead, findings: findings.length });
       return { status, runId: run!.RunID, findings: findings.length };
     };
-    if (run.TraversalComplete) return complete();
+    if (run.TraversalComplete) return await complete();
     let cursor = run.NextCursor;
     let upper = run.ScanUpperHubEventID;
     let scanStarted = run.HubScanStartedAtText ? run.HubScanStartedAtText + "Z" : null;
@@ -113,7 +114,7 @@ export async function runFinancialReconciliation(env: Environment = process.env,
       scanStarted = page.scan_started_at;
       cursor = page.next_cursor;
       if (!page.has_more) {
-        return complete();
+        return await complete();
       }
     }
     await state(run, "PAUSED");

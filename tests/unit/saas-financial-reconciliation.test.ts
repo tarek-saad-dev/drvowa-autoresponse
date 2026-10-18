@@ -68,6 +68,11 @@ const baseDeps = () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
   logger: silent,
 });
+const deferred = <T>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => { resolve = done; });
+  return { promise, resolve };
+};
 
 describe("reconciliation inventory contract", () => {
   it("signs exact transmitted bytes for the separate path with fresh metadata", async () => {
@@ -197,6 +202,50 @@ describe("bounded reconciliation runner", () => {
     expect((await runFinancialReconciliation(env, deps)).status).toBe("OBSERVED_MATCHES_PROVISIONAL");
     expect(deps.fetch).not.toHaveBeenCalled();
   });
+  it.each([["new", false], ["resumed", true]] as const)(
+    "keeps storage open until %s traversal completion is persisted", async (_kind, resumed) => {
+      const deps = baseDeps();
+      if (resumed) deps.begin.mockResolvedValue({ ...scanRun, PagesRead: 2, TraversalComplete: true });
+      const local = deferred<{ approvals: Approval[]; outbox: Outbox[] }>();
+      const observed = deferred<InventoryEvent[]>();
+      const finish = deferred<void>();
+      deps.local.mockReturnValue(local.promise);
+      deps.observed.mockReturnValue(observed.promise);
+      deps.finish.mockReturnValue(finish.promise);
+
+      const result = runFinancialReconciliation(env, deps);
+      await vi.waitFor(() => expect(deps.local).toHaveBeenCalledTimes(1));
+      expect(deps.close).not.toHaveBeenCalled();
+      local.resolve({ approvals: [], outbox: [] });
+      await vi.waitFor(() => expect(deps.observed).toHaveBeenCalledTimes(1));
+      expect(deps.close).not.toHaveBeenCalled();
+      observed.resolve([]);
+      await vi.waitFor(() => expect(deps.finish).toHaveBeenCalledTimes(1));
+      expect(deps.close).not.toHaveBeenCalled();
+      finish.resolve(undefined);
+
+      expect(await result).toEqual({ status: "OBSERVED_MATCHES_PROVISIONAL", runId: scanRun.RunID, findings: 0 });
+      expect(deps.close).toHaveBeenCalledTimes(1);
+      expect(deps.fetch).toHaveBeenCalledTimes(resumed ? 0 : 1);
+    });
+  it.each([["new", false], ["resumed", true]] as const)(
+    "marks %s traversal completion failures incomplete before closing storage", async (_kind, resumed) => {
+      const deps = baseDeps();
+      if (resumed) deps.begin.mockResolvedValue({ ...scanRun, PagesRead: 2, TraversalComplete: true });
+      const state = deferred<void>();
+      deps.local.mockRejectedValue(new Error("LOCAL_EVIDENCE_LIMIT"));
+      deps.state.mockReturnValue(state.promise);
+
+      const result = runFinancialReconciliation(env, deps);
+      await vi.waitFor(() => expect(deps.state).toHaveBeenCalledWith(
+        expect.objectContaining({ RunID: scanRun.RunID }), "SCAN_INCOMPLETE", "LOCAL_EVIDENCE_LIMIT"));
+      expect(deps.close).not.toHaveBeenCalled();
+      state.resolve(undefined);
+
+      expect(await result).toEqual({ status: "SCAN_INCOMPLETE", runId: scanRun.RunID });
+      expect(deps.close).toHaveBeenCalledTimes(1);
+      expect(deps.finish).not.toHaveBeenCalled();
+    });
   it("fresh later scans can observe a late-visible accepted event", async () => {
     const first = baseDeps();
     first.local.mockResolvedValue({ approvals: [approval], outbox: [outbox] });
