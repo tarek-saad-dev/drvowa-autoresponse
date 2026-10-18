@@ -20,7 +20,7 @@
     "saas-financial:reconcile": "node --import tsx scripts/saas-financial-reconcile.ts",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "test:migration-gate": "tsx scripts/release-migration-gate.ts"
+    "test:migration-gate": "node --import tsx scripts/release-migration-gate.ts"
   },
   "dependencies": {
     "@google/genai": "^2.23.0",
