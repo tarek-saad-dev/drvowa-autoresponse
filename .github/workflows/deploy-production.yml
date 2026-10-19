@@ -77,6 +77,9 @@ jobs:
             echo "==> Validating admin financial reports against the production database (read-only)"
             npx tsx scripts/admin-financial-smoke.ts
 
+            echo "==> Verifying billing refunds, net collections and replay (read-only)"
+            node --env-file-if-exists=.env --env-file-if-exists=.env.production.local --import tsx scripts/billing-production-smoke.ts
+
             echo "==> Restarting app service"
             systemctl restart drvowa.service
 
@@ -120,6 +123,12 @@ jobs:
               systemctl enable --now drvowa-billing-maintenance.timer
               systemctl is-active --quiet drvowa-billing-maintenance.timer
               echo "Billing maintenance timer active"
+              echo "==> Billing maintenance service execution status"
+              systemctl show drvowa-billing-maintenance.service \
+                --property=ActiveState,Result,ExecMainStatus,ExecMainStartTimestamp,ExecMainExitTimestamp \
+                --no-pager
+              echo "==> Billing maintenance timer schedule"
+              systemctl list-timers drvowa-billing-maintenance.timer --no-pager
               exit 0
             fi
 
