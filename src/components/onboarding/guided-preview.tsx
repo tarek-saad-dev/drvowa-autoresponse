@@ -121,8 +121,10 @@ function cx(...values: Array<string | false | null | undefined>) {
 
 export function GuidedOnboardingPreview({
   storageKey = "drvowa_guided_onboarding_draft_v1_preview",
+  selectedPlan = null,
 }: {
   storageKey?: string;
+  selectedPlan?: string | null;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("WELCOME");
@@ -900,7 +902,7 @@ export function GuidedOnboardingPreview({
       } catch {
         // Ignore storage failures.
       }
-      router.push("/dashboard");
+      router.push(selectedPlan ? "/dashboard/billing" : "/dashboard");
       router.refresh();
       return;
     }

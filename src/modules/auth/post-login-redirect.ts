@@ -2,7 +2,7 @@
  * Server-authoritative post-login destination.
  * Platform admin always wins over workspace/onboarding checks.
  */
-export type PostLoginPath = "/admin" | "/dashboard" | "/onboarding";
+export type PostLoginPath = "/admin" | "/dashboard" | "/choose-plan";
 
 export function resolvePostLoginPath(params: {
   isPlatformAdmin: boolean;
@@ -14,5 +14,5 @@ export function resolvePostLoginPath(params: {
   if (params.hasBusiness) {
     return "/dashboard";
   }
-  return "/onboarding";
+  return "/choose-plan";
 }

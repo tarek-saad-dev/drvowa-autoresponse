@@ -26,7 +26,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   const businesses = await listBusinessesForUser(user.userId);
   const onOnboarding =
-    pathname.includes("/onboarding") || pathname.endsWith("/onboarding");
+    pathname.includes("/onboarding") || pathname.endsWith("/onboarding") || pathname.includes("/choose-plan");
 
   if (businesses.length === 0 && !onOnboarding) {
     // Fallback: if pathname header missing, only dashboard subtree enforces again.

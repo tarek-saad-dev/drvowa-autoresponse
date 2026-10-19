@@ -48,7 +48,7 @@ export default function LoginForm() {
       const redirectTo =
         data.redirectTo === "/admin"
         || data.redirectTo === "/dashboard"
-        || data.redirectTo === "/onboarding"
+        || data.redirectTo === "/choose-plan"
           ? data.redirectTo
           : "/dashboard";
 
