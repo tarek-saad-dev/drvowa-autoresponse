@@ -140,7 +140,10 @@ export function GuidedOnboardingPreview({
   const [knowledgeTreeItems, setKnowledgeTreeItems] = useState<KnowledgeTreeItem[]>([]);
   const [knowledgeApplied, setKnowledgeApplied] = useState(false);
   const [previewQuestion, setPreviewQuestion] = useState("مواعيدكم إيه؟");
-  const [previewReply, setPreviewReply] = useState("لسه مجربناش الرد الحقيقي.");
+  const [previewReply, setPreviewReply] = useState("اختار سؤال لعرض الرد.");
+  const [previewReplies, setPreviewReplies] = useState<Record<string, string>>({});
+  const previewPendingRef = useRef<Set<string>>(new Set());
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [qrImageDataUrl, setQrImageDataUrl] = useState<string | null>(null);
   const [waReady, setWaReady] = useState(false);
   const [firstMessageStage, setFirstMessageStage] = useState(0);
@@ -781,7 +784,16 @@ export function GuidedOnboardingPreview({
   async function askPreview(question: string) {
     setLiveError(null);
     setPreviewQuestion(question);
-    setPreviewReply("بجهز الرد…");
+    const cached = previewReplies[question];
+    if (cached) {
+      setPreviewReply(cached);
+      return;
+    }
+    // Ignore rapid repeated taps while a request is running.
+    if (previewPendingRef.current.size > 0) return;
+    previewPendingRef.current.add(question);
+    setPreviewLoading(true);
+    setPreviewReply("بجهز الرد لأول مرة…");
     try {
       await ensureWorkspace();
       const response = await fetch("/api/onboarding/preview-reply", {
@@ -791,11 +803,15 @@ export function GuidedOnboardingPreview({
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error ?? data?.message ?? "تعذر تجربة الرد");
+      setPreviewReplies((current) => ({ ...current, [question]: data.reply }));
       setPreviewReply(data.reply);
       setChatCount((value) => Math.min(3, value + 1));
     } catch (error) {
       setPreviewReply("مقدرناش نطلع الرد دلوقتي.");
       setLiveError(error instanceof Error ? error.message : "تعذر تجربة الرد");
+    } finally {
+      previewPendingRef.current.delete(question);
+      setPreviewLoading(false);
     }
   }
 
@@ -1406,7 +1422,7 @@ export function GuidedOnboardingPreview({
                                       {discoveryQuestion || initialDiscoveryQuestion(effectiveBusinessType)}
                                     </h3>
                                     <p className="mt-2 text-xs leading-6 text-muted-foreground">
-                                      جاوب براحتك وبالتفاصيل. كل إجابة بتحدد السؤال اللي بعدها، فمش هنسألك حاجات ملهاش علاقة بنشاطك.
+                                      جاوب كتابة أو بصوتك على كل سؤال. كل إجابة بتحدد السؤال اللي بعدها، فمش هنسألك حاجات ملهاش علاقة بنشاطك.
                                     </p>
                                   </div>
                                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-card text-sm font-black text-primary shadow-sm">
@@ -1414,6 +1430,16 @@ export function GuidedOnboardingPreview({
                                   </span>
                                 </div>
 
+                                <div className="mt-4 rounded-2xl border border-primary/15 bg-card/70 p-4">
+                                  <p className="text-xs font-black text-primary">🎙️ قبل ما تجاوب بصوتك، ممكن تحكيلنا عن:</p>
+                                  <ul className="mt-2 list-inside list-disc space-y-1 text-xs leading-6 text-muted-foreground">
+                                    <li>طبيعة شغلك والخدمات اللي بتقدمها</li>
+                                    <li>الأسعار والباقات والعروض المتاحة</li>
+                                    <li>الفروع وعناوينها لو موجودة</li>
+                                    <li>مواعيد العمل والحجز وأي سياسات مهمة</li>
+                                  </ul>
+                                  <p className="mt-2 text-xs text-muted-foreground">تقدر تستخدم المايك في كل سؤال، ومش لازم تقول كل التفاصيل مرة واحدة.</p>
+                                </div>
                                 <Textarea
                                   value={discoveryInput}
                                   onChange={(event) => {
@@ -1541,13 +1567,14 @@ export function GuidedOnboardingPreview({
                 <div className="mx-auto max-w-3xl">
                   <span className="text-xs font-black text-primary">تجربة الردود</span>
                   <h2 className="mt-2 text-3xl font-black tracking-[-0.035em]">كلمه زي العميل</h2>
-                  <p className="mt-3 text-muted-foreground">جرب سؤالين أو تلاتة قبل ما توصله بعملائك.</p>
+                  <p className="mt-3 text-muted-foreground">اختار أي سؤال وشوف رد موظفك. الرد بيتحفظ، والتنقل بين الأسئلة مش بيستهلك طلبات جديدة.</p>
                   <div className="mt-6 flex flex-wrap gap-2">
                     {["أسعاركم إيه؟", "مواعيدكم؟", "عاوز أحجز", "عندكم كام فرع؟"].map((question) => (
                       <button
                         key={question}
                         type="button"
                         onClick={() => void askPreview(question)}
+                        disabled={previewLoading && !previewReplies[question]}
                         className="rounded-full border border-border bg-card px-4 py-2 text-sm font-bold shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:text-primary hover:shadow-md"
                       >
                         {question}
