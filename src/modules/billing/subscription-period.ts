@@ -10,9 +10,13 @@
  */
 
 export function addOneCalendarMonth(from: Date): Date {
+  return addCalendarMonths(from, 1);
+}
+
+export function addCalendarMonths(from: Date, months: number): Date {
   const d = new Date(from.getTime());
   const day = d.getUTCDate();
-  d.setUTCMonth(d.getUTCMonth() + 1);
+  d.setUTCMonth(d.getUTCMonth() + months);
   // Clamp overflow (e.g. Jan 31 → Mar 3) back to last day of target month.
   if (d.getUTCDate() < day) {
     d.setUTCDate(0);
@@ -27,6 +31,7 @@ export function addOneCalendarMonth(from: Date): Date {
  * @param now - approval / activation instant
  */
 export function computePaidSubscriptionPeriod(params: {
+  billingInterval?: "MONTHLY" | "ANNUAL";
   samePlanRenewal: boolean;
   currentPeriodEndUtc: Date | null | undefined;
   now?: Date;
@@ -40,12 +45,12 @@ export function computePaidSubscriptionPeriod(params: {
     const periodStartUtc = params.currentPeriodEndUtc;
     return {
       periodStartUtc,
-      periodEndUtc: addOneCalendarMonth(periodStartUtc),
+      periodEndUtc: addCalendarMonths(periodStartUtc, params.billingInterval === "ANNUAL" ? 12 : 1),
     };
   }
   return {
     periodStartUtc: now,
-    periodEndUtc: addOneCalendarMonth(now),
+    periodEndUtc: addCalendarMonths(now, params.billingInterval === "ANNUAL" ? 12 : 1),
   };
 }
 
@@ -56,4 +61,10 @@ export function isSubscriptionPeriodExpired(params: {
   if (!params.periodEndUtc) return false;
   const now = params.now ?? new Date();
   return params.periodEndUtc.getTime() <= now.getTime();
+}
+
+
+export const GRACE_PERIOD_DAYS = 5;
+export function gracePeriodEnded(end: Date | null | undefined, now = new Date()): boolean {
+  return !!end && now.getTime() >= end.getTime() + GRACE_PERIOD_DAYS * 86400000;
 }

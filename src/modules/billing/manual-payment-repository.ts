@@ -14,6 +14,7 @@ import type {
 } from "@/types/domain";
 
 type PaymentRow = {
+  BillingInterval: "MONTHLY" | "ANNUAL";
   PaymentRequestID: string;
   BusinessID: string;
   RequestedPlanID: string;
@@ -44,6 +45,7 @@ function db(trx?: TransactionClient) {
 
 function mapPayment(row: PaymentRow): ManualPaymentRequest {
   return {
+    billingInterval: row.BillingInterval,
     paymentRequestId: normalizeUuid(row.PaymentRequestID),
     businessId: normalizeUuid(row.BusinessID),
     requestedPlanId: normalizeUuid(row.RequestedPlanID),
@@ -70,7 +72,7 @@ function mapPayment(row: PaymentRow): ManualPaymentRequest {
 }
 
 const PAYMENT_SELECT = `
-  PaymentRequestID, BusinessID, RequestedPlanID, RequestedPlanCode, RequestedPlanDisplayName,
+  BillingInterval, PaymentRequestID, BusinessID, RequestedPlanID, RequestedPlanCode, RequestedPlanDisplayName,
   PaymentMethod, CurrencyCode, Amount, PaymentReference, PayerName, TransferReference,
   CustomerNote, Status, CreatedByUserID, SubmittedByUserID, SubmittedAtUtc,
   ReviewedByUserID, ReviewedAtUtc, ReviewNote, ApprovedSubscriptionID,
@@ -99,6 +101,13 @@ export async function lockPaymentRequest(
   paymentRequestId: string,
   trx: TransactionClient,
 ): Promise<ManualPaymentRequest | null> {
+  const owner = await getPaymentRequestById(paymentRequestId, trx);
+  if (!owner) return null;
+  // All billing mutations take the tenant lock before payment/subscription locks.
+  await trx.query(`SELECT BusinessID FROM TblBusiness WITH (UPDLOCK, HOLDLOCK)
+    WHERE BusinessID = @businessId`, [
+    { name: "businessId", type: sql.UniqueIdentifier, value: owner.businessId },
+  ]);
   const result = await trx.query<PaymentRow>(
     `SELECT ${PAYMENT_SELECT}
      FROM TblManualPaymentRequest WITH (UPDLOCK, HOLDLOCK, ROWLOCK)
@@ -188,6 +197,7 @@ export async function insertAwaitingTransfer(
     paymentMethod: ManualPaymentMethod;
     currencyCode: string;
     amount: number;
+    billingInterval?: "MONTHLY" | "ANNUAL";
     paymentReference: string;
     createdByUserId: string;
   },
@@ -199,11 +209,11 @@ export async function insertAwaitingTransfer(
   await db(trx).query(
     `INSERT INTO TblManualPaymentRequest (
       PaymentRequestID, BusinessID, RequestedPlanID, RequestedPlanCode, RequestedPlanDisplayName,
-      PaymentMethod, CurrencyCode, Amount, PaymentReference, Status,
+      PaymentMethod, CurrencyCode, Amount, PaymentReference, Status, BillingInterval,
       CreatedByUserID, CreatedAtUtc, UpdatedAtUtc
     ) VALUES (
       @paymentRequestId, @businessId, @requestedPlanId, @requestedPlanCode, @requestedPlanDisplayName,
-      @paymentMethod, @currencyCode, @amount, @paymentReference, N'AWAITING_TRANSFER',
+      @paymentMethod, @currencyCode, @amount, @paymentReference, N'AWAITING_TRANSFER', @billingInterval,
       @createdByUserId, @createdAtUtc, @updatedAtUtc
     )`,
     [
@@ -243,6 +253,7 @@ export async function insertAwaitingTransfer(
         value: params.currencyCode,
       },
       { name: "amount", type: sql.Decimal(12, 2), value: params.amount },
+      { name: "billingInterval", type: sql.NVarChar(16), value: params.billingInterval ?? "MONTHLY" },
       {
         name: "paymentReference",
         type: sql.NVarChar(64),
@@ -267,6 +278,7 @@ export async function insertAwaitingTransfer(
     paymentMethod: params.paymentMethod,
     currencyCode: params.currencyCode,
     amount: params.amount,
+    billingInterval: params.billingInterval ?? "MONTHLY",
     paymentReference: params.paymentReference,
     payerName: null,
     transferReference: null,

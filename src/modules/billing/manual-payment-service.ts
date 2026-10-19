@@ -1,3 +1,5 @@
+import { assertNoScheduledChange, isDowngrade, schedulePaidDowngrade } from "./scheduled-changes";
+import { ensurePaymentInvoice, settlePaymentInvoice, voidPaymentInvoice } from "./documents";
 import { isPaidPlanCode } from "@/constants/billing";
 import {
   isUniqueViolationError,
@@ -78,9 +80,11 @@ export async function createManualPaymentIntent(params: {
   businessId: string;
   userId: string;
   planCode: string;
+  billingInterval?: "MONTHLY" | "ANNUAL";
 }): Promise<ManualPaymentRequest> {
   assertManualBillingEnabled();
 
+  const billingInterval = params.billingInterval ?? "MONTHLY";
   const code = params.planCode.trim().toUpperCase();
   if (!isPaidPlanCode(code)) {
     throw new ValidationError("لا يمكن طلب دفع لخطة غير مدفوعة");
@@ -101,7 +105,7 @@ export async function createManualPaymentIntent(params: {
         "لديك طلب دفع قيد المراجعة بالفعل. انتظر النتيجة قبل إرسال طلب جديد.",
       );
     }
-    if (existingOpen.requestedPlanId === plan.planId) {
+    if (existingOpen.requestedPlanId === plan.planId && (existingOpen.billingInterval ?? "MONTHLY") === billingInterval) {
       return existingOpen;
     }
     // Different plan while AWAITING_TRANSFER — cancel then create new.
@@ -112,6 +116,7 @@ export async function createManualPaymentIntent(params: {
       );
       if (locked?.status === "AWAITING_TRANSFER") {
         await paymentRepo.markPaymentCanceled(locked.paymentRequestId, trx);
+        await voidPaymentInvoice(locked.paymentRequestId, trx);
       }
     });
   }
@@ -121,6 +126,11 @@ export async function createManualPaymentIntent(params: {
     const paymentReference = generatePaymentReference();
     try {
       return await withTransaction(async (trx) => {
+        await trx.query(`SELECT BusinessID FROM TblBusiness WITH (UPDLOCK, HOLDLOCK)
+          WHERE BusinessID = @businessId`, [
+          { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+        ]);
+        await assertNoScheduledChange(params.businessId, trx);
         const raced = await paymentRepo.findOpenByBusinessId(
           params.businessId,
           trx,
@@ -131,7 +141,7 @@ export async function createManualPaymentIntent(params: {
               "لديك طلب دفع قيد المراجعة بالفعل. انتظر النتيجة قبل إرسال طلب جديد.",
             );
           }
-          if (raced.requestedPlanId === plan.planId) {
+          if (raced.requestedPlanId === plan.planId && (raced.billingInterval ?? "MONTHLY") === billingInterval) {
             return raced;
           }
           throw new ConflictError(
@@ -139,7 +149,7 @@ export async function createManualPaymentIntent(params: {
           );
         }
 
-        return paymentRepo.insertAwaitingTransfer(
+        const created = await paymentRepo.insertAwaitingTransfer(
           {
             businessId: params.businessId,
             requestedPlanId: plan.planId,
@@ -147,12 +157,15 @@ export async function createManualPaymentIntent(params: {
             requestedPlanDisplayName: plan.displayName,
             paymentMethod: "INSTAPAY",
             currencyCode: plan.currencyCode ?? "EGP",
-            amount: plan.monthlyPriceAmount!,
+            amount: Number((plan.monthlyPriceAmount! * (billingInterval === "ANNUAL" ? 12 : 1)).toFixed(2)),
+            billingInterval,
             paymentReference,
             createdByUserId: params.userId,
           },
           trx,
         );
+        await ensurePaymentInvoice(created, trx);
+        return created;
       });
     } catch (error) {
       lastError = error;
@@ -164,7 +177,7 @@ export async function createManualPaymentIntent(params: {
               "لديك طلب دفع قيد المراجعة بالفعل. انتظر النتيجة قبل إرسال طلب جديد.",
             );
           }
-          if (raced.requestedPlanId === plan.planId) {
+          if (raced.requestedPlanId === plan.planId && (raced.billingInterval ?? "MONTHLY") === billingInterval) {
             return raced;
           }
           throw new ConflictError(
@@ -215,6 +228,8 @@ export async function confirmManualPaymentTransfer(params: {
     if (locked.status !== "AWAITING_TRANSFER") {
       throw new ConflictError("لا يمكن تأكيد هذا الطلب");
     }
+
+    await ensurePaymentInvoice(locked, trx);
 
     await paymentRepo.markPaymentPending(
       {
@@ -363,7 +378,7 @@ export async function approveManualPayment(params: {
     }
 
     const requestedPlan = await getPlanById(locked.requestedPlanId, trx);
-    if (!requestedPlan) {
+    if (!requestedPlan || requestedPlan.status !== "ACTIVE") {
       throw new ValidationError("الخطة المطلوبة غير موجودة");
     }
     if (!isPaidPlanCode(requestedPlan.code)) {
@@ -372,7 +387,7 @@ export async function approveManualPayment(params: {
 
     const priceChangedWarning =
       requestedPlan.monthlyPriceAmount == null
-      || Number(requestedPlan.monthlyPriceAmount) !== Number(locked.amount);
+      || Number(requestedPlan.monthlyPriceAmount) * (locked.billingInterval === "ANNUAL" ? 12 : 1) !== Number(locked.amount);
 
     const current = await getCurrentSubscription(locked.businessId, trx);
     let currentPlan: Plan | null = null;
@@ -389,31 +404,24 @@ export async function approveManualPayment(params: {
 
     const { periodStartUtc, periodEndUtc } = computePaidSubscriptionPeriod({
       samePlanRenewal,
+      billingInterval: locked.billingInterval,
       currentPeriodEndUtc: current?.periodEndUtc,
     });
 
-    if (current) {
-      await billingRepo.updateSubscriptionBillingFields(
-        {
-          subscriptionId: current.subscriptionId,
-          status: "CANCELED",
-          periodEndUtc: current.periodEndUtc ?? new Date(),
-        },
-        trx,
-      );
+    await assertNoScheduledChange(locked.businessId, trx);
+    const scheduledDowngrade = !!(current && currentPlan && current.periodEndUtc
+      && current.periodEndUtc > new Date() && isDowngrade(currentPlan.code, locked.requestedPlanCode));
+    let subscription: Subscription;
+    if (scheduledDowngrade) {
+      await schedulePaidDowngrade(current!, locked, trx);
+      subscription = current!;
+    } else {
+      if (current) await billingRepo.updateSubscriptionBillingFields({ subscriptionId: current.subscriptionId, status: "CANCELED" }, trx);
+      subscription = await billingRepo.insertSubscription({
+        businessId: locked.businessId, planId: locked.requestedPlanId, status: "ACTIVE",
+        periodStartUtc, periodEndUtc, providerName: "INSTAPAY_MANUAL", billingInterval: locked.billingInterval,
+      }, trx);
     }
-
-    const subscription = await billingRepo.insertSubscription(
-      {
-        businessId: locked.businessId,
-        planId: locked.requestedPlanId,
-        status: "ACTIVE",
-        periodStartUtc,
-        periodEndUtc,
-        providerName: "INSTAPAY_MANUAL",
-      },
-      trx,
-    );
 
     await paymentRepo.markPaymentApproved(
       {
@@ -425,6 +433,7 @@ export async function approveManualPayment(params: {
       trx,
     );
 
+    await settlePaymentInvoice(locked, trx);
     await captureApprovedManualPayment(locked.paymentRequestId, trx);
 
     const approved =
@@ -458,7 +467,7 @@ export async function approveManualPayment(params: {
       {
         businessId: locked.businessId,
         actorUserId: params.reviewerUserId,
-        action: "SUBSCRIPTION_MANUAL_ACTIVATED",
+        action: scheduledDowngrade ? "SUBSCRIPTION_DOWNGRADE_SCHEDULED" : "SUBSCRIPTION_MANUAL_ACTIVATED",
         entityType: "Subscription",
         entityId: subscription.subscriptionId,
         metadata: {
@@ -500,6 +509,8 @@ export async function rejectManualPayment(params: {
     if (locked.status !== "PENDING") {
       throw new ConflictError("لا يمكن رفض طلب ليس قيد المراجعة");
     }
+
+    await voidPaymentInvoice(locked.paymentRequestId, trx);
 
     await paymentRepo.markPaymentRejected(
       {

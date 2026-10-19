@@ -151,8 +151,8 @@ export async function listActivePlans(
 
 export async function getSubscriptionByBusinessId(params: {
   businessId: string;
-}): Promise<Subscription | null> {
-  const result = await query<SubscriptionRow>(
+}, trx?: TransactionClient): Promise<Subscription | null> {
+  const result = await db(trx).query<SubscriptionRow>(
     `SELECT TOP 1 ${SUBSCRIPTION_SELECT}
      FROM TblSubscription
      WHERE BusinessID = @businessId
@@ -171,17 +171,20 @@ export async function getSubscriptionByBusinessId(params: {
 
 export async function findSubscriptionByExternalId(params: {
   externalSubscriptionId: string;
-}): Promise<Subscription | null> {
-  const result = await query<SubscriptionRow>(
+  providerName?: string;
+}, trx?: TransactionClient): Promise<Subscription | null> {
+  const result = await db(trx).query<SubscriptionRow>(
     `SELECT TOP 1 ${SUBSCRIPTION_SELECT}
      FROM TblSubscription
-     WHERE ExternalSubscriptionId = @externalSubscriptionId`,
+     WHERE ExternalSubscriptionId = @externalSubscriptionId
+       AND (@providerName IS NULL OR ProviderName = @providerName)`,
     [
       {
         name: "externalSubscriptionId",
         type: sql.NVarChar(200),
         value: params.externalSubscriptionId,
       },
+      { name: "providerName", type: sql.NVarChar(64), value: params.providerName ?? null },
     ],
   );
   const row = result.recordset[0];
@@ -196,6 +199,7 @@ export async function insertSubscription(
     periodStartUtc?: Date;
     periodEndUtc?: Date | null;
     providerName?: string | null;
+    billingInterval?: "MONTHLY" | "ANNUAL";
   },
   trx?: TransactionClient,
 ): Promise<Subscription> {
@@ -210,11 +214,11 @@ export async function insertSubscription(
   await db(trx).query(
     `INSERT INTO TblSubscription (
       SubscriptionID, BusinessID, PlanID, Status,
-      PeriodStartUtc, PeriodEndUtc, ProviderName,
+      PeriodStartUtc, PeriodEndUtc, ProviderName, BillingInterval,
       CreatedAtUtc, UpdatedAtUtc
     ) VALUES (
       @subscriptionId, @businessId, @planId, @status,
-      @periodStartUtc, @periodEndUtc, @providerName,
+      @periodStartUtc, @periodEndUtc, @providerName, @billingInterval,
       @createdAtUtc, @updatedAtUtc
     )`,
     [
@@ -233,6 +237,7 @@ export async function insertSubscription(
       { name: "periodStartUtc", type: sql.DateTime2, value: periodStartUtc },
       { name: "periodEndUtc", type: sql.DateTime2, value: periodEndUtc },
       { name: "providerName", type: sql.NVarChar(64), value: providerName },
+      { name: "billingInterval", type: sql.NVarChar(16), value: params.billingInterval ?? "MONTHLY" },
       { name: "createdAtUtc", type: sql.DateTime2, value: now },
       { name: "updatedAtUtc", type: sql.DateTime2, value: now },
     ],
@@ -246,6 +251,7 @@ export async function insertSubscription(
     periodStartUtc,
     periodEndUtc,
     providerName,
+    billingInterval: params.billingInterval ?? "MONTHLY",
     externalCustomerId: null,
     externalSubscriptionId: null,
     createdAtUtc: now,
@@ -350,12 +356,26 @@ export async function tryInsertWebhookEvent(params: {
   payloadDigest: string;
   outcome: "APPLIED" | "DUPLICATE" | "IGNORED" | "FAILED";
   errorSummary?: string | null;
-}): Promise<BillingWebhookInsertResult> {
+}, trx?: TransactionClient): Promise<BillingWebhookInsertResult> {
+  if (trx) {
+    // Range-lock the unique key to serialize concurrent deliveries without
+    // catching a unique violation inside a possibly-aborted SQL transaction.
+    const existing = await trx.query<{ PayloadDigest: string }>(
+      `SELECT PayloadDigest FROM TblBillingWebhookEvent WITH (UPDLOCK, HOLDLOCK)
+       WHERE ProviderName = @providerName AND ProviderEventId = @providerEventId`,
+      [{ name: "providerName", type: sql.NVarChar(64), value: params.providerName },
+       { name: "providerEventId", type: sql.NVarChar(200), value: params.providerEventId }],
+    );
+    if (existing.recordset[0]) {
+      if (existing.recordset[0].PayloadDigest !== params.payloadDigest) throw new Error("WEBHOOK_PAYLOAD_CONFLICT");
+      return { inserted: false, duplicate: true };
+    }
+  }
   const billingWebhookEventId = randomUUID();
   const now = new Date();
 
   try {
-    await query(
+    await db(trx).query(
       `INSERT INTO TblBillingWebhookEvent (
         BillingWebhookEventID, ProviderName, ProviderEventId, EventType,
         PayloadDigest, ProcessedAtUtc, CreatedAtUtc, Outcome, ErrorSummary
@@ -405,9 +425,25 @@ export async function tryInsertWebhookEvent(params: {
     );
     return { inserted: true, billingWebhookEventId };
   } catch (error) {
-    if (isUniqueViolationError(error)) {
+    if (!trx && isUniqueViolationError(error)) {
       return { inserted: false, duplicate: true };
     }
     throw error;
   }
+}
+
+
+export async function finishWebhookEvent(
+  eventId: string,
+  outcome: "APPLIED" | "IGNORED",
+  reason: string | null,
+  trx: TransactionClient,
+): Promise<void> {
+  await trx.query(`UPDATE TblBillingWebhookEvent
+    SET Outcome = @outcome, ErrorSummary = @reason, ProcessedAtUtc = SYSUTCDATETIME()
+    WHERE BillingWebhookEventID = @eventId`, [
+    { name: "eventId", type: sql.UniqueIdentifier, value: eventId },
+    { name: "outcome", type: sql.NVarChar(32), value: outcome },
+    { name: "reason", type: sql.NVarChar(500), value: reason },
+  ]);
 }

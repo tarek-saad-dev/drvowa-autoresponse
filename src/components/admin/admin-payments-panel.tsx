@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
+import { BillingAdminActions } from "./billing-admin-actions";
 import { Button } from "@/components/ui/button";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
 
@@ -206,6 +207,7 @@ export function AdminPaymentsPanel({
               </div>
             </dl>
 
+            <BillingAdminActions key={selected.paymentRequestId} paymentRequestId={selected.paymentRequestId} status={selected.status} onCompleted={() => setSelected(null)} />
             {selected.status === "PENDING" ? (
               <div className="mt-5 space-y-3">
                 <p className="text-xs text-muted-foreground">

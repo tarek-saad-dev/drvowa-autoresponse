@@ -28,6 +28,7 @@ export default async function AdminPaymentsPage({ searchParams }: PageProps) {
         {(
           [
             ["PENDING", "معلقة"],
+            ["AWAITING_TRANSFER", "قبل التحويل / الخصومات"],
             ["APPROVED", "معتمدة"],
             ["REJECTED", "مرفوضة"],
             ["ALL", "الكل"],

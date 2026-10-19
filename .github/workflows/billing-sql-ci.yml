@@ -1,0 +1,72 @@
+name: Billing SQL Server checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/modules/billing/**"
+      - "db/migrations/**"
+      - "tests/integration/manual-instapay-billing.test.ts"
+      - ".github/workflows/billing-sql-ci.yml"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  billing-sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: BillingCI-only-7aF!42
+        ports:
+          - 1433:1433
+    env:
+      DB_SERVER: localhost
+      DB_PORT: 1433
+      DB_NAME: billing_ci
+      DB_USER: sa
+      DB_PASSWORD: BillingCI-only-7aF!42
+      DB_ENCRYPT: true
+      DB_TRUST_SERVER_CERTIFICATE: true
+      MANUAL_INSTAPAY_ENABLED: 1
+      DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED: 0
+      BILLING_EMAIL_NOTICES_ENABLED: 0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Initialize isolated test database
+        run: |
+          node --input-type=module <<'JS'
+          import sql from 'mssql';
+          let connected = false;
+          for (let attempt = 0; attempt < 45; attempt++) {
+            const pool = new sql.ConnectionPool({ server: process.env.DB_SERVER,
+              port: Number(process.env.DB_PORT), database: 'master', user: process.env.DB_USER,
+              password: process.env.DB_PASSWORD, options: { encrypt: true, trustServerCertificate: true },
+              connectionTimeout: 2000 });
+            try {
+              await pool.connect();
+              await pool.request().query("IF DB_ID(N'billing_ci') IS NULL CREATE DATABASE billing_ci");
+              connected = true;
+              break;
+            } catch { await new Promise(resolve => setTimeout(resolve, 2000)); }
+            finally { await pool.close(); }
+          }
+          if (!connected) throw new Error('SQL Server test database did not become ready');
+          JS
+      - name: Apply all migrations
+        run: npm run db:migrate
+      - name: Verify migrations are repeatable
+        run: npm run db:migrate
+      - name: Exercise payment, receipt, annual, grace, downgrade and refund transactions
+        run: npx vitest run tests/integration/manual-instapay-billing.test.ts

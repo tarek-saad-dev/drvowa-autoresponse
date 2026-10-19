@@ -14,7 +14,10 @@ permissions:
   contents: read
 
 jobs:
+  billing-checks:
+    uses: ./.github/workflows/billing-sql-ci.yml
   deploy:
+    needs: billing-checks
     name: Deploy to VPS
     runs-on: ubuntu-latest
     timeout-minutes: 20

@@ -1,5 +1,5 @@
 /**
- * Read-only release checks for migrations 001–031.
+ * Read-only release checks for migrations 001–032.
  *
  * --files-only validates the repository without connecting to SQL Server.
  * --verified-isolated-db additionally checks an operator-verified test database.
@@ -10,7 +10,7 @@ import { resolve } from "node:path";
 
 import sql from "mssql";
 
-const lastVersion = 31;
+const lastVersion = 32;
 const mode = process.argv[2];
 
 function requireEnv(name: string): string {
@@ -43,7 +43,7 @@ function checkFiles(): Map<string, string> {
   if (!/NOT EXISTS/i.test(sql011) || /\bUPDATE\s+dbo\.TblUsagePeriodCounter\b/i.test(sql011)) {
     throw new Error("011 must INSERT missing rows only, never UPDATE counters");
   }
-  console.log("FILE_ORDER 001→031: PASS");
+  console.log("FILE_ORDER 001→032: PASS");
   console.log("011_PRESERVE_SQL: PASS");
   return names;
 }
@@ -89,7 +89,7 @@ async function checkIsolatedDatabase(names: Map<string, string>): Promise<void> 
       }
       previous = appliedAt;
     }
-    console.log("ISOLATED_DB_APPLIED 001→031: PASS (read-only)");
+    console.log("ISOLATED_DB_APPLIED 001→032: PASS (read-only)");
   } finally {
     await pool.close();
   }

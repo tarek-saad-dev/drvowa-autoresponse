@@ -1,10 +1,11 @@
+import Link from "next/link";
+import { getScheduledBillingChange } from "@/modules/billing/documents";
 import { Alert } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { BillingPlansClient } from "@/components/dashboard/billing-plans-client";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import {
-  formatUsageRenewalAr,
   subscriptionStatusLabel,
 } from "@/lib/ui/labels";
 import {
@@ -29,7 +30,7 @@ function formatDate(value: Date | null | undefined): string {
 function paymentStatusLabel(status: string): string {
   if (status === "AWAITING_TRANSFER") return "بانتظار التحويل";
   if (status === "PENDING") return "قيد المراجعة";
-  if (status === "APPROVED") return "تم اعتماد الدفع وتفعيل الباقة";
+  if (status === "APPROVED") return "تم اعتماد الدفع";
   if (status === "REJECTED") return "تعذر اعتماد الدفع";
   if (status === "CANCELED") return "ملغي";
   return "—";
@@ -54,6 +55,7 @@ export default async function BillingPage() {
   const sub = overview.subscription;
   const instructions = manualEnabled ? getInstaPayDisplayConfig() : null;
   const latest = paymentStatus.latest;
+  const scheduled = await getScheduledBillingChange(businessId);
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
@@ -71,12 +73,15 @@ export default async function BillingPage() {
           <div className="rounded-2xl bg-surface px-4 py-3">
             <p className="text-[11px] font-bold text-muted-foreground">التجديد</p>
             <p className="mt-1 text-sm font-black">
-              {formatUsageRenewalAr(overview.usagePeriod.usagePeriodEndUtc)}
+              {formatDate(sub?.periodEndUtc)}
             </p>
           </div>
         </div>
       </section>
 
+      <Link className="inline-block rounded-xl border border-border bg-card px-4 py-3 font-bold text-primary" href="/dashboard/billing/documents">الفواتير والإيصالات</Link>
+      {scheduled ? <Alert variant="info" title="تغيير مجدول">{scheduled.Kind === "CANCEL" ? "الإلغاء والتحويل إلى المجاني" : `الانتقال إلى ${scheduled.PlanDisplayName}`} يوم {formatDate(scheduled.EffectiveAtUtc)}. باقتك الحالية مستمرة حتى ذلك الموعد.</Alert> : null}
+      {sub?.periodEndUtc && sub.periodEndUtc <= new Date() && plan?.code !== "FREE" ? <Alert variant="info" title="فترة السماح">يمكنك التجديد خلال 5 أيام من انتهاء الاشتراك. بعدها تتحول إلى الباقة المجانية.</Alert> : null}
       {latest ? (
         <Alert
           variant={
@@ -95,7 +100,7 @@ export default async function BillingPage() {
             </span>
           </p>
           {latest.status === "APPROVED" ? (
-            <p className="mt-1 text-sm">تم تفعيل باقتك.</p>
+            <p className="mt-1 text-sm">تم اعتماد الدفع. التخفيض يبدأ بعد نهاية الفترة الحالية.</p>
           ) : null}
           {latest.status === "REJECTED" && latest.reviewNote ? (
             <p className="mt-1 text-sm">{latest.reviewNote}</p>

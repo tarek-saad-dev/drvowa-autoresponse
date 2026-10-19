@@ -27,6 +27,8 @@ import { upsertPlatformAdmin } from "@/modules/platform-admin/service";
 import { completeOnboarding } from "@/modules/onboarding/service";
 import { rethrowDbBootstrapFailure } from "../helpers/db-bootstrap";
 import { clearTestCookies } from "../helpers/cookies";
+import { performBillingAdminAction } from "@/modules/billing/admin-operations";
+import { listBillingDocuments } from "@/modules/billing/documents";
 
 function dbEnvConfigured(): boolean {
   try {
@@ -104,6 +106,97 @@ describe.runIf(dbEnvOk)("manual instapay billing lifecycle", () => {
   afterAll(async () => {
     clearTestCookies();
     await closePool().catch(() => undefined);
+  });
+
+  it("V2: invoices precede payment; annual approval issues exactly one receipt", async () => {
+    process.env.MANUAL_INSTAPAY_ENABLED = "1";
+    const ctx = await onboardUser(`v2_year_${randomUUID().slice(0, 8)}@example.com`);
+    const admin = await makeAdmin();
+    const intent = await createManualPaymentIntent({ ...ctx, planCode: "STARTER", billingInterval: "ANNUAL" });
+    expect(intent.amount).toBe(499 * 12);
+    const before = await listBillingDocuments(ctx.businessId);
+    expect(before).toHaveLength(1);
+    expect(before[0].Status).toBe("OPEN");
+    expect(before[0].ReceiptNumber).toBeNull();
+    await confirmManualPaymentTransfer({ ...ctx, paymentRequestId: intent.paymentRequestId, payerName: "Annual" });
+    const results = await Promise.all([1, 2].map(() => approveManualPayment({ paymentRequestId: intent.paymentRequestId, reviewerUserId: admin })));
+    expect(results.filter(r => !r.alreadyApproved)).toHaveLength(1);
+    const sub = results[0].subscription;
+    expect(sub.periodEndUtc!.getTime() - sub.periodStartUtc!.getTime()).toBeGreaterThan(364 * 86400000);
+    const after = await listBillingDocuments(ctx.businessId);
+    expect(after).toHaveLength(1);
+    expect(after[0].Status).toBe("PAID");
+    expect(after[0].ReceiptNumber).not.toBeNull();
+    expect(Number(after[0].TotalMinor)).toBe(499 * 12 * 100);
+  });
+
+  it("V2: full discount settles as waived and never issues a cash receipt", async () => {
+    process.env.MANUAL_INSTAPAY_ENABLED = "1";
+    const ctx = await onboardUser(`v2_waive_${randomUUID().slice(0, 8)}@example.com`);
+    const admin = await makeAdmin();
+    const intent = await createManualPaymentIntent({ ...ctx, planCode: "PRO" });
+    await performBillingAdminAction({ paymentRequestId: intent.paymentRequestId, actorUserId: admin,
+      action: "discount", discountPercent: 100, reason: "Approved complimentary subscription" });
+    await approveManualPayment({ paymentRequestId: intent.paymentRequestId, reviewerUserId: admin });
+    const docs = await listBillingDocuments(ctx.businessId);
+    expect(docs[0].Status).toBe("WAIVED");
+    expect(docs[0].ReceiptNumber).toBeNull();
+    expect(Number(docs[0].TotalMinor)).toBe(0);
+    expect((await getEntitlementSnapshot(ctx.businessId)).plan?.code).toBe("PRO");
+  });
+
+  it("V2: grace retains paid access until five days have elapsed", async () => {
+    process.env.MANUAL_INSTAPAY_ENABLED = "1";
+    const ctx = await onboardUser(`v2_grace_${randomUUID().slice(0, 8)}@example.com`);
+    const admin = await makeAdmin();
+    const payment = await submitManualPaymentRequest({ ...ctx, planCode: "PRO", payerName: "Grace" });
+    const result = await approveManualPayment({ paymentRequestId: payment.paymentRequestId, reviewerUserId: admin });
+    await billingRepo.updateSubscriptionBillingFields({ subscriptionId: result.subscription.subscriptionId, periodEndUtc: new Date(Date.now() - 4 * 86400000) });
+    expect((await getEntitlementSnapshot(ctx.businessId)).plan?.code).toBe("PRO");
+    await billingRepo.updateSubscriptionBillingFields({ subscriptionId: result.subscription.subscriptionId, periodEndUtc: new Date(Date.now() - 6 * 86400000) });
+    expect((await getEntitlementSnapshot(ctx.businessId)).plan?.code).toBe("FREE");
+  });
+
+  it("V2: a paid downgrade preserves the higher plan until the effective date", async () => {
+    process.env.MANUAL_INSTAPAY_ENABLED = "1";
+    const ctx = await onboardUser(`v2_down_${randomUUID().slice(0, 8)}@example.com`);
+    const admin = await makeAdmin();
+    const high = await submitManualPaymentRequest({ ...ctx, planCode: "PRO", payerName: "High" });
+    await approveManualPayment({ paymentRequestId: high.paymentRequestId, reviewerUserId: admin });
+    const low = await submitManualPaymentRequest({ ...ctx, planCode: "STARTER", payerName: "Low" });
+    await approveManualPayment({ paymentRequestId: low.paymentRequestId, reviewerUserId: admin });
+    expect((await getEntitlementSnapshot(ctx.businessId)).plan?.code).toBe("PRO");
+    await query(`UPDATE TblBillingScheduledChange SET EffectiveAtUtc = DATEADD(SECOND, -1, SYSUTCDATETIME()) WHERE BusinessID = @b AND State = N'PENDING'`, [{ name: "b", type: sql.UniqueIdentifier, value: ctx.businessId }]);
+    expect((await getEntitlementSnapshot(ctx.businessId)).plan?.code).toBe("STARTER");
+  });
+
+  it("V2: refund confirmation is idempotent, preserves receipt and cancels its subscription", async () => {
+    process.env.MANUAL_INSTAPAY_ENABLED = "1";
+    const capture = process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED;
+    const exportToken = process.env.DRVO_GROUP_FINANCE_EXPORT_TOKEN;
+    process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED = "0";
+    delete process.env.DRVO_GROUP_FINANCE_EXPORT_TOKEN;
+    try {
+      const ctx = await onboardUser(`v2_refund_${randomUUID().slice(0, 8)}@example.com`);
+      const admin = await makeAdmin();
+      const payment = await submitManualPaymentRequest({ ...ctx, planCode: "PRO", payerName: "Refund" });
+      await approveManualPayment({ paymentRequestId: payment.paymentRequestId, reviewerUserId: admin });
+      const base = { paymentRequestId: payment.paymentRequestId, actorUserId: admin, reason: "Customer cancellation" };
+      await performBillingAdminAction({ ...base, action: "request_refund" });
+      expect((await getEntitlementSnapshot(ctx.businessId)).plan?.code).toBe("PRO");
+      await performBillingAdminAction({ ...base, action: "confirm_refund", transferReference: "test-transfer" });
+      expect((await performBillingAdminAction({ ...base, action: "confirm_refund", transferReference: "test-transfer" })).status).toBe("already_completed");
+      expect((await getEntitlementSnapshot(ctx.businessId)).plan?.code).toBe("FREE");
+      const docs = await listBillingDocuments(ctx.businessId);
+      expect(docs[0].Status).toBe("PAID");
+      expect(docs[0].RefundState).toBe("SUCCEEDED");
+      expect(docs[0].ReceiptNumber).not.toBeNull();
+    } finally {
+      if (capture === undefined) delete process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED;
+      else process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED = capture;
+      if (exportToken === undefined) delete process.env.DRVO_GROUP_FINANCE_EXPORT_TOKEN;
+      else process.env.DRVO_GROUP_FINANCE_EXPORT_TOKEN = exportToken;
+    }
   });
 
   it("seeds exact V1 pricing and limits", async () => {

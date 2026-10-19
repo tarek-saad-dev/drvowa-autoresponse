@@ -15,7 +15,8 @@ import { NotFoundError } from "@/lib/tenancy/errors";
 import type { Plan, Subscription, SubscriptionStatus } from "@/types/domain";
 
 import * as billingRepo from "./repository";
-import { isSubscriptionPeriodExpired } from "./subscription-period";
+import { applyDueScheduledChange } from "./scheduled-changes";
+import { gracePeriodEnded } from "./subscription-period";
 
 type SubscriptionRow = {
   SubscriptionID: string;
@@ -91,10 +92,15 @@ async function expirePaidAndBootstrapFree(
   businessId: string,
   trx: TransactionClient,
 ): Promise<Subscription | null> {
-  const locked = await lockCurrentSubscription(businessId, trx);
-  if (!locked) return null;
+  await trx.query(`SELECT BusinessID FROM TblBusiness WITH (UPDLOCK, HOLDLOCK)
+    WHERE BusinessID = @businessId`, [
+    { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
+  ]);
+  const found = await lockCurrentSubscription(businessId, trx);
+  if (!found) return null;
+  const locked = await applyDueScheduledChange(found, trx);
 
-  if (!isSubscriptionPeriodExpired({ periodEndUtc: locked.periodEndUtc })) {
+  if (!gracePeriodEnded(locked.periodEndUtc)) {
     return locked;
   }
 

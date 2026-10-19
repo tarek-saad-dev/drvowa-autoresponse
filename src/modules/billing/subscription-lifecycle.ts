@@ -3,6 +3,7 @@
  * Does not hardcode Stripe/Paymob — adapters live behind payment-provider.ts.
  */
 
+import { withTransaction } from "@/lib/db";
 import { structuredLog } from "@/lib/observability/logger";
 import type { Subscription, SubscriptionStatus } from "@/types/domain";
 
@@ -37,28 +38,8 @@ function mapLifecycleStatus(
   if (result.mappedStatus) {
     return result.mappedStatus;
   }
-  const event = (result.eventType ?? "").toLowerCase();
-  if (
-    event.includes("activate")
-    || event.includes("created")
-    || event.includes("renew")
-    || event.includes("paid")
-    || event.includes("succeeded")
-  ) {
-    return "ACTIVE";
-  }
-  if (event.includes("past_due") || event.includes("past-due")) {
-    return "PAST_DUE";
-  }
-  if (event.includes("cancel")) {
-    return "CANCELED";
-  }
-  if (event.includes("expir")) {
-    return "EXPIRED";
-  }
-  if (event.includes("trial")) {
-    return "TRIALING";
-  }
+  // Only a verified provider adapter may map an event to entitlements.
+  // Text matching would treat invoice.unpaid / refund.succeeded as ACTIVE.
   return undefined;
 }
 
@@ -85,14 +66,15 @@ export async function applyVerifiedWebhook(
     return { status: "failed", reason: "MISSING_PROVIDER_EVENT_ID" };
   }
 
+  return withTransaction(async (trx): Promise<ApplyWebhookResult> => {
   const payloadDigest = repo.digestWebhookPayload(options?.rawBody ?? "");
   const insert = await repo.tryInsertWebhookEvent({
     providerName,
     providerEventId,
     eventType: result.eventType ?? "unknown",
     payloadDigest,
-    outcome: "APPLIED",
-  });
+    outcome: "IGNORED",
+  }, trx);
 
   if (!insert.inserted) {
     structuredLog("billing", "billing.webhook.duplicate", {
@@ -102,33 +84,42 @@ export async function applyVerifiedWebhook(
     return { status: "duplicate" };
   }
 
+  const nextStatus = mapLifecycleStatus(result);
+  if (!nextStatus) {
+    await repo.finishWebhookEvent(insert.billingWebhookEventId, "IGNORED", "UNMAPPED_EVENT", trx);
+    return { status: "ignored", reason: "UNMAPPED_EVENT" };
+  }
   let subscription: Subscription | null = null;
   if (result.externalSubscriptionId) {
     subscription = await repo.findSubscriptionByExternalId({
       externalSubscriptionId: result.externalSubscriptionId,
-    });
+      providerName,
+    }, trx);
   }
-  if (!subscription && result.businessId) {
+  if (!result.externalSubscriptionId && result.businessId) {
     subscription = await repo.getSubscriptionByBusinessId({
       businessId: result.businessId,
-    });
+    }, trx);
   }
 
-  if (!subscription) {
-    structuredLog("billing", "billing.webhook.ignored", {
-      reason: "SUBSCRIPTION_NOT_FOUND",
-      providerEventId,
-    });
-    return { status: "ignored", reason: "SUBSCRIPTION_NOT_FOUND" };
+  // Roll back the dedup marker as well: a delayed local write must be retryable.
+  if (!subscription) throw new Error("SUBSCRIPTION_NOT_FOUND");
+  if ((result.businessId && subscription.businessId.toLowerCase() !== result.businessId.toLowerCase())
+    || (subscription.providerName && subscription.providerName !== providerName)) {
+    throw new Error("SUBSCRIPTION_IDENTITY_MISMATCH");
   }
-
-  const nextStatus = mapLifecycleStatus(result);
+  const periodStart = toDate(result.periodStartUtc);
+  const periodEnd = toDate(result.periodEndUtc);
+  if ((result.periodStartUtc !== undefined && (!periodStart || !Number.isFinite(periodStart.getTime())))
+    || (result.periodEndUtc !== undefined && (!periodEnd || !Number.isFinite(periodEnd.getTime())))
+    || (periodStart && periodEnd && periodEnd <= periodStart)) {
+    throw new Error("INVALID_BILLING_PERIOD");
+  }
   let nextPlanId: string | undefined;
   if (result.planCode) {
-    const plan = await repo.getPlanByCode(result.planCode);
-    if (plan && plan.status === "ACTIVE") {
-      nextPlanId = plan.planId;
-    }
+    const plan = await repo.getPlanByCode(result.planCode, trx);
+    if (!plan || plan.status !== "ACTIVE") throw new Error("INVALID_BILLING_PLAN");
+    nextPlanId = plan.planId;
   }
 
   await repo.updateSubscriptionBillingFields({
@@ -144,9 +135,10 @@ export async function applyVerifiedWebhook(
       result.externalSubscriptionId !== undefined
         ? result.externalSubscriptionId
         : undefined,
-    periodStartUtc: toDate(result.periodStartUtc),
-    periodEndUtc: toDate(result.periodEndUtc),
-  });
+    periodStartUtc: periodStart,
+    periodEndUtc: periodEnd,
+  }, trx);
+  await repo.finishWebhookEvent(insert.billingWebhookEventId, "APPLIED", null, trx);
 
   structuredLog("billing", "billing.webhook.applied", {
     providerName,
@@ -160,6 +152,7 @@ export async function applyVerifiedWebhook(
     status: "applied",
     subscriptionId: subscription.subscriptionId,
   };
+  });
 }
 
 export async function createCheckoutSession(

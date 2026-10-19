@@ -1,3 +1,4 @@
+import { performBillingAdminAction } from "@/modules/billing/admin-operations";
 import { z } from "zod";
 
 import { handleApiError, jsonOk, parseJsonBody } from "@/lib/api/http";
@@ -25,6 +26,12 @@ export async function GET(_request: Request, context: RouteContext) {
 
 const actionSchema = z.discriminatedUnion("action", [
   z.object({
+    action: z.enum(["discount", "cancel_now", "cancel_at_end", "cancel_scheduled", "request_refund", "confirm_refund", "fail_refund"]),
+    reason: z.string().trim().min(1).max(1000),
+    discountPercent: z.number().min(0).max(100).optional(),
+    transferReference: z.string().trim().min(1).max(160).optional(),
+  }),
+  z.object({
     action: z.literal("approve"),
     reviewNote: z.string().max(1000).optional().nullable(),
   }),
@@ -40,6 +47,9 @@ export async function POST(request: Request, context: RouteContext) {
     const { paymentRequestId } = await context.params;
     const body = actionSchema.parse(await parseJsonBody(request));
 
+    if (body.action !== "approve" && body.action !== "reject") {
+      return jsonOk(await performBillingAdminAction({ ...body, paymentRequestId, actorUserId: admin.userId }));
+    }
     if (body.action === "approve") {
       const result = await approveManualPayment({
         paymentRequestId,

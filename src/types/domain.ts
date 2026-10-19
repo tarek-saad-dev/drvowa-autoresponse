@@ -354,7 +354,7 @@ export type UsageEvent = {
   usageKey?: string | null;
 };
 
-export type PlanBillingInterval = "MONTHLY";
+export type PlanBillingInterval = "MONTHLY" | "ANNUAL";
 
 export type Plan = {
   planId: string;
@@ -394,6 +394,7 @@ export type ManualPaymentStatus =
 export type ManualPaymentMethod = "INSTAPAY";
 
 export type ManualPaymentRequest = {
+  billingInterval?: PlanBillingInterval;
   paymentRequestId: string;
   businessId: string;
   requestedPlanId: string;
@@ -419,6 +420,7 @@ export type ManualPaymentRequest = {
 };
 
 export type Subscription = {
+  billingInterval?: PlanBillingInterval;
   subscriptionId: string;
   businessId: string;
   planId: string;

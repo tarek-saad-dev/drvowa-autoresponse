@@ -66,3 +66,9 @@ describe("payment-reference", () => {
     expect(a).not.toBe(b);
   });
 });
+
+it("supports an annual cycle and clamps leap day", () => {
+  const result = computePaidSubscriptionPeriod({ samePlanRenewal: false,
+    currentPeriodEndUtc: null, now: new Date("2024-02-29T12:00:00Z"), billingInterval: "ANNUAL" });
+  expect(result.periodEndUtc.toISOString()).toBe("2025-02-28T12:00:00.000Z");
+});

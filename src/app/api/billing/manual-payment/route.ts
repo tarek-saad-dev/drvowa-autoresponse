@@ -9,6 +9,8 @@ import {
   getPaymentInstructions,
 } from "@/modules/billing/manual-payment-service";
 import { isManualInstaPayEnabled } from "@/modules/billing/instapay-config";
+import { requireBusinessMembership } from "@/lib/tenancy/require-membership";
+import { ForbiddenError } from "@/lib/tenancy/errors";
 
 function serializePayment(p: {
   paymentRequestId: string;
@@ -62,6 +64,7 @@ export async function GET() {
 const createIntentSchema = z.object({
   action: z.literal("create_intent").optional().default("create_intent"),
   planCode: z.string().min(1).max(32),
+  billingInterval: z.enum(["MONTHLY", "ANNUAL"]).default("MONTHLY"),
 });
 
 const confirmSchema = z.object({
@@ -77,6 +80,10 @@ const postSchema = z.union([confirmSchema, createIntentSchema]);
 export async function POST(request: Request) {
   try {
     const { businessId, user } = await requireApiBusiness();
+    const membership = await requireBusinessMembership(user.userId, businessId);
+    if (membership.role !== "OWNER" && membership.role !== "ADMIN") {
+      throw new ForbiddenError("إدارة الفوترة متاحة لمالك النشاط أو المدير فقط");
+    }
     const body = postSchema.parse(await parseJsonBody(request));
 
     if (body.action === "confirm_transfer") {
@@ -95,6 +102,7 @@ export async function POST(request: Request) {
       businessId,
       userId: user.userId,
       planCode: body.planCode,
+      billingInterval: body.billingInterval,
     });
     return jsonOk(serializePayment(created), { status: 201 });
   } catch (error) {

@@ -63,6 +63,7 @@ export function BillingPlansClient({
   initialOpenIntent = null,
 }: Props) {
   const router = useRouter();
+  const [billingInterval, setBillingInterval] = useState<"MONTHLY" | "ANNUAL">("MONTHLY");
   const [selectedCode, setSelectedCode] = useState<string | null>(
     initialOpenIntent?.planCode ?? null,
   );
@@ -89,7 +90,7 @@ export function BillingPlansClient({
           Accept: "application/json",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ planCode }),
+        body: JSON.stringify({ planCode, billingInterval }),
       });
       const data = (await res.json()) as IntentState & {
         error?: string;
@@ -326,6 +327,12 @@ export function BillingPlansClient({
   return (
     <section className="space-y-4">
       <h2 className="text-lg font-semibold">الباقات المتاحة</h2>
+      <label className="flex items-center gap-3">دورة الاشتراك
+        <select aria-label="دورة الاشتراك" className="rounded border border-border bg-card p-2 text-foreground" value={billingInterval} onChange={e => setBillingInterval(e.target.value as "MONTHLY" | "ANNUAL")} disabled={creating}>
+          <option value="MONTHLY">شهري</option><option value="ANNUAL">سنوي — سعر 12 شهر</option>
+        </select>
+      </label>
+      <p className="text-sm text-muted-foreground">الترقية تبدأ بدورة جديدة فور اعتماد الدفع. التخفيض المدفوع يبدأ بعد انتهاء اشتراكك الحالي.</p>
       {error ? (
         <p className="text-sm text-destructive" role="alert">
           {error}
@@ -354,8 +361,8 @@ export function BillingPlansClient({
                 ) : null}
               </div>
               <p className="mt-2 text-2xl font-bold tracking-tight">
-                {formatPrice(plan.monthlyPriceAmount, plan.currencyCode)}
-                {(plan.monthlyPriceAmount ?? 0) > 0 ? " / شهر" : ""}
+                {formatPrice(plan.monthlyPriceAmount == null ? null : plan.monthlyPriceAmount * (billingInterval === "ANNUAL" ? 12 : 1), plan.currencyCode)}
+                {(plan.monthlyPriceAmount ?? 0) > 0 ? (billingInterval === "ANNUAL" ? " / سنة" : " / شهر") : ""}
               </p>
               <ul className="mt-4 flex-1 space-y-1.5 text-sm text-muted-foreground">
                 <li>واتساب: {formatLimit(plan.maxWhatsAppConnections)}</li>
