@@ -35,11 +35,21 @@ export async function performBillingAdminAction(params: {
   const reason = params.reason.trim();
   if (!reason || reason.length > 1000) throw new ValidationError("سبب الإجراء مطلوب ولا يتجاوز 1000 حرف");
   return withTransaction(async trx => {
-    const payment = await payments.lockPaymentRequest(params.paymentRequestId, trx);
-    if (!payment) throw new NotFoundError("طلب الدفع غير موجود");
+    // Resolve the tenant without taking a payment write lock. All billing mutations
+    // must acquire the business lock before the payment lock to prevent deadlocks
+    // with approval and subscription-maintenance transactions.
+    const tenant = (await trx.query<{ BusinessID: string }>(
+      `SELECT BusinessID FROM TblManualPaymentRequest WHERE PaymentRequestID = @payment`,
+      [{ name: "payment", type: sql.UniqueIdentifier, value: params.paymentRequestId }],
+    )).recordset[0];
+    if (!tenant) throw new NotFoundError("طلب الدفع غير موجود");
     await trx.query(`SELECT BusinessID FROM TblBusiness WITH (UPDLOCK, HOLDLOCK) WHERE BusinessID = @business`, [
-      { name: "business", type: sql.UniqueIdentifier, value: payment.businessId },
+      { name: "business", type: sql.UniqueIdentifier, value: tenant.BusinessID },
     ]);
+    const payment = await payments.lockPaymentRequest(params.paymentRequestId, trx);
+    if (!payment || payment.businessId !== tenant.BusinessID) {
+      throw new ConflictError("طلب الدفع تغيّر أثناء تنفيذ الإجراء؛ أعد المحاولة");
+    }
     const key = [{ name: "payment", type: sql.UniqueIdentifier, value: payment.paymentRequestId }];
     if (params.action === "discount") {
       if (payment.status !== "AWAITING_TRANSFER") throw new ConflictError("الخصم متاح قبل تأكيد التحويل فقط");
