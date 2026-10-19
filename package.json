@@ -21,7 +21,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:migration-gate": "node --import tsx scripts/release-migration-gate.ts",
-    "billing:maintain": "node --env-file-if-exists=.env --import tsx scripts/billing-maintenance.ts"
+    "billing:maintain": "node --env-file-if-exists=.env --env-file-if-exists=.env.production.local --import tsx scripts/billing-maintenance.ts"
   },
   "dependencies": {
     "@google/genai": "^2.23.0",
