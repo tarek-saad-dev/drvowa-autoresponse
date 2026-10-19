@@ -95,13 +95,48 @@ jobs:
             echo "AI worker is running"
 
             echo "==> Waiting for app"
+            HEALTHY=0
             for attempt in {1..15}; do
               if curl --fail --silent --show-error http://127.0.0.1:3100/api/health >/dev/null; then
-                echo "DRVOWA production health check passed"
-                exit 0
+                HEALTHY=1
+                break
               fi
               sleep 2
             done
+            if [ "$HEALTHY" = 1 ]; then
+              echo "DRVOWA production health check passed"
+              echo "==> Installing hourly billing maintenance timer"
+              cat > /etc/systemd/system/drvowa-billing-maintenance.service <<'UNIT'
+            [Unit]
+            Description=DRVO billing subscription and renewal maintenance
+            After=network-online.target
+            Wants=network-online.target
+
+            [Service]
+            Type=oneshot
+            WorkingDirectory=/home/drvowa/app
+            Environment=NODE_ENV=production
+            ExecStart=/usr/bin/env npm run billing:maintain
+            TimeoutStartSec=600
+            UNIT
+              cat > /etc/systemd/system/drvowa-billing-maintenance.timer <<'UNIT'
+            [Unit]
+            Description=Run DRVO billing maintenance hourly
+
+            [Timer]
+            OnCalendar=hourly
+            Persistent=true
+            Unit=drvowa-billing-maintenance.service
+
+            [Install]
+            WantedBy=timers.target
+            UNIT
+              systemctl daemon-reload
+              systemctl enable --now drvowa-billing-maintenance.timer
+              systemctl is-active --quiet drvowa-billing-maintenance.timer
+              echo "Billing maintenance timer active"
+              exit 0
+            fi
 
             echo "DRVOWA production health check failed"
             systemctl status drvowa.service --no-pager -l || true
