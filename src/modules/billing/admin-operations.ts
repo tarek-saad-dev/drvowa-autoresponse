@@ -72,7 +72,10 @@ export async function performBillingAdminAction(params: {
       if (payment.status !== "APPROVED") throw new ConflictError("الاسترداد متاح للمدفوعات المعتمدة فقط");
       // The currently deployed Hub contract supports payment.confirmed only.
       // Fail closed until a reviewed refund delivery adapter exists.
-      if (process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED === "1" || configuredFinanceExportToken()) throw new ConflictError("يلزم تفعيل دعم الاسترداد في ربط المركز المالي قبل تنفيذ الاسترداد");
+      if (process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED === "1"
+        || (configuredFinanceExportToken() && process.env.DRVO_GROUP_FINANCE_REFUNDS_CONSUMER_READY !== "1")) {
+        throw new ConflictError("يلزم تفعيل دعم الاسترداد في ربط المركز المالي قبل تنفيذ الاسترداد");
+      }
       const invoice = (await trx.query<{ InvoiceID: string; TotalMinor: number }>(`SELECT InvoiceID, TotalMinor FROM TblBillingInvoice WHERE PaymentRequestID = @payment AND Status = N'PAID'`, key)).recordset[0];
       if (!invoice) throw new ConflictError("لا توجد فاتورة مدفوعة مرتبطة؛ المدفوعات القديمة تحتاج تسوية موثقة");
       const existing = (await trx.query<{ RefundID: string; State: string; AmountMinor: number }>(`SELECT RefundID, State, AmountMinor FROM TblBillingRefund WITH (UPDLOCK, HOLDLOCK) WHERE PaymentRequestID = @payment`, key)).recordset[0];
