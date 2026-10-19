@@ -175,6 +175,7 @@ describe.runIf(dbEnvOk)("manual instapay billing lifecycle", () => {
     process.env.MANUAL_INSTAPAY_ENABLED = "1";
     const capture = process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED;
     const exportToken = process.env.DRVO_GROUP_FINANCE_EXPORT_TOKEN;
+    const consumerReady = process.env.DRVO_GROUP_FINANCE_REFUNDS_CONSUMER_READY;
     process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED = "0";
     delete process.env.DRVO_GROUP_FINANCE_EXPORT_TOKEN;
     try {
@@ -183,6 +184,15 @@ describe.runIf(dbEnvOk)("manual instapay billing lifecycle", () => {
       const payment = await submitManualPaymentRequest({ ...ctx, planCode: "PRO", payerName: "Refund" });
       await approveManualPayment({ paymentRequestId: payment.paymentRequestId, reviewerUserId: admin });
       const base = { paymentRequestId: payment.paymentRequestId, actorUserId: admin, reason: "Customer cancellation" };
+      process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED = "1";
+      await expect(performBillingAdminAction({ ...base, action: "request_refund" }))
+        .rejects.toThrow("يلزم تفعيل دعم الاسترداد");
+      process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED = "0";
+      process.env.DRVO_GROUP_FINANCE_EXPORT_TOKEN = "A".repeat(64);
+      process.env.DRVO_GROUP_FINANCE_REFUNDS_CONSUMER_READY = "0";
+      await expect(performBillingAdminAction({ ...base, action: "request_refund" }))
+        .rejects.toThrow("يلزم تفعيل دعم الاسترداد");
+      delete process.env.DRVO_GROUP_FINANCE_EXPORT_TOKEN;
       await performBillingAdminAction({ ...base, action: "request_refund" });
       expect((await getEntitlementSnapshot(ctx.businessId)).plan?.code).toBe("PRO");
       await performBillingAdminAction({ ...base, action: "confirm_refund", transferReference: "test-transfer" });
@@ -205,6 +215,8 @@ describe.runIf(dbEnvOk)("manual instapay billing lifecycle", () => {
       else process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED = capture;
       if (exportToken === undefined) delete process.env.DRVO_GROUP_FINANCE_EXPORT_TOKEN;
       else process.env.DRVO_GROUP_FINANCE_EXPORT_TOKEN = exportToken;
+      if (consumerReady === undefined) delete process.env.DRVO_GROUP_FINANCE_REFUNDS_CONSUMER_READY;
+      else process.env.DRVO_GROUP_FINANCE_REFUNDS_CONSUMER_READY = consumerReady;
     }
   });
 
