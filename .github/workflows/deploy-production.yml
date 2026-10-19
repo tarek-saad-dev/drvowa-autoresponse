@@ -40,15 +40,19 @@ jobs:
         env:
           VPS_HOST: ${{ secrets.DRVOWA_VPS_HOST }}
           VPS_USER: ${{ secrets.DRVOWA_VPS_USER }}
+          DEPLOY_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" 'bash -se' <<'REMOTE'
+          ssh -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" "DEPLOY_SHA=$DEPLOY_SHA bash -se" <<'REMOTE'
             set -euo pipefail
 
             cd /home/drvowa/app
 
-            echo "==> Pulling main"
-            git pull --ff-only origin main
+            echo "==> Checking out the exact commit verified by billing SQL CI"
+            git fetch origin main
+            git checkout --detach "$DEPLOY_SHA"
+            test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+            echo "Deploying verified commit $DEPLOY_SHA"
 
             echo "==> Ensuring integration encryption secret"
             ENV_FILE=".env.production.local"
