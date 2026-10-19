@@ -60,3 +60,40 @@ In DRVO Tech:
 ## Deferred to later contract versions
 
 Refunds, reversals, contracted MRR, invoices, expenses, payment-provider settlement, tax and recognized revenue need durable source-of-truth tables **inside each product**. They cannot be derived safely from the manual approval table. These should be added as dedicated signed financial events with original payment references and independent idempotency keys.
+
+## Refund export extension (AutoResponse-owned, additive)
+
+`GET /api/internal/group-finance/v1/refunds` uses the **same service Bearer token** and
+`from` / `after` / `limit` pagination as collections. Only successful, completed
+EGP refunds are returned. `periodBasis=REFUND_COMPLETION_UTC`. Each event has
+`eventType=REFUND_CONFIRMED`, `sourceEntity=BILLING_REFUND`, stable `sourceEntityId`
+(RefundID), `sourceVersion=1`, `originalPaymentRequestId`, `sourceTenantId`,
+`occurredAtUtc`, and **positive** `amountMinor`. No customer PII or transfer
+reference is exposed.
+
+**Group consumer requirements (must be implemented and verified in DRVO Tech):**
+1. Import collections and refunds as distinct, immutable facts; dedupe on
+   `(productId, sourceEntity, sourceEntityId, sourceVersion)`.
+2. Validate that `originalPaymentRequestId` belongs to the same product and tenant,
+   and that a refund never exceeds the associated approved collection.
+3. Compute **net collections = approved collections − successful refunds**, once each.
+   Preserve separate gross and refund metrics; do not add snapshot gross totals to events.
+4. Persist each feed's cursor **atomically with imported events** and reconcile by
+   payment/refund completion UTC respectively. Re-poll overlaps safely.
+5. Verify replay, failed HTTP requests, duplicate deliveries, wrong tenant references,
+   full refund, and stale-feed behavior before enabling refunds.
+
+**Activation is deliberately fail-closed:**
+- If `DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED=1`, admin refunds remain blocked.
+  The signed SaaS Financial Hub event endpoint still accepts `payment.confirmed`
+  only; this read-only feed is not a replacement for a Hub `refund.confirmed` event.
+- If `DRVO_GROUP_FINANCE_EXPORT_TOKEN` is configured, admin refunds remain blocked
+  until the central consumer is deployed and verified **and** the AutoResponse server
+  explicitly sets `DRVO_GROUP_FINANCE_REFUNDS_CONSUMER_READY=1`.
+- Never set this flag based only on an HTTP 200 from the new endpoint; first prove
+  that the consumer ingests refunds and reconciles net totals correctly.
+- If neither central integration is configured, existing product-local manual refund
+  operations retain their previous behavior.
+
+This extension prepares the product-owned refund source for central consumption.
+**It does not claim the DRVO Tech central integration is finished.**
