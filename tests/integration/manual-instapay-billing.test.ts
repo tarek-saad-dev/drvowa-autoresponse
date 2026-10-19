@@ -29,6 +29,7 @@ import { rethrowDbBootstrapFailure } from "../helpers/db-bootstrap";
 import { clearTestCookies } from "../helpers/cookies";
 import { performBillingAdminAction } from "@/modules/billing/admin-operations";
 import { listBillingDocuments } from "@/modules/billing/documents";
+import { listConfirmedRefundsForGroupFinance } from "@/modules/billing/group-finance-refunds";
 
 function dbEnvConfigured(): boolean {
   try {
@@ -191,6 +192,14 @@ describe.runIf(dbEnvOk)("manual instapay billing lifecycle", () => {
       expect(docs[0].Status).toBe("PAID");
       expect(docs[0].RefundState).toBe("SUCCEEDED");
       expect(docs[0].ReceiptNumber).not.toBeNull();
+      const refunds = await listConfirmedRefundsForGroupFinance({ limit: "250" });
+      const matching = refunds.events.filter(event => event.originalPaymentRequestId === payment.paymentRequestId.toLowerCase());
+      expect(matching).toHaveLength(1);
+      expect(matching[0]).toMatchObject({
+        eventType: "REFUND_CONFIRMED", sourceEntity: "BILLING_REFUND",
+        amountMinor: Number(docs[0].TotalMinor), currency: "EGP",
+      });
+      expect(refunds.nextCursor).toBeTruthy();
     } finally {
       if (capture === undefined) delete process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED;
       else process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED = capture;
