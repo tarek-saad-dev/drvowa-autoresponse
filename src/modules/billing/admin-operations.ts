@@ -47,7 +47,7 @@ export async function performBillingAdminAction(params: {
       { name: "business", type: sql.UniqueIdentifier, value: tenant.BusinessID },
     ]);
     const payment = await payments.lockPaymentRequest(params.paymentRequestId, trx);
-    if (!payment || payment.businessId !== tenant.BusinessID) {
+    if (!payment || payment.businessId.toLowerCase() !== tenant.BusinessID.toLowerCase()) {
       throw new ConflictError("طلب الدفع تغيّر أثناء تنفيذ الإجراء؛ أعد المحاولة");
     }
     const key = [{ name: "payment", type: sql.UniqueIdentifier, value: payment.paymentRequestId }];
