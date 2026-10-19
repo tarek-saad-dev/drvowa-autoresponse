@@ -106,31 +106,16 @@ jobs:
             if [ "$HEALTHY" = 1 ]; then
               echo "DRVOWA production health check passed"
               echo "==> Installing hourly billing maintenance timer"
-              cat > /etc/systemd/system/drvowa-billing-maintenance.service <<'UNIT'
-            [Unit]
-            Description=DRVO billing subscription and renewal maintenance
-            After=network-online.target
-            Wants=network-online.target
-
-            [Service]
-            Type=oneshot
-            WorkingDirectory=/home/drvowa/app
-            Environment=NODE_ENV=production
-            ExecStart=/usr/bin/env npm run billing:maintain
-            TimeoutStartSec=600
-            UNIT
-              cat > /etc/systemd/system/drvowa-billing-maintenance.timer <<'UNIT'
-            [Unit]
-            Description=Run DRVO billing maintenance hourly
-
-            [Timer]
-            OnCalendar=hourly
-            Persistent=true
-            Unit=drvowa-billing-maintenance.service
-
-            [Install]
-            WantedBy=timers.target
-            UNIT
+              printf '%s\n' '[Unit]' 'Description=DRVO billing subscription and renewal maintenance' \
+                'After=network-online.target' 'Wants=network-online.target' '' '[Service]' \
+                'Type=oneshot' 'WorkingDirectory=/home/drvowa/app' 'Environment=NODE_ENV=production' \
+                'ExecStart=/usr/bin/env npm run billing:maintain' 'TimeoutStartSec=600' \
+                > /etc/systemd/system/drvowa-billing-maintenance.service
+              printf '%s\n' '[Unit]' 'Description=Run DRVO billing maintenance hourly' '' \
+                '[Timer]' 'OnCalendar=hourly' 'Persistent=true' \
+                'Unit=drvowa-billing-maintenance.service' '' '[Install]' \
+                'WantedBy=timers.target' \
+                > /etc/systemd/system/drvowa-billing-maintenance.timer
               systemctl daemon-reload
               systemctl enable --now drvowa-billing-maintenance.timer
               systemctl is-active --quiet drvowa-billing-maintenance.timer
