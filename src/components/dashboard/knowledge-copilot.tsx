@@ -130,32 +130,6 @@ export function KnowledgeCopilot() {
     [proposals],
   );
 
-  const proposalTree = useMemo(() => {
-    const groups = new Map<
-      string,
-      { key: string; title: string; items: Proposal[] }
-    >();
-
-    for (const proposal of proposals) {
-      const key =
-        proposal.topicKey?.trim()
-        || `standalone:${proposal.proposalId}`;
-      const title =
-        proposal.topicTitle?.trim()
-        || proposal.proposedTitle
-        || "معلومة مستقلة";
-
-      const current = groups.get(key);
-      if (current) {
-        current.items.push(proposal);
-      } else {
-        groups.set(key, { key, title, items: [proposal] });
-      }
-    }
-
-    return [...groups.values()];
-  }, [proposals]);
-
   async function analyze(event?: FormEvent) {
     event?.preventDefault();
     const payload = text.trim();
@@ -407,178 +381,87 @@ export function KnowledgeCopilot() {
       ) : null}
 
       {proposals.length > 0 ? (
-        <div className="mx-auto max-w-3xl space-y-5">
+        <div className="mx-auto max-w-3xl space-y-4">
           <div className="rounded-[26px] border border-border bg-card p-4 shadow-sm sm:p-5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-black">شجرة التغييرات قبل الاعتماد</p>
-                <p className="mt-1 text-xs leading-6 text-muted-foreground">
-                  كل Parent بيمثل موضوع، وتحته الـ Children المرتبطة بيه. راجع التغييرات قبل الحفظ.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2 text-[10px] font-black">
-                <span className="rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-green-700">● جديد</span>
-                <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-700">● تعديل</span>
-                <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-red-700">● حذف</span>
-                <span className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-orange-700">● مراجعة</span>
-              </div>
-            </div>
-
-            <div className="mt-7 space-y-8">
-              {proposalTree.map((group) => (
-                <section key={group.key} className="relative">
-                  <div className="relative z-10 flex items-center gap-3">
-                    <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-2 border-ink bg-ink text-lg font-black text-white shadow-sm">
-                      ◉
-                    </div>
-                    <div className="min-w-0 rounded-2xl border-2 border-border bg-card px-4 py-3 shadow-sm">
-                      <div className="truncate text-sm font-black text-foreground">{group.title}</div>
-                      <div className="mt-1 text-[10px] font-bold text-muted-foreground">
-                        Parent node · {group.items.length} {group.items.length === 1 ? "child" : "children"}
+            <h3 className="text-sm font-black">راجع المعلومات قبل الاعتماد</h3>
+            <p className="mt-1 text-xs leading-6 text-muted-foreground">
+              كل معلومة تظهر مرة واحدة. افتح أي كارت لمراجعة محتواه والتغيير المقترح قبل الحفظ.
+            </p>
+            <div className="mt-5 space-y-3">
+              {proposals.map((p) => {
+                const isConflict = p.action === "CONFLICT";
+                const isNoop = p.action === "NOOP";
+                const tone = p.action === "CREATE"
+                  ? "border-success/30"
+                  : p.action === "MERGE"
+                    ? "border-primary/30"
+                    : isConflict
+                      ? "border-warning/40"
+                      : "border-border";
+                return (
+                  <details key={p.proposalId} className={`group rounded-2xl border bg-card ${tone}`}>
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl p-4 marker:hidden [&::-webkit-details-marker]:hidden">
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <Badge variant={actionVariant(p.action)}>{actionLabel(p.action)}</Badge>
+                          <span className="text-[11px] text-muted-foreground">{knowledgeCategoryLabel(p.category)}</span>
+                        </div>
+                        <h4 className="text-sm font-black leading-6 text-foreground">{p.proposedTitle}</h4>
                       </div>
-                    </div>
-                  </div>
-
-                  <div className="relative mr-6 mt-1 border-r-[3px] border-border pb-1 pr-8">
-                    {group.items.map((p, itemIndex) => {
-                      const isCreate = p.action === "CREATE";
-                      const isMerge = p.action === "MERGE";
-                      const isConflict = p.action === "CONFLICT";
-                      const isNoop = p.action === "NOOP";
-
-                      const nodeTone = isCreate
-                        ? "border-green-200 bg-green-50/80"
-                        : isMerge
-                          ? "border-amber-200 bg-amber-50/80"
-                          : isConflict
-                            ? "border-orange-200 bg-orange-50/80"
-                            : "border-border bg-surface";
-
-                      const dotTone = isCreate
-                        ? "bg-green-500 ring-green-100"
-                        : isMerge
-                          ? "bg-amber-500 ring-amber-100"
-                          : isConflict
-                            ? "bg-orange-500 ring-orange-100"
-                            : "bg-muted-foreground ring-border";
-
-                      const statusTone = isCreate
-                        ? "border-green-200 bg-green-100 text-green-800"
-                        : isMerge
-                          ? "border-amber-200 bg-amber-100 text-amber-800"
-                          : isConflict
-                            ? "border-orange-200 bg-orange-100 text-orange-800"
-                            : "border-border bg-secondary text-muted-foreground";
-
-                      return (
-                        <div key={p.proposalId} className="relative pt-5">
-                          <span className="absolute -right-8 top-10 h-[3px] w-8 bg-border" />
-                          <span className={`absolute -right-[2.18rem] top-[2.18rem] h-4 w-4 rounded-full border-2 border-card ring-4 ${dotTone}`} />
-
-                          <div className={`rounded-2xl border-2 px-4 py-4 shadow-[0_5px_16px_rgba(7,19,25,.04)] ${nodeTone}`}>
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2 text-[10px] font-black text-muted-foreground">
-                                  <span>Child {itemIndex + 1}</span>
-                                  <span className="text-muted-foreground/50">/</span>
-                                  <span>{knowledgeCategoryLabel(p.category)}</span>
-                                </div>
-                                <h4 className="mt-1.5 text-sm font-black leading-6 text-foreground">
-                                  {p.proposedTitle}
-                                </h4>
-                              </div>
-
-                              <span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-black ${statusTone}`}>
-                                {actionLabel(p.action)}
-                              </span>
-                            </div>
-
-                            {p.action === "MERGE" || p.action === "CONFLICT" ? (
-                              <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                                <div className="rounded-xl border border-border/70 bg-card/70 p-3">
-                                  <p className="mb-1 text-[10px] font-black text-muted-foreground">
-                                    المعلومة الحالية
-                                  </p>
-                                  <p className="whitespace-pre-wrap text-xs leading-6 text-muted-foreground">
-                                    {p.existingContent || "—"}
-                                  </p>
-                                </div>
-                                <div className="rounded-xl border border-border/70 bg-card/90 p-3">
-                                  <p className="mb-1 text-[10px] font-black text-muted-foreground">
-                                    المعلومة الجديدة
-                                  </p>
-                                  <p className="whitespace-pre-wrap text-xs leading-6">
-                                    {p.proposedContent}
-                                  </p>
-                                </div>
-                              </div>
-                            ) : (
-                              <p className="mt-3 whitespace-pre-wrap text-xs leading-6 text-muted-foreground">
-                                {p.proposedContent}
-                              </p>
-                            )}
-
-                            {p.action === "CONFLICT" ? (
-                              <div className="mt-4 flex flex-wrap gap-2">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  disabled={pending}
-                                  onClick={() =>
-                                    patchProposal(p.proposalId, {
-                                      resolution: "USE_NEW",
-                                      selected: true,
-                                    })
-                                  }
-                                >
-                                  استخدم الجديدة
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={pending}
-                                  onClick={() =>
-                                    patchProposal(p.proposalId, {
-                                      resolution: "KEEP_EXISTING",
-                                      selected: false,
-                                    })
-                                  }
-                                >
-                                  احتفظ بالحالية
-                                </Button>
-                              </div>
-                            ) : !isNoop ? (
-                              <label className="mt-4 flex items-center gap-2 text-xs font-bold">
-                                <input
-                                  type="checkbox"
-                                  checked={p.selected}
-                                  disabled={pending}
-                                  onChange={(e) =>
-                                    patchProposal(p.proposalId, {
-                                      selected: e.target.checked,
-                                    })
-                                  }
-                                />
-                                تضمين في الاعتماد
-                              </label>
-                            ) : (
-                              <p className="mt-4 text-[11px] text-muted-foreground">
-                                موجودة بالفعل — مش هتتضاف مرة تانية.
-                              </p>
-                            )}
+                      <span aria-hidden="true" className="shrink-0 text-lg text-muted-foreground transition-transform group-open:rotate-180">⌄</span>
+                    </summary>
+                    <div className="border-t border-border px-4 pb-4 pt-3">
+                      {p.action === "MERGE" || isConflict ? (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-xl border border-border bg-surface p-3">
+                            <p className="mb-2 text-xs font-bold text-muted-foreground">المعلومة الحالية</p>
+                            <p className="whitespace-pre-wrap text-xs leading-6 text-foreground">{p.existingContent || "—"}</p>
+                          </div>
+                          <div className="rounded-xl border border-border bg-surface p-3">
+                            <p className="mb-2 text-xs font-bold text-muted-foreground">المعلومة المقترحة</p>
+                            <p className="whitespace-pre-wrap text-xs leading-6 text-foreground">{p.proposedContent}</p>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              ))}
+                      ) : (
+                        <div className="rounded-xl border border-border bg-surface p-3">
+                          <p className="mb-2 text-xs font-bold text-muted-foreground">
+                            {isNoop ? "المعلومة الموجودة بالفعل" : "المحتوى اللي هيتضاف"}
+                          </p>
+                          <p className="whitespace-pre-wrap text-xs leading-6 text-foreground">{p.proposedContent}</p>
+                        </div>
+                      )}
+                      {isConflict ? (
+                        <div className="mt-4">
+                          <p className="mb-2 text-xs text-muted-foreground">فيه تعارض مع معلومة محفوظة. اختار النسخة الصحيحة:</p>
+                          <div className="flex flex-wrap gap-2">
+                            <Button type="button" size="sm" disabled={pending}
+                              variant={p.resolution === "USE_NEW" && p.selected ? "default" : "outline"}
+                              onClick={() => patchProposal(p.proposalId, { resolution: "USE_NEW", selected: true })}>
+                              استخدم الجديدة
+                            </Button>
+                            <Button type="button" size="sm" disabled={pending} variant="outline"
+                              onClick={() => patchProposal(p.proposalId, { resolution: "KEEP_EXISTING", selected: false })}>
+                              احتفظ بالحالية
+                            </Button>
+                          </div>
+                        </div>
+                      ) : !isNoop ? (
+                        <label className="mt-4 flex items-center gap-2 text-xs font-bold text-foreground">
+                          <input type="checkbox" checked={p.selected} disabled={pending}
+                            onChange={(event) => patchProposal(p.proposalId, { selected: event.target.checked })} />
+                          تضمين في الاعتماد
+                        </label>
+                      ) : (
+                        <p className="mt-3 text-xs text-muted-foreground">المعلومة محفوظة بالفعل، ومش هتتضاف مرة تانية.</p>
+                      )}
+                    </div>
+                  </details>
+                );
+              })}
             </div>
-
-            <div className="mt-7 rounded-2xl border border-border bg-surface px-4 py-3 text-[11px] leading-6 text-muted-foreground">
-              الأخضر = Node جديدة، الأصفر = Node موجودة اتعدلت، الأحمر = حذف صريح، والبرتقالي = تعارض محتاج قرار. الحذف الصريح لسه مش مفعّل في الـ backend الحالي، فمش هيظهر أحمر إلا بعد إضافة Delete action فعلية.
-            </div>
+            <p className="mt-4 text-xs leading-6 text-muted-foreground">
+              الإضافة والتحديثات المحددة بس هي اللي هتتحفظ بعد الاعتماد. حذف المعلومات مش متاح في الخطوة دي.
+            </p>
           </div>
 
           <div className="sticky bottom-20 z-10 rounded-[22px] border border-border bg-card/95 p-3 shadow-[0_16px_50px_rgba(7,19,25,.14)] backdrop-blur md:bottom-4">
