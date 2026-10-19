@@ -5,6 +5,8 @@
 import { closePool, query } from "../src/lib/db";
 import { getAdminFinancialReport } from "../src/modules/billing/admin-financial-report";
 import { listConfirmedRefundsForGroupFinance } from "../src/modules/billing/group-finance-refunds";
+import { configuredFinanceExportToken } from "../src/modules/billing/group-finance-export-auth";
+import { isRefundProcessingAllowed } from "../src/modules/billing/refund-readiness";
 
 type Totals = {
   GrossMinor: number | string | null;
@@ -72,6 +74,11 @@ async function main() {
     netCollectionsMinor: gross - refunds,
     confirmedRefundCount: Number(totals.RefundCount),
     refundFeedReplayable: true,
+    refundActionsEnabled: isRefundProcessingAllowed({
+      hubCaptureEnabled: process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED === "1",
+      financeExportConfigured: Boolean(configuredFinanceExportToken()),
+      refundConsumerReady: process.env.DRVO_GROUP_FINANCE_REFUNDS_CONSUMER_READY === "1",
+    }),
     readOnly: true,
   });
 }
