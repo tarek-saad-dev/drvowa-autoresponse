@@ -7,6 +7,7 @@ on:
       - "src/modules/billing/**"
       - "db/migrations/**"
       - "tests/integration/manual-instapay-billing.test.ts"
+      - "tests/refund-policy.test.ts"
       - ".github/workflows/billing-sql-ci.yml"
   workflow_dispatch:
   workflow_call:
@@ -68,5 +69,7 @@ jobs:
         run: npm run db:migrate
       - name: Verify migrations are repeatable
         run: npm run db:migrate
+      - name: Verify refund safety and amount unit tests
+        run: npx vitest run tests/refund-policy.test.ts
       - name: Exercise payment, receipt, annual, grace, downgrade and refund transactions
         run: npx vitest run tests/integration/manual-instapay-billing.test.ts
