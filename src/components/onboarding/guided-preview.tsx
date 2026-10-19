@@ -774,6 +774,9 @@ export function GuidedOnboardingPreview({
       );
       setKnowledgeCount(Math.max(proposalIds.length, data.proposals?.length ?? 0));
       setKnowledgeApplied(true);
+      setPreviewReplies({});
+      setPreviewReply("اختار سؤال لعرض الرد بعد تحديث المعلومات.");
+      setChatCount(0);
       setMockState("success");
     } catch (error) {
       setLiveError(error instanceof Error ? error.message : "حدث خطأ أثناء التدريب");
