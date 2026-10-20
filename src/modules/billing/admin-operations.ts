@@ -9,7 +9,7 @@ import { ensurePaymentInvoice } from "./documents";
 import { getCurrentSubscription } from "./entitlements";
 import { assertNoScheduledChange } from "./scheduled-changes";
 import { configuredFinanceExportToken } from "./group-finance-export-auth";
-import { isRefundProcessingAllowed } from "./refund-readiness";
+import { isRefundProcessingAllowed, refundReadinessOptions } from "./refund-readiness";
 import { readSaasFinancialConfig } from "./saas-financial-config";
 import { captureSucceededBillingRefund } from "./saas-financial-refund-outbox";
 
@@ -73,22 +73,13 @@ export async function performBillingAdminAction(params: {
       }, trx);
     } else if (params.action === "request_refund" || params.action === "confirm_refund" || params.action === "fail_refund") {
       if (payment.status !== "APPROVED") throw new ConflictError("الاسترداد متاح للمدفوعات المعتمدة فقط");
-      let sourceConfigured = false;
+      let financial: ReturnType<typeof readSaasFinancialConfig> | null = null;
       try {
-        const financial = readSaasFinancialConfig();
-        sourceConfigured = financial.captureEnabled && financial.sourceStatus === "active"
-          && financial.sourceKey === "drvo-autorespond"
-          && financial.sourceActivatedAt === "2026-10-18T04:59:46.821598Z"
-          && !!financial.captureCutoffAt;
+        financial = readSaasFinancialConfig();
       } catch { /* Invalid financial configuration keeps refunds closed. */ }
-      if (!isRefundProcessingAllowed({
-        hubCaptureEnabled: process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED !== undefined
-          && process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED !== "0",
-        refundCaptureEnabled: process.env.DRVO_SAAS_FINANCIAL_REFUND_CAPTURE_ENABLED === "1",
-        hubSourceConfigured: sourceConfigured,
-        financeExportConfigured: Boolean(configuredFinanceExportToken()),
-        refundConsumerReady: process.env.DRVO_GROUP_FINANCE_REFUNDS_CONSUMER_READY === "1",
-      })) {
+      if (!isRefundProcessingAllowed(refundReadinessOptions(
+        process.env, financial, Boolean(configuredFinanceExportToken()),
+      ))) {
         throw new ConflictError("يلزم تفعيل دعم الاسترداد في ربط المركز المالي قبل تنفيذ الاسترداد");
       }
       const invoice = (await trx.query<{ InvoiceID: string; TotalMinor: number }>(`SELECT InvoiceID, TotalMinor FROM TblBillingInvoice WHERE PaymentRequestID = @payment AND Status = N'PAID'`, key)).recordset[0];

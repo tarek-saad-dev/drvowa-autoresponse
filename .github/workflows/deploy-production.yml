@@ -82,7 +82,8 @@ jobs:
             npx tsx scripts/admin-financial-smoke.ts
 
             echo "==> Verifying billing refunds, net collections and replay (read-only)"
-            node --env-file-if-exists=.env --env-file-if-exists=.env.production.local --import tsx scripts/billing-production-smoke.ts
+            test -r /etc/drvowa/financial-hub.env || { echo "Financial service environment is unavailable to billing smoke"; exit 1; }
+            node --env-file-if-exists=.env.production.local --env-file=/etc/drvowa/financial-hub.env --import tsx scripts/billing-production-smoke.ts
 
             echo "==> Restarting app service"
             systemctl restart drvowa.service
