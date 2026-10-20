@@ -1,6 +1,55 @@
 import { describe, expect, it } from "vitest";
 import { invoiceTotals, validateRefundAmount } from "../src/modules/billing/ledger-policy";
-import { isRefundProcessingAllowed } from "../src/modules/billing/refund-readiness";
+import { isRefundProcessingAllowed, productionRefundReadiness } from "../src/modules/billing/refund-readiness";
+
+const productionFinancialEnv = {
+  DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED: "1",
+  DRVO_SAAS_FINANCIAL_ENDPOINT: "https://drvotech.com/api/saas-financial/v1/events",
+  DRVO_SAAS_FINANCIAL_SOURCE_KEY: "drvo-autorespond",
+  DRVO_SAAS_FINANCIAL_SOURCE_STATUS: "active",
+  DRVO_SAAS_FINANCIAL_SOURCE_ACTIVATED_AT: "2026-10-18T04:59:46.821598Z",
+  DRVO_SAAS_FINANCIAL_CAPTURE_CUTOFF_AT: "2026-10-18T04:59:46.821598Z",
+};
+
+describe("production billing smoke readiness", () => {
+  it("fails when the service financial environment was not loaded", () => {
+    expect(() => productionRefundReadiness({}, false)).toThrow(/capture configuration/);
+    expect(() => productionRefundReadiness({ DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED: "1" }, false))
+      .toThrow(/verified active source/);
+    expect(() => productionRefundReadiness({ ...productionFinancialEnv,
+      DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED: "0" }, false)).toThrow(/capture configuration/);
+  });
+
+  it("reports deliberately disabled refund capture without failing the smoke", () => {
+    expect(productionRefundReadiness(productionFinancialEnv, false)).toEqual({
+      refundCaptureEnabled: false, refundActionsEnabled: false,
+    });
+    expect(productionRefundReadiness({ ...productionFinancialEnv,
+      DRVO_SAAS_FINANCIAL_REFUND_CAPTURE_ENABLED: "0" }, false).refundActionsEnabled).toBe(false);
+    expect(() => productionRefundReadiness({ ...productionFinancialEnv,
+      DRVO_SAAS_FINANCIAL_REFUND_CAPTURE_ENABLED: "enabled" }, false))
+      .toThrow(/refund capture configuration/);
+  });
+
+  it("permits actions only with enabled refund capture and verified source", () => {
+    const enabled = { ...productionFinancialEnv, DRVO_SAAS_FINANCIAL_REFUND_CAPTURE_ENABLED: "1" };
+    expect(productionRefundReadiness(enabled, false)).toEqual({
+      refundCaptureEnabled: true, refundActionsEnabled: true,
+    });
+    expect(() => productionRefundReadiness({ ...enabled,
+      DRVO_SAAS_FINANCIAL_SOURCE_KEY: "another-source" }, false)).toThrow(/source configuration/);
+    expect(() => productionRefundReadiness({ ...enabled,
+      DRVO_SAAS_FINANCIAL_ENDPOINT: "http://drvotech.com/api/saas-financial/v1/events" }, false))
+      .toThrow(/ENDPOINT/);
+  });
+
+  it("keeps actions closed when a configured pull consumer is not ready", () => {
+    const enabled = { ...productionFinancialEnv, DRVO_SAAS_FINANCIAL_REFUND_CAPTURE_ENABLED: "1" };
+    expect(productionRefundReadiness(enabled, true).refundActionsEnabled).toBe(false);
+    expect(productionRefundReadiness({ ...enabled,
+      DRVO_GROUP_FINANCE_REFUNDS_CONSUMER_READY: "1" }, true).refundActionsEnabled).toBe(true);
+  });
+});
 
 describe("refund activation policy: fail closed for financial consumers", () => {
   it.each([

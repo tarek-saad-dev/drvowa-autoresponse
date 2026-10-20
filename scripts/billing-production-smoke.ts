@@ -6,8 +6,7 @@ import { closePool, query } from "../src/lib/db";
 import { getAdminFinancialReport } from "../src/modules/billing/admin-financial-report";
 import { listConfirmedRefundsForGroupFinance } from "../src/modules/billing/group-finance-refunds";
 import { configuredFinanceExportToken } from "../src/modules/billing/group-finance-export-auth";
-import { isRefundProcessingAllowed } from "../src/modules/billing/refund-readiness";
-import { readSaasFinancialConfig } from "../src/modules/billing/saas-financial-config";
+import { productionRefundReadiness } from "../src/modules/billing/refund-readiness";
 
 type Totals = {
   GrossMinor: number | string | null;
@@ -17,6 +16,10 @@ type Totals = {
 };
 
 async function main() {
+  // The deploy process must load the same financial EnvironmentFile as systemd.
+  // Missing or invalid payment capture configuration is a failed smoke, while
+  // the deliberately disabled refund flag is a successful disabled state.
+  const readiness = productionRefundReadiness(process.env, Boolean(configuredFinanceExportToken()));
   const [report, totalsResult] = await Promise.all([
     getAdminFinancialReport({ months: 6 }),
     query<Totals>(`
@@ -69,29 +72,14 @@ async function main() {
     throw new Error("Refund export has invalid minor units");
   }
 
-  let sourceConfigured = false;
-  try {
-    const financial = readSaasFinancialConfig();
-    sourceConfigured = financial.captureEnabled && financial.sourceStatus === "active"
-      && financial.sourceKey === "drvo-autorespond"
-      && financial.sourceActivatedAt === "2026-10-18T04:59:46.821598Z"
-      && !!financial.captureCutoffAt;
-  } catch { /* Invalid financial configuration keeps refunds closed. */ }
-
   console.log("[billing-production-smoke] PASS", {
     approvedCollectionsMinor: gross,
     confirmedRefundsMinor: refunds,
     netCollectionsMinor: gross - refunds,
     confirmedRefundCount: Number(totals.RefundCount),
     refundFeedReplayable: true,
-    refundActionsEnabled: isRefundProcessingAllowed({
-      hubCaptureEnabled: process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED !== undefined
-        && process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED !== "0",
-      refundCaptureEnabled: process.env.DRVO_SAAS_FINANCIAL_REFUND_CAPTURE_ENABLED === "1",
-      hubSourceConfigured: sourceConfigured,
-      financeExportConfigured: Boolean(configuredFinanceExportToken()),
-      refundConsumerReady: process.env.DRVO_GROUP_FINANCE_REFUNDS_CONSUMER_READY === "1",
-    }),
+    refundCaptureEnabled: readiness.refundCaptureEnabled,
+    refundActionsEnabled: readiness.refundActionsEnabled,
     readOnly: true,
   });
 }

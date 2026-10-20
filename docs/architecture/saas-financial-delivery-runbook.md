@@ -1,6 +1,6 @@
-# SaaS Financial Hub delivery worker — inactive Phase 3
+# SaaS Financial Hub delivery worker
 
-This worker is a separate process from the AI worker. The code does not activate a Hub source or enable capture, delivery, or reconciliation. All three flags default to `0`. Do not start a production worker until the source, immutable first activation time, capture cutoff, endpoint, and credential have been verified through the activation process.
+This worker is a separate process from the AI worker. All three financial flags default to `0` in code. The reported production worker and payment capture are active; verify current service state and source configuration before refund activation. The [refund activation checklist](../saas-financial-refund-rollout.md) covers that cutover.
 
 ## Configuration and startup
 
@@ -29,4 +29,4 @@ For manual recovery after investigation, update only mutable delivery columns wi
 
 ## Rotation and rollout
 
-Issue a replacement Hub credential for the same active source using the Hub's restricted credential command. Inject the new key ID and dedicated secret in the worker service, restart it, verify acceptance or idempotent duplicates, then revoke the old key after overlap. Never copy a signing secret into this repository. Before enabling delivery, verify Hub replay-cache sharing, TLS proxy configuration, source status and activation boundary, time sync, isolated SQL migrations 029–031, backlog alerts, and the approved capture boundary. Phase 4 reconciliation remains a separate implementation and control.
+Issue a replacement Hub credential for the same active source using the Hub's restricted credential command. Inject the new key ID and dedicated secret in the worker service, restart it, verify acceptance or idempotent duplicates, then revoke the old key after overlap. Never copy a signing secret into this repository. Before enabling delivery for a new source, verify Hub replay-cache sharing, TLS proxy configuration, source status and activation boundary, time sync, isolated SQL migrations, backlog alerts, and the approved capture boundary. Reconciliation remains a separate operational control.
