@@ -130,6 +130,27 @@ function cx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
 }
 
+function MicrophonePermissionHelp({ state }: { state: "blocked" | "unavailable" }) {
+  return (
+    <div className="mt-3 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs leading-6 text-foreground" role="status">
+      {state === "blocked" ? (
+        <>
+          <p className="font-black">المايك محتاج سماح من المتصفح</p>
+          <p className="mt-1 text-muted-foreground">
+            اضغط أيقونة إعدادات الموقع جنب الرابط فوق، واختار Microphone → Allow، وبعدها اضغط Reload وجرّب «جاوب بصوتك» تاني.
+            لو دي أول مرة بتطلب الإذن، المتصفح هيعرض نافذة Allow / Block بنفسه.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="font-black">مش قادرين نبدأ التسجيل من الجهاز ده</p>
+          <p className="mt-1 text-muted-foreground">اتأكد إن الميكروفون متوصل ومتاح للمتصفح، وبعدها جرّب زر الصوت تاني. وتقدر تكتب إجابتك عادي.</p>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function GuidedOnboardingPreview({
   storageKey = "drvowa_guided_onboarding_draft_v1_preview",
   selectedPlan = null,
@@ -172,9 +193,7 @@ export function GuidedOnboardingPreview({
   const [recordingPaused, setRecordingPaused] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
-  const [voiceInputFallback, setVoiceInputFallback] = useState(false);
-  const discoveryAnswerRef = useRef<HTMLTextAreaElement | null>(null);
-  const knowledgeAnswerRef = useRef<HTMLTextAreaElement | null>(null);
+  const [microphoneHelp, setMicrophoneHelp] = useState<"blocked" | "unavailable" | null>(null);
   const [knowledgeMode, setKnowledgeMode] = useState<KnowledgeMode>("guided");
   const [discoveryTurns, setDiscoveryTurns] = useState<DiscoveryTurn[]>([]);
   const [discoveryQuestion, setDiscoveryQuestion] = useState("");
@@ -460,26 +479,17 @@ export function GuidedOnboardingPreview({
 
   async function startVoiceRecording(target: "knowledge" | "discovery" = "knowledge") {
     setVoiceError(null);
+    setMicrophoneHelp(null);
     voiceTargetRef.current = target;
 
-    // A denied or unsupported microphone should never block the onboarding
-    // interview or display a technical error. Let the user continue typing.
-    const focusWrittenAnswer = () => {
-      (target === "discovery" ? discoveryAnswerRef : knowledgeAnswerRef).current?.focus();
-    };
-
-    if (voiceInputFallback) {
-      focusWrittenAnswer();
-      return;
-    }
-
+    // Request access directly in the button click. The browser shows its native
+    // Allow / Block prompt when permission hasn't already been decided.
     if (
       typeof window === "undefined"
       || !navigator.mediaDevices?.getUserMedia
       || typeof MediaRecorder === "undefined"
     ) {
-      setVoiceInputFallback(true);
-      focusWrittenAnswer();
+      setMicrophoneHelp("unavailable");
       return;
     }
 
@@ -519,11 +529,15 @@ export function GuidedOnboardingPreview({
       if (target === "discovery") setVoiceFlowState("recording");
       setRecordingPaused(false);
       setRecording(true);
-    } catch {
+    } catch (error) {
       stream?.getTracks().forEach((track) => track.stop());
       if (target === "discovery") setVoiceFlowState("idle");
-      setVoiceInputFallback(true);
-      focusWrittenAnswer();
+      const name = error instanceof Error ? error.name : "";
+      setMicrophoneHelp(
+        name === "NotAllowedError" || name === "PermissionDeniedError" || name === "SecurityError"
+          ? "blocked"
+          : "unavailable",
+      );
     }
   }
 
@@ -1506,7 +1520,6 @@ export function GuidedOnboardingPreview({
                                   <p className="mt-2 text-xs text-muted-foreground">تقدر تستخدم المايك في كل سؤال، ومش لازم تقول كل التفاصيل مرة واحدة.</p>
                                 </div>
                                 <Textarea
-                                  ref={discoveryAnswerRef}
                                   value={discoveryInput}
                                   onChange={(event) => {
                                     setDiscoveryInput(event.target.value);
@@ -1528,9 +1541,7 @@ export function GuidedOnboardingPreview({
                                       ? "بنحوّل الصوت لنص…"
                                       : recording
                                         ? "■ وقف التسجيل"
-                                        : voiceInputFallback
-                                          ? "✍️ اكتب إجابتك"
-                                          : "🎙️ جاوب بصوتك"}
+                                        : "🎙️ جاوب بصوتك"}
                                   </Button>
                                   <Button
                                     type="button"
@@ -1548,6 +1559,7 @@ export function GuidedOnboardingPreview({
                                     {recordingPaused ? "التسجيل متوقف مؤقتًا." : "بسمعك دلوقتي… اتكلم براحتك."}
                                   </div>
                                 ) : null}
+                                {microphoneHelp ? <MicrophonePermissionHelp state={microphoneHelp} /> : null}
                                 {voiceError ? <p className="mt-3 text-xs font-bold text-destructive">{voiceError}</p> : null}
                                 {discoveryError ? <p className="mt-3 text-xs font-bold text-destructive">{discoveryError}</p> : null}
                               </div>
@@ -1580,7 +1592,6 @@ export function GuidedOnboardingPreview({
                       ) : (
                         <>
                           <Textarea
-                            ref={knowledgeAnswerRef}
                             value={knowledge}
                             onChange={(event) => setKnowledge(event.target.value)}
                             placeholder="مثال: عندنا فرعين، بنفتح يوميًا من 11 الصبح، خدمة الشعر بـ200 جنيه، الحجز متاح من الموقع..."
@@ -1605,9 +1616,7 @@ export function GuidedOnboardingPreview({
                                   ? "بنحوّل الصوت لنص…"
                                   : recording
                                     ? "■ وقف التسجيل"
-                                    : voiceInputFallback
-                                      ? "✍️ اكتب معلوماتك"
-                                      : "🎙️ اتكلم بدل الكتابة"}
+                                    : "🎙️ اتكلم بدل الكتابة"}
                               </Button>
                             </div>
                             {recording ? (
@@ -1616,6 +1625,7 @@ export function GuidedOnboardingPreview({
                                 بسمعك دلوقتي… اتكلم براحتك وبعدين وقف التسجيل.
                               </div>
                             ) : null}
+                            {microphoneHelp ? <MicrophonePermissionHelp state={microphoneHelp} /> : null}
                             {voiceError ? (
                               <p className="mt-3 text-xs font-bold text-destructive" role="alert">
                                 {voiceError}
