@@ -165,7 +165,7 @@ export function GuidedOnboardingPreview({
   const [liveError, setLiveError] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
   const firstMessageStartedAt = useRef<string | null>(null);
-  const sceneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sceneTimerRef = useRef<number | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const [recording, setRecording] = useState(false);
