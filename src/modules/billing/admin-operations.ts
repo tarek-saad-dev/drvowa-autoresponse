@@ -5,7 +5,7 @@ import { writeAuditEvent } from "@/modules/audit/service";
 import { invoiceTotals, validateRefundAmount } from "./ledger-policy";
 import * as payments from "./manual-payment-repository";
 import * as repo from "./repository";
-import { ensurePaymentInvoice } from "./documents";
+import { ensurePaymentInvoice, settlePaymentInvoice } from "./documents";
 import { getCurrentSubscription } from "./entitlements";
 import { assertNoScheduledChange } from "./scheduled-changes";
 import { configuredFinanceExportToken } from "./group-finance-export-auth";
@@ -13,7 +13,7 @@ import { isRefundProcessingAllowed, refundReadinessOptions } from "./refund-read
 import { readSaasFinancialConfig } from "./saas-financial-config";
 import { captureSucceededBillingRefund } from "./saas-financial-refund-outbox";
 
-export type BillingAdminAction = "discount" | "cancel_now" | "cancel_at_end" | "cancel_scheduled" | "request_refund" | "confirm_refund" | "fail_refund";
+export type BillingAdminAction = "discount" | "cancel_now" | "cancel_at_end" | "cancel_scheduled" | "request_refund" | "confirm_refund" | "fail_refund" | "reconcile_legacy_invoice";
 
 async function cancelToFree(businessId: string, trx: TransactionClient) {
   const paidChange = await trx.query(`SELECT ChangeID FROM TblBillingScheduledChange
@@ -34,6 +34,7 @@ async function cancelToFree(businessId: string, trx: TransactionClient) {
 export async function performBillingAdminAction(params: {
   paymentRequestId: string; actorUserId: string; action: BillingAdminAction;
   reason: string; discountPercent?: number; transferReference?: string;
+  verifiedOriginalTransfer?: boolean;
 }) {
   const reason = params.reason.trim();
   if (!reason || reason.length > 1000) throw new ValidationError("سبب الإجراء مطلوب ولا يتجاوز 1000 حرف");
@@ -54,7 +55,23 @@ export async function performBillingAdminAction(params: {
       throw new ConflictError("طلب الدفع تغيّر أثناء تنفيذ الإجراء؛ أعد المحاولة");
     }
     const key = [{ name: "payment", type: sql.UniqueIdentifier, value: payment.paymentRequestId }];
-    if (params.action === "discount") {
+    if (params.action === "reconcile_legacy_invoice") {
+      if (payment.status !== "APPROVED" || Number(payment.amount) <= 0) {
+        throw new ConflictError("التسوية متاحة فقط لدفعة قديمة معتمدة بقيمة موجبة");
+      }
+      if (!params.verifiedOriginalTransfer || !params.transferReference?.trim()
+          || params.transferReference.trim().length > 160) {
+        throw new ValidationError("راجع التحويل البنكي الأصلي وأدخل مرجعه ثم أكد المراجعة");
+      }
+      const old = (await trx.query<{ InvoiceID: string; Status: string }>(
+        `SELECT InvoiceID, Status FROM TblBillingInvoice WITH (UPDLOCK, HOLDLOCK)
+          WHERE PaymentRequestID = @payment`, key)).recordset[0];
+      if (old) throw new ConflictError("توجد فاتورة بالفعل؛ تتطلب حالتها مراجعة مالية منفصلة");
+      // An explicit, audited manual reconciliation of historical receipts.
+      // Do not emit another payment-capture event; the original approval owns revenue.
+      await ensurePaymentInvoice(payment, trx);
+      await settlePaymentInvoice(payment, trx);
+    } else if (params.action === "discount") {
       if (payment.status !== "AWAITING_TRANSFER") throw new ConflictError("الخصم متاح قبل تأكيد التحويل فقط");
       await ensurePaymentInvoice(payment, trx);
       const invoice = (await trx.query<{ SubtotalMinor: number; Status: string }>(`SELECT SubtotalMinor, Status FROM TblBillingInvoice WITH (UPDLOCK, HOLDLOCK) WHERE PaymentRequestID = @payment`, key)).recordset[0];
@@ -152,7 +169,8 @@ export async function performBillingAdminAction(params: {
     }
     await writeAuditEvent({ businessId: payment.businessId, actorUserId: params.actorUserId,
       action: `BILLING_${params.action.toUpperCase()}`, entityType: "ManualPaymentRequest", entityId: payment.paymentRequestId,
-      metadata: { reason, previousAmount: payment.amount, discountPercent: params.discountPercent ?? null } }, trx);
+      metadata: { reason, previousAmount: payment.amount, discountPercent: params.discountPercent ?? null,
+        reconciliationTransferReference: params.action === "reconcile_legacy_invoice" ? params.transferReference?.trim() : null } }, trx);
     return { status: "completed" };
   });
 }

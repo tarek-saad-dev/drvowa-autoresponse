@@ -8,18 +8,19 @@ import { isRefundProcessingAllowed, refundReadinessOptions } from "@/modules/bil
 type Row = {
   PaymentRequestID: string; PaymentReference: string; BusinessName: string;
   RequestedPlanDisplayName: string; Amount: number; CurrencyCode: string;
-  ReviewedAtUtc: Date | null; RefundState: string | null;
+  ReviewedAtUtc: Date | null; RefundState: string | null; InvoiceStatus: string | null;
   RefundAmountMinor: number | null; RefundReference: string | null; RefundReason: string | null;
 };
 export default async function AdminRefundsPage() {
   await requirePlatformAdmin();
   const rows = await query<Row>(`
     SELECT TOP (300) p.PaymentRequestID, p.PaymentReference, b.Name AS BusinessName,
-      p.RequestedPlanDisplayName, p.Amount, p.CurrencyCode, p.ReviewedAtUtc,
+      p.RequestedPlanDisplayName, p.Amount, p.CurrencyCode, p.ReviewedAtUtc, i.Status AS InvoiceStatus,
       r.State AS RefundState, r.AmountMinor AS RefundAmountMinor,
       r.TransferReference AS RefundReference, r.Reason AS RefundReason
     FROM TblManualPaymentRequest p
     INNER JOIN TblBusiness b ON b.BusinessID = p.BusinessID
+    LEFT JOIN TblBillingInvoice i ON i.PaymentRequestID = p.PaymentRequestID
     LEFT JOIN TblBillingRefund r ON r.PaymentRequestID = p.PaymentRequestID
     WHERE p.Status = N'APPROVED'
     ORDER BY CASE WHEN r.State = N'PENDING' THEN 0 ELSE 1 END,
@@ -42,7 +43,7 @@ export default async function AdminRefundsPage() {
       businessName: r.BusinessName, planName: r.RequestedPlanDisplayName,
       amount: Number(r.Amount), currency: r.CurrencyCode,
       reviewedAt: r.ReviewedAtUtc ? new Date(r.ReviewedAtUtc).toISOString() : null,
-      state: r.RefundState, refundedAmountMinor: r.RefundAmountMinor == null ? null : Number(r.RefundAmountMinor),
+      state: r.RefundState, invoiceStatus: r.InvoiceStatus, refundedAmountMinor: r.RefundAmountMinor == null ? null : Number(r.RefundAmountMinor),
       transferReference: r.RefundReference, reason: r.RefundReason,
     }))} />
   </div>;

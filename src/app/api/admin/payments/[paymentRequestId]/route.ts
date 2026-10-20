@@ -26,10 +26,11 @@ export async function GET(_request: Request, context: RouteContext) {
 
 const actionSchema = z.discriminatedUnion("action", [
   z.object({
-    action: z.enum(["discount", "cancel_now", "cancel_at_end", "cancel_scheduled", "request_refund", "confirm_refund", "fail_refund"]),
+    action: z.enum(["discount", "cancel_now", "cancel_at_end", "cancel_scheduled", "request_refund", "confirm_refund", "fail_refund", "reconcile_legacy_invoice"]),
     reason: z.string().trim().min(1).max(1000),
     discountPercent: z.number().min(0).max(100).optional(),
     transferReference: z.string().trim().min(1).max(160).optional(),
+    verifiedOriginalTransfer: z.boolean().optional(),
   }),
   z.object({
     action: z.literal("approve"),
