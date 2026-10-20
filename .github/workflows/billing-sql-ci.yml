@@ -7,6 +7,8 @@ on:
       - "src/modules/billing/**"
       - "db/migrations/**"
       - "tests/integration/manual-instapay-billing.test.ts"
+      - "tests/integration/saas-financial-outbox.test.ts"
+      - "tests/integration/saas-financial-reconciliation.test.ts"
       - "tests/refund-policy.test.ts"
       - ".github/workflows/billing-sql-ci.yml"
   workflow_dispatch:
@@ -30,13 +32,14 @@ jobs:
     env:
       DB_SERVER: localhost
       DB_PORT: 1433
-      DB_NAME: billing_ci
+      DB_NAME: billing_test_ci
       DB_USER: sa
       DB_PASSWORD: BillingCI-only-7aF!42
       DB_ENCRYPT: true
       DB_TRUST_SERVER_CERTIFICATE: true
       MANUAL_INSTAPAY_ENABLED: 1
       DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED: 0
+      DRVO_TEST_ISOLATED_DB: 1
       BILLING_EMAIL_NOTICES_ENABLED: 0
     steps:
       - uses: actions/checkout@v4
@@ -57,7 +60,7 @@ jobs:
               connectionTimeout: 2000 });
             try {
               await pool.connect();
-              await pool.request().query("IF DB_ID(N'billing_ci') IS NULL CREATE DATABASE billing_ci");
+              await pool.request().query("IF DB_ID(N'billing_test_ci') IS NULL CREATE DATABASE billing_test_ci");
               connected = true;
               break;
             } catch { await new Promise(resolve => setTimeout(resolve, 2000)); }
@@ -73,3 +76,7 @@ jobs:
         run: npx vitest run tests/refund-policy.test.ts
       - name: Exercise payment, receipt, annual, grace, downgrade and refund transactions
         run: npx vitest run tests/integration/manual-instapay-billing.test.ts
+      - name: Exercise transactional financial payment and refund outbox
+        run: npx vitest run tests/integration/saas-financial-outbox.test.ts
+      - name: Exercise durable financial reconciliation evidence
+        run: npx vitest run tests/integration/saas-financial-reconciliation.test.ts

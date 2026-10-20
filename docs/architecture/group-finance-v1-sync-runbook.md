@@ -1,6 +1,6 @@
 # AutoResponse → DRVO Tech finance sync (v1)
 
-**Status:** API code in feature PR. Inactive in production until `DRVO_GROUP_FINANCE_EXPORT_TOKEN` is configured on AutoResponse and matching secret is stored in DRVO Tech. No automatic DRVO Tech sync job exists yet.
+**Status:** The read-only pull API is implemented. Its production consumer status must be verified separately; the presence of `DRVO_GROUP_FINANCE_EXPORT_TOKEN` alone does not prove that a consumer books or reconciles refunds. This feed is separate from the signed SaaS Financial Hub push pipeline.
 
 ## API contract
 
@@ -84,9 +84,12 @@ reference is exposed.
    full refund, and stale-feed behavior before enabling refunds.
 
 **Activation is deliberately fail-closed:**
-- If `DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED=1`, admin refunds remain blocked.
-  The signed SaaS Financial Hub event endpoint still accepts `payment.confirmed`
-  only; this read-only feed is not a replacement for a Hub `refund.confirmed` event.
+- If `DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED=1`, admin refunds remain blocked until
+  migration 033, the verified `drvo-autorespond` source configuration, and the
+  explicitly enabled `DRVO_SAAS_FINANCIAL_REFUND_CAPTURE_ENABLED=1` make the
+  transactional `payment.refunded` outbox path available. This read-only feed
+  remains separate from the Hub's signed push event and must not also be booked
+  into the Hub's SaaS ledger.
 - If `DRVO_GROUP_FINANCE_EXPORT_TOKEN` is configured, admin refunds remain blocked
   until the central consumer is deployed and verified **and** the AutoResponse server
   explicitly sets `DRVO_GROUP_FINANCE_REFUNDS_CONSUMER_READY=1`.
@@ -95,5 +98,6 @@ reference is exposed.
 - If neither central integration is configured, existing product-local manual refund
   operations retain their previous behavior.
 
-This extension prepares the product-owned refund source for central consumption.
-**It does not claim the DRVO Tech central integration is finished.**
+This pull-feed contract remains available for independent consumers. See the
+[Hub refund rollout](../saas-financial-refund-rollout.md) for the signed push
+pipeline and its separate production activation gates.

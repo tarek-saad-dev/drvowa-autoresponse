@@ -9,11 +9,14 @@ export type FinancialClaim = {
   currency: string;
   leaseToken: string;
   attemptCount: number;
+  eventType?: string;
+  sourceRefundId?: string | null;
 };
 
 type ClaimRow = {
   EventID: string; SourcePaymentID: string; Payload: string;
   AmountMinor: string; CurrencyCode: string; AttemptCount: number;
+  EventType: string; SourceRefundID: string | null;
 };
 
 /** One autocommitted UPDATE claims one due row. OUTPUT INTO is required because migration 029 has an UPDATE trigger. */
@@ -21,7 +24,8 @@ export async function claimFinancialEvent(sourceKey: string, leaseSeconds: numbe
   const leaseToken = randomUUID();
   const result = await query<ClaimRow>(
     `DECLARE @claimed TABLE (EventID NVARCHAR(150), SourcePaymentID NVARCHAR(150),
-      Payload NVARCHAR(2000), AmountMinor VARCHAR(20), CurrencyCode NVARCHAR(3), AttemptCount INT);
+      Payload NVARCHAR(2000), AmountMinor VARCHAR(20), CurrencyCode NVARCHAR(3), AttemptCount INT,
+      EventType NVARCHAR(64), SourceRefundID NVARCHAR(150));
      ;WITH due AS (
        SELECT TOP (1) * FROM dbo.TblSaasFinancialOutbox WITH (UPDLOCK, READPAST, ROWLOCK)
        WHERE SourceKey = @sourceKey AND AttemptCount < 2147483647
@@ -33,7 +37,8 @@ export async function claimFinancialEvent(sourceKey: string, leaseSeconds: numbe
        LeaseUntilUtc = DATEADD(second, @leaseSeconds, SYSUTCDATETIME()),
        AttemptCount = AttemptCount + 1
      OUTPUT INSERTED.EventID, INSERTED.SourcePaymentID, INSERTED.Payload,
-       CONVERT(VARCHAR(20), INSERTED.AmountMinor), INSERTED.CurrencyCode, INSERTED.AttemptCount
+       CONVERT(VARCHAR(20), INSERTED.AmountMinor), INSERTED.CurrencyCode, INSERTED.AttemptCount,
+       INSERTED.EventType, INSERTED.SourceRefundID
        INTO @claimed;
      SELECT * FROM @claimed;`,
     [
@@ -46,6 +51,7 @@ export async function claimFinancialEvent(sourceKey: string, leaseSeconds: numbe
   return row ? {
     eventId: row.EventID, sourcePaymentId: row.SourcePaymentID, payload: row.Payload,
     amountMinor: row.AmountMinor, currency: row.CurrencyCode,
+    eventType: row.EventType, sourceRefundId: row.SourceRefundID,
     leaseToken, attemptCount: row.AttemptCount,
   } : null;
 }

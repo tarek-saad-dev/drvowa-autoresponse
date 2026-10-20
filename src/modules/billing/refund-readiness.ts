@@ -4,10 +4,13 @@
  */
 export function isRefundProcessingAllowed(options: {
   hubCaptureEnabled: boolean;
+  refundCaptureEnabled: boolean;
+  hubSourceConfigured: boolean;
   financeExportConfigured: boolean;
   refundConsumerReady: boolean;
 }): boolean {
-  if (options.hubCaptureEnabled) return false;
+  if (options.refundCaptureEnabled && !options.hubCaptureEnabled) return false;
+  if (options.hubCaptureEnabled && (!options.refundCaptureEnabled || !options.hubSourceConfigured)) return false;
   if (options.financeExportConfigured && !options.refundConsumerReady) return false;
   return true;
 }

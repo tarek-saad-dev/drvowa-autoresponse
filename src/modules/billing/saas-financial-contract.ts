@@ -15,6 +15,11 @@ export type PaymentConfirmedV1 = Readonly<{
   currency: SaasFinancialCurrency;
   occurred_at: string;
 }>;
+export type PaymentRefundedV1 = Readonly<{
+  schema_version: 1; event_id: string; type: "payment.refunded";
+  source_refund_id: string; original_source_payment_id: string;
+  amount_minor: number; currency: SaasFinancialCurrency; occurred_at: string;
+}>;
 
 const HUB_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,149}$/;
 const PAYMENT_REQUEST_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -46,6 +51,12 @@ export function sourcePaymentIdForManualRequest(paymentRequestId: string): strin
 
 export function eventIdForManualPaymentConfirmation(paymentRequestId: string): string {
   return `autorespond:payment.confirmed:${manualPaymentUuid(paymentRequestId)}`;
+}
+export function sourceRefundIdForBillingRefund(refundId: string): string {
+  return `autorespond:billing-refund:${manualPaymentUuid(refundId)}`;
+}
+export function eventIdForBillingRefund(refundId: string): string {
+  return `autorespond:payment.refunded:${manualPaymentUuid(refundId)}`;
 }
 
 /** The SQL DECIMAL(12,2) value must be read as text, before any number coercion. */
@@ -155,4 +166,27 @@ export function parsePaymentConfirmedV1(
     currency: data.currency,
     occurred_at: occurred.canonical,
   };
+}
+export function parsePaymentRefundedV1(value: unknown, bounds: { sourceActivatedAt: string; now?: Date }): PaymentRefundedV1 {
+  if (value === null || typeof value !== "object" || Array.isArray(value)
+    || Object.getPrototypeOf(value) !== Object.prototype) throw new RangeError("Refund event must be a plain object");
+  const data = value as Record<string, unknown>;
+  const fields = ["schema_version", "event_id", "type", "source_refund_id",
+    "original_source_payment_id", "amount_minor", "currency", "occurred_at"];
+  if (Object.keys(data).length !== fields.length || Object.keys(data).some(key => !fields.includes(key))
+    || data.schema_version !== 1 || data.type !== "payment.refunded"
+    || !isHubIdentifier(data.event_id) || !isHubIdentifier(data.source_refund_id)
+    || !isHubIdentifier(data.original_source_payment_id)
+    || typeof data.amount_minor !== "number" || !Number.isSafeInteger(data.amount_minor)
+    || data.amount_minor < 1 || data.amount_minor > SAAS_FINANCIAL_MAX_AMOUNT_MINOR
+    || !isSaasFinancialCurrency(data.currency)) throw new RangeError("Invalid Hub refund fields");
+  const occurred = parseHubTimestamp(data.occurred_at);
+  const activation = parseHubTimestamp(bounds.sourceActivatedAt);
+  const now = bounds.now ?? new Date();
+  if (!Number.isFinite(now.getTime()) || occurred.epochMicroseconds < activation.epochMicroseconds
+    || occurred.epochMicroseconds > BigInt(now.getTime() + 300_000) * BigInt(1000))
+    throw new RangeError("Refund occurrence is outside Hub bounds");
+  return { schema_version: 1, event_id: data.event_id, type: "payment.refunded",
+    source_refund_id: data.source_refund_id, original_source_payment_id: data.original_source_payment_id,
+    amount_minor: data.amount_minor, currency: data.currency, occurred_at: occurred.canonical };
 }

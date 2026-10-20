@@ -10,6 +10,8 @@ import { getCurrentSubscription } from "./entitlements";
 import { assertNoScheduledChange } from "./scheduled-changes";
 import { configuredFinanceExportToken } from "./group-finance-export-auth";
 import { isRefundProcessingAllowed } from "./refund-readiness";
+import { readSaasFinancialConfig } from "./saas-financial-config";
+import { captureSucceededBillingRefund } from "./saas-financial-refund-outbox";
 
 export type BillingAdminAction = "discount" | "cancel_now" | "cancel_at_end" | "cancel_scheduled" | "request_refund" | "confirm_refund" | "fail_refund";
 
@@ -71,10 +73,19 @@ export async function performBillingAdminAction(params: {
       }, trx);
     } else if (params.action === "request_refund" || params.action === "confirm_refund" || params.action === "fail_refund") {
       if (payment.status !== "APPROVED") throw new ConflictError("الاسترداد متاح للمدفوعات المعتمدة فقط");
-      // The currently deployed Hub contract supports payment.confirmed only.
-      // Fail closed until a reviewed refund delivery adapter exists.
+      let sourceConfigured = false;
+      try {
+        const financial = readSaasFinancialConfig();
+        sourceConfigured = financial.captureEnabled && financial.sourceStatus === "active"
+          && financial.sourceKey === "drvo-autorespond"
+          && financial.sourceActivatedAt === "2026-10-18T04:59:46.821598Z"
+          && !!financial.captureCutoffAt;
+      } catch { /* Invalid financial configuration keeps refunds closed. */ }
       if (!isRefundProcessingAllowed({
-        hubCaptureEnabled: process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED === "1",
+        hubCaptureEnabled: process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED !== undefined
+          && process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED !== "0",
+        refundCaptureEnabled: process.env.DRVO_SAAS_FINANCIAL_REFUND_CAPTURE_ENABLED === "1",
+        hubSourceConfigured: sourceConfigured,
         financeExportConfigured: Boolean(configuredFinanceExportToken()),
         refundConsumerReady: process.env.DRVO_GROUP_FINANCE_REFUNDS_CONSUMER_READY === "1",
       })) {
@@ -113,6 +124,7 @@ export async function performBillingAdminAction(params: {
           { name: "actor", type: sql.UniqueIdentifier, value: params.actorUserId },
         ]);
         if (confirmed) {
+          await captureSucceededBillingRefund(existing.RefundID, payment.paymentRequestId, payment.businessId, trx);
           const scheduled = (await trx.query(`UPDATE TblBillingScheduledChange SET State = N'CANCELED'
             OUTPUT inserted.ChangeID WHERE PaymentRequestID = @payment AND State = N'PENDING'`, key)).recordset;
           const current = await getCurrentSubscription(payment.businessId, trx);

@@ -35,9 +35,9 @@ Webhook event text no longer guesses entitlement status (e.g. `invoice.unpaid` a
 
 Manual payment mutation paths lock the business before payment/subscription rows, serializing approval, discounts, refunds and maintenance within a tenant. Unique invoice-per-payment and receipt-per-invoice keys provide a second guard against duplicate issuance. Client-computed amounts are never accepted. Tenant billing writes require OWNER or ADMIN; platform actions require the existing platform-admin gate.
 
-The current central finance adapters support confirmed payments only. Refunds fail closed while `DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED=1` or the legacy `DRVO_GROUP_FINANCE_EXPORT_TOKEN` is configured. Do not enable either central integration after local refunds until a reviewed refund export/reconciliation adapter is implemented. Existing gross reports/exports retain their original meaning and must not be presented as net revenue.
+The SaaS Financial Hub integration now has a transactional `payment.refunded` outbox path. It remains disabled by default through `DRVO_SAAS_FINANCIAL_REFUND_CAPTURE_ENABLED=0`; enabling it requires migration 033, the verified source configuration, and the gates in [the refund rollout](saas-financial-refund-rollout.md). The separate group-finance pull refund feed retains its independent consumer readiness requirement. Gross collections remain unchanged; net collections subtract successful refunds once.
 
-## Release gate — not a production deployment
+## Historical Billing V2 release gate — not a production deployment
 
 1. Use Node 22 (project requirement). Local validation here used Node 24, so Node 22 CI is required.
 2. Run the new **Billing SQL Server checks** workflow against its disposable SQL Server database. It applies all migrations and exercises transactions. Local unit/build success is not a substitute for this check.

@@ -1,5 +1,5 @@
 import { closePool } from "@/lib/db";
-import { parsePaymentConfirmedV1 } from "./saas-financial-contract";
+import { parsePaymentConfirmedV1, parsePaymentRefundedV1 } from "./saas-financial-contract";
 import { readSaasFinancialConfig, type SaasFinancialConfig } from "./saas-financial-config";
 import { classifyHubResponse, createHubClient, retryDelayMs, type HubResponse } from "./saas-financial-client";
 import { claimFinancialEvent, settleFinancialEvent, type FinancialClaim } from "./saas-financial-delivery-repository";
@@ -33,8 +33,15 @@ export function validateClaim(claim: FinancialClaim, activatedAt: string): boole
     const raw = JSON.parse(claim.payload);
     // Capture stores JSON.stringify(event). Equality also rejects duplicate JSON keys.
     if (JSON.stringify(raw) !== claim.payload) return false;
-    const event = parsePaymentConfirmedV1(raw, { sourceActivatedAt: activatedAt });
-    return event.event_id === claim.eventId && event.source_payment_id === claim.sourcePaymentId
+    const event = raw?.type === "payment.refunded"
+      ? parsePaymentRefundedV1(raw, { sourceActivatedAt: activatedAt })
+      : parsePaymentConfirmedV1(raw, { sourceActivatedAt: activatedAt });
+    const identityMatches = event.type === "payment.refunded"
+      ? claim.eventType === "payment.refunded" && event.source_refund_id === claim.sourceRefundId
+        && event.original_source_payment_id === claim.sourcePaymentId
+      : (claim.eventType === undefined || claim.eventType === "payment.confirmed")
+        && !claim.sourceRefundId && event.source_payment_id === claim.sourcePaymentId;
+    return identityMatches && event.event_id === claim.eventId
       && String(event.amount_minor) === claim.amountMinor && event.currency === claim.currency;
   } catch { return false; }
 }
