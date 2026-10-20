@@ -683,10 +683,88 @@
   background: #0e2631;
   color: #c8e8f4;
 }
+.pricingStack {
+  display: grid;
+  gap: 18px;
+}
 .pricingGrid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 17px;
+}
+.freePlanRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) auto;
+  align-items: center;
+  gap: 18px 28px;
+  padding: 16px 22px;
+  border: 1px solid #2a3840;
+  border-radius: 14px;
+  background: #12181c;
+  color: #8a9aa3;
+}
+.freePlanCopy {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+}
+.freePlanCopy .eyebrow {
+  margin: 0;
+  color: #7d8d96;
+  min-height: 0;
+}
+.freePlanCopy h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #b7c4cb;
+}
+.freePlanCopy p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #7f9099;
+}
+.freePlanMeta {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.freePlanPrice {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.freePlanPrice strong {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  color: #9eafb8;
+}
+.freePlanPrice span,
+.freePlanPrice small {
+  font-size: 11px;
+  color: #7a8b94;
+}
+.freePlanLimits {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: #6f8089;
+}
+.freePlanRow > a {
+  justify-self: end;
+  min-height: 40px;
+  padding-inline: 16px;
+  font-size: 12px;
+  color: #aebcc4;
+  border-color: #3a4a52;
+  background: #1a2227;
+}
+.freePlanRow > a:hover {
+  border-color: #52636c;
+  color: #d5dee3;
 }
 .plan {
   padding: 25px 20px;
@@ -1001,8 +1079,17 @@
     min-height: 110px;
   }
   .pricingGrid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 22px;
+  }
+  .freePlanRow {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 18px 20px;
+  }
+  .freePlanRow > a {
+    justify-self: stretch;
+    width: 100%;
   }
   .plan {
     padding: 27px;
@@ -1336,6 +1423,9 @@
   .pricingGrid {
     grid-template-columns: 1fr;
     gap: 19px;
+  }
+  .freePlanRow {
+    grid-template-columns: 1fr;
   }
   .plan {
     padding: 27px;

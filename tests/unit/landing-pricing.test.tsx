@@ -47,4 +47,33 @@ describe("public landing pricing", () => {
     expect(html).toContain("0");
     expect(html).toContain("بدون حد محدد");
   });
+
+  it("keeps paid plans in the main grid and demotes FREE to a gray row below", () => {
+    const html = render([
+      plan({
+        code: "FREE",
+        displayName: "مجاني",
+        monthlyPriceAmount: 0,
+        monthlyAiReplies: 500,
+        monthlyWhatsAppOutbound: 500,
+        maxAgents: 1,
+        maxActiveKnowledgeItems: 50,
+      }),
+      plan({ code: "STARTER", displayName: "بداية", monthlyPriceAmount: 499 }),
+      plan({ code: "PRO", displayName: "احترافي", monthlyPriceAmount: 999 }),
+      plan({
+        code: "BUSINESS",
+        displayName: "أعمال",
+        monthlyPriceAmount: 1999,
+        maxAgents: 15,
+      }),
+    ]);
+    expect(html).toContain("بداية");
+    expect(html).toContain("احترافي");
+    expect(html).toContain("أعمال");
+    expect(html).toContain("مجاني");
+    expect(html).toContain('aria-label="الخطة المجانية"');
+    expect(html.indexOf("بداية")).toBeLessThan(html.indexOf("الخطة المجانية"));
+    expect(html.indexOf("أعمال")).toBeLessThan(html.indexOf("الخطة المجانية"));
+  });
 });
