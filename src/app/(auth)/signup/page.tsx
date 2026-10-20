@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 import { Alert } from "@/components/ui/alert";
@@ -11,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export default function SignupPage() {
-  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -43,8 +41,9 @@ export default function SignupPage() {
         return;
       }
 
-      router.push("/choose-plan");
-      router.refresh();
+      // Navigate with a fresh document after setting the session cookie.
+      // This prevents first-login App Router cache/session races on mobile Safari.
+      window.location.assign("/choose-plan");
     } catch {
       setError("حدث خطأ في الاتصال. حاول مرة أخرى.");
     } finally {
