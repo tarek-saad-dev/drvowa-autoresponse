@@ -1,4 +1,4 @@
-import { query, sql } from "@/lib/db";
+import { query } from "@/lib/db";
 import { requirePlatformAdmin } from "@/modules/platform-admin/service";
 import { RefundsPanel } from "@/components/admin/refunds-panel";
 import { readSaasFinancialConfig } from "@/modules/billing/saas-financial-config";
