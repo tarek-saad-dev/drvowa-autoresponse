@@ -1,5 +1,9 @@
 # DRVO AutoRespond → DRVO Tech SaaS Financial Hub
 
+This document records the original payment-only phases. For the current
+refund implementation and activation gates, see the
+[refund rollout](../saas-financial-refund-rollout.md).
+
 ## Phase 1 state
 
 This phase defines a pure payment contract and strict, inactive configuration. It creates no financial event, database table, HTTP request, secret, scheduler, or Hub source. Capture, delivery, and reconciliation default to `0` (off). The DRVO Tech AutoRespond source is currently designated disabled; repository defaults do not prove live database state. No activation timestamp or capture cutoff is assumed.

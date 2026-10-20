@@ -7,6 +7,7 @@ import { getAdminFinancialReport } from "../src/modules/billing/admin-financial-
 import { listConfirmedRefundsForGroupFinance } from "../src/modules/billing/group-finance-refunds";
 import { configuredFinanceExportToken } from "../src/modules/billing/group-finance-export-auth";
 import { isRefundProcessingAllowed } from "../src/modules/billing/refund-readiness";
+import { readSaasFinancialConfig } from "../src/modules/billing/saas-financial-config";
 
 type Totals = {
   GrossMinor: number | string | null;
@@ -68,6 +69,15 @@ async function main() {
     throw new Error("Refund export has invalid minor units");
   }
 
+  let sourceConfigured = false;
+  try {
+    const financial = readSaasFinancialConfig();
+    sourceConfigured = financial.captureEnabled && financial.sourceStatus === "active"
+      && financial.sourceKey === "drvo-autorespond"
+      && financial.sourceActivatedAt === "2026-10-18T04:59:46.821598Z"
+      && !!financial.captureCutoffAt;
+  } catch { /* Invalid financial configuration keeps refunds closed. */ }
+
   console.log("[billing-production-smoke] PASS", {
     approvedCollectionsMinor: gross,
     confirmedRefundsMinor: refunds,
@@ -75,7 +85,10 @@ async function main() {
     confirmedRefundCount: Number(totals.RefundCount),
     refundFeedReplayable: true,
     refundActionsEnabled: isRefundProcessingAllowed({
-      hubCaptureEnabled: process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED === "1",
+      hubCaptureEnabled: process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED !== undefined
+        && process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED !== "0",
+      refundCaptureEnabled: process.env.DRVO_SAAS_FINANCIAL_REFUND_CAPTURE_ENABLED === "1",
+      hubSourceConfigured: sourceConfigured,
       financeExportConfigured: Boolean(configuredFinanceExportToken()),
       refundConsumerReady: process.env.DRVO_GROUP_FINANCE_REFUNDS_CONSUMER_READY === "1",
     }),

@@ -15,7 +15,16 @@ describe("refund activation policy: fail closed for financial consumers", () => 
   ])("hub=$hubCaptureEnabled export=$financeExportConfigured ready=$refundConsumerReady => $allowed", ({
     allowed, ...config
   }) => {
-    expect(isRefundProcessingAllowed(config)).toBe(allowed);
+    expect(isRefundProcessingAllowed({ ...config, refundCaptureEnabled: false,
+      hubSourceConfigured: false })).toBe(allowed);
+  });
+  it("requires explicit refund capture and verified source configuration when Hub capture is active", () => {
+    const base = { hubCaptureEnabled: true, financeExportConfigured: false,
+      refundConsumerReady: false, refundCaptureEnabled: true, hubSourceConfigured: true };
+    expect(isRefundProcessingAllowed(base)).toBe(true);
+    expect(isRefundProcessingAllowed({ ...base, refundCaptureEnabled: false })).toBe(false);
+    expect(isRefundProcessingAllowed({ ...base, hubSourceConfigured: false })).toBe(false);
+    expect(isRefundProcessingAllowed({ ...base, financeExportConfigured: true })).toBe(false);
   });
 });
 

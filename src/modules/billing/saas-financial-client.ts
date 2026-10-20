@@ -97,7 +97,17 @@ export function classifyHubResponse(response: HubResponse, eventId: string, now 
   };
   if (response.status >= 500 && response.status <= 599) return { kind: "retry", code: "HUB_UNAVAILABLE" };
   if (response.status === 401 || response.status === 403) return { kind: "review", code: "AUTH_OR_SOURCE" };
-  if (response.status === 409) return { kind: "review", code: "IDENTITY_CONFLICT" };
+  if (response.status === 409) {
+    // A refund may be claimed before its original payment reaches the Hub.
+    // Only this exact dependency error is transient; all other conflicts need review.
+    try {
+      const error = JSON.parse(response.body);
+      if (error?.error?.code === "original_payment_missing"
+        && Object.keys(error).length === 1 && Object.keys(error.error).length === 1)
+        return { kind: "retry", code: "ORIGINAL_PAYMENT_MISSING" };
+    } catch { /* malformed conflicts stay for review */ }
+    return { kind: "review", code: "IDENTITY_CONFLICT" };
+  }
   if (response.status === 422) return { kind: "review", code: "INVALID_PAYLOAD" };
   if (response.status >= 300 && response.status <= 399) return { kind: "review", code: "HUB_REDIRECT" };
   return { kind: "review", code: "UNEXPECTED_STATUS" };

@@ -30,6 +30,8 @@ import { clearTestCookies } from "../helpers/cookies";
 import { performBillingAdminAction } from "@/modules/billing/admin-operations";
 import { listBillingDocuments } from "@/modules/billing/documents";
 import { listConfirmedRefundsForGroupFinance } from "@/modules/billing/group-finance-refunds";
+import { eventIdForBillingRefund, eventIdForManualPaymentConfirmation,
+  sourcePaymentIdForManualRequest, sourceRefundIdForBillingRefund } from "@/modules/billing/saas-financial-contract";
 
 function dbEnvConfigured(): boolean {
   try {
@@ -41,6 +43,8 @@ function dbEnvConfigured(): boolean {
 }
 
 const dbEnvOk = dbEnvConfigured();
+const isolated = process.env.DRVO_TEST_ISOLATED_DB === "1"
+  && /(?:test|isolated)/i.test(process.env.DB_NAME ?? "");
 
 async function onboardUser(email: string) {
   const password = "ManualBill!23456";
@@ -95,7 +99,7 @@ async function makeAdmin() {
   return admin.user.userId;
 }
 
-describe.runIf(dbEnvOk)("manual instapay billing lifecycle", () => {
+describe.runIf(dbEnvOk && isolated)("manual instapay billing lifecycle", () => {
   beforeAll(async () => {
     try {
       await getDbConfig();
@@ -173,21 +177,46 @@ describe.runIf(dbEnvOk)("manual instapay billing lifecycle", () => {
 
   it("V2: refund confirmation is idempotent, preserves receipt and cancels its subscription", async () => {
     process.env.MANUAL_INSTAPAY_ENABLED = "1";
-    const capture = process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED;
-    const exportToken = process.env.DRVO_GROUP_FINANCE_EXPORT_TOKEN;
-    const consumerReady = process.env.DRVO_GROUP_FINANCE_REFUNDS_CONSUMER_READY;
-    process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED = "0";
+    const financialNames = [
+      "DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED", "DRVO_SAAS_FINANCIAL_REFUND_CAPTURE_ENABLED",
+      "DRVO_SAAS_FINANCIAL_DELIVERY_ENABLED", "DRVO_SAAS_FINANCIAL_RECONCILIATION_ENABLED",
+      "DRVO_SAAS_FINANCIAL_ENDPOINT", "DRVO_SAAS_FINANCIAL_SOURCE_KEY",
+      "DRVO_SAAS_FINANCIAL_SOURCE_STATUS", "DRVO_SAAS_FINANCIAL_SOURCE_ACTIVATED_AT",
+      "DRVO_SAAS_FINANCIAL_CAPTURE_CUTOFF_AT", "DRVO_GROUP_FINANCE_EXPORT_TOKEN",
+      "DRVO_GROUP_FINANCE_REFUNDS_CONSUMER_READY",
+    ] as const;
+    const originalEnv = financialNames.map(name => [name, process.env[name]] as const);
+    process.env.DRVO_SAAS_FINANCIAL_ENDPOINT = "https://hub.example.com/api/saas-financial/v1/events";
+    process.env.DRVO_SAAS_FINANCIAL_SOURCE_KEY = "drvo-autorespond";
+    process.env.DRVO_SAAS_FINANCIAL_SOURCE_STATUS = "active";
+    process.env.DRVO_SAAS_FINANCIAL_SOURCE_ACTIVATED_AT = "2026-10-18T04:59:46.821598Z";
+    process.env.DRVO_SAAS_FINANCIAL_CAPTURE_CUTOFF_AT = "2026-10-18T04:59:46.821598Z";
+    process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED = "1";
+    process.env.DRVO_SAAS_FINANCIAL_REFUND_CAPTURE_ENABLED = "1";
+    process.env.DRVO_SAAS_FINANCIAL_DELIVERY_ENABLED = "0";
+    process.env.DRVO_SAAS_FINANCIAL_RECONCILIATION_ENABLED = "0";
     delete process.env.DRVO_GROUP_FINANCE_EXPORT_TOKEN;
     try {
       const ctx = await onboardUser(`v2_refund_${randomUUID().slice(0, 8)}@example.com`);
       const admin = await makeAdmin();
       const payment = await submitManualPaymentRequest({ ...ctx, planCode: "PRO", payerName: "Refund" });
       await approveManualPayment({ paymentRequestId: payment.paymentRequestId, reviewerUserId: admin });
+      const originalPaymentId = sourcePaymentIdForManualRequest(payment.paymentRequestId);
+      const paymentEvents = (await query<{ EventID: string; SourcePaymentID: string; SourceKey: string }>(
+        `SELECT EventID, SourcePaymentID, SourceKey FROM dbo.TblSaasFinancialOutbox
+         WHERE PaymentRequestID=@payment AND EventType=N'payment.confirmed'`, [
+          { name: "payment", type: sql.UniqueIdentifier, value: payment.paymentRequestId },
+        ])).recordset;
+      expect(paymentEvents).toHaveLength(1);
+      expect(paymentEvents[0]).toMatchObject({
+        EventID: eventIdForManualPaymentConfirmation(payment.paymentRequestId),
+        SourcePaymentID: originalPaymentId, SourceKey: "drvo-autorespond",
+      });
       const base = { paymentRequestId: payment.paymentRequestId, actorUserId: admin, reason: "Customer cancellation" };
-      process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED = "1";
+      process.env.DRVO_SAAS_FINANCIAL_REFUND_CAPTURE_ENABLED = "0";
       await expect(performBillingAdminAction({ ...base, action: "request_refund" }))
         .rejects.toThrow("يلزم تفعيل دعم الاسترداد");
-      process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED = "0";
+      process.env.DRVO_SAAS_FINANCIAL_REFUND_CAPTURE_ENABLED = "1";
       process.env.DRVO_GROUP_FINANCE_EXPORT_TOKEN = "A".repeat(64);
       process.env.DRVO_GROUP_FINANCE_REFUNDS_CONSUMER_READY = "0";
       await expect(performBillingAdminAction({ ...base, action: "request_refund" }))
@@ -195,6 +224,22 @@ describe.runIf(dbEnvOk)("manual instapay billing lifecycle", () => {
       delete process.env.DRVO_GROUP_FINANCE_EXPORT_TOKEN;
       await performBillingAdminAction({ ...base, action: "request_refund" });
       expect((await getEntitlementSnapshot(ctx.businessId)).plan?.code).toBe("PRO");
+      process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED = "0";
+      await expect(performBillingAdminAction({ ...base, action: "confirm_refund",
+        transferReference: "test-transfer" })).rejects.toThrow("يلزم تفعيل دعم الاسترداد");
+      const pending = (await query<{ State: string }>(
+        "SELECT State FROM dbo.TblBillingRefund WHERE PaymentRequestID=@payment", [
+          { name: "payment", type: sql.UniqueIdentifier, value: payment.paymentRequestId },
+        ])).recordset;
+      expect(pending).toHaveLength(1);
+      expect(pending[0].State).toBe("PENDING");
+      expect((await query(
+        `SELECT EventID FROM dbo.TblSaasFinancialOutbox
+         WHERE PaymentRequestID=@payment AND EventType=N'payment.refunded'`, [
+          { name: "payment", type: sql.UniqueIdentifier, value: payment.paymentRequestId },
+        ])).recordset).toHaveLength(0);
+      expect((await getEntitlementSnapshot(ctx.businessId)).plan?.code).toBe("PRO");
+      process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED = "1";
       await performBillingAdminAction({ ...base, action: "confirm_refund", transferReference: "test-transfer" });
       expect((await performBillingAdminAction({ ...base, action: "confirm_refund", transferReference: "test-transfer" })).status).toBe("already_completed");
       expect((await getEntitlementSnapshot(ctx.businessId)).plan?.code).toBe("FREE");
@@ -202,6 +247,24 @@ describe.runIf(dbEnvOk)("manual instapay billing lifecycle", () => {
       expect(docs[0].Status).toBe("PAID");
       expect(docs[0].RefundState).toBe("SUCCEEDED");
       expect(docs[0].ReceiptNumber).not.toBeNull();
+      const refundEvents = (await query<{ RefundID: string; EventID: string; SourceRefundID: string;
+        SourcePaymentID: string; SourceKey: string; Payload: string }>(
+        `SELECT RefundID, EventID, SourceRefundID, SourcePaymentID, SourceKey, Payload
+         FROM dbo.TblSaasFinancialOutbox
+         WHERE PaymentRequestID=@payment AND EventType=N'payment.refunded'`, [
+          { name: "payment", type: sql.UniqueIdentifier, value: payment.paymentRequestId },
+        ])).recordset;
+      expect(refundEvents).toHaveLength(1);
+      expect(refundEvents[0]).toMatchObject({
+        EventID: eventIdForBillingRefund(refundEvents[0].RefundID),
+        SourceRefundID: sourceRefundIdForBillingRefund(refundEvents[0].RefundID),
+        SourcePaymentID: originalPaymentId, SourceKey: "drvo-autorespond",
+      });
+      expect(JSON.parse(refundEvents[0].Payload)).toMatchObject({
+        type: "payment.refunded", original_source_payment_id: originalPaymentId,
+        source_refund_id: refundEvents[0].SourceRefundID,
+        amount_minor: Number(docs[0].TotalMinor), currency: "EGP",
+      });
       const refunds = await listConfirmedRefundsForGroupFinance({ limit: "250" });
       const matching = refunds.events.filter(event => event.originalPaymentRequestId === payment.paymentRequestId.toLowerCase());
       expect(matching).toHaveLength(1);
@@ -211,12 +274,10 @@ describe.runIf(dbEnvOk)("manual instapay billing lifecycle", () => {
       });
       expect(refunds.nextCursor).toBeTruthy();
     } finally {
-      if (capture === undefined) delete process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED;
-      else process.env.DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED = capture;
-      if (exportToken === undefined) delete process.env.DRVO_GROUP_FINANCE_EXPORT_TOKEN;
-      else process.env.DRVO_GROUP_FINANCE_EXPORT_TOKEN = exportToken;
-      if (consumerReady === undefined) delete process.env.DRVO_GROUP_FINANCE_REFUNDS_CONSUMER_READY;
-      else process.env.DRVO_GROUP_FINANCE_REFUNDS_CONSUMER_READY = consumerReady;
+      for (const [name, value] of originalEnv) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
     }
   });
 

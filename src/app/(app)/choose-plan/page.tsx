@@ -21,7 +21,7 @@ export default async function ChoosePlanPage() {
   if (admin) redirect("/admin");
   if (businesses.length) redirect("/dashboard/billing");
 
-  const paid = plans.filter((plan) => plan.status === "ACTIVE" && plan.code !== "FREE" && plan.monthlyPriceAmount !== null && plan.monthlyPriceAmount > 0);
+  const paid = plans.filter((plan) => plan.status === "ACTIVE" && plan.code !== "FREE" && plan.monthlyPriceAmount != null && plan.monthlyPriceAmount > 0);
   return (
     <main dir="rtl" className="min-h-screen bg-background px-4 py-12 text-foreground sm:px-8">
       <div className="mx-auto max-w-6xl">
@@ -32,7 +32,7 @@ export default async function ChoosePlanPage() {
         </div>
         {paid.length ? (
           <div className="grid gap-5 md:grid-cols-3">
-            {paid.map((plan, index) => (
+            {paid.map((plan) => (
               <article key={plan.planId} className={`flex flex-col rounded-3xl border bg-card p-6 shadow-sm ${plan.code === "PRO" ? "border-primary shadow-lg" : "border-border"}`}>
                 {plan.code === "PRO" ? <span className="mb-3 text-xs font-black text-primary">الأكثر اختيارًا</span> : null}
                 <h2 className="text-xl font-black">{plan.displayName}</h2>

@@ -13,6 +13,9 @@ import {
 import { getCurrentSubscription, getPlanByCode } from "@/modules/billing/entitlements";
 import { eventIdForManualPaymentConfirmation } from "@/modules/billing/saas-financial-contract";
 import { claimFinancialEvent, settleFinancialEvent } from "@/modules/billing/saas-financial-delivery-repository";
+import { loadLocalEvidence } from "@/modules/billing/saas-financial-reconciliation-repository";
+import { performBillingAdminAction } from "@/modules/billing/admin-operations";
+import { eventIdForBillingRefund, sourceRefundIdForBillingRefund } from "@/modules/billing/saas-financial-contract";
 
 // Opt in only after the operator has verified a disposable SQL Server database
 // with migrations 029–031 applied. No test here executes migrations.
@@ -147,11 +150,124 @@ describe.runIf(isolated)("financial outbox on verified isolated SQL Server", () 
     expect(recovered?.attemptCount).toBe(2);
     expect(await settleFinancialEvent(owned, { state: "ACCEPTED", errorCode: null })).toBe(false);
     expect(await settleFinancialEvent(recovered!, { state: "PENDING", errorCode: "UNCERTAIN_RESPONSE", delayMs: 0 })).toBe(true);
+    const retry = (await query<{ DeliveryState: string; AttemptCount: number;
+      LeaseOwner: string | null; LeaseUntilUtc: Date | null; LastErrorCode: string;
+      NextAttemptAtUtc: Date }>(
+      `SELECT DeliveryState, AttemptCount, LeaseOwner, LeaseUntilUtc, LastErrorCode, NextAttemptAtUtc
+       FROM dbo.TblSaasFinancialOutbox WHERE EventID=@eventId`, [
+        { name: "eventId", type: sql.NVarChar(150), value: event.event_id },
+      ])).recordset;
+    expect(retry).toEqual([expect.objectContaining({ DeliveryState: "PENDING", AttemptCount: 2,
+      LeaseOwner: null, LeaseUntilUtc: null, LastErrorCode: "UNCERTAIN_RESPONSE",
+      NextAttemptAtUtc: expect.any(Date) })]);
+    // DATETIME2(3) can round a zero-delay retry slightly ahead of the claim's SQL clock.
+    await query(`UPDATE dbo.TblSaasFinancialOutbox
+      SET NextAttemptAtUtc=DATEADD(second,-1,SYSUTCDATETIME())
+      WHERE EventID=@eventId AND SourceKey=@source AND DeliveryState=N'PENDING'`, [
+      { name: "eventId", type: sql.NVarChar(150), value: event.event_id },
+      { name: "source", type: sql.NVarChar(100), value: claimSource },
+    ]);
     const restartClaim = await claimFinancialEvent(claimSource, 60);
     expect(restartClaim?.eventId).toBe(event.event_id);
     expect(restartClaim?.attemptCount).toBe(3);
     expect(await settleFinancialEvent(restartClaim!, { state: "ACCEPTED", errorCode: null })).toBe(true);
     expect(await claimFinancialEvent(claimSource, 60)).toBeNull();
+  });
+
+  it("atomically captures one successful refund; failed refunds and duplicate confirmations add none", async () => {
+    const migration = await query<{ Version: string }>(
+      "SELECT Version FROM dbo.TblSchemaMigration WHERE Version=N'033'");
+    if (!migration.recordset.length) throw new Error("Apply migration 033 to the isolated test DB first");
+    captureConfig();
+    vi.stubEnv("DRVO_SAAS_FINANCIAL_SOURCE_KEY", "drvo-autorespond");
+    vi.stubEnv("DRVO_SAAS_FINANCIAL_SOURCE_ACTIVATED_AT", "2026-10-18T04:59:46.821598Z");
+    vi.stubEnv("DRVO_SAAS_FINANCIAL_REFUND_CAPTURE_ENABLED", "1");
+    const ctx = await context();
+    const payment = await submitManualPaymentRequest({ businessId: ctx.businessId,
+      userId: ctx.userId, planCode: "STARTER", payerName: "Refund capture" });
+    await approveManualPayment({ paymentRequestId: payment.paymentRequestId, reviewerUserId: ctx.adminId });
+    const base = { paymentRequestId: payment.paymentRequestId, actorUserId: ctx.adminId,
+      reason: "Verified transfer" };
+    await performBillingAdminAction({ ...base, action: "request_refund" });
+    const confirmations = await Promise.all([
+      performBillingAdminAction({ ...base, action: "confirm_refund", transferReference: "transfer-1" }),
+      performBillingAdminAction({ ...base, action: "confirm_refund", transferReference: "transfer-1" }),
+    ]);
+    expect(confirmations.map(row => row.status).sort()).toEqual(["already_completed", "completed"]);
+    const facts = await query<{ RefundID: string; AmountMinor: string; SourceRefundID: string;
+      EventID: string; Payload: string }>(`SELECT o.RefundID,CONVERT(varchar(20),o.AmountMinor) AS AmountMinor,
+      o.SourceRefundID,o.EventID,o.Payload FROM dbo.TblSaasFinancialOutbox o
+      WHERE o.PaymentRequestID=@payment AND o.EventType=N'payment.refunded'`, [
+      { name: "payment", type: sql.UniqueIdentifier, value: payment.paymentRequestId }]);
+    expect(facts.recordset).toHaveLength(1);
+    const fact = facts.recordset[0];
+    expect(fact.EventID).toBe(eventIdForBillingRefund(fact.RefundID));
+    expect(fact.SourceRefundID).toBe(sourceRefundIdForBillingRefund(fact.RefundID));
+    expect(JSON.parse(fact.Payload)).toMatchObject({ type: "payment.refunded",
+      original_source_payment_id: `autorespond:manual-payment:${payment.paymentRequestId}`,
+      amount_minor: Number(fact.AmountMinor) });
+    const evidence = await loadLocalEvidence("drvo-autorespond",
+      process.env.DRVO_SAAS_FINANCIAL_CAPTURE_CUTOFF_AT!);
+    const matchingRefunds = evidence.refunds.filter(row =>
+      row.refundId.toLowerCase() === fact.RefundID.toLowerCase());
+    expect(matchingRefunds).toHaveLength(1);
+    expect(matchingRefunds[0]).toMatchObject({ amountMinor: fact.AmountMinor,
+      currency: "EGP", state: "SUCCEEDED" });
+    expect(matchingRefunds[0].paymentRequestId.toLowerCase())
+      .toBe(payment.paymentRequestId.toLowerCase());
+    expect(evidence.outbox).toContainEqual(expect.objectContaining({ eventId: fact.EventID,
+      refundId: fact.RefundID, sourceRefundId: fact.SourceRefundID, eventType: "payment.refunded",
+      sourcePaymentId: `autorespond:manual-payment:${payment.paymentRequestId}`,
+      amountMinor: fact.AmountMinor, currency: "EGP" }));
+    const second = await context();
+    const failedPayment = await submitManualPaymentRequest({ businessId: second.businessId,
+      userId: second.userId, planCode: "STARTER", payerName: "Failed refund" });
+    await approveManualPayment({ paymentRequestId: failedPayment.paymentRequestId, reviewerUserId: second.adminId });
+    const failedBase = { paymentRequestId: failedPayment.paymentRequestId,
+      actorUserId: second.adminId, reason: "Transfer failed" };
+    await performBillingAdminAction({ ...failedBase, action: "request_refund" });
+    await performBillingAdminAction({ ...failedBase, action: "fail_refund" });
+    expect((await rows(failedPayment.paymentRequestId)).filter(row => JSON.parse(row.Payload).type === "payment.refunded"))
+      .toHaveLength(0);
+  });
+
+  it("rolls back successful refund state when immutable outbox identity conflicts", async () => {
+    const migration = await query<{ Version: string }>(
+      "SELECT Version FROM dbo.TblSchemaMigration WHERE Version=N'033'");
+    if (!migration.recordset.length) throw new Error("Apply migration 033 to the isolated test DB first");
+    captureConfig();
+    vi.stubEnv("DRVO_SAAS_FINANCIAL_SOURCE_KEY", "drvo-autorespond");
+    vi.stubEnv("DRVO_SAAS_FINANCIAL_SOURCE_ACTIVATED_AT", "2026-10-18T04:59:46.821598Z");
+    vi.stubEnv("DRVO_SAAS_FINANCIAL_REFUND_CAPTURE_ENABLED", "1");
+    const ctx = await context();
+    const payment = await submitManualPaymentRequest({ businessId: ctx.businessId,
+      userId: ctx.userId, planCode: "STARTER", payerName: "Refund rollback" });
+    await approveManualPayment({ paymentRequestId: payment.paymentRequestId, reviewerUserId: ctx.adminId });
+    const base = { paymentRequestId: payment.paymentRequestId, actorUserId: ctx.adminId,
+      reason: "Conflict test" };
+    await performBillingAdminAction({ ...base, action: "request_refund" });
+    const pending = (await query<{ RefundID: string }>(
+      "SELECT RefundID FROM dbo.TblBillingRefund WHERE PaymentRequestID=@payment", [
+        { name: "payment", type: sql.UniqueIdentifier, value: payment.paymentRequestId }])).recordset[0];
+    await query(`INSERT dbo.TblSaasFinancialOutbox
+      (EventID,SourcePaymentID,SourceRefundID,RefundID,PaymentRequestID,BusinessID,SourceKey,
+       EventType,SchemaVersion,AmountMinor,CurrencyCode,OccurredAtUtc,Payload,NextAttemptAtUtc)
+      VALUES (@event,@original,@refundSource,@refund,@payment,@business,N'drvo-autorespond',
+       N'payment.refunded',1,1,N'EGP',SYSUTCDATETIME(),N'{}',SYSUTCDATETIME())`, [
+      { name: "event", type: sql.NVarChar(150), value: eventIdForBillingRefund(pending.RefundID) },
+      { name: "original", type: sql.NVarChar(150), value: `autorespond:manual-payment:${payment.paymentRequestId}` },
+      { name: "refundSource", type: sql.NVarChar(150), value: sourceRefundIdForBillingRefund(pending.RefundID) },
+      { name: "refund", type: sql.UniqueIdentifier, value: pending.RefundID },
+      { name: "payment", type: sql.UniqueIdentifier, value: payment.paymentRequestId },
+      { name: "business", type: sql.UniqueIdentifier, value: ctx.businessId },
+    ]);
+    await expect(performBillingAdminAction({ ...base, action: "confirm_refund",
+      transferReference: "transfer-conflict" })).rejects.toThrow();
+    expect((await query<{ State: string }>(
+      "SELECT State FROM dbo.TblBillingRefund WHERE RefundID=@refund", [
+        { name: "refund", type: sql.UniqueIdentifier, value: pending.RefundID }])).recordset[0].State)
+      .toBe("PENDING");
+    expect((await getCurrentSubscription(ctx.businessId))?.planId).not.toBe((await getPlanByCode("FREE"))?.planId);
   });
 
   it("rolls back payment and subscription changes when outbox insert fails", async () => {
@@ -203,7 +319,7 @@ describe.runIf(isolated)("financial outbox on verified isolated SQL Server", () 
         (EventID,SourcePaymentID,PaymentRequestID,BusinessID,SourceKey,
          EventType,SchemaVersion,AmountMinor,CurrencyCode,OccurredAtUtc,Payload,NextAttemptAtUtc)
         VALUES (@event,@payment,@request,@business,@source,N'payment.confirmed',
-         1,100,N'EGP',SYSUTCDATETIME(),N'{}',SYSUTCDATETIME())`, [
+         1,100,N'EGP',SYSUTCDATETIME(),N'{}',DATEADD(second,-1,SYSUTCDATETIME()))`, [
         { name: "event", type: sql.NVarChar(150), value: eventId },
         { name: "payment", type: sql.NVarChar(150), value: sourcePaymentId },
         { name: "request", type: sql.UniqueIdentifier, value: payment.paymentRequestId },

@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { query, sql, withTransaction, type QueryInput } from "@/lib/db";
+import { parseHubTimestamp } from "./saas-financial-contract";
 import type { InventoryEvent, InventoryPage, InventoryWindow } from "./saas-financial-reconciliation-client";
-import type { Approval, Finding, Outbox } from "./saas-financial-reconciliation-compare";
+import type { Approval, Finding, Outbox, Refund } from "./saas-financial-reconciliation-compare";
 
 export type ScanRun = {
   RunID: string; SourceKey: string; Status: string; PagesRead: number; EventsRead: number; TraversalComplete: boolean;
@@ -18,12 +19,25 @@ const runSelect = `SELECT RunID, SourceKey, Status, PagesRead, EventsRead, NextC
   FROM dbo.TblSaasFinancialReconciliationRun`;
 const sourceInput = (source: string): QueryInput => ({ name: "source", type: sql.NVarChar(100), value: source });
 const runInput = (run: string): QueryInput => ({ name: "run", type: sql.UniqueIdentifier, value: run });
+// SQL Server style 126 omits trailing zero fractional digits from DATETIME2(6).
+const sqlUtc = (text: string) => parseHubTimestamp(`${text}Z`).canonical;
+function normalizeRunTimes(row: ScanRun): ScanRun {
+  const normalize = (text: string | null) => text === null ? null : sqlUtc(text).slice(0, -1);
+  return { ...row,
+    HubScanStartedAtText: normalize(row.HubScanStartedAtText),
+    AcceptedFromText: normalize(row.AcceptedFromText),
+    AcceptedBeforeText: normalize(row.AcceptedBeforeText),
+    SourceActivatedText: normalize(row.SourceActivatedText)!,
+    CaptureCutoffText: normalize(row.CaptureCutoffText)!,
+  };
+}
 
 export async function beginScan(source: string, activated: string, cutoff: string,
   window: InventoryWindow | null, pageLimit: number): Promise<ScanRun> {
   return withTransaction(async trx => {
-    const open = (await trx.query<ScanRun>(`${runSelect} WITH (UPDLOCK, HOLDLOCK)
+    const rawOpen = (await trx.query<ScanRun>(`${runSelect} WITH (UPDLOCK, HOLDLOCK)
       WHERE SourceKey = @source AND Status IN (N'SCANNING', N'PAUSED')`, [sourceInput(source)])).recordset[0];
+    const open = rawOpen && normalizeRunTimes(rawOpen);
     if (open) {
       if (open.SourceActivatedText + "Z" !== activated || open.CaptureCutoffText + "Z" !== cutoff)
         throw new Error("RECONCILIATION_BOUNDARY_CHANGED");
@@ -51,7 +65,7 @@ export async function beginScan(source: string, activated: string, cutoff: strin
       { name: "cutoff", type: sql.VarChar(33), value: cutoff.slice(0,-1) },
       { name: "limit", type: sql.Int, value: pageLimit },
     ]);
-    return (await trx.query<ScanRun>(`${runSelect} WHERE RunID=@run`, [runInput(id)])).recordset[0];
+    return normalizeRunTimes((await trx.query<ScanRun>(`${runSelect} WHERE RunID=@run`, [runInput(id)])).recordset[0]);
   });
 }
 
@@ -75,8 +89,8 @@ export async function recordPage(run: ScanRun, page: InventoryPage): Promise<voi
           || prior.SourcePaymentID !== e.source_payment_id || prior.SourceRefundID !== e.source_refund_id
           || prior.OriginalSourcePaymentID !== e.original_source_payment_id
           || prior.AmountMinor !== e.amount_minor || prior.CurrencyCode !== e.currency
-          || prior.OccurredText !== e.occurred_at.slice(0,-1)
-          || prior.AcceptedText !== e.accepted_at.slice(0,-1)) throw new Error("HUB_FACT_CONFLICT");
+          || sqlUtc(prior.OccurredText) !== e.occurred_at
+          || sqlUtc(prior.AcceptedText) !== e.accepted_at) throw new Error("HUB_FACT_CONFLICT");
         await trx.execute(`UPDATE dbo.TblSaasFinancialReconciliationEvent
           SET LastObservedAtUtc=SYSUTCDATETIME(),ObservationCount=ObservationCount+1
           WHERE SourceKey=@source AND EventID=@event`, inputs);
@@ -117,7 +131,7 @@ export async function recordPage(run: ScanRun, page: InventoryPage): Promise<voi
 }
 
 export async function loadLocalEvidence(source: string, cutoff: string, cap = 5000):
-  Promise<{ approvals: Approval[]; outbox: Outbox[] }> {
+  Promise<{ approvals: Approval[]; refunds: Refund[]; outbox: Outbox[] }> {
   const approvalResult = await query<{
     PaymentRequestID: string; PaymentMethod: string; AmountText: string; CurrencyCode: string;
     ReviewedAtText: string; ReviewedByUserID: string | null; ApprovedSubscriptionID: string | null;
@@ -129,18 +143,31 @@ export async function loadLocalEvidence(source: string, cutoff: string, cap = 50
         AND ReviewedAtUtc >= CONVERT(datetime2(6),@cutoff,126)
       ORDER BY ReviewedAtUtc,PaymentRequestID`, [{ name: "cutoff", type: sql.VarChar(33), value: cutoff.slice(0,-1) }]);
   const outboxResult = await query<{
-    EventID: string; SourcePaymentID: string; PaymentRequestID: string; AmountMinor: string;
+    EventID: string; SourcePaymentID: string; SourceRefundID: string | null; RefundID: string | null;
+    EventType: string; PaymentRequestID: string; AmountMinor: string;
     CurrencyCode: string; OccurredAtText: string; Payload: string; DeliveryState: string;
-  }>(`SELECT TOP (${cap + 1}) EventID,SourcePaymentID,PaymentRequestID,
+  }>(`SELECT TOP (${cap + 1}) EventID,SourcePaymentID,SourceRefundID,RefundID,EventType,PaymentRequestID,
       CONVERT(varchar(20),AmountMinor) AS AmountMinor,CurrencyCode,
       CONVERT(varchar(23),OccurredAtUtc,126)+'000Z' AS OccurredAtText,Payload,DeliveryState
       FROM dbo.TblSaasFinancialOutbox
       WHERE SourceKey COLLATE Latin1_General_100_BIN2 = @source COLLATE Latin1_General_100_BIN2
       ORDER BY CreatedAtUtc,EventID`,
     [sourceInput(source)]);
-  if (approvalResult.recordset.length > cap || outboxResult.recordset.length > cap)
+  const refundResult = await query<{ RefundID: string; PaymentRequestID: string; AmountMinor: string;
+    CurrencyCode: string; CompletedAtText: string; State: string }>(
+    `SELECT TOP (${cap + 1}) r.RefundID,r.PaymentRequestID,
+      CONVERT(varchar(20),r.AmountMinor) AS AmountMinor,r.CurrencyCode,
+      CONVERT(varchar(23),r.CompletedAtUtc,126) AS CompletedAtText,r.State
+      FROM dbo.TblBillingRefund r
+      WHERE r.State=N'SUCCEEDED' AND r.CompletedAtUtc >= CONVERT(datetime2(6),@cutoff,126)
+      ORDER BY r.CompletedAtUtc,r.RefundID`,
+    [{ name: "cutoff", type: sql.VarChar(33), value: cutoff.slice(0,-1) }]);
+  if (approvalResult.recordset.length > cap || outboxResult.recordset.length > cap
+    || refundResult.recordset.length > cap)
     throw new Error("LOCAL_EVIDENCE_LIMIT");
   return {
+    refunds: refundResult.recordset.map(r => ({ refundId: r.RefundID, paymentRequestId: r.PaymentRequestID,
+      amountMinor: r.AmountMinor, currency: r.CurrencyCode, completedAtText: r.CompletedAtText, state: r.State })),
     approvals: approvalResult.recordset.map(r => ({
       paymentRequestId: r.PaymentRequestID, method: r.PaymentMethod, amountText: r.AmountText,
       currency: r.CurrencyCode, reviewedAtText: r.ReviewedAtText,
@@ -150,6 +177,7 @@ export async function loadLocalEvidence(source: string, cutoff: string, cap = 50
       eventId: r.EventID, sourcePaymentId: r.SourcePaymentID, paymentRequestId: r.PaymentRequestID,
       amountMinor: r.AmountMinor, currency: r.CurrencyCode, occurredAtText: r.OccurredAtText,
       payload: r.Payload, state: r.DeliveryState,
+      eventType: r.EventType, refundId: r.RefundID, sourceRefundId: r.SourceRefundID,
     })),
   };
 }
@@ -161,8 +189,8 @@ export async function loadObservedHub(run: ScanRun): Promise<InventoryEvent[]> {
     CurrencyCode: InventoryEvent["currency"]; OccurredText: string; AcceptedText: string;
   }>(`SELECT e.HubEventID,e.EventID,e.EventType,e.SourcePaymentID,e.SourceRefundID,
     e.OriginalSourcePaymentID,e.AmountMinor,e.CurrencyCode,
-    CONVERT(varchar(33),e.OccurredAtUtc,126)+'Z' AS OccurredText,
-    CONVERT(varchar(33),e.AcceptedAtUtc,126)+'Z' AS AcceptedText
+    CONVERT(varchar(33),e.OccurredAtUtc,126) AS OccurredText,
+    CONVERT(varchar(33),e.AcceptedAtUtc,126) AS AcceptedText
     FROM dbo.TblSaasFinancialReconciliationObservation o
     JOIN dbo.TblSaasFinancialReconciliationEvent e ON e.SourceKey=o.SourceKey AND e.EventID=o.EventID
     WHERE o.RunID=@run`, [runInput(run.RunID)]);
@@ -170,7 +198,7 @@ export async function loadObservedHub(run: ScanRun): Promise<InventoryEvent[]> {
     hub_event_id: r.HubEventID, event_id: r.EventID, type: r.EventType,
     source_payment_id: r.SourcePaymentID, source_refund_id: r.SourceRefundID,
     original_source_payment_id: r.OriginalSourcePaymentID, amount_minor: r.AmountMinor,
-    currency: r.CurrencyCode, occurred_at: r.OccurredText, accepted_at: r.AcceptedText,
+    currency: r.CurrencyCode, occurred_at: sqlUtc(r.OccurredText), accepted_at: sqlUtc(r.AcceptedText),
   }));
 }
 

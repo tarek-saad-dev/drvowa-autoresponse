@@ -61,8 +61,8 @@ describe("login entry for existing sessions", () => {
     await expect(LoginPage()).rejects.toThrow("REDIRECT:/admin");
   });
 
-  it("redirects a signed-in user without a workspace to onboarding", async () => {
+  it("redirects a signed-in user without a workspace to plan selection", async () => {
     vi.mocked(getCurrentSession).mockResolvedValue(session);
-    await expect(LoginPage()).rejects.toThrow("REDIRECT:/onboarding");
+    await expect(LoginPage()).rejects.toThrow("REDIRECT:/choose-plan");
   });
 });

@@ -21,9 +21,9 @@ describe("resolvePostLoginPath", () => {
     ).toBe("/dashboard");
   });
 
-  it("normal user + no business → /onboarding", () => {
+  it("normal user + no business → /choose-plan", () => {
     expect(
       resolvePostLoginPath({ isPlatformAdmin: false, hasBusiness: false }),
-    ).toBe("/onboarding");
+    ).toBe("/choose-plan");
   });
 });
