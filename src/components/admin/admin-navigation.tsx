@@ -8,6 +8,7 @@ const navigation = [
   { href: "/admin/financials", label: "المالية والتقارير" },
   { href: "/admin/subscriptions", label: "العملاء والاشتراكات" },
   { href: "/admin/payments", label: "المدفوعات" },
+  { href: "/admin/refunds", label: "الاستردادات" },
   { href: "/admin/whatsapp", label: "واتساب" },
 ];
 
