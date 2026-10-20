@@ -191,10 +191,17 @@ describe.runIf(isolated)("financial outbox on verified isolated SQL Server", () 
       amount_minor: Number(fact.AmountMinor) });
     const evidence = await loadLocalEvidence("drvo-autorespond",
       process.env.DRVO_SAAS_FINANCIAL_CAPTURE_CUTOFF_AT!);
-    expect(evidence.refunds).toContainEqual(expect.objectContaining({ refundId: fact.RefundID,
-      paymentRequestId: payment.paymentRequestId, amountMinor: fact.AmountMinor, state: "SUCCEEDED" }));
+    const matchingRefunds = evidence.refunds.filter(row =>
+      row.refundId.toLowerCase() === fact.RefundID.toLowerCase());
+    expect(matchingRefunds).toHaveLength(1);
+    expect(matchingRefunds[0]).toMatchObject({ amountMinor: fact.AmountMinor,
+      currency: "EGP", state: "SUCCEEDED" });
+    expect(matchingRefunds[0].paymentRequestId.toLowerCase())
+      .toBe(payment.paymentRequestId.toLowerCase());
     expect(evidence.outbox).toContainEqual(expect.objectContaining({ eventId: fact.EventID,
-      refundId: fact.RefundID, sourceRefundId: fact.SourceRefundID, eventType: "payment.refunded" }));
+      refundId: fact.RefundID, sourceRefundId: fact.SourceRefundID, eventType: "payment.refunded",
+      sourcePaymentId: `autorespond:manual-payment:${payment.paymentRequestId}`,
+      amountMinor: fact.AmountMinor, currency: "EGP" }));
     const second = await context();
     const failedPayment = await submitManualPaymentRequest({ businessId: second.businessId,
       userId: second.userId, planCode: "STARTER", payerName: "Failed refund" });
