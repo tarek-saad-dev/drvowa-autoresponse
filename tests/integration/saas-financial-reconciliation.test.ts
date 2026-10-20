@@ -31,16 +31,24 @@ describe.runIf(isolated)("reconciliation evidence on verified isolated SQL Serve
       currency: "EGP", occurred_at: "2026-10-18T10:00:00.000000Z",
       accepted_at: "2026-10-18T10:01:00.000000Z",
     };
+    const fractionalEvent: InventoryEvent = { ...event,
+      hub_event_id: "9007199254740994", event_id: `event:${randomUUID()}`,
+      source_payment_id: `payment:${randomUUID()}`, amount_minor: "1", currency: "USD",
+      occurred_at: "2026-10-18T10:00:00.123456Z",
+      accepted_at: "2026-10-18T10:01:00.654321Z",
+    };
     const first = await beginScan(source, activation, activation, null, 20);
-    await recordPage(first, { events: [event], has_more: false, next_cursor: null,
-      scan_upper_hub_event_id: event.hub_event_id,
+    await recordPage(first, { events: [event, fractionalEvent], has_more: false, next_cursor: null,
+      scan_upper_hub_event_id: fractionalEvent.hub_event_id,
       scan_started_at: "2026-10-18T11:00:00.000000Z", source_activated_at: activation });
-    expect((await loadObservedHub(first))[0]).toMatchObject(event);
+    const observed = await loadObservedHub(first);
+    expect(observed).toHaveLength(2);
+    expect(observed).toEqual(expect.arrayContaining([event, fractionalEvent]));
     await finishScan(first, [{ subject: event.event_id, code: "HUB_WITHOUT_ELIGIBLE_APPROVAL" }]);
     const second = await beginScan(source, activation, activation, null, 20);
     expect(second.RunID).not.toBe(first.RunID);
-    await recordPage(second, { events: [event], has_more: false, next_cursor: null,
-      scan_upper_hub_event_id: event.hub_event_id,
+    await recordPage(second, { events: [event, fractionalEvent], has_more: false, next_cursor: null,
+      scan_upper_hub_event_id: fractionalEvent.hub_event_id,
       scan_started_at: "2026-10-18T11:05:00.000000Z", source_activated_at: activation });
     await finishScan(second, []);
     const cases = await query<{ InvestigationState: string; ObservationCount: number }>(
@@ -49,6 +57,13 @@ describe.runIf(isolated)("reconciliation evidence on verified isolated SQL Serve
     expect(cases.recordset).toEqual([expect.objectContaining({
       InvestigationState: "OPEN", ObservationCount: 1,
     })]);
+    const conflicting = await beginScan(source, activation, activation, null, 20);
+    await expect(recordPage(conflicting, { events: [{ ...fractionalEvent,
+      occurred_at: "2026-10-18T10:00:00.123457Z" }], has_more: false, next_cursor: null,
+      scan_upper_hub_event_id: fractionalEvent.hub_event_id,
+      scan_started_at: "2026-10-18T11:10:00.000000Z", source_activated_at: activation }))
+      .rejects.toThrow("HUB_FACT_CONFLICT");
+    await setScanState(conflicting, "SCAN_INCOMPLETE", "HUB_FACT_CONFLICT");
     const paused = await beginScan(source, activation, activation, null, 20);
     await setScanState(paused, "PAUSED");
     const resumed = await beginScan(source, activation, activation, null, 20);

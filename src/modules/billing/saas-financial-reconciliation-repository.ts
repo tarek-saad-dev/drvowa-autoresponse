@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { query, sql, withTransaction, type QueryInput } from "@/lib/db";
+import { parseHubTimestamp } from "./saas-financial-contract";
 import type { InventoryEvent, InventoryPage, InventoryWindow } from "./saas-financial-reconciliation-client";
 import type { Approval, Finding, Outbox, Refund } from "./saas-financial-reconciliation-compare";
 
@@ -18,12 +19,25 @@ const runSelect = `SELECT RunID, SourceKey, Status, PagesRead, EventsRead, NextC
   FROM dbo.TblSaasFinancialReconciliationRun`;
 const sourceInput = (source: string): QueryInput => ({ name: "source", type: sql.NVarChar(100), value: source });
 const runInput = (run: string): QueryInput => ({ name: "run", type: sql.UniqueIdentifier, value: run });
+// SQL Server style 126 omits trailing zero fractional digits from DATETIME2(6).
+const sqlUtc = (text: string) => parseHubTimestamp(`${text}Z`).canonical;
+function normalizeRunTimes(row: ScanRun): ScanRun {
+  const normalize = (text: string | null) => text === null ? null : sqlUtc(text).slice(0, -1);
+  return { ...row,
+    HubScanStartedAtText: normalize(row.HubScanStartedAtText),
+    AcceptedFromText: normalize(row.AcceptedFromText),
+    AcceptedBeforeText: normalize(row.AcceptedBeforeText),
+    SourceActivatedText: normalize(row.SourceActivatedText)!,
+    CaptureCutoffText: normalize(row.CaptureCutoffText)!,
+  };
+}
 
 export async function beginScan(source: string, activated: string, cutoff: string,
   window: InventoryWindow | null, pageLimit: number): Promise<ScanRun> {
   return withTransaction(async trx => {
-    const open = (await trx.query<ScanRun>(`${runSelect} WITH (UPDLOCK, HOLDLOCK)
+    const rawOpen = (await trx.query<ScanRun>(`${runSelect} WITH (UPDLOCK, HOLDLOCK)
       WHERE SourceKey = @source AND Status IN (N'SCANNING', N'PAUSED')`, [sourceInput(source)])).recordset[0];
+    const open = rawOpen && normalizeRunTimes(rawOpen);
     if (open) {
       if (open.SourceActivatedText + "Z" !== activated || open.CaptureCutoffText + "Z" !== cutoff)
         throw new Error("RECONCILIATION_BOUNDARY_CHANGED");
@@ -51,7 +65,7 @@ export async function beginScan(source: string, activated: string, cutoff: strin
       { name: "cutoff", type: sql.VarChar(33), value: cutoff.slice(0,-1) },
       { name: "limit", type: sql.Int, value: pageLimit },
     ]);
-    return (await trx.query<ScanRun>(`${runSelect} WHERE RunID=@run`, [runInput(id)])).recordset[0];
+    return normalizeRunTimes((await trx.query<ScanRun>(`${runSelect} WHERE RunID=@run`, [runInput(id)])).recordset[0]);
   });
 }
 
@@ -75,8 +89,8 @@ export async function recordPage(run: ScanRun, page: InventoryPage): Promise<voi
           || prior.SourcePaymentID !== e.source_payment_id || prior.SourceRefundID !== e.source_refund_id
           || prior.OriginalSourcePaymentID !== e.original_source_payment_id
           || prior.AmountMinor !== e.amount_minor || prior.CurrencyCode !== e.currency
-          || prior.OccurredText !== e.occurred_at.slice(0,-1)
-          || prior.AcceptedText !== e.accepted_at.slice(0,-1)) throw new Error("HUB_FACT_CONFLICT");
+          || sqlUtc(prior.OccurredText) !== e.occurred_at
+          || sqlUtc(prior.AcceptedText) !== e.accepted_at) throw new Error("HUB_FACT_CONFLICT");
         await trx.execute(`UPDATE dbo.TblSaasFinancialReconciliationEvent
           SET LastObservedAtUtc=SYSUTCDATETIME(),ObservationCount=ObservationCount+1
           WHERE SourceKey=@source AND EventID=@event`, inputs);
@@ -175,8 +189,8 @@ export async function loadObservedHub(run: ScanRun): Promise<InventoryEvent[]> {
     CurrencyCode: InventoryEvent["currency"]; OccurredText: string; AcceptedText: string;
   }>(`SELECT e.HubEventID,e.EventID,e.EventType,e.SourcePaymentID,e.SourceRefundID,
     e.OriginalSourcePaymentID,e.AmountMinor,e.CurrencyCode,
-    CONVERT(varchar(33),e.OccurredAtUtc,126)+'Z' AS OccurredText,
-    CONVERT(varchar(33),e.AcceptedAtUtc,126)+'Z' AS AcceptedText
+    CONVERT(varchar(33),e.OccurredAtUtc,126) AS OccurredText,
+    CONVERT(varchar(33),e.AcceptedAtUtc,126) AS AcceptedText
     FROM dbo.TblSaasFinancialReconciliationObservation o
     JOIN dbo.TblSaasFinancialReconciliationEvent e ON e.SourceKey=o.SourceKey AND e.EventID=o.EventID
     WHERE o.RunID=@run`, [runInput(run.RunID)]);
@@ -184,7 +198,7 @@ export async function loadObservedHub(run: ScanRun): Promise<InventoryEvent[]> {
     hub_event_id: r.HubEventID, event_id: r.EventID, type: r.EventType,
     source_payment_id: r.SourcePaymentID, source_refund_id: r.SourceRefundID,
     original_source_payment_id: r.OriginalSourcePaymentID, amount_minor: r.AmountMinor,
-    currency: r.CurrencyCode, occurred_at: r.OccurredText, accepted_at: r.AcceptedText,
+    currency: r.CurrencyCode, occurred_at: sqlUtc(r.OccurredText), accepted_at: sqlUtc(r.AcceptedText),
   }));
 }
 
