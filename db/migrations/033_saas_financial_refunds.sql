@@ -6,6 +6,8 @@ IF OBJECT_ID(N'dbo.TblSaasFinancialOutbox', N'U') IS NULL
 ALTER TABLE dbo.TblSaasFinancialOutbox ADD
   RefundID UNIQUEIDENTIFIER NULL,
   SourceRefundID NVARCHAR(150) COLLATE Latin1_General_100_BIN2 NULL;
+GO
+
 ALTER TABLE dbo.TblSaasFinancialOutbox ADD
   CONSTRAINT FK_SaasFinancialOutbox_Refund FOREIGN KEY (RefundID) REFERENCES dbo.TblBillingRefund(RefundID),
   CONSTRAINT CK_SaasFinancialOutbox_RefundShape CHECK (
