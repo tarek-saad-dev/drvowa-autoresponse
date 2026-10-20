@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 import { Alert } from "@/components/ui/alert";
@@ -11,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export default function LoginForm() {
-  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -52,8 +50,9 @@ export default function LoginForm() {
           ? data.redirectTo
           : "/dashboard";
 
-      router.push(redirectTo);
-      router.refresh();
+      // New session cookies need a fresh document navigation (especially iOS Safari).
+      // Avoid racing router.push() against router.refresh() after authentication.
+      window.location.assign(redirectTo);
     } catch {
       setError("حدث خطأ في الاتصال. حاول مرة أخرى.");
     } finally {
