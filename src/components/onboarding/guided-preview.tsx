@@ -95,6 +95,17 @@ const FLOW: Array<{ key: Step; label: string; short: string }> = [
   { key: "COMPLETED", label: "جاهز", short: "جاهز" },
 ];
 
+const STEP_SCENES: Record<Step, { line: string; cue: string }> = {
+  WELCOME: { line: "كل بيزنس ليه حكاية. وموظفك الجديد هيبدأ يسمع حكايتك.", cue: "بنفتح صفحة جديدة…" },
+  BUSINESS: { line: "نبدأ بيك. احكيلنا عن المكان اللي موظفك هيمثّله.", cue: "يلا نتعرف على بيزنسك…" },
+  KNOWLEDGE: { line: "من تفاصيلك الصغيرة هنكوّن معرفة تخلّيه يرد بثقة.", cue: "بنجهز مساحة التدريب…" },
+  PLAYGROUND: { line: "دلوقتي حان وقت التجربة. اسأله كأنك عميل.", cue: "بنفتح مساحة التجربة…" },
+  WHATSAPP: { line: "فاضل نوصل موظفك بالمكان اللي عملاؤك بيكلموك منه.", cue: "بنجهز ربط واتساب…" },
+  FIRST_MESSAGE: { line: "أول رسالة حقيقية. من هنا تبدأ الحكاية.", cue: "بنستعد لأول رسالة…" },
+  HUMAN_TAKEOVER: { line: "إنت دايمًا صاحب القرار، وتقدر تتدخل في أي وقت.", cue: "بنوضح إزاي تفضل متحكم…" },
+  COMPLETED: { line: "خلصنا الإعداد. موظفك جاهز يشتغل معاك.", cue: "اللمسات الأخيرة…" },
+};
+
 const businessQuestions = [
   { key: "name", label: "اسم البيزنس إيه؟", placeholder: "مثال: CUT SALON", kind: "text" },
   { key: "type", label: "نشاطك إيه؟", placeholder: "", kind: "type" },
@@ -128,6 +139,8 @@ export function GuidedOnboardingPreview({
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("WELCOME");
+  const [transitioning, setTransitioning] = useState(false);
+  const [transitionMessage, setTransitionMessage] = useState("");
   const [mockState, setMockState] = useState<MockState>("default");
   const [businessQuestion, setBusinessQuestion] = useState(0);
   const [business, setBusiness] = useState<Record<string, string>>({});
@@ -152,6 +165,7 @@ export function GuidedOnboardingPreview({
   const [liveError, setLiveError] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
   const firstMessageStartedAt = useRef<string | null>(null);
+  const sceneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const [recording, setRecording] = useState(false);
@@ -176,6 +190,9 @@ export function GuidedOnboardingPreview({
 
   const index = FLOW.findIndex((item) => item.key === step);
   const progress = Math.max(0, Math.round((index / (FLOW.length - 1)) * 100));
+  useEffect(() => () => {
+    if (sceneTimerRef.current !== null) window.clearTimeout(sceneTimerRef.current);
+  }, []);
 
   const currentBusinessQuestion = businessQuestions[businessQuestion];
   const currentBusinessValue = business[currentBusinessQuestion.key]?.trim() ?? "";
@@ -914,7 +931,26 @@ export function GuidedOnboardingPreview({
     chatCount,
   ]);
 
+  function sceneTransition(target: Step, afterTransition?: () => void) {
+    if (sceneTimerRef.current !== null || transitioning) return;
+    const commit = () => {
+      afterTransition?.();
+      setStep(target);
+      setMockState("default");
+      setTransitioning(false);
+      sceneTimerRef.current = null;
+    };
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      commit();
+      return;
+    }
+    setTransitionMessage(STEP_SCENES[target].cue);
+    setTransitioning(true);
+    sceneTimerRef.current = window.setTimeout(commit, target === step ? 420 : 720);
+  }
+
   async function next() {
+    if (transitioning) return;
     if (step === "COMPLETED") {
       try {
         window.localStorage.removeItem(storageKey);
@@ -927,7 +963,7 @@ export function GuidedOnboardingPreview({
     }
     if (step === "BUSINESS" && !businessCanContinue) return;
     if (step === "BUSINESS" && businessQuestion < businessQuestions.length - 1) {
-      setBusinessQuestion((value) => value + 1);
+      sceneTransition("BUSINESS", () => setBusinessQuestion((value) => value + 1));
       return;
     }
     if (step === "KNOWLEDGE" && !knowledgeApplied && mockState !== "success") {
@@ -956,32 +992,33 @@ export function GuidedOnboardingPreview({
 
     const nextStep = FLOW[Math.min(index + 1, FLOW.length - 1)]?.key;
     if (nextStep) {
-      setStep(nextStep);
-      setMockState("default");
+      sceneTransition(nextStep);
     }
   }
 
   function previous() {
+    if (transitioning) return;
     if (step === "BUSINESS" && businessQuestion > 0) {
-      setBusinessQuestion((value) => value - 1);
+      sceneTransition("BUSINESS", () => setBusinessQuestion((value) => value - 1));
       return;
     }
     const previousStep = FLOW[Math.max(index - 1, 0)]?.key;
-    if (previousStep) {
-      setStep(previousStep);
-      setMockState("default");
-    }
+    if (previousStep) sceneTransition(previousStep);
   }
 
   function jump(target: Step) {
-    setStep(target);
-    setMockState("default");
+    if (target !== step) sceneTransition(target);
   }
 
   return (
-    <main dir="rtl" className="relative min-h-screen overflow-x-hidden bg-background/40 px-4 pb-28 pt-5 text-foreground sm:px-6 sm:pb-10">
-      <div className="mx-auto flex w-full max-w-5xl flex-col">
-        <header className="mb-7 flex items-center justify-between gap-4">
+    <main dir="rtl" className="drvo-onboarding relative isolate h-[100dvh] min-h-0 w-full overflow-hidden bg-background text-foreground">
+      <div aria-hidden="true" className="drvo-onboarding-atmosphere pointer-events-none absolute inset-0 overflow-hidden">
+        <span className="drvo-onboarding-fog drvo-onboarding-fog-one" />
+        <span className="drvo-onboarding-fog drvo-onboarding-fog-two" />
+        <span className="drvo-onboarding-fog drvo-onboarding-fog-three" />
+      </div>
+      <div className="relative z-10 mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col gap-3 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 sm:gap-4 sm:px-6 sm:py-5">
+        <header className="flex shrink-0 items-center justify-between gap-4">
           <div>
             <div className="text-lg font-black tracking-[-0.03em] text-primary">DRVOWA</div>
             <div className="mt-0.5 text-[11px] font-medium text-muted-foreground">إعداد موظف الاستقبال</div>
@@ -991,11 +1028,11 @@ export function GuidedOnboardingPreview({
           </div>
         </header>
 
-        <section aria-label="تقدم الإعداد" className="mb-8">
+        <section aria-label="تقدم الإعداد" className="shrink-0">
           <div className="relative mx-auto max-w-4xl">
-            <div className="absolute left-[6%] right-[6%] top-5 h-1 rounded-full bg-card/80 shadow-inner" />
+            <div className="absolute left-[6%] right-[6%] top-4 h-0.5 rounded-full bg-card/80 shadow-inner sm:top-5" />
             <div
-              className="absolute right-[6%] top-5 h-1 rounded-full bg-primary transition-[width] duration-700 ease-out"
+              className="absolute right-[6%] top-4 h-0.5 rounded-full bg-primary transition-[width] duration-700 ease-out sm:top-5"
               style={{ width: `${progress * 0.88}%` }}
             />
             <div className="relative grid grid-cols-8 gap-1">
@@ -1018,7 +1055,7 @@ export function GuidedOnboardingPreview({
                   >
                     <span
                       className={cx(
-                        "grid h-9 w-9 place-items-center rounded-xl border-2 text-xs font-black shadow-sm transition-all duration-300 sm:h-10 sm:w-10 sm:rounded-2xl sm:text-sm",
+                        "grid h-8 w-8 place-items-center rounded-xl border-2 text-[11px] font-black shadow-sm transition-all duration-300 sm:h-10 sm:w-10 sm:rounded-2xl sm:text-sm",
                         done && "border-primary bg-primary text-white",
                         active && "scale-110 border-primary bg-card text-primary shadow-[0_10px_30px_rgba(0,117,154,.22)]",
                         !done && !active && "border-white bg-card/90 text-muted-foreground",
@@ -1034,20 +1071,27 @@ export function GuidedOnboardingPreview({
                 );
               })}
             </div>
-            <div className="mt-3 text-center text-xs font-black text-primary md:hidden">{FLOW[index]?.label}</div>
+            <div className="mt-1 text-center text-[11px] font-black text-primary md:hidden">{FLOW[index]?.label}</div>
           </div>
         </section>
 
-        <section className="mx-auto w-full max-w-[840px]">
-          <div className="overflow-hidden rounded-[30px] border border-white/80 bg-card/88 shadow-[0_24px_80px_rgba(7,19,25,.10)] backdrop-blur-xl">
-            <div key={step} className="min-h-[540px] animate-[fadeIn_.28s_ease-out] p-6 sm:p-9 md:p-12">
+        <section className="mx-auto flex min-h-0 w-full max-w-[920px] flex-1 flex-col">
+          <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] border border-white/70 bg-card/90 shadow-[0_24px_90px_rgba(7,19,25,.13)] backdrop-blur-2xl sm:rounded-[32px]">
+            <div aria-live="polite" className="shrink-0 border-b border-border/40 px-5 pb-3 pt-4 sm:px-9 sm:pb-4 sm:pt-5">
+              <div className="flex items-center gap-2 text-[10px] font-black tracking-widest text-primary">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_12px_var(--primary)]" />
+                DRVOWA / {FLOW[index]?.short}
+              </div>
+              <p className="mt-1 text-xs font-medium leading-5 text-muted-foreground sm:text-sm">{STEP_SCENES[step].line}</p>
+            </div>
+            <div key={`${step}-${businessQuestion}`} className="drvo-onboarding-step min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 pt-3 sm:px-9 sm:pb-7 sm:pt-5 md:px-12">
               {step === "WELCOME" ? (
-                <div className="flex min-h-[450px] flex-col items-center justify-center text-center">
-                  <div className="mb-7 grid h-24 w-24 place-items-center rounded-[30px] bg-primary text-4xl text-primary-foreground shadow-[0_18px_50px_rgba(0,117,154,.28)]">✦</div>
+                <div className="flex min-h-full flex-col items-center justify-center text-center">
+                  <div className="drvo-welcome-icon mb-7 grid h-24 w-24 place-items-center rounded-[30px] bg-primary text-4xl text-primary-foreground shadow-[0_18px_50px_rgba(0,117,154,.28)]">✦</div>
                   <span className="mb-3 rounded-full bg-success-soft px-3 py-1 text-xs font-bold text-success">هنمشي معاك خطوة بخطوة</span>
-                  <h1 className="max-w-2xl text-3xl font-black leading-[1.25] tracking-[-0.035em] sm:text-4xl">خلينا نجهز موظف الاستقبال بتاعك</h1>
-                  <p className="mt-4 max-w-xl text-base leading-8 text-muted-foreground sm:text-lg">في كام خطوة بسيطة، هنعلمه بيزنسك، نجرب ردوده، ونوصله بواتساب لحد أول رد حقيقي.</p>
-                  <div className="mt-8 grid w-full max-w-lg grid-cols-3 gap-3">
+                  <h1 className="drvo-welcome-title max-w-2xl text-3xl font-black leading-[1.25] tracking-[-0.035em] sm:text-4xl">خلينا نجهز موظف الاستقبال بتاعك</h1>
+                  <p className="drvo-welcome-copy mt-4 max-w-xl text-base leading-8 text-muted-foreground sm:text-lg">في كام خطوة بسيطة، هنعلمه بيزنسك، نجرب ردوده، ونوصله بواتساب لحد أول رد حقيقي.</p>
+                  <div className="drvo-welcome-grid mt-8 grid w-full max-w-lg grid-cols-3 gap-3">
                     {[
                       ["01", "نعرف البيزنس"],
                       ["02", "ندرب الموظف"],
@@ -1059,12 +1103,12 @@ export function GuidedOnboardingPreview({
                       </div>
                     ))}
                   </div>
-                  <p className="mt-6 text-xs text-muted-foreground">كل حاجة بتتحفظ تلقائيًا، وتقدر تكمل في أي وقت.</p>
+                  <p className="drvo-welcome-footer mt-6 text-xs text-muted-foreground">كل حاجة بتتحفظ تلقائيًا، وتقدر تكمل في أي وقت.</p>
                 </div>
               ) : null}
 
               {step === "BUSINESS" ? (
-                <div className="mx-auto flex min-h-[450px] max-w-2xl flex-col justify-center">
+                <div className="mx-auto flex min-h-full max-w-2xl flex-col justify-center">
                   <div className="mb-8 flex items-center justify-between gap-4">
                     <div>
                       <span className="text-xs font-black text-primary">تعريف البيزنس</span>
@@ -1597,10 +1641,7 @@ export function GuidedOnboardingPreview({
                       <button type="button" onClick={() => setChatCount((n) => Math.max(1, n))} className="rounded-xl bg-success-soft px-3 py-2 text-xs font-black text-success">تمام 👍</button>
                       <button
                         type="button"
-                        onClick={() => {
-                          setStep("KNOWLEDGE");
-                          setMockState("default");
-                        }}
+                        onClick={() => sceneTransition("KNOWLEDGE")}
                         className="rounded-xl bg-card px-3 py-2 text-xs font-black text-muted-foreground shadow-sm"
                       >
                         عدّل المعلومة
@@ -1721,7 +1762,7 @@ export function GuidedOnboardingPreview({
               ) : null}
 
               {step === "COMPLETED" ? (
-                <div className="mx-auto flex min-h-[460px] max-w-2xl flex-col items-center justify-center text-center">
+                <div className="mx-auto flex min-h-full max-w-2xl flex-col items-center justify-center text-center">
                   <div className="mb-6 grid h-24 w-24 place-items-center rounded-full bg-success text-4xl text-white shadow-[0_18px_55px_rgba(15,138,99,.28)]">✓</div>
                   <span className="rounded-full bg-accent-soft px-4 py-1.5 text-xs font-black text-accent">جاهز للشغل</span>
                   <h2 className="mt-4 text-3xl font-black tracking-[-0.035em] sm:text-4xl">موظف الاستقبال بتاعك جاهز 🎉</h2>
@@ -1737,13 +1778,14 @@ export function GuidedOnboardingPreview({
               ) : null}
             </div>
 
-            <div className="hidden items-center justify-between gap-3 border-t border-border/70 bg-card/75 px-6 py-5 sm:flex sm:px-9 md:px-12">
-              <Button type="button" variant="ghost" disabled={step === "WELCOME"} onClick={previous}>السابق</Button>
+            <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border/70 bg-card/90 px-5 py-3 sm:px-9 sm:py-4 md:px-12">
+              <Button type="button" variant="ghost" disabled={step === "WELCOME" || transitioning} onClick={previous}>السابق</Button>
               <Button
                 type="button"
                 onClick={next}
                 disabled={
-                  mockState === "loading"
+                  transitioning
+                  || mockState === "loading"
                   || (step === "BUSINESS" && !businessCanContinue)
                   || (step === "KNOWLEDGE" && !knowledgeApplied && ((knowledgeMode === "guided" && !discoveryDone) || !knowledge.trim()) && mockState !== "success")
                   || (step === "PLAYGROUND" && chatCount === 0)
@@ -1751,11 +1793,19 @@ export function GuidedOnboardingPreview({
                   || (step === "FIRST_MESSAGE" && firstMessageStage < 5)
                   || (step === "HUMAN_TAKEOVER" && !humanTakeoverDone)
                 }
-                className="min-w-44"
+                className="min-w-36 sm:min-w-44"
               >
                 {primaryLabel}
               </Button>
             </div>
+            {transitioning ? (
+              <div className="drvo-scene-transition absolute inset-0 z-30 flex flex-col items-center justify-center bg-card/95 px-6 text-center backdrop-blur-2xl" role="status" aria-live="polite">
+                <div className="drvo-scene-orbit mb-6 grid h-20 w-20 place-items-center rounded-[28px] border border-primary/20 bg-primary/10 text-4xl text-primary">✦</div>
+                <p className="text-xl font-black tracking-[-0.03em] sm:text-2xl">{transitionMessage}</p>
+                <span className="mt-3 text-xs font-medium text-muted-foreground">خطوة جديدة في رحلة موظفك</span>
+                <div className="drvo-scene-loading mt-7 h-1 w-36 overflow-hidden rounded-full bg-primary/10"><span className="block h-full w-1/2 rounded-full bg-primary" /></div>
+              </div>
+            ) : null}
           </div>
         </section>
 
@@ -1876,6 +1926,47 @@ export function GuidedOnboardingPreview({
       ) : null}
 
       <style jsx global>{`
+        @keyframes drvoSceneEnter {
+          from { opacity: 0; transform: translateY(16px) scale(.985); filter: blur(5px); }
+          to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+        }
+        @keyframes drvoFogDrift {
+          0%, 100% { transform: translate3d(-4%, 2%, 0) rotate(-9deg) scale(1); opacity: .65; }
+          50% { transform: translate3d(8%, -4%, 0) rotate(8deg) scale(1.16); opacity: 1; }
+        }
+        @keyframes drvoSceneOrbit {
+          0%, 100% { transform: rotate(-8deg) scale(.94); box-shadow: 0 0 20px rgb(0 117 154 / .08); }
+          50% { transform: rotate(12deg) scale(1.06); box-shadow: 0 0 60px rgb(0 117 154 / .24); }
+        }
+        @keyframes drvoSceneLoading {
+          from { transform: translateX(110%); }
+          to { transform: translateX(-220%); }
+        }
+        .drvo-onboarding { background: var(--atmosphere); }
+        .drvo-onboarding-fog {
+          position: absolute; display: block; width: 60vw; height: 60vw; border-radius: 9999px;
+          background: radial-gradient(ellipse, rgb(0 150 198 / .19) 0%, rgb(0 117 154 / .09) 35%, transparent 72%);
+          filter: blur(50px); animation: drvoFogDrift 18s ease-in-out infinite; will-change: transform;
+        }
+        .drvo-onboarding-fog-one { top: -35%; right: -17%; }
+        .drvo-onboarding-fog-two { bottom: -55%; left: -16%; animation-delay: -8s; animation-duration: 23s; }
+        .drvo-onboarding-fog-three { width: 40vw; height: 40vw; top: 25%; left: 26%; opacity: .4; animation-delay: -13s; animation-duration: 29s; }
+        .drvo-onboarding-step { animation: drvoSceneEnter .55s cubic-bezier(.2,.7,.2,1) both; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+        .drvo-scene-transition { animation: drvoSceneEnter .25s ease-out both; }
+        .drvo-scene-orbit { animation: drvoSceneOrbit 1.4s ease-in-out infinite; }
+        .drvo-scene-loading > span { animation: drvoSceneLoading .8s ease-in-out infinite; }
+        @media (max-height: 790px), (max-width: 640px) {
+          .drvo-onboarding-step .drvo-welcome-icon { width: 64px; height: 64px; font-size: 30px; margin-bottom: 12px; border-radius: 22px; }
+          .drvo-onboarding-step .drvo-welcome-title { font-size: clamp(1.4rem, 4vw, 2.15rem); }
+          .drvo-onboarding-step .drvo-welcome-copy { margin-top: 8px; font-size: .85rem; line-height: 1.65; }
+          .drvo-onboarding-step .drvo-welcome-grid { margin-top: 16px; gap: 8px; }
+          .drvo-onboarding-step .drvo-welcome-grid > div { padding: 10px 6px; }
+          .drvo-onboarding-step .drvo-welcome-footer { margin-top: 12px; }
+          .drvo-onboarding-fog { filter: blur(30px); width: 95vw; height: 95vw; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .drvo-onboarding-fog, .drvo-onboarding-step, .drvo-scene-transition, .drvo-scene-orbit, .drvo-scene-loading > span { animation: none !important; }
+        }
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(8px) scale(.995); }
           to { opacity: 1; transform: translateY(0) scale(1); }
@@ -1896,27 +1987,6 @@ export function GuidedOnboardingPreview({
         }
       `}</style>
 
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border/70 bg-card/95 p-3 shadow-[0_-8px_30px_rgba(7,19,25,.08)] backdrop-blur sm:hidden">
-        <div className="mx-auto flex max-w-lg gap-2">
-          {step !== "WELCOME" ? <Button type="button" variant="outline" className="w-24" onClick={previous}>السابق</Button> : null}
-          <Button
-            type="button"
-            className="flex-1"
-            onClick={next}
-            disabled={
-              mockState === "loading"
-              || (step === "BUSINESS" && !businessCanContinue)
-              || (step === "KNOWLEDGE" && !knowledgeApplied && ((knowledgeMode === "guided" && !discoveryDone) || !knowledge.trim()) && mockState !== "success")
-              || (step === "PLAYGROUND" && chatCount === 0)
-              || (step === "WHATSAPP" && Boolean(qrImageDataUrl) && !waReady)
-              || (step === "FIRST_MESSAGE" && firstMessageStage < 5)
-              || (step === "HUMAN_TAKEOVER" && !humanTakeoverDone)
-            }
-          >
-            {primaryLabel}
-          </Button>
-        </div>
-      </div>
     </main>
   );
 }
