@@ -172,6 +172,9 @@ export function GuidedOnboardingPreview({
   const [recordingPaused, setRecordingPaused] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [voiceInputFallback, setVoiceInputFallback] = useState(false);
+  const discoveryAnswerRef = useRef<HTMLTextAreaElement | null>(null);
+  const knowledgeAnswerRef = useRef<HTMLTextAreaElement | null>(null);
   const [knowledgeMode, setKnowledgeMode] = useState<KnowledgeMode>("guided");
   const [discoveryTurns, setDiscoveryTurns] = useState<DiscoveryTurn[]>([]);
   const [discoveryQuestion, setDiscoveryQuestion] = useState("");
@@ -458,19 +461,31 @@ export function GuidedOnboardingPreview({
   async function startVoiceRecording(target: "knowledge" | "discovery" = "knowledge") {
     setVoiceError(null);
     voiceTargetRef.current = target;
-    if (target === "discovery") setVoiceFlowState("recording");
+
+    // A denied or unsupported microphone should never block the onboarding
+    // interview or display a technical error. Let the user continue typing.
+    const focusWrittenAnswer = () => {
+      (target === "discovery" ? discoveryAnswerRef : knowledgeAnswerRef).current?.focus();
+    };
+
+    if (voiceInputFallback) {
+      focusWrittenAnswer();
+      return;
+    }
 
     if (
       typeof window === "undefined"
       || !navigator.mediaDevices?.getUserMedia
       || typeof MediaRecorder === "undefined"
     ) {
-      setVoiceError("التسجيل الصوتي غير مدعوم على المتصفح ده. تقدر تكتب المعلومات بدلًا منه.");
+      setVoiceInputFallback(true);
+      focusWrittenAnswer();
       return;
     }
 
+    let stream: MediaStream | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const preferredTypes = [
         "audio/webm;codecs=opus",
         "audio/webm",
@@ -492,7 +507,7 @@ export function GuidedOnboardingPreview({
         const blob = new Blob(audioChunksRef.current, {
           type: recorder.mimeType || "audio/webm",
         });
-        stream.getTracks().forEach((track) => track.stop());
+        stream?.getTracks().forEach((track) => track.stop());
         mediaRecorderRef.current = null;
         setRecordingPaused(false);
         setRecording(false);
@@ -501,11 +516,14 @@ export function GuidedOnboardingPreview({
       };
 
       recorder.start();
+      if (target === "discovery") setVoiceFlowState("recording");
       setRecordingPaused(false);
       setRecording(true);
     } catch {
+      stream?.getTracks().forEach((track) => track.stop());
       if (target === "discovery") setVoiceFlowState("idle");
-      setVoiceError("مقدرناش نفتح الميكروفون. اسمح باستخدامه من المتصفح وجرب تاني.");
+      setVoiceInputFallback(true);
+      focusWrittenAnswer();
     }
   }
 
@@ -1488,6 +1506,7 @@ export function GuidedOnboardingPreview({
                                   <p className="mt-2 text-xs text-muted-foreground">تقدر تستخدم المايك في كل سؤال، ومش لازم تقول كل التفاصيل مرة واحدة.</p>
                                 </div>
                                 <Textarea
+                                  ref={discoveryAnswerRef}
                                   value={discoveryInput}
                                   onChange={(event) => {
                                     setDiscoveryInput(event.target.value);
@@ -1509,7 +1528,9 @@ export function GuidedOnboardingPreview({
                                       ? "بنحوّل الصوت لنص…"
                                       : recording
                                         ? "■ وقف التسجيل"
-                                        : "🎙️ جاوب بصوتك"}
+                                        : voiceInputFallback
+                                          ? "✍️ اكتب إجابتك"
+                                          : "🎙️ جاوب بصوتك"}
                                   </Button>
                                   <Button
                                     type="button"
@@ -1559,6 +1580,7 @@ export function GuidedOnboardingPreview({
                       ) : (
                         <>
                           <Textarea
+                            ref={knowledgeAnswerRef}
                             value={knowledge}
                             onChange={(event) => setKnowledge(event.target.value)}
                             placeholder="مثال: عندنا فرعين، بنفتح يوميًا من 11 الصبح، خدمة الشعر بـ200 جنيه، الحجز متاح من الموقع..."
@@ -1583,7 +1605,9 @@ export function GuidedOnboardingPreview({
                                   ? "بنحوّل الصوت لنص…"
                                   : recording
                                     ? "■ وقف التسجيل"
-                                    : "🎙️ اتكلم بدل الكتابة"}
+                                    : voiceInputFallback
+                                      ? "✍️ اكتب معلوماتك"
+                                      : "🎙️ اتكلم بدل الكتابة"}
                               </Button>
                             </div>
                             {recording ? (
