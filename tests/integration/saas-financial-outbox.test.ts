@@ -150,6 +150,23 @@ describe.runIf(isolated)("financial outbox on verified isolated SQL Server", () 
     expect(recovered?.attemptCount).toBe(2);
     expect(await settleFinancialEvent(owned, { state: "ACCEPTED", errorCode: null })).toBe(false);
     expect(await settleFinancialEvent(recovered!, { state: "PENDING", errorCode: "UNCERTAIN_RESPONSE", delayMs: 0 })).toBe(true);
+    const retry = (await query<{ DeliveryState: string; AttemptCount: number;
+      LeaseOwner: string | null; LeaseUntilUtc: Date | null; LastErrorCode: string;
+      NextAttemptAtUtc: Date }>(
+      `SELECT DeliveryState, AttemptCount, LeaseOwner, LeaseUntilUtc, LastErrorCode, NextAttemptAtUtc
+       FROM dbo.TblSaasFinancialOutbox WHERE EventID=@eventId`, [
+        { name: "eventId", type: sql.NVarChar(150), value: event.event_id },
+      ])).recordset;
+    expect(retry).toEqual([expect.objectContaining({ DeliveryState: "PENDING", AttemptCount: 2,
+      LeaseOwner: null, LeaseUntilUtc: null, LastErrorCode: "UNCERTAIN_RESPONSE",
+      NextAttemptAtUtc: expect.any(Date) })]);
+    // DATETIME2(3) can round a zero-delay retry slightly ahead of the claim's SQL clock.
+    await query(`UPDATE dbo.TblSaasFinancialOutbox
+      SET NextAttemptAtUtc=DATEADD(second,-1,SYSUTCDATETIME())
+      WHERE EventID=@eventId AND SourceKey=@source AND DeliveryState=N'PENDING'`, [
+      { name: "eventId", type: sql.NVarChar(150), value: event.event_id },
+      { name: "source", type: sql.NVarChar(100), value: claimSource },
+    ]);
     const restartClaim = await claimFinancialEvent(claimSource, 60);
     expect(restartClaim?.eventId).toBe(event.event_id);
     expect(restartClaim?.attemptCount).toBe(3);
@@ -302,7 +319,7 @@ describe.runIf(isolated)("financial outbox on verified isolated SQL Server", () 
         (EventID,SourcePaymentID,PaymentRequestID,BusinessID,SourceKey,
          EventType,SchemaVersion,AmountMinor,CurrencyCode,OccurredAtUtc,Payload,NextAttemptAtUtc)
         VALUES (@event,@payment,@request,@business,@source,N'payment.confirmed',
-         1,100,N'EGP',SYSUTCDATETIME(),N'{}',SYSUTCDATETIME())`, [
+         1,100,N'EGP',SYSUTCDATETIME(),N'{}',DATEADD(second,-1,SYSUTCDATETIME()))`, [
         { name: "event", type: sql.NVarChar(150), value: eventId },
         { name: "payment", type: sql.NVarChar(150), value: sourcePaymentId },
         { name: "request", type: sql.UniqueIdentifier, value: payment.paymentRequestId },
