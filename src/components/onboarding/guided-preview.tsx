@@ -37,21 +37,6 @@ type KnowledgeTreeItem = {
   topicTitle?: string | null;
 };
 
-const discoveryLabels: Record<string, string> = {
-  offerings: "الخدمات / المنتجات",
-  pricing: "الأسعار",
-  customer_journey: "رحلة العميل",
-  availability: "المواعيد والتوفر",
-  booking_ordering: "الحجز / الطلب",
-  payments: "الدفع",
-  fulfillment: "التنفيذ / التوصيل",
-  policies: "السياسات",
-  promotions: "العروض",
-  exceptions: "الحالات الخاصة",
-  human_escalation: "التدخل البشري",
-  faq: "الأسئلة المتكررة",
-};
-
 function initialDiscoveryQuestion(type?: string) {
   const businessType = type?.trim() || "البيزنس";
   const examples: Record<string, string> = {
@@ -123,8 +108,6 @@ const countryChoices = [
   { code: "KW", label: "الكويت", locale: "ar-KW", timezone: "Asia/Kuwait" },
 ] as const;
 const branchChoices = ["فرع واحد", "فرعين", "3 فروع", "4+", "لسه ببدأ"];
-
-const knowledgeChips = ["الخدمات", "الأسعار", "المواعيد", "الفروع", "السياسات", "العروض"];
 
 const voicePromptExamples: Record<string, string[]> = {
   offerings: ["بتقدم إيه بالظبط؟", "إيه أشهر الخدمات أو المنتجات؟", "في اختيارات أو إضافات؟", "العميل بيطلب الخدمة إزاي؟"],
@@ -230,14 +213,15 @@ export function GuidedOnboardingPreview({
   const [voiceFlowState, setVoiceFlowState] = useState<
     "idle" | "recording" | "transcribing" | "saving"
   >("idle");
+  const trainingStartedRef = useRef(false);
 
   const index = FLOW.findIndex((item) => item.key === step);
   const progress = Math.max(0, Math.round((index / (FLOW.length - 1)) * 100));
   useEffect(() => {
-    if (step === "KNOWLEDGE" && knowledgeMode === "guided" && !discoveryDone) {
+    if (step === "KNOWLEDGE" && !discoveryDone) {
       discoveryChatEndRef.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
     }
-  }, [step, knowledgeMode, discoveryTurns, discoveryQuestion, discoveryLoading, discoveryDone]);
+  }, [step, discoveryTurns, discoveryQuestion, discoveryLoading, discoveryDone]);
   useEffect(() => () => {
     if (sceneTimerRef.current !== null) window.clearTimeout(sceneTimerRef.current);
   }, []);
@@ -653,6 +637,13 @@ export function GuidedOnboardingPreview({
     }
   }
 
+  async function retryDiscovery() {
+    if (discoveryLoading || !discoveryTurns.length) return;
+    setDiscoveryInput("");
+    discoveryInputRef.current = "";
+    await requestDiscoveryQuestion(discoveryTurns);
+  }
+
   async function submitDiscoveryAnswer(answerOverride?: string) {
     const answer = (answerOverride ?? discoveryInput).trim();
     if (!answer || discoveryLoading) return;
@@ -670,6 +661,10 @@ export function GuidedOnboardingPreview({
     setDiscoveryTurns(nextTurns);
     setDiscoveryInput("");
     discoveryInputRef.current = "";
+    await requestDiscoveryQuestion(nextTurns);
+  }
+
+  async function requestDiscoveryQuestion(nextTurns: DiscoveryTurn[]) {
     setDiscoveryLoading(true);
     setDiscoveryError(null);
 
@@ -856,6 +851,7 @@ export function GuidedOnboardingPreview({
     } catch (error) {
       setLiveError(error instanceof Error ? error.message : "حدث خطأ أثناء التدريب");
       setMockState("error");
+      trainingStartedRef.current = false;
     }
   }
 
@@ -935,20 +931,14 @@ export function GuidedOnboardingPreview({
     }
   }
 
-  const knowledgeTreeGroups = useMemo(() => {
-    const groups = new Map<string, { title: string; items: KnowledgeTreeItem[] }>();
-    for (const item of knowledgeTreeItems) {
-      const key = item.topicKey?.trim() || `standalone:${item.proposalId}`;
-      const title = item.topicTitle?.trim() || item.title;
-      const existing = groups.get(key);
-      if (existing) {
-        existing.items.push(item);
-      } else {
-        groups.set(key, { title, items: [item] });
-      }
-    }
-    return [...groups.entries()].map(([key, group]) => ({ key, ...group }));
-  }, [knowledgeTreeItems]);
+  /* eslint-disable react-hooks/exhaustive-deps -- one-shot automatic training of a completed interview */
+  useEffect(() => {
+    if (step !== "KNOWLEDGE" || !draftRestored || !discoveryDone || !knowledge.trim() || knowledgeApplied || mockState === "error") return;
+    if (trainingStartedRef.current) return;
+    trainingStartedRef.current = true;
+    void trainKnowledge();
+  }, [step, draftRestored, discoveryDone, knowledge, knowledgeApplied, mockState]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const primaryLabel = useMemo(() => {
     switch (step) {
@@ -961,9 +951,9 @@ export function GuidedOnboardingPreview({
           ? "بنعلم الموظف..."
           : knowledgeApplied || mockState === "success"
             ? "جربه دلوقتي"
-            : knowledgeMode === "guided" && !discoveryDone
-              ? "كمّل المقابلة الأول"
-              : "علّم الموظف";
+            : !discoveryDone
+              ? "كمّل المحادثة"
+              : "بجهز موظفك...";
       case "PLAYGROUND":
         return chatCount > 0 ? "الردود تمام — وصل واتساب" : "جرب سؤال الأول";
       case "WHATSAPP":
@@ -1025,7 +1015,7 @@ export function GuidedOnboardingPreview({
       return;
     }
     if (step === "KNOWLEDGE" && !knowledgeApplied && mockState !== "success") {
-      if (knowledgeMode === "guided" && !discoveryDone) return;
+      if (!discoveryDone) return;
       if (!knowledge.trim()) return;
       await trainKnowledge();
       return;
@@ -1076,7 +1066,7 @@ export function GuidedOnboardingPreview({
         <span className="drvo-onboarding-fog drvo-onboarding-fog-three" />
       </div>
       <div className="relative z-10 mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col gap-3 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 sm:gap-4 sm:px-6 sm:py-5">
-        <header className="flex shrink-0 items-center justify-between gap-4">
+        {step !== "KNOWLEDGE" ? <header className="flex shrink-0 items-center justify-between gap-4">
           <div>
             <div className="text-lg font-black tracking-[-0.03em] text-primary">DRVOWA</div>
             <div className="mt-0.5 text-[11px] font-medium text-muted-foreground">إعداد موظف الاستقبال</div>
@@ -1084,9 +1074,9 @@ export function GuidedOnboardingPreview({
           <div className="rounded-full border border-border/70 bg-card/75 px-3 py-1.5 text-xs font-semibold text-muted-foreground shadow-sm backdrop-blur">
             {Math.min(index + 1, FLOW.length)} من {FLOW.length}
           </div>
-        </header>
+        </header> : null}
 
-        <section aria-label="تقدم الإعداد" className="shrink-0">
+        {step !== "KNOWLEDGE" ? <section aria-label="تقدم الإعداد" className="shrink-0">
           <div className="relative mx-auto max-w-4xl">
             <div className="absolute left-[6%] right-[6%] top-4 h-0.5 rounded-full bg-card/80 shadow-inner sm:top-5" />
             <div
@@ -1131,18 +1121,18 @@ export function GuidedOnboardingPreview({
             </div>
             <div className="mt-1 text-center text-[11px] font-black text-primary md:hidden">{FLOW[index]?.label}</div>
           </div>
-        </section>
+        </section> : null}
 
         <section className="mx-auto flex min-h-0 w-full max-w-[920px] flex-1 flex-col">
           <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] border border-white/70 bg-card/90 shadow-[0_24px_90px_rgba(7,19,25,.13)] backdrop-blur-2xl sm:rounded-[32px]">
-            <div aria-live="polite" className="shrink-0 border-b border-border/40 px-5 pb-3 pt-4 sm:px-9 sm:pb-4 sm:pt-5">
+            {step !== "KNOWLEDGE" ? <div aria-live="polite" className="shrink-0 border-b border-border/40 px-5 pb-3 pt-4 sm:px-9 sm:pb-4 sm:pt-5">
               <div className="flex items-center gap-2 text-[10px] font-black tracking-widest text-primary">
                 <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_12px_var(--primary)]" />
                 DRVOWA / {FLOW[index]?.short}
               </div>
               <p className="mt-1 text-xs font-medium leading-5 text-muted-foreground sm:text-sm">{STEP_SCENES[step].line}</p>
-            </div>
-            <div key={`${step}-${businessQuestion}`} className="drvo-onboarding-step min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 pt-3 sm:px-9 sm:pb-7 sm:pt-5 md:px-12">
+            </div> : null}
+            <div key={`${step}-${businessQuestion}`} className={cx("drvo-onboarding-step min-h-0 flex-1 overscroll-contain", step === "KNOWLEDGE" ? "overflow-hidden" : "overflow-y-auto px-5 pb-5 pt-3 sm:px-9 sm:pb-7 sm:pt-5 md:px-12")}>
               {step === "WELCOME" ? (
                 <div className="flex min-h-full flex-col items-center justify-center text-center">
                   <div className="drvo-welcome-icon mb-7 grid h-24 w-24 place-items-center rounded-[30px] bg-primary text-4xl text-primary-foreground shadow-[0_18px_50px_rgba(0,117,154,.28)]">✦</div>
@@ -1279,391 +1269,93 @@ export function GuidedOnboardingPreview({
               ) : null}
 
               {step === "KNOWLEDGE" ? (
-                <div className="mx-auto max-w-3xl">
-                  <span className="text-xs font-black text-primary">تدريب الموظف</span>
-                  <h2 className="mt-2 text-3xl font-black tracking-[-0.035em]">دلوقتي علّم موظفك</h2>
-                  <p className="mt-3 leading-7 text-muted-foreground">الصق أي معلومات عندك، حتى لو مش مترتبة. إحنا هننظمها ونحولها لمعرفة يقدر يستخدمها في الرد.</p>
-
-                  {mockState === "error" ? (
-                    <div className="mt-8 rounded-[24px] border border-destructive/20 bg-destructive/5 p-6">
-                      <div className="flex items-start gap-4">
-                        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-destructive/10 font-black text-destructive">!</div>
-                        <div>
-                          <h3 className="font-black">مقدرناش نكمل التدريب المرة دي</h3>
-                          <p className="mt-2 text-sm leading-7 text-muted-foreground">معلوماتك لسه موجودة. جرّب تاني من غير ما تعيد أي حاجة.</p>
-                          {liveError ? <p className="mt-2 text-xs font-bold text-destructive">{liveError}</p> : null}
-                        </div>
-                      </div>
+                <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col">
+                  <div className="flex shrink-0 items-center gap-3 border-b border-border/60 px-4 py-3 sm:px-6">
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary text-xl text-primary-foreground" aria-hidden="true">✦</span>
+                    <div className="min-w-0 flex-1">
+                      <h1 className="text-sm font-black">DRVOWA</h1>
+                      <p className="text-xs text-muted-foreground">بنتعرف على بيزنسك</p>
                     </div>
-                  ) : mockState === "loading" ? (
-                    <div className="mt-8 space-y-3 rounded-[24px] border border-primary/20 bg-primary/5 p-6">
-                      {["بقرأ المعلومات…", "بنظم الخدمات والأسعار…", "بفهم السياسات والمواعيد…", "بنجهز موظف الاستقبال…"].map((label, i) => (
-                        <div key={label} className="flex items-center gap-3 rounded-2xl bg-card p-4 shadow-sm">
-                          <span className={cx("grid h-8 w-8 place-items-center rounded-full text-sm font-black", i < 2 ? "bg-success-soft text-success" : "bg-secondary text-muted-foreground")}>{i < 2 ? "✓" : "…"}</span>
-                          <span className="font-bold">{label}</span>
-                        </div>
-                      ))}
+                    <button type="button" onClick={previous} className="rounded-full px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-surface hover:text-foreground" aria-label="الرجوع">رجوع</button>
+                  </div>
+                  <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain bg-[#edf5f5] px-3 py-5 dark:bg-[#101e23] sm:px-6" role="log" aria-label="محادثة التدريب" aria-live="polite">
+                    <div className="max-w-[88%] self-start rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-sm leading-7 shadow-sm">
+                      أهلاً بيك 👋 أنا DRVOWA. احكيلي عن شغلك براحتك، كتابة أو فويس، وأنا هسأل بس عن التفاصيل اللي ناقصاني.
                     </div>
-                  ) : mockState === "success" || knowledgeApplied ? (
-                    <div className="mt-8 rounded-[24px] border border-success/20 bg-success-soft/55 p-6">
-                      <div className="flex items-center gap-4">
-                        <div className="grid h-14 w-14 place-items-center rounded-2xl bg-success text-2xl text-white">✓</div>
-                        <div>
-                          <h3 className="text-xl font-black">جاهز للتجربة ✨</h3>
-                          <p className="mt-1 text-sm text-muted-foreground">موظفك اتعلم {knowledgeCount || "مجموعة"} معلومات جديدة عن البيزنس.</p>
-                        </div>
+                    {discoveryTurns.map((turn, i) => (
+                      <div key={i} className="contents">
+                        <div className="max-w-[90%] self-start whitespace-pre-wrap rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-sm leading-7 shadow-sm">{turn.question}</div>
+                        <div className="max-w-[88%] self-end whitespace-pre-wrap rounded-[20px] rounded-tl-md bg-primary px-4 py-3 text-sm leading-7 text-primary-foreground shadow-sm">{turn.answer}</div>
                       </div>
-                      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                        {[
-                          ["SERVICE", "الخدمات"],
-                          ["FAQ", "الأسئلة الشائعة"],
-                          ["POLICY", "السياسات"],
-                          ["LOCATION_INFO", "الفروع والموقع"],
-                          ["ABOUT", "عن البيزنس"],
-                          ["CUSTOM", "معلومات إضافية"],
-                        ].filter(([key]) => (knowledgeSummary[key] ?? 0) > 0)
-                          .map(([key, label]) => (
-                            <div key={key} className="rounded-2xl bg-card/85 p-3 text-center">
-                              <div className="text-lg font-black">{knowledgeSummary[key]}</div>
-                              <div className="mt-1 text-[11px] font-bold text-muted-foreground">{label}</div>
-                            </div>
-                          ))}
+                    ))}
+                    {discoveryLoading ? (
+                      <div className="max-w-[88%] self-start rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-sm text-muted-foreground shadow-sm" role="status">بفهم كلامك وبجهّز السؤال اللي بعده…</div>
+                    ) : discoveryError ? (
+                      <div className="max-w-[88%] self-start rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-sm shadow-sm" role="alert">
+                        <p className="text-destructive">إجابتك محفوظة، بس حصلت مشكلة: {discoveryError}</p>
+                        <button type="button" onClick={() => void retryDiscovery()} className="mt-2 font-bold text-primary underline underline-offset-4">حاول تاني</button>
                       </div>
-
-                      {knowledgeTreeGroups.length > 0 ? (
-                        <div className="mt-6 rounded-[26px] border border-border bg-card p-4 shadow-sm sm:p-6">
-                          <div className="flex flex-wrap items-start justify-between gap-4">
-                            <div>
-                              <div className="text-base font-black">خريطة التغييرات في المعرفة</div>
-                              <div className="mt-1 text-xs leading-6 text-muted-foreground">
-                                الموضوع الرئيسي فوق، وتحته كل المعلومات التابعة له كـ Nodes مترابطة.
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap gap-2 text-[10px] font-black">
-                              <span className="rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-green-700">● جديد</span>
-                              <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-700">● تعديل</span>
-                              <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-red-700">● حذف</span>
-                            </div>
-                          </div>
-
-                          <div className="mt-7 space-y-8">
-                            {knowledgeTreeGroups.map((group) => (
-                              <div key={group.key} className="relative">
-                                <div className="relative z-10 flex items-center gap-3">
-                                  <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-2 border-ink bg-ink text-lg font-black text-white shadow-sm">
-                                    ◉
-                                  </div>
-                                  <div className="min-w-0 rounded-2xl border-2 border-border bg-card px-4 py-3 shadow-sm">
-                                    <div className="truncate text-sm font-black text-foreground">{group.title}</div>
-                                    <div className="mt-1 text-[10px] font-bold text-muted-foreground">
-                                      Parent node · {group.items.length} {group.items.length === 1 ? "child" : "children"}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="relative mr-6 mt-1 border-r-[3px] border-border pb-1 pr-8">
-                                  {group.items.map((item, itemIndex) => {
-                                    const isCreate = item.action === "CREATE";
-                                    const isMerge = item.action === "MERGE";
-                                    const isDelete = item.action === "DELETE";
-                                    const isConflict = item.action === "CONFLICT";
-
-                                    const nodeClasses = isCreate
-                                      ? "border-green-200 bg-green-50/80"
-                                      : isMerge
-                                        ? "border-amber-200 bg-amber-50/80"
-                                        : isDelete
-                                          ? "border-red-200 bg-red-50/80"
-                                          : isConflict
-                                            ? "border-orange-200 bg-orange-50/80"
-                                            : "border-border bg-surface";
-
-                                    const dotClasses = isCreate
-                                      ? "bg-green-500 ring-green-100"
-                                      : isMerge
-                                        ? "bg-amber-500 ring-amber-100"
-                                        : isDelete
-                                          ? "bg-red-500 ring-red-100"
-                                          : isConflict
-                                            ? "bg-orange-500 ring-orange-100"
-                                            : "bg-muted-foreground ring-border";
-
-                                    const badgeClasses = isCreate
-                                      ? "border-green-200 bg-green-100 text-green-800"
-                                      : isMerge
-                                        ? "border-amber-200 bg-amber-100 text-amber-800"
-                                        : isDelete
-                                          ? "border-red-200 bg-red-100 text-red-800"
-                                          : isConflict
-                                            ? "border-orange-200 bg-orange-100 text-orange-800"
-                                            : "border-border bg-secondary text-muted-foreground";
-
-                                    const statusLabel = isCreate
-                                      ? "جديد"
-                                      : isMerge
-                                        ? "اتعدل"
-                                        : isDelete
-                                          ? "اتمسح"
-                                          : isConflict
-                                            ? "محتاج مراجعة"
-                                            : "بدون تغيير";
-
-                                    return (
-                                      <div key={item.proposalId} className="relative pt-5">
-                                        <span className="absolute -right-8 top-10 h-[3px] w-8 bg-border" />
-                                        <span className={cx(
-                                          "absolute -right-[2.18rem] top-[2.18rem] h-4 w-4 rounded-full border-2 border-card ring-4",
-                                          dotClasses,
-                                        )} />
-
-                                        <div className={cx(
-                                          "relative rounded-2xl border-2 px-4 py-3.5 shadow-[0_5px_16px_rgba(7,19,25,.04)]",
-                                          nodeClasses,
-                                        )}>
-                                          <div className="flex flex-wrap items-start justify-between gap-3">
-                                            <div className="min-w-0">
-                                              <div className="flex items-center gap-2">
-                                                <span className="text-[10px] font-black text-muted-foreground">
-                                                  Child {itemIndex + 1}
-                                                </span>
-                                                <span className="text-[10px] text-muted-foreground/50">/</span>
-                                                <span className="text-[10px] font-black text-muted-foreground">{item.category}</span>
-                                              </div>
-                                              <div className="mt-1.5 text-sm font-black leading-6 text-foreground">
-                                                {item.title}
-                                              </div>
-                                            </div>
-
-                                            <span className={cx(
-                                              "shrink-0 rounded-full border px-3 py-1 text-[10px] font-black",
-                                              badgeClasses,
-                                            )}>
-                                              {statusLabel}
-                                            </span>
-                                          </div>
-
-                                          {group.items.length > 1 ? (
-                                            <div className="mt-2.5 flex items-center gap-2 text-[10px] font-bold text-muted-foreground">
-                                              <span className="text-muted-foreground/50">↳</span>
-                                              مرتبط بـ {group.title}
-                                            </div>
-                                          ) : null}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-
-                          <div className="mt-7 rounded-2xl border border-border bg-surface px-4 py-3 text-[11px] leading-6 text-muted-foreground">
-                            اللون بيوضح نوع التغيير: الأخضر إضافة جديدة، الأصفر تعديل على معرفة موجودة، والأحمر حذف صريح. التعارض بيظهر برتقالي للمراجعة ومش بيتحسب حذف.
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <>
-                      <div className="mt-7 grid grid-cols-2 gap-2 rounded-2xl bg-surface p-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setKnowledgeMode("guided")}
-                          className={cx(
-                            "rounded-xl px-4 py-3 text-sm font-black transition",
-                            knowledgeMode === "guided"
-                              ? "bg-card text-primary shadow-sm"
-                              : "text-muted-foreground",
-                          )}
-                        >
-                          ✨ اسألني واحدة واحدة
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setKnowledgeMode("freeform")}
-                          className={cx(
-                            "rounded-xl px-4 py-3 text-sm font-black transition",
-                            knowledgeMode === "freeform"
-                              ? "bg-card text-primary shadow-sm"
-                              : "text-muted-foreground",
-                          )}
-                        >
-                          📝 هكتب كل حاجة
-                        </button>
+                    ) : discoveryDone ? (
+                      <div className="max-w-[90%] self-start rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-sm leading-7 shadow-sm">
+                        {knowledgeApplied ? "تمام! ✨ دلوقتي فهمت بيزنسك وجاهز أجرب أرد على العملاء." : mockState === "error" ? "أنا جمعت معلوماتك، لكن حصلت مشكلة في حفظها. جرّب تاني من غير ما تعيد أي حاجة." : "تمام ❤️ الصورة بقت واضحة. بجهّز موظفك دلوقتي…"}
+                        {mockState === "error" && liveError ? <p className="mt-2 text-xs text-destructive" role="alert">{liveError}</p> : null}
                       </div>
-
-                      {knowledgeMode === "guided" ? (
-                        <div className="mt-5">
-                          {discoveryDone ? (
-                            <div className="rounded-[24px] border border-success/20 bg-success-soft/55 p-6">
-                              <div className="flex items-start gap-4">
-                                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-success text-xl text-white">✓</div>
-                                <div className="flex-1">
-                                  <h3 className="font-black">تمام — الصورة بقت واضحة جدًا</h3>
-                                  <p className="mt-2 text-sm leading-7 text-muted-foreground">
-                                    جمعنا {discoveryTurns.length} إجابات عن {effectiveBusinessType || "النشاط"}، وجهزناهم للتدريب. تقدر تدرب الموظف دلوقتي.
-                                  </p>
-                                  {discoveryCovered.length > 0 ? (
-                                    <div className="mt-4 flex flex-wrap gap-2">
-                                      {discoveryCovered.map((key) => (
-                                        <span key={key} className="rounded-full bg-card px-3 py-1.5 text-[11px] font-black text-success">
-                                          {discoveryLabels[key] || key} ✓
-                                        </span>
-                                      ))}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <div className="overflow-hidden rounded-[24px] border border-border/70 bg-[#eaf3f4] shadow-sm dark:bg-[#101e23]">
-                                <div className="flex items-center gap-3 border-b border-border/50 bg-card/90 px-4 py-3 sm:px-5">
-                                  <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary text-xl text-primary-foreground">✦</span>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-black text-foreground">DRVOWA · مساعد الإعداد</p>
-                                    <p className="mt-0.5 text-[11px] text-muted-foreground">بيسألك عن نشاطك خطوة بخطوة</p>
-                                  </div>
-                                  <span className="rounded-full bg-success-soft px-2.5 py-1 text-[10px] font-bold text-success">● متصل</span>
-                                </div>
-
-                                <div className="flex max-h-[42dvh] min-h-[180px] flex-col gap-4 overflow-y-auto overscroll-contain px-3 py-5 sm:max-h-[360px] sm:px-5" role="log" aria-label="محادثة التعريف بنشاطك" aria-live="polite">
-                                  <div className="max-w-[88%] self-start rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-sm leading-7 text-foreground shadow-sm">
-                                    أهلًا بيك! 👋 أنا DRVOWA. هسألك كام سؤال خفيف علشان أفهم نشاطك وأجهز موظفك الذكي.
-                                  </div>
-                                  {discoveryTurns.map((turn, turnIndex) => (
-                                    <div key={turnIndex} className="flex flex-col gap-2">
-                                      <div className="max-w-[90%] self-start rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-sm leading-7 text-foreground shadow-sm">
-                                        {turn.question}
-                                      </div>
-                                      <div className="max-w-[88%] self-end whitespace-pre-wrap rounded-[20px] rounded-tl-md bg-primary px-4 py-3 text-sm leading-7 text-primary-foreground shadow-sm">
-                                        {turn.answer}
-                                      </div>
-                                    </div>
-                                  ))}
-                                  {discoveryLoading ? (
-                                    <div className="flex max-w-[85%] items-center gap-2 self-start rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-xs text-muted-foreground shadow-sm">
-                                      <span className="flex gap-1" aria-hidden="true">
-                                        {[0, 1, 2].map((dot) => (
-                                          <span key={dot} className="drvo-chat-dot h-1.5 w-1.5 rounded-full bg-primary/60" style={{ animationDelay: `${dot * 150}ms` }} />
-                                        ))}
-                                      </span>
-                                      بفهم كلامك وبجهّز السؤال اللي بعده…
-                                    </div>
-                                  ) : (
-                                    <div className="max-w-[90%] self-start rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-sm leading-7 text-foreground shadow-sm">
-                                      {discoveryQuestion || initialDiscoveryQuestion(effectiveBusinessType)}
-                                    </div>
-                                  )}
-                                  <div ref={discoveryChatEndRef} aria-hidden="true" />
-                                </div>
-
-                                <div className="border-t border-border/40 bg-card/90 p-3 sm:p-4">
-                                  <p className="mb-2 text-[11px] font-medium text-muted-foreground">
-                                    رد بطريقتك، بصوتك أو بالكتابة. سؤال واحد كل مرة ✨
-                                  </p>
-                                  <div className="flex items-end gap-2">
-                                    <button
-                                      type="button"
-                                      aria-label={recording ? "إيقاف التسجيل" : "تسجيل رد صوتي"}
-                                      title={recording ? "إيقاف التسجيل" : "جاوب بصوتك"}
-                                      disabled={transcribing || discoveryLoading}
-                                      onClick={recording ? stopVoiceRecording : () => void startVoiceRecording("discovery")}
-                                      className={cx(
-                                        "grid h-12 w-12 shrink-0 place-items-center rounded-full text-xl shadow-sm transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50",
-                                        recording ? "bg-destructive text-white" : "bg-primary/10 text-primary",
-                                      )}
-                                    >
-                                      {recording ? "■" : "🎙"}
-                                    </button>
-                                    <Textarea
-                                      value={discoveryInput}
-                                      onChange={(event) => {
-                                        setDiscoveryInput(event.target.value);
-                                        discoveryInputRef.current = event.target.value;
-                                      }}
-                                      aria-label="اكتب ردك على سؤال الموظف"
-                                      placeholder="اكتب ردك هنا…"
-                                      rows={2}
-                                      className="min-h-12 max-h-28 flex-1 resize-none rounded-2xl border border-border bg-background px-3 py-2 text-sm leading-6"
-                                    />
-                                    <button
-                                      type="button"
-                                      aria-label="إرسال الإجابة"
-                                      disabled={!discoveryInput.trim() || discoveryLoading || recording || transcribing}
-                                      onClick={() => void submitDiscoveryAnswer()}
-                                      className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-primary text-xl text-primary-foreground shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                                    >➤</button>
-                                  </div>
-                                  {recording ? (
-                                    <p className="mt-2 text-xs font-bold text-destructive">● التسجيل شغال… اضغط على زر المايك لما تخلص.</p>
-                                  ) : null}
-                                  {transcribing ? <p className="mt-2 text-xs text-primary">بنحوّل رسالتك الصوتية لنص…</p> : null}
-                                  {microphoneHelp ? <MicrophonePermissionHelp state={microphoneHelp} /> : null}
-                                  {voiceError ? <p className="mt-2 text-xs font-bold text-destructive" role="alert">{voiceError}</p> : null}
-                                  {discoveryError ? <p className="mt-2 text-xs font-bold text-destructive" role="alert">{discoveryError}</p> : null}
-                                </div>
-                              </div>
-                              {discoveryTurns.length > 0 ? (
-                                <p className="mt-3 text-center text-[11px] text-muted-foreground">
-                                  عرفنا {discoveryTurns.length} {discoveryTurns.length === 1 ? "إجابة" : "إجابات"} عن نشاطك لحد دلوقتي
-                                </p>
-                              ) : null}
-                            </>
-                          )}
-                        </div>
-                      ) : (
-                        <>
+                    ) : (
+                      <div className="max-w-[90%] self-start whitespace-pre-wrap rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-sm leading-7 shadow-sm">{discoveryQuestion || initialDiscoveryQuestion(effectiveBusinessType)}</div>
+                    )}
+                    <div ref={discoveryChatEndRef} aria-hidden="true" />
+                  </div>
+                  <div className="shrink-0 border-t border-border/60 bg-card px-3 py-3 sm:px-5">
+                    {discoveryDone ? (
+                      <div className="flex items-center justify-center">
+                        {knowledgeApplied ? (
+                          <Button type="button" onClick={() => void next()} className="w-full max-w-sm rounded-full">جرّب موظفك دلوقتي ←</Button>
+                        ) : mockState === "error" ? (
+                          <Button type="button" onClick={() => { trainingStartedRef.current = true; void trainKnowledge(); }} className="w-full max-w-sm rounded-full">إعادة المحاولة</Button>
+                        ) : (
+                          <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><span className="h-3 w-3 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />بجهز الموظف…</p>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-end gap-2">
+                          <button
+                            type="button"
+                            aria-label={recording ? "إيقاف التسجيل وإرسال الرد" : "تسجيل رد صوتي"}
+                            disabled={transcribing || discoveryLoading || Boolean(discoveryError)}
+                            onClick={recording ? stopVoiceRecording : () => void startVoiceRecording("discovery")}
+                            className={cx("grid h-11 w-11 shrink-0 place-items-center rounded-full text-lg transition disabled:opacity-40", recording ? "bg-destructive text-white" : "bg-primary/10 text-primary")}
+                          >{recording ? "■" : "🎙"}</button>
                           <Textarea
-                            value={knowledge}
-                            onChange={(event) => setKnowledge(event.target.value)}
-                            placeholder="مثال: عندنا فرعين، بنفتح يوميًا من 11 الصبح، خدمة الشعر بـ200 جنيه، الحجز متاح من الموقع..."
-                            className="mt-5 min-h-56 rounded-[24px] border-2 bg-card p-5 text-base leading-8 shadow-sm focus:border-primary"
+                            value={discoveryInput}
+                            onChange={(event) => { setDiscoveryInput(event.target.value); discoveryInputRef.current = event.target.value; }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                                event.preventDefault();
+                                if (discoveryInput.trim() && !discoveryLoading && !recording && !transcribing && !discoveryError) void submitDiscoveryAnswer();
+                              }
+                            }}
+                            aria-label="اكتب رسالتك"
+                            placeholder={recording ? "بسمعك دلوقتي…" : "اكتب أو سجّل ردك…"}
+                            rows={1}
+                            disabled={recording || discoveryLoading || transcribing || Boolean(discoveryError)}
+                            className="min-h-11 max-h-28 flex-1 resize-none rounded-2xl border border-border bg-background px-3 py-2 text-sm leading-6"
                           />
-                          <div className="mt-4 rounded-[22px] border border-primary/15 bg-primary/5 p-4">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-black">مش عايز تكتب؟ اتكلم وإحنا هنكتبلك.</p>
-                                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                  اتكلم بالعربي بشكل طبيعي، وبعد التحويل راجع النص وعدّله لو محتاج.
-                                </p>
-                              </div>
-                              <Button
-                                type="button"
-                                variant={recording ? "danger" : "outline"}
-                                disabled={transcribing}
-                                onClick={recording ? stopVoiceRecording : () => void startVoiceRecording("knowledge")}
-                                className="min-w-40 rounded-2xl"
-                              >
-                                {transcribing
-                                  ? "بنحوّل الصوت لنص…"
-                                  : recording
-                                    ? "■ وقف التسجيل"
-                                    : "🎙️ اتكلم بدل الكتابة"}
-                              </Button>
-                            </div>
-                            {recording ? (
-                              <div className="mt-3 flex items-center gap-2 text-xs font-black text-destructive">
-                                <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-destructive" />
-                                بسمعك دلوقتي… اتكلم براحتك وبعدين وقف التسجيل.
-                              </div>
-                            ) : null}
-                            {microphoneHelp ? <MicrophonePermissionHelp state={microphoneHelp} /> : null}
-                            {voiceError ? (
-                              <p className="mt-3 text-xs font-bold text-destructive" role="alert">
-                                {voiceError}
-                              </p>
-                            ) : null}
-                          </div>
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            {knowledgeChips.map((chip) => (
-                              <span key={chip} className="rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-bold text-secondary-foreground">{chip}</span>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </>
-                  )}
+                          <button
+                            type="button"
+                            aria-label="إرسال الرسالة"
+                            disabled={!discoveryInput.trim() || discoveryLoading || recording || transcribing || Boolean(discoveryError)}
+                            onClick={() => void submitDiscoveryAnswer()}
+                            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary text-lg text-primary-foreground transition hover:opacity-90 disabled:opacity-40"
+                          >↑</button>
+                        </div>
+                        {recording ? <p className="mt-2 text-xs font-semibold text-destructive" role="status">● بسجّل صوتك… اضغط على المايك لما تخلص.</p> : null}
+                        {transcribing ? <p className="mt-2 text-xs text-primary" role="status">بنحوّل الرسالة الصوتية لنص…</p> : null}
+                        {microphoneHelp ? <MicrophonePermissionHelp state={microphoneHelp} /> : null}
+                        {voiceError ? <p className="mt-2 text-xs text-destructive" role="alert">{voiceError}</p> : null}
+                      </>
+                    )}
+                  </div>
                 </div>
               ) : null}
 
@@ -1835,7 +1527,7 @@ export function GuidedOnboardingPreview({
               ) : null}
             </div>
 
-            <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border/70 bg-card/90 px-5 py-3 sm:px-9 sm:py-4 md:px-12">
+            {step !== "KNOWLEDGE" ? <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border/70 bg-card/90 px-5 py-3 sm:px-9 sm:py-4 md:px-12">
               <Button type="button" variant="ghost" disabled={step === "WELCOME" || transitioning} onClick={previous}>السابق</Button>
               <Button
                 type="button"
@@ -1844,7 +1536,7 @@ export function GuidedOnboardingPreview({
                   transitioning
                   || mockState === "loading"
                   || (step === "BUSINESS" && !businessCanContinue)
-                  || (step === "KNOWLEDGE" && !knowledgeApplied && ((knowledgeMode === "guided" && !discoveryDone) || !knowledge.trim()) && mockState !== "success")
+                  || (step === "KNOWLEDGE" && !knowledgeApplied && (!discoveryDone || !knowledge.trim()) && mockState !== "success")
                   || (step === "PLAYGROUND" && chatCount === 0)
                   || (step === "WHATSAPP" && Boolean(qrImageDataUrl) && !waReady)
                   || (step === "FIRST_MESSAGE" && firstMessageStage < 5)
@@ -1854,7 +1546,7 @@ export function GuidedOnboardingPreview({
               >
                 {primaryLabel}
               </Button>
-            </div>
+            </div> : null}
             {transitioning ? (
               <div className="drvo-scene-transition absolute inset-0 z-30 flex flex-col items-center justify-center bg-card/95 px-6 text-center backdrop-blur-2xl" role="status" aria-live="polite">
                 <div className="drvo-scene-orbit mb-6 grid h-20 w-20 place-items-center rounded-[28px] border border-primary/20 bg-primary/10 text-4xl text-primary">✦</div>
@@ -1876,7 +1568,7 @@ export function GuidedOnboardingPreview({
         </div> : null}
       </div>
 
-      {voiceFlowState !== "idle" ? (
+      {voiceFlowState !== "idle" && step !== "KNOWLEDGE" ? (
         <div
           className="voice-flow-overlay fixed inset-0 z-[80] flex items-center justify-center bg-ink/45 px-5 backdrop-blur-md"
           role="dialog"
