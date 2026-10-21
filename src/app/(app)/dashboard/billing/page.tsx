@@ -54,6 +54,16 @@ export default async function BillingPage() {
   const instructions = manualEnabled ? getInstaPayDisplayConfig() : null;
   const latest = paymentStatus.open ?? (paymentStatus.latest?.status === "REJECTED" ? paymentStatus.latest : null);
   const scheduled = await getScheduledBillingChange(businessId);
+  const requiresReview =
+    !sub || !plan ||
+    (sub.status === "ACTIVE" && !overview.canAct) ||
+    (sub.periodStartUtc && sub.periodEndUtc && sub.periodEndUtc <= sub.periodStartUtc) ||
+    (plan.maxWhatsAppConnections != null && overview.whatsappConnectionsUsed > plan.maxWhatsAppConnections) ||
+    (plan.maxAgents != null && overview.agentsUsed > plan.maxAgents) ||
+    (plan.maxActiveKnowledgeItems != null && overview.activeKnowledgeUsed > plan.maxActiveKnowledgeItems) ||
+    (plan.monthlyAiReplies != null && overview.aiUsed > plan.monthlyAiReplies) ||
+    (plan.monthlyWhatsAppOutbound != null && overview.whatsappOutboundUsed > plan.monthlyWhatsAppOutbound);
+  const scheduledNeedsReview = Boolean(scheduled && scheduled.Kind !== "CANCEL" && !scheduled.PlanDisplayName);
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
@@ -71,15 +81,17 @@ export default async function BillingPage() {
           <div className="rounded-2xl bg-surface px-4 py-3">
             <p className="text-[11px] font-bold text-muted-foreground">نهاية الفترة الحالية</p>
             <p className="mt-1 text-sm font-black">
-              {formatDate(sub?.periodEndUtc)}
+              {requiresReview ? "يحتاج مراجعة" : sub?.periodEndUtc ? formatDate(sub.periodEndUtc) : "لا يوجد موعد تجديد محدد"}
             </p>
           </div>
         </div>
       </section>
 
       <Link className="inline-block rounded-xl border border-border bg-card px-4 py-3 font-bold text-primary" href="/dashboard/billing/documents">الفواتير والإيصالات</Link>
-      {scheduled ? <Alert variant="info" title="تغيير مجدول">{scheduled.Kind === "CANCEL" ? "الإلغاء والتحويل إلى المجاني" : `الانتقال إلى ${scheduled.PlanDisplayName}`} يوم {formatDate(scheduled.EffectiveAtUtc)}. باقتك الحالية مستمرة حتى ذلك الموعد.</Alert> : null}
-      {sub?.periodEndUtc && sub.periodEndUtc <= new Date() && plan?.code !== "FREE" ? <Alert variant="info" title="فترة السماح">يمكنك التجديد خلال 5 أيام من انتهاء الاشتراك. بعدها تتحول إلى الباقة المجانية.</Alert> : null}
+      {requiresReview ? <Alert variant="info" title="بيانات الاشتراك تحتاج مراجعة">بعض بيانات الاشتراك أو الاستخدام غير متسقة حاليًا. راجع الفواتير والإيصالات أو تواصل مع الدعم قبل اتخاذ قرار دفع جديد.</Alert> : null}
+      {scheduledNeedsReview ? <Alert variant="info" title="تغيير الباقة يحتاج مراجعة">هناك تغيير مسجل للاشتراك لكن تفاصيل الباقة المستهدفة غير مكتملة. برجاء مراجعته قبل إجراء دفع جديد.</Alert> : null}
+      {scheduled && !scheduledNeedsReview ? <Alert variant="info" title="تغيير مجدول">{scheduled.Kind === "CANCEL" ? "الإلغاء والتحويل إلى المجاني" : `الانتقال إلى ${scheduled.PlanDisplayName}`} يوم {formatDate(scheduled.EffectiveAtUtc)}. باقتك الحالية مستمرة حتى ذلك الموعد.</Alert> : null}
+      {!requiresReview && sub?.periodEndUtc && sub.periodEndUtc <= new Date() && plan?.code !== "FREE" ? <Alert variant="info" title="فترة السماح">يمكنك التجديد خلال 5 أيام من انتهاء الاشتراك. بعدها تتحول إلى الباقة المجانية.</Alert> : null}
       {latest && (latest.status === "AWAITING_TRANSFER" || latest.status === "PENDING" || latest.status === "REJECTED") ? (
         <Alert
           variant={latest.status === "REJECTED" ? "error" : "info"}
@@ -111,11 +123,13 @@ export default async function BillingPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-black text-primary">اشتراكك الحالي</p>
-            <h2 className="mt-1 text-2xl font-black">{plan?.displayName ?? "—"}</h2>
+            <h2 className="mt-1 text-2xl font-black">{requiresReview ? "يحتاج مراجعة" : plan?.displayName ?? "—"}</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              {overview.canAct
-                ? "التشغيل متاح دلوقتي ضمن حدود الخطة."
-                : "التشغيل متوقف مؤقتًا — راجع حالة الاشتراك."}
+              {requiresReview
+                ? "بيانات الاشتراك تحتاج مراجعة قبل الاعتماد عليها."
+                : overview.canAct
+                  ? "التشغيل متاح دلوقتي ضمن حدود الخطة."
+                  : "التشغيل متوقف مؤقتًا — راجع حالة الاشتراك."}
             </p>
           </div>
           <div className={`rounded-full px-3 py-1.5 text-xs font-black ${
@@ -123,7 +137,7 @@ export default async function BillingPage() {
               ? "bg-success-soft text-success"
               : "bg-warning-soft text-warning"
           }`}>
-            {subscriptionStatusLabel(sub?.status)}
+            {requiresReview ? "يحتاج مراجعة" : subscriptionStatusLabel(sub?.status)}
           </div>
         </div>
 
@@ -136,7 +150,7 @@ export default async function BillingPage() {
           <div>
             <dt className="text-muted-foreground">حالة التشغيل</dt>
             <dd className="font-medium">
-              {overview.canAct ? "جاهز للاستخدام" : "محتاج مراجعة"}
+              {requiresReview ? "يحتاج مراجعة" : overview.canAct ? "جاهز للاستخدام" : "محتاج مراجعة"}
             </dd>
           </div>
         </dl>
