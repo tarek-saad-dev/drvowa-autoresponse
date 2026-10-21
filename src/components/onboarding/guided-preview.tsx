@@ -126,6 +126,26 @@ const branchChoices = ["فرع واحد", "فرعين", "3 فروع", "4+", "ل�
 
 const knowledgeChips = ["الخدمات", "الأسعار", "المواعيد", "الفروع", "السياسات", "العروض"];
 
+const voicePromptExamples: Record<string, string[]> = {
+  offerings: ["بتقدم إيه بالظبط؟", "إيه أشهر الخدمات أو المنتجات؟", "في اختيارات أو إضافات؟", "العميل بيطلب الخدمة إزاي؟"],
+  pricing: ["أسعار الخدمات كام؟", "في باقات أو عروض؟", "في مصاريف إضافية؟", "طرق الدفع المتاحة إيه؟"],
+  availability: ["بتفتحوا إمتى؟", "في أيام إجازة؟", "الحجز محتاج ميعاد؟", "المواعيد بتختلف حسب الفرع؟"],
+  booking_ordering: ["العميل يحجز أو يطلب إزاي؟", "إيه البيانات المطلوبة؟", "ينفع يلغي أو يغيّر؟", "الطلب بياخد وقت قد إيه؟"],
+  policies: ["سياسة الإلغاء إيه؟", "في استبدال أو استرجاع؟", "إيه أهم شروط التعامل؟", "إمتى يتحول لموظف بشري؟"],
+  human_escalation: ["إمتى العميل يحتاج موظف؟", "بيتواصل مع مين؟", "إيه المشاكل اللي محتاجة تدخل؟", "مواعيد متابعة الشكاوى إيه؟"],
+  faq: ["العملاء بيسألوا عن إيه كتير؟", "إيه الإجابات الدقيقة؟", "إيه الحالات الاستثنائية؟", "في معلومات لازم تتأكد منها؟"],
+};
+const defaultVoicePrompts = ["طبيعة شغلك إيه؟", "خدماتك وأسعارك كام؟", "فروعك وعناوينها فين؟", "مواعيدك وسياساتك إيه؟"];
+
+function getVoicePrompts(topic: string | null, businessType: string): string[] {
+  if (topic && voicePromptExamples[topic]) return voicePromptExamples[topic];
+  if (businessType === "مطعم") return ["بتقدموا أكلات إيه؟", "أسعار المنيو والعروض؟", "الدليفري والتوصيل فين؟", "مواعيد العمل والطلبات؟"];
+  if (businessType === "صالون") return ["خدمات الشعر والبشرة إيه؟", "أسعار الخدمات والباقات؟", "الفروع والحجز والمواعيد؟", "العروض والسياسات؟"];
+  if (businessType === "عيادة") return ["التخصص والخدمات إيه؟", "أسعار الكشف والمتابعة؟", "العنوان ومواعيد الحجز؟", "تعليمات وسياسات العيادة؟"];
+  return defaultVoicePrompts;
+}
+
+
 function cx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
 }
@@ -1888,10 +1908,20 @@ export function GuidedOnboardingPreview({
                     ? "خد وقتك، ولما تبقى جاهز اضغط «كمّل التسجيل» وهتكمل نفس الإجابة من مكان ما وقفت."
                     : "سجّل في مكان هادي، قرّب الموبايل منك، واتكلم بصوت واضح وطبيعي. اذكر كل التفاصيل والاستثناءات حتى لو شايفها بسيطة."}
                 </p>
-                <div className="mt-5 grid grid-cols-3 gap-2 text-[11px] font-bold text-muted-foreground">
-                  <span className="rounded-xl bg-surface px-2 py-2.5">مكان هادي</span>
-                  <span className="rounded-xl bg-surface px-2 py-2.5">صوت واضح</span>
-                  <span className="rounded-xl bg-surface px-2 py-2.5">بدون استعجال</span>
+                <div className="mt-5 text-start">
+                  <p className="mb-3 text-xs font-black text-primary">💡 ممكن تحكي عن الحاجات دي:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {getVoicePrompts(discoveryTopic, effectiveBusinessType).map((prompt, promptIndex) => (
+                      <span
+                        key={prompt}
+                        className="rounded-2xl border border-primary/15 bg-primary/5 px-3.5 py-2.5 text-xs font-bold leading-5 text-foreground shadow-sm"
+                      >
+                        <span className="ml-1.5 text-primary">{String(promptIndex + 1).padStart(2, "0")}</span>
+                        {prompt}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[11px] leading-5 text-muted-foreground">دي أفكار تساعدك بس؛ اتكلم بطريقتك ومش لازم تجاوب عليهم كلهم.</p>
                 </div>
                 <div className="mt-6 grid grid-cols-2 gap-2">
                   {typeof MediaRecorder !== "undefined"
