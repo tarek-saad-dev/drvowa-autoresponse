@@ -30,9 +30,7 @@ function formatDate(value: Date | null | undefined): string {
 function paymentStatusLabel(status: string): string {
   if (status === "AWAITING_TRANSFER") return "بانتظار التحويل";
   if (status === "PENDING") return "قيد المراجعة";
-  if (status === "APPROVED") return "تم اعتماد الدفع";
   if (status === "REJECTED") return "تعذر اعتماد الدفع";
-  if (status === "CANCELED") return "ملغي";
   return "—";
 }
 
@@ -54,7 +52,7 @@ export default async function BillingPage() {
   const plan = overview.plan;
   const sub = overview.subscription;
   const instructions = manualEnabled ? getInstaPayDisplayConfig() : null;
-  const latest = paymentStatus.latest;
+  const latest = paymentStatus.open ?? (paymentStatus.latest?.status === "REJECTED" ? paymentStatus.latest : null);
   const scheduled = await getScheduledBillingChange(businessId);
 
   return (
@@ -71,7 +69,7 @@ export default async function BillingPage() {
             </p>
           </div>
           <div className="rounded-2xl bg-surface px-4 py-3">
-            <p className="text-[11px] font-bold text-muted-foreground">التجديد</p>
+            <p className="text-[11px] font-bold text-muted-foreground">نهاية الفترة الحالية</p>
             <p className="mt-1 text-sm font-black">
               {formatDate(sub?.periodEndUtc)}
             </p>
@@ -84,13 +82,7 @@ export default async function BillingPage() {
       {sub?.periodEndUtc && sub.periodEndUtc <= new Date() && plan?.code !== "FREE" ? <Alert variant="info" title="فترة السماح">يمكنك التجديد خلال 5 أيام من انتهاء الاشتراك. بعدها تتحول إلى الباقة المجانية.</Alert> : null}
       {latest && (latest.status === "AWAITING_TRANSFER" || latest.status === "PENDING" || latest.status === "REJECTED") ? (
         <Alert
-          variant={
-            latest.status === "APPROVED"
-              ? "success"
-              : latest.status === "REJECTED"
-                ? "error"
-                : "info"
-          }
+          variant={latest.status === "REJECTED" ? "error" : "info"}
           title={paymentStatusLabel(latest.status)}
         >
           <p className="text-sm">
@@ -169,7 +161,7 @@ export default async function BillingPage() {
             max={plan?.monthlyWhatsAppOutbound}
           />
           <Progress
-            label="اتصالات واتساب"
+            label="اتصالات واتساب المفعّلة"
             value={overview.whatsappConnectionsUsed}
             max={plan?.maxWhatsAppConnections}
           />
@@ -184,6 +176,7 @@ export default async function BillingPage() {
             max={plan?.maxActiveKnowledgeItems}
           />
         </div>
+        <p className="text-xs leading-6 text-muted-foreground">اتصالات واتساب المفعّلة فقط هي الظاهرة هنا. أي اتصال قيد الإعداد قد يحجز مكانًا مؤقتًا من سعة الباقة حتى يتم إكماله أو إلغاؤه.</p>
       </section>
 
       <BillingPlansClient
