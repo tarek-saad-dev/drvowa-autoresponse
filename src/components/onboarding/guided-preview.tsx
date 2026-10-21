@@ -226,12 +226,18 @@ export function GuidedOnboardingPreview({
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const voiceTargetRef = useRef<"knowledge" | "discovery">("knowledge");
   const discoveryInputRef = useRef("");
+  const discoveryChatEndRef = useRef<HTMLDivElement | null>(null);
   const [voiceFlowState, setVoiceFlowState] = useState<
     "idle" | "recording" | "transcribing" | "saving"
   >("idle");
 
   const index = FLOW.findIndex((item) => item.key === step);
   const progress = Math.max(0, Math.round((index / (FLOW.length - 1)) * 100));
+  useEffect(() => {
+    if (step === "KNOWLEDGE" && knowledgeMode === "guided" && !discoveryDone) {
+      discoveryChatEndRef.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
+    }
+  }, [step, knowledgeMode, discoveryTurns, discoveryQuestion, discoveryLoading, discoveryDone]);
   useEffect(() => () => {
     if (sceneTimerRef.current !== null) window.clearTimeout(sceneTimerRef.current);
   }, []);
@@ -1549,6 +1555,7 @@ export function GuidedOnboardingPreview({
                                       {discoveryQuestion || initialDiscoveryQuestion(effectiveBusinessType)}
                                     </div>
                                   )}
+                                  <div ref={discoveryChatEndRef} aria-hidden="true" />
                                 </div>
 
                                 <div className="border-t border-border/40 bg-card/90 p-3 sm:p-4">
