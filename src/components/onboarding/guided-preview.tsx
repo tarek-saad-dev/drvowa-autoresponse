@@ -1511,100 +1511,96 @@ export function GuidedOnboardingPreview({
                             </div>
                           ) : (
                             <>
-                              <div className="rounded-[24px] border border-primary/15 bg-primary/5 p-5 sm:p-6">
-                                <div className="flex items-start justify-between gap-4">
-                                  <div>
-                                    <span className="text-[11px] font-black text-primary">
-                                      مقابلة ذكية · {effectiveBusinessType || "نشاطك"}
-                                    </span>
-                                    <h3 className="mt-2 text-xl font-black leading-8">
+                              <div className="overflow-hidden rounded-[24px] border border-border/70 bg-[#eaf3f4] shadow-sm dark:bg-[#101e23]">
+                                <div className="flex items-center gap-3 border-b border-border/50 bg-card/90 px-4 py-3 sm:px-5">
+                                  <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary text-xl text-primary-foreground">✦</span>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-black text-foreground">DRVOWA · مساعد الإعداد</p>
+                                    <p className="mt-0.5 text-[11px] text-muted-foreground">بيسألك عن نشاطك خطوة بخطوة</p>
+                                  </div>
+                                  <span className="rounded-full bg-success-soft px-2.5 py-1 text-[10px] font-bold text-success">● متصل</span>
+                                </div>
+
+                                <div className="flex max-h-[42dvh] min-h-[180px] flex-col gap-4 overflow-y-auto overscroll-contain px-3 py-5 sm:max-h-[360px] sm:px-5" role="log" aria-label="محادثة التعريف بنشاطك" aria-live="polite">
+                                  <div className="max-w-[88%] self-start rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-sm leading-7 text-foreground shadow-sm">
+                                    أهلًا بيك! 👋 أنا DRVOWA. هسألك كام سؤال خفيف علشان أفهم نشاطك وأجهز موظفك الذكي.
+                                  </div>
+                                  {discoveryTurns.map((turn, turnIndex) => (
+                                    <div key={turnIndex} className="flex flex-col gap-2">
+                                      <div className="max-w-[90%] self-start rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-sm leading-7 text-foreground shadow-sm">
+                                        {turn.question}
+                                      </div>
+                                      <div className="max-w-[88%] self-end whitespace-pre-wrap rounded-[20px] rounded-tl-md bg-primary px-4 py-3 text-sm leading-7 text-primary-foreground shadow-sm">
+                                        {turn.answer}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {discoveryLoading ? (
+                                    <div className="flex max-w-[85%] items-center gap-2 self-start rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-xs text-muted-foreground shadow-sm">
+                                      <span className="flex gap-1" aria-hidden="true">
+                                        {[0, 1, 2].map((dot) => (
+                                          <span key={dot} className="drvo-chat-dot h-1.5 w-1.5 rounded-full bg-primary/60" style={{ animationDelay: `${dot * 150}ms` }} />
+                                        ))}
+                                      </span>
+                                      بفهم كلامك وبجهّز السؤال اللي بعده…
+                                    </div>
+                                  ) : (
+                                    <div className="max-w-[90%] self-start rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-sm leading-7 text-foreground shadow-sm">
                                       {discoveryQuestion || initialDiscoveryQuestion(effectiveBusinessType)}
-                                    </h3>
-                                    <p className="mt-2 text-xs leading-6 text-muted-foreground">
-                                      جاوب كتابة أو بصوتك على كل سؤال. كل إجابة بتحدد السؤال اللي بعدها، فمش هنسألك حاجات ملهاش علاقة بنشاطك.
-                                    </p>
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="border-t border-border/40 bg-card/90 p-3 sm:p-4">
+                                  <p className="mb-2 text-[11px] font-medium text-muted-foreground">
+                                    رد بطريقتك، بصوتك أو بالكتابة. سؤال واحد كل مرة ✨
+                                  </p>
+                                  <div className="flex items-end gap-2">
+                                    <button
+                                      type="button"
+                                      aria-label={recording ? "إيقاف التسجيل" : "تسجيل رد صوتي"}
+                                      title={recording ? "إيقاف التسجيل" : "جاوب بصوتك"}
+                                      disabled={transcribing || discoveryLoading}
+                                      onClick={recording ? stopVoiceRecording : () => void startVoiceRecording("discovery")}
+                                      className={cx(
+                                        "grid h-12 w-12 shrink-0 place-items-center rounded-full text-xl shadow-sm transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50",
+                                        recording ? "bg-destructive text-white" : "bg-primary/10 text-primary",
+                                      )}
+                                    >
+                                      {recording ? "■" : "🎙"}
+                                    </button>
+                                    <Textarea
+                                      value={discoveryInput}
+                                      onChange={(event) => {
+                                        setDiscoveryInput(event.target.value);
+                                        discoveryInputRef.current = event.target.value;
+                                      }}
+                                      aria-label="اكتب ردك على سؤال الموظف"
+                                      placeholder="اكتب ردك هنا…"
+                                      rows={2}
+                                      className="min-h-12 max-h-28 flex-1 resize-none rounded-2xl border border-border bg-background px-3 py-2 text-sm leading-6"
+                                    />
+                                    <button
+                                      type="button"
+                                      aria-label="إرسال الإجابة"
+                                      disabled={!discoveryInput.trim() || discoveryLoading || recording || transcribing}
+                                      onClick={() => void submitDiscoveryAnswer()}
+                                      className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-primary text-xl text-primary-foreground shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >➤</button>
                                   </div>
-                                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-card text-sm font-black text-primary shadow-sm">
-                                    {discoveryTurns.length + 1}
-                                  </span>
+                                  {recording ? (
+                                    <p className="mt-2 text-xs font-bold text-destructive">● التسجيل شغال… اضغط على زر المايك لما تخلص.</p>
+                                  ) : null}
+                                  {transcribing ? <p className="mt-2 text-xs text-primary">بنحوّل رسالتك الصوتية لنص…</p> : null}
+                                  {microphoneHelp ? <MicrophonePermissionHelp state={microphoneHelp} /> : null}
+                                  {voiceError ? <p className="mt-2 text-xs font-bold text-destructive" role="alert">{voiceError}</p> : null}
+                                  {discoveryError ? <p className="mt-2 text-xs font-bold text-destructive" role="alert">{discoveryError}</p> : null}
                                 </div>
-
-                                <div className="mt-4 rounded-2xl border border-primary/15 bg-card/70 p-4">
-                                  <p className="text-xs font-black text-primary">🎙️ قبل ما تجاوب بصوتك، ممكن تحكيلنا عن:</p>
-                                  <ul className="mt-2 list-inside list-disc space-y-1 text-xs leading-6 text-muted-foreground">
-                                    <li>طبيعة شغلك والخدمات اللي بتقدمها</li>
-                                    <li>الأسعار والباقات والعروض المتاحة</li>
-                                    <li>الفروع وعناوينها لو موجودة</li>
-                                    <li>مواعيد العمل والحجز وأي سياسات مهمة</li>
-                                  </ul>
-                                  <p className="mt-2 text-xs text-muted-foreground">تقدر تستخدم المايك في كل سؤال، ومش لازم تقول كل التفاصيل مرة واحدة.</p>
-                                </div>
-                                <Textarea
-                                  value={discoveryInput}
-                                  onChange={(event) => {
-                                    setDiscoveryInput(event.target.value);
-                                    discoveryInputRef.current = event.target.value;
-                                  }}
-                                  placeholder="احكي براحتك... كل تفصيلة صغيرة ممكن تفرق في رد موظف الاستقبال."
-                                  className="mt-5 min-h-36 rounded-[20px] border-2 bg-card p-4 text-base leading-8 shadow-sm focus:border-primary"
-                                />
-
-                                <div className="mt-3 flex flex-wrap items-center gap-2">
-                                  <Button
-                                    type="button"
-                                    variant={recording ? "danger" : "outline"}
-                                    disabled={transcribing || discoveryLoading}
-                                    onClick={recording ? stopVoiceRecording : () => void startVoiceRecording("discovery")}
-                                    className="rounded-2xl"
-                                  >
-                                    {transcribing
-                                      ? "بنحوّل الصوت لنص…"
-                                      : recording
-                                        ? "■ وقف التسجيل"
-                                        : "🎙️ جاوب بصوتك"}
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    disabled={!discoveryInput.trim() || discoveryLoading || recording || transcribing}
-                                    onClick={() => void submitDiscoveryAnswer()}
-                                    className="rounded-2xl"
-                                  >
-                                    {discoveryLoading ? "بفهم إجابتك…" : "ثبّت الإجابة وكمل"}
-                                  </Button>
-                                </div>
-
-                                {recording ? (
-                                  <div className="mt-3 flex items-center gap-2 text-xs font-black text-destructive">
-                                    <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-destructive" />
-                                    {recordingPaused ? "التسجيل متوقف مؤقتًا." : "بسمعك دلوقتي… اتكلم براحتك."}
-                                  </div>
-                                ) : null}
-                                {microphoneHelp ? <MicrophonePermissionHelp state={microphoneHelp} /> : null}
-                                {voiceError ? <p className="mt-3 text-xs font-bold text-destructive">{voiceError}</p> : null}
-                                {discoveryError ? <p className="mt-3 text-xs font-bold text-destructive">{discoveryError}</p> : null}
                               </div>
-
                               {discoveryTurns.length > 0 ? (
-                                <div className="mt-4 rounded-2xl border border-border/70 bg-card p-4">
-                                  <div className="flex items-center justify-between gap-3">
-                                    <span className="text-xs font-black">اللي عرفناه لحد دلوقتي</span>
-                                    <span className="text-[11px] font-bold text-muted-foreground">
-                                      {discoveryTurns.length} إجابة
-                                    </span>
-                                  </div>
-                                  <div className="mt-3 flex flex-wrap gap-2">
-                                    {discoveryCovered.map((key) => (
-                                      <span key={key} className="rounded-full bg-success-soft px-3 py-1.5 text-[11px] font-black text-success">
-                                        {discoveryLabels[key] || key} ✓
-                                      </span>
-                                    ))}
-                                    {discoveryMissing.slice(0, 4).map((key) => (
-                                      <span key={key} className="rounded-full bg-secondary px-3 py-1.5 text-[11px] font-bold text-muted-foreground">
-                                        {discoveryLabels[key] || key}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
+                                <p className="mt-3 text-center text-[11px] text-muted-foreground">
+                                  عرفنا {discoveryTurns.length} {discoveryTurns.length === 1 ? "إجابة" : "إجابات"} عن نشاطك لحد دلوقتي
+                                </p>
                               ) : null}
                             </>
                           )}
@@ -1990,6 +1986,11 @@ export function GuidedOnboardingPreview({
       ) : null}
 
       <style jsx global>{`
+        @keyframes drvoChatPulse {
+          0%, 70%, 100% { opacity: .3; transform: translateY(0); }
+          35% { opacity: 1; transform: translateY(-4px); }
+        }
+        .drvo-chat-dot { animation: drvoChatPulse 1s ease-in-out infinite; }
         @keyframes drvoSceneEnter {
           from { opacity: 0; transform: translateY(16px) scale(.985); filter: blur(5px); }
           to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
