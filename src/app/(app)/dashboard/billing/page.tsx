@@ -82,7 +82,7 @@ export default async function BillingPage() {
       <Link className="inline-block rounded-xl border border-border bg-card px-4 py-3 font-bold text-primary" href="/dashboard/billing/documents">الفواتير والإيصالات</Link>
       {scheduled ? <Alert variant="info" title="تغيير مجدول">{scheduled.Kind === "CANCEL" ? "الإلغاء والتحويل إلى المجاني" : `الانتقال إلى ${scheduled.PlanDisplayName}`} يوم {formatDate(scheduled.EffectiveAtUtc)}. باقتك الحالية مستمرة حتى ذلك الموعد.</Alert> : null}
       {sub?.periodEndUtc && sub.periodEndUtc <= new Date() && plan?.code !== "FREE" ? <Alert variant="info" title="فترة السماح">يمكنك التجديد خلال 5 أيام من انتهاء الاشتراك. بعدها تتحول إلى الباقة المجانية.</Alert> : null}
-      {latest ? (
+      {latest && (latest.status === "AWAITING_TRANSFER" || latest.status === "PENDING" || latest.status === "REJECTED") ? (
         <Alert
           variant={
             latest.status === "APPROVED"
@@ -99,9 +99,6 @@ export default async function BillingPage() {
               {latest.paymentReference}
             </span>
           </p>
-          {latest.status === "APPROVED" ? (
-            <p className="mt-1 text-sm">تم اعتماد الدفع. التخفيض يبدأ بعد نهاية الفترة الحالية.</p>
-          ) : null}
           {latest.status === "REJECTED" && latest.reviewNote ? (
             <p className="mt-1 text-sm">{latest.reviewNote}</p>
           ) : null}
