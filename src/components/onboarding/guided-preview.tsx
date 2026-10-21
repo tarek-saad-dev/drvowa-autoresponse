@@ -931,14 +931,14 @@ export function GuidedOnboardingPreview({
     }
   }
 
-  /* eslint-disable react-hooks/exhaustive-deps -- one-shot automatic training of a completed interview */
+  /* eslint-disable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect -- guarded one-shot async transition */
   useEffect(() => {
     if (step !== "KNOWLEDGE" || !draftRestored || !discoveryDone || !knowledge.trim() || knowledgeApplied || mockState === "error") return;
     if (trainingStartedRef.current) return;
     trainingStartedRef.current = true;
     void trainKnowledge();
   }, [step, draftRestored, discoveryDone, knowledge, knowledgeApplied, mockState]);
-  /* eslint-enable react-hooks/exhaustive-deps */
+  /* eslint-enable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
 
   const primaryLabel = useMemo(() => {
     switch (step) {
@@ -974,7 +974,6 @@ export function GuidedOnboardingPreview({
     firstMessageStage,
     humanTakeoverDone,
     knowledgeApplied,
-    knowledgeMode,
     discoveryDone,
     chatCount,
   ]);
@@ -1536,7 +1535,6 @@ export function GuidedOnboardingPreview({
                   transitioning
                   || mockState === "loading"
                   || (step === "BUSINESS" && !businessCanContinue)
-                  || (step === "KNOWLEDGE" && !knowledgeApplied && (!discoveryDone || !knowledge.trim()) && mockState !== "success")
                   || (step === "PLAYGROUND" && chatCount === 0)
                   || (step === "WHATSAPP" && Boolean(qrImageDataUrl) && !waReady)
                   || (step === "FIRST_MESSAGE" && firstMessageStage < 5)
