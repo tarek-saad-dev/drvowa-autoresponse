@@ -22,7 +22,7 @@ export function Progress({
       {label ? (
         <div className="flex items-center justify-between gap-2 text-xs">
           <span className="text-muted-foreground">{label}</span>
-          <span className="font-medium tabular-nums">
+          <span dir="ltr" className="font-medium tabular-nums whitespace-nowrap">
             {unlimited ? `${value} · بلا حد` : `${value} / ${max}`}
           </span>
         </div>
