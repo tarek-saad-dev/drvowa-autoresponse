@@ -4,12 +4,15 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
+
+import "./onboarding-theme.css";
 
 type Step =
-  | "WELCOME"
   | "BUSINESS"
   | "KNOWLEDGE"
   | "PLAYGROUND"
@@ -70,7 +73,6 @@ function compileDiscoveryKnowledge(
 }
 
 const FLOW: Array<{ key: Step; label: string; short: string }> = [
-  { key: "WELCOME", label: "البداية", short: "ابدأ" },
   { key: "BUSINESS", label: "تعريف البيزنس", short: "البيزنس" },
   { key: "KNOWLEDGE", label: "تدريب الموظف", short: "التدريب" },
   { key: "PLAYGROUND", label: "تجربة الردود", short: "التجربة" },
@@ -81,7 +83,6 @@ const FLOW: Array<{ key: Step; label: string; short: string }> = [
 ];
 
 const STEP_SCENES: Record<Step, { line: string; cue: string }> = {
-  WELCOME: { line: "كل بيزنس ليه حكاية. وموظفك الجديد هيبدأ يسمع حكايتك.", cue: "بنفتح صفحة جديدة…" },
   BUSINESS: { line: "نبدأ بيك. احكيلنا عن المكان اللي موظفك هيمثّله.", cue: "يلا نتعرف على بيزنسك…" },
   KNOWLEDGE: { line: "من تفاصيلك الصغيرة هنكوّن معرفة تخلّيه يرد بثقة.", cue: "بنجهز مساحة التدريب…" },
   PLAYGROUND: { line: "دلوقتي حان وقت التجربة. اسأله كأنك عميل.", cue: "بنفتح مساحة التجربة…" },
@@ -92,11 +93,7 @@ const STEP_SCENES: Record<Step, { line: string; cue: string }> = {
 };
 
 const businessQuestions = [
-  { key: "name", label: "اسم البيزنس إيه؟", placeholder: "مثال: CUT SALON", kind: "text" },
-  { key: "type", label: "نشاطك إيه؟", placeholder: "", kind: "type" },
-  { key: "countryCode", label: "البيزنس موجود فين؟", placeholder: "", kind: "country" },
-  { key: "branches", label: "عندك كام فرع؟", placeholder: "", kind: "branches" },
-  { key: "hours", label: "مواعيد العمل إيه؟", placeholder: "مثال: يوميًا من 11 ص إلى 2 ص", kind: "text" },
+  { key: "identity", label: "عرّفنا على البيزنس", placeholder: "مثال: CUT SALON", kind: "identity" },
   { key: "link", label: "عندك موقع أو Instagram؟", placeholder: "اختياري", kind: "text" },
 ] as const;
 
@@ -107,8 +104,6 @@ const countryChoices = [
   { code: "AE", label: "الإمارات", locale: "ar-AE", timezone: "Asia/Dubai" },
   { code: "KW", label: "الكويت", locale: "ar-KW", timezone: "Asia/Kuwait" },
 ] as const;
-const branchChoices = ["فرع واحد", "فرعين", "3 فروع", "4+", "لسه ببدأ"];
-
 const voicePromptExamples: Record<string, string[]> = {
   offerings: ["بتقدم إيه بالظبط؟", "إيه أشهر الخدمات أو المنتجات؟", "في اختيارات أو إضافات؟", "العميل بيطلب الخدمة إزاي؟"],
   pricing: ["أسعار الخدمات كام؟", "في باقات أو عروض؟", "في مصاريف إضافية؟", "طرق الدفع المتاحة إيه؟"],
@@ -155,19 +150,19 @@ function MicrophonePermissionHelp({ state }: { state: "blocked" | "unavailable" 
 }
 
 export function GuidedOnboardingPreview({
-  storageKey = "drvowa_guided_onboarding_draft_v1_preview",
+  storageKey = "drvowa_guided_onboarding_draft_v4_preview",
   selectedPlan = null,
 }: {
   storageKey?: string;
   selectedPlan?: string | null;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>("WELCOME");
+  const [step, setStep] = useState<Step>("BUSINESS");
   const [transitioning, setTransitioning] = useState(false);
   const [transitionMessage, setTransitionMessage] = useState("");
   const [mockState, setMockState] = useState<MockState>("default");
   const [businessQuestion, setBusinessQuestion] = useState(0);
-  const [business, setBusiness] = useState<Record<string, string>>({});
+  const [business, setBusiness] = useState<Record<string, string>>({ countryCode: "EG" });
   const [knowledge, setKnowledge] = useState("");
   const [chatCount, setChatCount] = useState(0);
   const [workspaceReady, setWorkspaceReady] = useState(false);
@@ -228,17 +223,41 @@ export function GuidedOnboardingPreview({
 
   const currentBusinessQuestion = businessQuestions[businessQuestion];
   const currentBusinessValue = business[currentBusinessQuestion.key]?.trim() ?? "";
+  const businessNameValue = business.name?.trim() ?? "";
+  const showBusinessTypePicker = businessNameValue.length > 0;
   const effectiveBusinessType =
     business.type === "أخرى"
       ? business.customType?.trim() || "نشاط آخر"
       : business.type?.trim() || "";
+  const typeReady =
+    business.type === "أخرى"
+      ? Boolean(business.customType?.trim())
+      : Boolean(business.type?.trim());
   const businessCanContinue =
     currentBusinessQuestion.key === "link"
-    || (currentBusinessQuestion.key === "type"
-      ? business.type === "أخرى"
-        ? Boolean(business.customType?.trim())
-        : currentBusinessValue.length > 0
+    || (currentBusinessQuestion.kind === "identity"
+      ? businessNameValue.length > 0 && typeReady
       : currentBusinessValue.length > 0);
+  const typeSectionRef = useRef<HTMLDivElement | null>(null);
+  const didRevealTypeRef = useRef(false);
+
+  useEffect(() => {
+    if (step !== "BUSINESS" || currentBusinessQuestion.kind !== "identity") return;
+    if (!showBusinessTypePicker) {
+      didRevealTypeRef.current = false;
+      return;
+    }
+    if (didRevealTypeRef.current) return;
+    didRevealTypeRef.current = true;
+    const timer = window.setTimeout(() => {
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      typeSectionRef.current?.scrollIntoView({
+        behavior: reduceMotion ? "auto" : "smooth",
+        block: "nearest",
+      });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [step, currentBusinessQuestion.kind, showBusinessTypePicker]);
 
   /* eslint-disable react-hooks/set-state-in-effect -- guided onboarding restores and polls external state */
   useEffect(() => {
@@ -246,7 +265,7 @@ export function GuidedOnboardingPreview({
       const raw = window.localStorage.getItem(storageKey);
       if (raw) {
         const saved = JSON.parse(raw) as {
-          step?: Step;
+          step?: Step | "WELCOME";
           businessQuestion?: number;
           business?: Record<string, string>;
           knowledge?: string;
@@ -263,7 +282,9 @@ export function GuidedOnboardingPreview({
           discoveryMissing?: string[];
           discoveryDone?: boolean;
         };
-        if (saved.step && FLOW.some((item) => item.key === saved.step)) {
+        if (saved.step === "WELCOME") {
+          setStep("BUSINESS");
+        } else if (saved.step && FLOW.some((item) => item.key === saved.step)) {
           setStep(saved.step);
         }
         if (typeof saved.businessQuestion === "number") {
@@ -272,7 +293,7 @@ export function GuidedOnboardingPreview({
           );
         }
         if (saved.business && typeof saved.business === "object") {
-          setBusiness(saved.business);
+          setBusiness({ countryCode: "EG", ...saved.business });
         }
         if (typeof saved.knowledge === "string") {
           setKnowledge(saved.knowledge);
@@ -942,8 +963,6 @@ export function GuidedOnboardingPreview({
 
   const primaryLabel = useMemo(() => {
     switch (step) {
-      case "WELCOME":
-        return "ابدأ الإعداد";
       case "BUSINESS":
         return businessQuestion < businessQuestions.length - 1 ? "التالي" : "تمام — كمل";
       case "KNOWLEDGE":
@@ -1067,11 +1086,14 @@ export function GuidedOnboardingPreview({
       <div className="relative z-10 mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col gap-3 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 sm:gap-4 sm:px-6 sm:py-5">
         {step !== "KNOWLEDGE" ? <header className="flex shrink-0 items-center justify-between gap-4">
           <div>
-            <div className="text-lg font-black tracking-[-0.03em] text-primary">DRVOWA</div>
-            <div className="mt-0.5 text-[11px] font-medium text-muted-foreground">إعداد موظف الاستقبال</div>
+            <BrandLogo className="h-7 w-auto" priority />
+            <div className="mt-1 text-[11px] font-medium text-muted-foreground">إعداد موظف الاستقبال</div>
           </div>
-          <div className="rounded-full border border-border/70 bg-card/75 px-3 py-1.5 text-xs font-semibold text-muted-foreground shadow-sm backdrop-blur">
-            {Math.min(index + 1, FLOW.length)} من {FLOW.length}
+          <div className="flex items-center gap-2">
+            <div data-tech="true" className="drvo-ob-chip rounded-full px-3 py-1.5 text-xs font-semibold shadow-sm backdrop-blur">
+              {Math.min(index + 1, FLOW.length)} / {FLOW.length}
+            </div>
+            <ThemeToggle />
           </div>
         </header> : null}
 
@@ -1082,7 +1104,7 @@ export function GuidedOnboardingPreview({
               className="absolute right-[6%] top-4 h-0.5 rounded-full bg-primary transition-[width] duration-700 ease-out sm:top-5"
               style={{ width: `${progress * 0.88}%` }}
             />
-            <div className="relative grid grid-cols-8 gap-1">
+            <div className="relative grid grid-cols-7 gap-1">
               {FLOW.map((item, itemIndex) => {
                 const done = itemIndex < index;
                 const active = itemIndex === index;
@@ -1105,10 +1127,10 @@ export function GuidedOnboardingPreview({
                         "grid h-8 w-8 place-items-center rounded-xl border-2 text-[11px] font-black shadow-sm transition-all duration-300 sm:h-10 sm:w-10 sm:rounded-2xl sm:text-sm",
                         done && "border-primary bg-primary text-white",
                         active && "scale-110 border-primary bg-card text-primary shadow-[0_10px_30px_rgba(0,117,154,.22)]",
-                        !done && !active && "border-white bg-card/90 text-muted-foreground",
+                        !done && !active && "border-border bg-card/90 text-muted-foreground",
                       )}
                     >
-                      {done ? "✓" : itemIndex === FLOW.length - 1 ? "★" : itemIndex + 1}
+                      {done ? "✓" : itemIndex + 1}
                     </span>
                     <span className={cx(
                       "hidden text-[10px] font-black transition md:block",
@@ -1123,129 +1145,86 @@ export function GuidedOnboardingPreview({
         </section> : null}
 
         <section className="mx-auto flex min-h-0 w-full max-w-[920px] flex-1 flex-col">
-          <div className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] border border-white/70 bg-card/90 shadow-[0_24px_90px_rgba(7,19,25,.13)] backdrop-blur-2xl sm:rounded-[32px]">
+          <div className="drvo-ob-glass relative flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] sm:rounded-[32px]">
             {step !== "KNOWLEDGE" ? <div aria-live="polite" className="shrink-0 border-b border-border/40 px-5 pb-3 pt-4 sm:px-9 sm:pb-4 sm:pt-5">
-              <div className="flex items-center gap-2 text-[10px] font-black tracking-widest text-primary">
-                <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_12px_var(--primary)]" />
-                DRVOWA / {FLOW[index]?.short}
+              <div data-tech="true" className="drvo-ob-neon-text flex items-center gap-2 text-[10px] font-semibold tracking-[0.18em] uppercase">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_12px_var(--ob-neon-glow)]" />
+                DRVO / {FLOW[index]?.short}
               </div>
               <p className="mt-1 text-xs font-medium leading-5 text-muted-foreground sm:text-sm">{STEP_SCENES[step].line}</p>
             </div> : null}
             <div key={`${step}-${businessQuestion}`} className={cx("drvo-onboarding-step min-h-0 flex-1 overscroll-contain", step === "KNOWLEDGE" ? "overflow-hidden" : "overflow-y-auto px-5 pb-5 pt-3 sm:px-9 sm:pb-7 sm:pt-5 md:px-12")}>
-              {step === "WELCOME" ? (
-                <div className="flex min-h-full flex-col items-center justify-center text-center">
-                  <div className="drvo-welcome-icon mb-7 grid h-24 w-24 place-items-center rounded-[30px] bg-primary text-4xl text-primary-foreground shadow-[0_18px_50px_rgba(0,117,154,.28)]">✦</div>
-                  <span className="mb-3 rounded-full bg-success-soft px-3 py-1 text-xs font-bold text-success">هنمشي معاك خطوة بخطوة</span>
-                  <h1 className="drvo-welcome-title max-w-2xl text-3xl font-black leading-[1.25] tracking-[-0.035em] sm:text-4xl">خلينا نجهز موظف الاستقبال بتاعك</h1>
-                  <p className="drvo-welcome-copy mt-4 max-w-xl text-base leading-8 text-muted-foreground sm:text-lg">في كام خطوة بسيطة، هنعلمه بيزنسك، نجرب ردوده، ونوصله بواتساب لحد أول رد حقيقي.</p>
-                  <div className="drvo-welcome-grid mt-8 grid w-full max-w-lg grid-cols-3 gap-3">
-                    {[
-                      ["01", "نعرف البيزنس"],
-                      ["02", "ندرب الموظف"],
-                      ["03", "نشغله على واتساب"],
-                    ].map(([n, label]) => (
-                      <div key={n} className="rounded-2xl border border-border/70 bg-surface/70 p-4">
-                        <div className="text-xs font-black text-primary">{n}</div>
-                        <div className="mt-1 text-xs font-bold sm:text-sm">{label}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="drvo-welcome-footer mt-6 text-xs text-muted-foreground">كل حاجة بتتحفظ تلقائيًا، وتقدر تكمل في أي وقت.</p>
-                </div>
-              ) : null}
-
               {step === "BUSINESS" ? (
                 <div className="mx-auto flex min-h-full max-w-2xl flex-col justify-center">
-                  <div className="mb-8 flex items-center justify-between gap-4">
+                  <div className="mb-6 flex items-center justify-between gap-4 sm:mb-8">
                     <div>
                       <span className="text-xs font-black text-primary">تعريف البيزنس</span>
                       <h2 className="mt-2 text-3xl font-black tracking-[-0.035em]">{currentBusinessQuestion.label}</h2>
                     </div>
-                    <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/10 text-lg font-black text-primary">{businessQuestion + 1}</div>
-                  </div>
-                  {currentBusinessQuestion.kind === "type" ? (
-                    <>
-                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                        {businessTypeChoices.map((choice) => {
-                          const selected = business.type === choice;
-                          return (
-                            <button
-                              key={choice}
-                              type="button"
-                              onClick={() => setBusiness((prev) => ({ ...prev, type: choice, ...(choice !== "أخرى" ? { customType: "" } : {}) }))}
-                              className={cx(
-                                "rounded-2xl border-2 p-5 text-start text-sm font-black transition-all duration-200",
-                                selected
-                                  ? "border-primary bg-primary/8 text-primary shadow-[0_10px_28px_rgba(0,117,154,.12)]"
-                                  : "border-border bg-card hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md",
-                              )}
-                            >
-                              <span className="mb-3 block text-2xl">{choice === "صالون" ? "✂️" : choice === "عيادة" ? "🩺" : choice === "مطعم" ? "🍽️" : choice === "متجر" ? "🛍️" : choice === "خدمات" ? "🧩" : "✨"}</span>
-                              {choice}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {business.type === "أخرى" ? (
-                        <div className="mt-4">
-                          <Input
-                            value={business.customType ?? ""}
-                            onChange={(event) =>
-                              setBusiness((prev) => ({ ...prev, customType: event.target.value }))
-                            }
-                            placeholder="اكتب نوع النشاط بالتحديد، مثال: أكاديمية تعليم، شركة عقارات، مركز صيانة..."
-                            className="h-14 rounded-2xl border-2 bg-card px-4 text-base"
-                            autoFocus
-                          />
-                          <p className="mt-2 text-xs leading-6 text-muted-foreground">
-                            هنستخدم النوع ده علشان نصيغ أسئلة التدريب على طبيعة شغلك بالظبط.
-                          </p>
-                        </div>
-                      ) : null}
-                    </>
-                  ) : currentBusinessQuestion.kind === "country" ? (
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                      {countryChoices.map((choice) => {
-                        const selected = business.countryCode === choice.code;
-                        return (
-                          <button
-                            key={choice.code}
-                            type="button"
-                            onClick={() =>
-                              setBusiness((prev) => ({ ...prev, countryCode: choice.code }))
-                            }
-                            className={cx(
-                              "rounded-2xl border-2 px-3 py-5 text-center text-sm font-black transition-all duration-200",
-                              selected
-                                ? "border-primary bg-primary text-white shadow-lg"
-                                : "border-border bg-card hover:border-primary/50",
-                            )}
-                          >
-                            {choice.label}
-                          </button>
-                        );
-                      })}
+                    <div data-tech="true" className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/10 text-lg font-semibold text-primary">
+                      {String(businessQuestion + 1).padStart(2, "0")}
                     </div>
-                  ) : currentBusinessQuestion.kind === "branches" ? (
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                      {branchChoices.map((choice) => {
-                        const selected = business.branches === choice;
-                        return (
-                          <button
-                            key={choice}
-                            type="button"
-                            onClick={() => setBusiness((prev) => ({ ...prev, branches: choice }))}
-                            className={cx(
-                              "rounded-2xl border-2 px-3 py-5 text-center text-sm font-black transition-all duration-200",
-                              selected
-                                ? "border-primary bg-primary text-white shadow-lg"
-                                : "border-border bg-card hover:border-primary/50",
-                            )}
-                          >
-                            {choice}
-                          </button>
-                        );
-                      })}
+                  </div>
+                  {currentBusinessQuestion.kind === "identity" ? (
+                    <div className="space-y-5">
+                      <div>
+                        <label className="mb-2 block text-sm font-bold text-foreground">اسم البيزنس</label>
+                        <Input
+                          autoFocus
+                          value={business.name ?? ""}
+                          onChange={(event) => setBusiness((prev) => ({ ...prev, name: event.target.value }))}
+                          placeholder={currentBusinessQuestion.placeholder}
+                          className="h-14 rounded-2xl border-2 bg-card px-5 text-lg font-semibold shadow-sm focus:border-primary sm:h-16"
+                        />
+                      </div>
+                      <div
+                        ref={typeSectionRef}
+                        className={cx(
+                          "overflow-hidden transition-all duration-500 ease-out",
+                          showBusinessTypePicker ? "max-h-[720px] translate-y-0 opacity-100" : "pointer-events-none max-h-0 -translate-y-2 opacity-0",
+                        )}
+                        aria-hidden={!showBusinessTypePicker}
+                      >
+                        <div className="border-t border-border/60 pt-5">
+                          <div className="mb-3">
+                            <p className="text-sm font-bold text-foreground">نشاطك إيه؟</p>
+                            <p className="mt-1 text-xs text-muted-foreground">اختار أقرب وصف لشغلك.</p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                            {businessTypeChoices.map((choice) => {
+                              const selected = business.type === choice;
+                              return (
+                                <button
+                                  key={choice}
+                                  type="button"
+                                  tabIndex={showBusinessTypePicker ? 0 : -1}
+                                  onClick={() => setBusiness((prev) => ({ ...prev, type: choice, ...(choice !== "أخرى" ? { customType: "" } : {}) }))}
+                                  className={cx(
+                                    "rounded-2xl border-2 p-4 text-start text-sm font-black transition-all duration-200 sm:p-5",
+                                    selected
+                                      ? "border-primary bg-primary/8 text-primary shadow-[0_10px_28px_rgba(0,117,154,.12)]"
+                                      : "border-border bg-card hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md",
+                                  )}
+                                >
+                                  <span className="mb-2 block text-2xl sm:mb-3">{choice === "صالون" ? "✂️" : choice === "عيادة" ? "🩺" : choice === "مطعم" ? "🍽️" : choice === "متجر" ? "🛍️" : choice === "خدمات" ? "🧩" : "✨"}</span>
+                                  {choice}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {business.type === "أخرى" ? (
+                            <div className="mt-4">
+                              <Input
+                                value={business.customType ?? ""}
+                                onChange={(event) => setBusiness((prev) => ({ ...prev, customType: event.target.value }))}
+                                placeholder="اكتب نوع النشاط بالتحديد، مثال: أكاديمية تعليم، شركة عقارات..."
+                                className="h-14 rounded-2xl border-2 bg-card px-4 text-base"
+                                autoFocus
+                              />
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <Input
@@ -1257,12 +1236,9 @@ export function GuidedOnboardingPreview({
                     />
                   )}
                   <div className="mt-5 flex gap-2">
-                    {businessQuestions.map((_, qIndex) => (
-                      <span key={qIndex} className={cx("h-1.5 flex-1 rounded-full transition", qIndex <= businessQuestion ? "bg-primary" : "bg-secondary")} />
+                    {businessQuestions.map((question, qIndex) => (
+                      <span key={question.key} className={cx("h-1.5 flex-1 rounded-full transition", qIndex <= businessQuestion ? "bg-primary" : "bg-secondary")} />
                     ))}
-                  </div>
-                  <div className="mt-10 rounded-2xl border border-border/70 bg-surface/60 p-4 text-sm text-muted-foreground">
-                    <span className="font-bold text-foreground">معلومة صغيرة:</span> مش لازم كل حاجة تكون كاملة دلوقتي. تقدر تعدلها بعدين.
                   </div>
                 </div>
               ) : null}
@@ -1270,9 +1246,9 @@ export function GuidedOnboardingPreview({
               {step === "KNOWLEDGE" ? (
                 <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col">
                   <div className="flex shrink-0 items-center gap-3 border-b border-border/60 px-4 py-3 sm:px-6">
-                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary text-xl text-primary-foreground" aria-hidden="true">✦</span>
+                    <BrandLogo className="h-6 w-auto" />
                     <div className="min-w-0 flex-1">
-                      <h1 className="text-sm font-black">DRVOWA</h1>
+                      <h1 className="text-sm font-black">شات التدريب</h1>
                       <p className="text-xs text-muted-foreground">بنتعرف على بيزنسك</p>
                     </div>
                     <button type="button" onClick={previous} className="rounded-full px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-surface hover:text-foreground" aria-label="الرجوع">رجوع</button>
@@ -1526,8 +1502,8 @@ export function GuidedOnboardingPreview({
               ) : null}
             </div>
 
-            {step !== "KNOWLEDGE" ? <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border/70 bg-card/90 px-5 py-3 sm:px-9 sm:py-4 md:px-12">
-              <Button type="button" variant="ghost" disabled={step === "WELCOME" || transitioning} onClick={previous}>السابق</Button>
+            {step !== "KNOWLEDGE" ? <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border/70 bg-transparent px-5 py-3 sm:px-9 sm:py-4 md:px-12">
+              <Button type="button" variant="ghost" disabled={(step === "BUSINESS" && businessQuestion === 0) || transitioning} onClick={previous}>السابق</Button>
               <Button
                 type="button"
                 onClick={next}

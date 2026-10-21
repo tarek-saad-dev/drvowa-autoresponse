@@ -1,0 +1,156 @@
+@import "@dawod/thmanyah-font-web/sans.css";
+
+.drvo-onboarding {
+  --ob-neon: #3de7ff;
+  --ob-neon-soft: rgb(61 231 255 / 0.16);
+  --ob-neon-glow: rgb(61 231 255 / 0.22);
+  --ob-ink: #eef8fb;
+  --ob-muted: #8fa6b2;
+  --ob-glass: rgb(10 18 24 / 0.72);
+  --ob-glass-border: rgb(61 231 255 / 0.16);
+  --ob-glass-highlight: rgb(255 255 255 / 0.08);
+  --ob-surface: rgb(14 24 31 / 0.78);
+  --ob-fog: rgb(0 180 220 / 0.18);
+  font-family: "Thmanyah Sans", var(--font-ibm-plex-arabic), "Segoe UI", Tahoma, sans-serif;
+  color: var(--ob-ink);
+  background:
+    radial-gradient(ellipse 70% 45% at 100% -8%, rgb(0 170 210 / 0.2), transparent 58%),
+    radial-gradient(ellipse 50% 35% at 0% 100%, rgb(0 90 120 / 0.18), transparent 55%),
+    linear-gradient(180deg, #05090c 0%, #071117 100%);
+}
+
+html[data-theme="light"] .drvo-onboarding {
+  --ob-neon: #0496bd;
+  --ob-neon-soft: rgb(4 150 189 / 0.12);
+  --ob-neon-glow: rgb(4 150 189 / 0.18);
+  --ob-ink: #071319;
+  --ob-muted: #5b7380;
+  --ob-glass: rgb(255 255 255 / 0.72);
+  --ob-glass-border: rgb(4 150 189 / 0.18);
+  --ob-glass-highlight: rgb(255 255 255 / 0.85);
+  --ob-surface: rgb(244 249 251 / 0.82);
+  --ob-fog: rgb(0 117 154 / 0.14);
+  background:
+    radial-gradient(ellipse 70% 45% at 100% -8%, rgb(0 150 198 / 0.14), transparent 58%),
+    radial-gradient(ellipse 50% 35% at 0% 100%, rgb(0 95 128 / 0.08), transparent 55%),
+    linear-gradient(180deg, #f7fbfc 0%, #eef5f8 100%);
+}
+
+.drvo-onboarding .font-mono,
+.drvo-onboarding [data-tech="true"] {
+  font-family: var(--font-space-grotesk), "Space Grotesk", ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.02em;
+}
+
+.drvo-onboarding h1,
+.drvo-onboarding h2,
+.drvo-onboarding h3,
+.drvo-onboarding .drvo-ob-display {
+  font-family: "Thmanyah Sans", var(--font-ibm-plex-arabic), sans-serif;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+}
+
+.drvo-onboarding h1 {
+  font-size: clamp(2.1rem, 4.8vw, 3.4rem);
+}
+
+.drvo-onboarding h2 {
+  font-size: clamp(1.7rem, 3.4vw, 2.55rem);
+}
+
+.drvo-onboarding-fog {
+  background: radial-gradient(ellipse, var(--ob-fog) 0%, transparent 70%) !important;
+}
+
+.drvo-ob-glass {
+  background: var(--ob-glass);
+  border: 1px solid var(--ob-glass-border);
+  box-shadow:
+    0 24px 80px rgb(0 0 0 / 0.28),
+    0 0 0 1px rgb(61 231 255 / 0.04),
+    inset 0 1px 0 var(--ob-glass-highlight);
+  backdrop-filter: blur(22px) saturate(1.15);
+}
+
+html[data-theme="light"] .drvo-ob-glass {
+  box-shadow:
+    0 24px 70px rgb(7 34 46 / 0.1),
+    0 0 0 1px rgb(4 150 189 / 0.05),
+    inset 0 1px 0 var(--ob-glass-highlight);
+}
+
+.drvo-ob-neon-text {
+  color: var(--ob-neon);
+  text-shadow: 0 0 18px var(--ob-neon-glow);
+}
+
+.drvo-ob-chip {
+  border: 1px solid var(--ob-glass-border);
+  background: var(--ob-surface);
+  color: var(--ob-muted);
+  box-shadow: inset 0 1px 0 var(--ob-glass-highlight);
+}
+
+.drvo-onboarding .text-muted-foreground {
+  color: var(--ob-muted) !important;
+}
+
+.drvo-onboarding .text-primary {
+  color: var(--ob-neon) !important;
+}
+
+.drvo-onboarding .bg-card,
+.drvo-onboarding .bg-card\/90,
+.drvo-onboarding .bg-card\/75,
+.drvo-onboarding .bg-card\/95 {
+  background-color: var(--ob-glass) !important;
+}
+
+.drvo-onboarding .border-border,
+.drvo-onboarding .border-border\/40,
+.drvo-onboarding .border-border\/60,
+.drvo-onboarding .border-border\/70,
+.drvo-onboarding .border-border\/80 {
+  border-color: var(--ob-glass-border) !important;
+}
+
+.drvo-onboarding .bg-surface,
+.drvo-onboarding .bg-surface\/60,
+.drvo-onboarding .bg-surface\/70 {
+  background-color: var(--ob-surface) !important;
+}
+
+.drvo-onboarding .bg-primary {
+  background-color: var(--ob-neon) !important;
+  color: #041018 !important;
+  box-shadow: 0 0 28px var(--ob-neon-glow);
+}
+
+.drvo-onboarding .bg-primary\/8,
+.drvo-onboarding .bg-primary\/5,
+.drvo-onboarding .bg-primary\/10 {
+  background-color: var(--ob-neon-soft) !important;
+}
+
+.drvo-onboarding .border-primary,
+.drvo-onboarding .border-primary\/20,
+.drvo-onboarding .border-primary\/50 {
+  border-color: color-mix(in oklab, var(--ob-neon) 70%, transparent) !important;
+}
+
+.drvo-onboarding input,
+.drvo-onboarding textarea {
+  font-family: inherit;
+  background: var(--ob-surface) !important;
+  border-color: var(--ob-glass-border) !important;
+  color: var(--ob-ink) !important;
+  box-shadow: inset 0 1px 0 var(--ob-glass-highlight);
+}
+
+.drvo-onboarding input:focus,
+.drvo-onboarding textarea:focus {
+  border-color: var(--ob-neon) !important;
+  box-shadow: 0 0 0 3px var(--ob-neon-soft), 0 0 24px var(--ob-neon-glow);
+}

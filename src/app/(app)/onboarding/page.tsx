@@ -19,7 +19,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
 
   return (
     <GuidedOnboardingPreview
-      storageKey={`drvowa_guided_onboarding_draft_v1_${user.userId}`}
+      storageKey={`drvowa_guided_onboarding_draft_v4_${user.userId}`}
       selectedPlan={selectedPlan}
     />
   );
