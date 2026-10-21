@@ -77,6 +77,7 @@ export function BillingPlansClient({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [showPending, setShowPending] = useState(false);
 
   async function choosePlan(planCode: string) {
     setSelectedCode(planCode);
@@ -108,6 +109,7 @@ export function BillingPlansClient({
           planDisplayName: data.planDisplayName,
           planCode: data.planCode,
         });
+        setShowPending(true);
         setStep("done");
         router.refresh();
         return;
@@ -157,6 +159,7 @@ export function BillingPlansClient({
       if (!res.ok) {
         throw new Error(mapUserFacingError(data, "تعذر إرسال تأكيد الدفع"));
       }
+      setShowPending(false);
       setStep("done");
       router.refresh();
     } catch (err) {
@@ -168,9 +171,9 @@ export function BillingPlansClient({
 
   if (step === "done" && intent) {
     return (
-      <Alert variant="success" title="طلب الدفع قيد المراجعة">
+      <Alert variant="info" title={showPending ? "طلب الدفع قيد المراجعة بالفعل" : "تم إرسال تأكيد التحويل"}>
         <p className="mt-1">
-          تم استلام تأكيدك. سيتم تفعيل الاشتراك بعد مراجعة التحويل يدوياً — لا يوجد تحقق تلقائي.
+          {showPending ? "طلب التحويل مسجل بالفعل وفي انتظار مراجعة الإدارة. لا داعي لإعادة إرساله." : "استلمنا بيانات التحويل، وفي انتظار مراجعتها يدويًا قبل تطبيق أي تغيير على اشتراكك."}
         </p>
         <p className="mt-3 text-sm font-semibold">
           مرجع DRVOWA: <span className="font-mono">{intent.paymentReference}</span>
@@ -183,6 +186,7 @@ export function BillingPlansClient({
             setStep("plans");
             setSelectedCode(null);
             setIntent(null);
+            setShowPending(false);
           }}
         >
           العودة للخطط
@@ -224,7 +228,7 @@ export function BillingPlansClient({
             <div>
               <dt className="text-muted-foreground">المبلغ</dt>
               <dd className="font-semibold" data-testid="pay-amount">
-                {formatPrice(intent.amount, intent.currencyCode)} جنيه
+                {formatPrice(intent.amount, intent.currencyCode)}
               </dd>
             </div>
             <div>
@@ -332,7 +336,7 @@ export function BillingPlansClient({
           <option value="MONTHLY">شهري</option><option value="ANNUAL">سنوي — سعر 12 شهر</option>
         </select>
       </label>
-      <p className="text-sm text-muted-foreground">الترقية تبدأ بدورة جديدة فور اعتماد الدفع. التخفيض المدفوع يبدأ بعد انتهاء اشتراكك الحالي.</p>
+      <p className="text-sm leading-7 text-muted-foreground">لو اخترت باقة أعلى، يبدأ الاشتراك الجديد بعد اعتماد الدفع. ولو اخترت باقة أقل، يستمر اشتراكك الحالي حتى نهاية فترته، وبعدها يبدأ التغيير. اختيار باقة وحده لا يخصم أي مبلغ.</p>
       {error ? (
         <p className="text-sm text-destructive" role="alert">
           {error}
