@@ -341,6 +341,25 @@ export async function countWhatsAppConnections(
   return Number(result.recordset[0]?.Cnt ?? 0);
 }
 
+/** Dashboard metric: only paired/activated WhatsApp accounts, not pending shells.
+ * Resource capacity is enforced separately by countWhatsAppConnections, which
+ * includes reserved pending accounts to prevent provisioning past plan limits.
+ */
+export async function countActiveWhatsAppConnections(
+  businessId: string,
+): Promise<number> {
+  const result = await query<{ Cnt: number }>(
+    `SELECT COUNT(1) AS Cnt FROM TblChannelConnection
+     WHERE BusinessID = @businessId
+       AND Channel = N'WHATSAPP'
+       AND Provider = N'BAILEYS'
+       AND Status = N'ACTIVE'
+       AND IsActive = 1`,
+    [{ name: "businessId", type: sql.UniqueIdentifier, value: businessId }],
+  );
+  return Number(result.recordset[0]?.Cnt ?? 0);
+}
+
 export async function getEntitlementSnapshot(
   businessId: string,
 ): Promise<EntitlementSnapshot> {
@@ -381,7 +400,7 @@ export async function getEntitlementSnapshot(
         eventType: USAGE_EVENT_WHATSAPP_OUTBOUND,
         periodStartUtc: usagePeriod.usagePeriodStartUtc,
       }),
-      countWhatsAppConnections(businessId),
+      countActiveWhatsAppConnections(businessId),
       countAgents(businessId),
       countActiveKnowledge(businessId),
     ]);
