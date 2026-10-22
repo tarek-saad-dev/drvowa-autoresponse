@@ -10,6 +10,8 @@ export const inboundWhatsAppDtoSchema = z
     externalContactKey: z.string().trim().min(1).max(256),
     fromMe: z.boolean(),
     isGroup: z.boolean(),
+    sourceRemoteJid: z.string().trim().min(1).max(256).optional(),
+    sourceIsBroadcast: z.boolean().optional(),
     messageTimestamp: z.union([z.string(), z.number(), z.null()]).optional(),
     receivedAt: z.union([z.string(), z.number(), z.null()]).optional(),
     upsertType: z.string().trim().min(1).max(32),
