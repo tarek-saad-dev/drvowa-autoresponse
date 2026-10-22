@@ -10,7 +10,6 @@ import type { ConversationListItem, Message } from "@/types/domain";
 
 import {
   normalizeInboundContent,
-  classifyBlockedWhatsAppSource,
   parseOptionalUtc,
   type InboundWhatsAppDto,
 } from "./content";
@@ -60,12 +59,6 @@ export async function ingestWhatsAppInbound(
   const blockedSource = classifyBlockedWhatsAppSource(dto);
   if (blockedSource) {
     return { outcome: "ignored", reason: blockedSource };
-  }
-  // Critical: reject non-private source chat BEFORE contact normalization,
-  // tenant/database lookups, usage accounting, or AI reply scheduling.
-  const sourceBlock = classifyBlockedWhatsAppSource(dto);
-  if (sourceBlock) {
-    return { outcome: "ignored", reason: sourceBlock };
   }
   if (dto.isGroup) {
     return { outcome: "ignored", reason: "group" };
