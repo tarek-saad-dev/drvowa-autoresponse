@@ -16,8 +16,21 @@ permissions:
 jobs:
   billing-checks:
     uses: ./.github/workflows/billing-sql-ci.yml
+  whatsapp-source-checks:
+    name: WhatsApp origin isolation regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx vitest run tests/unit/whatsapp-source-guard.test.ts
+      - run: npm run typecheck
   deploy:
-    needs: billing-checks
+    needs: [billing-checks, whatsapp-source-checks]
     name: Deploy to VPS
     runs-on: ubuntu-latest
     timeout-minutes: 20
