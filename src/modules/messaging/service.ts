@@ -16,6 +16,7 @@ import {
 } from "./content";
 import * as repo from "./repository";
 import { canonicalizeWhatsAppContactIdentity } from "./whatsapp-identity";
+import { classifyBlockedWhatsAppSource } from "./whatsapp-source-guard";
 
 export type IngestOutcome =
   | {
@@ -54,6 +55,11 @@ export async function ingestWhatsAppInbound(
 ): Promise<IngestOutcome> {
   if (dto.fromMe) {
     return { outcome: "ignored", reason: "from_me" };
+  }
+  // Reject origin types before resolving contacts or creating conversations/AI tasks.
+  const blockedSource = classifyBlockedWhatsAppSource(dto);
+  if (blockedSource) {
+    return { outcome: "ignored", reason: blockedSource };
   }
   // Critical: reject non-private source chat BEFORE contact normalization,
   // tenant/database lookups, usage accounting, or AI reply scheduling.
