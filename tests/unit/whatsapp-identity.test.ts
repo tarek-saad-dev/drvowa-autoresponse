@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { canonicalizeWhatsAppContactIdentity } from "@/modules/messaging/whatsapp-identity";
-import { classifyBlockedWhatsAppSource, inboundWhatsAppDtoSchema } from "@/modules/messaging/content";
+import { inboundWhatsAppDtoSchema } from "@/modules/messaging/content";
+import { classifyBlockedWhatsAppSource } from "@/modules/messaging/whatsapp-source-guard";
 
 describe("Phase 3B Part 2B.1 WhatsApp contact identity", () => {
   it("1/2/3. bare phone, JID, and plus-prefix canonicalize to digits", () => {
