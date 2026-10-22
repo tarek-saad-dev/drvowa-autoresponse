@@ -10,6 +10,7 @@ import type { ConversationListItem, Message } from "@/types/domain";
 
 import {
   normalizeInboundContent,
+  classifyBlockedWhatsAppSource,
   parseOptionalUtc,
   type InboundWhatsAppDto,
 } from "./content";
@@ -36,6 +37,9 @@ export type IngestOutcome =
       reason:
         | "from_me"
         | "group"
+        | "broadcast"
+        | "newsletter"
+        | "call"
         | "not_live_notify"
         | "inactive_connection";
     };
@@ -50,6 +54,12 @@ export async function ingestWhatsAppInbound(
 ): Promise<IngestOutcome> {
   if (dto.fromMe) {
     return { outcome: "ignored", reason: "from_me" };
+  }
+  // Critical: reject non-private source chat BEFORE contact normalization,
+  // tenant/database lookups, usage accounting, or AI reply scheduling.
+  const sourceBlock = classifyBlockedWhatsAppSource(dto);
+  if (sourceBlock) {
+    return { outcome: "ignored", reason: sourceBlock };
   }
   if (dto.isGroup) {
     return { outcome: "ignored", reason: "group" };
