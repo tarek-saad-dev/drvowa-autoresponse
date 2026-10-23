@@ -219,6 +219,7 @@ export function EmployeeKnowledgeChat({
   }
 
   function discardChanges() {
+    window.localStorage.removeItem(storageKey);
     setProposals([]);
     setSession(null);
     setTurns((old) => [...old, {
