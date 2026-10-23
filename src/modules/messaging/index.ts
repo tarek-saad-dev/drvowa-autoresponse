@@ -14,6 +14,7 @@ export {
   ingestWhatsAppInbound,
   listInboxConversations,
   getInboxConversationCounts,
+  getDashboardDailyActivity,
   listInboxMessages,
   resolveChannelByExternalAccountKey,
   type IngestOutcome,

@@ -43,7 +43,13 @@ export default async function ChoosePlanPage() {
                   <li>✓ {plan.monthlyAiReplies?.toLocaleString("en-US") ?? "غير محدد"} رد ذكاء اصطناعي شهريًا</li>
                   <li>✓ {plan.maxWhatsAppConnections ?? "غير محدد"} اتصال واتساب</li>
                 </ul>
-                <Link href={`/onboarding?plan=${encodeURIComponent(plan.code)}`} className="rounded-xl bg-primary px-4 py-3 text-center font-bold text-primary-foreground hover:opacity-90">اختار الباقة ←</Link>
+                <Link
+                  href={`/onboarding?plan=${encodeURIComponent(plan.code)}`}
+                  prefetch={false}
+                  className="rounded-xl bg-primary px-4 py-3 text-center font-bold text-primary-foreground hover:opacity-90"
+                >
+                  اختار الباقة ←
+                </Link>
               </article>
             ))}
           </div>
@@ -55,7 +61,13 @@ export default async function ChoosePlanPage() {
             <h2 className="font-bold">عايز تجرّب الأول؟</h2>
             <p className="mt-1 text-sm text-muted-foreground">ابدأ بالخطة المجانية وبعدين تقدر ترقي في أي وقت.</p>
           </div>
-          <Link href="/onboarding?plan=FREE" className="rounded-xl border border-border px-5 py-2.5 text-sm font-bold text-muted-foreground transition hover:border-primary hover:text-foreground">ابدأ مجانًا ←</Link>
+          <Link
+            href="/onboarding?plan=FREE"
+            prefetch={false}
+            className="rounded-xl border border-border px-5 py-2.5 text-sm font-bold text-muted-foreground transition hover:border-primary hover:text-foreground"
+          >
+            ابدأ مجانًا ←
+          </Link>
         </div>
       </div>
     </main>

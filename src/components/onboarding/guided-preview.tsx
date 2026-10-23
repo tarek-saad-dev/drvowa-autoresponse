@@ -88,14 +88,91 @@ const STEP_SCENES: Record<Step, { line: string; cue: string }> = {
   PLAYGROUND: { line: "دلوقتي حان وقت التجربة. اسأله كأنك عميل.", cue: "بنفتح مساحة التجربة…" },
   WHATSAPP: { line: "فاضل نوصل موظفك بالمكان اللي عملاؤك بيكلموك منه.", cue: "بنجهز ربط واتساب…" },
   FIRST_MESSAGE: { line: "أول رسالة حقيقية. من هنا تبدأ الحكاية.", cue: "بنستعد لأول رسالة…" },
-  HUMAN_TAKEOVER: { line: "إنت دايمًا صاحب القرار، وتقدر تتدخل في أي وقت.", cue: "بنوضح إزاي تفضل متحكم…" },
-  COMPLETED: { line: "خلصنا الإعداد. موظفك جاهز يشتغل معاك.", cue: "اللمسات الأخيرة…" },
+  HUMAN_TAKEOVER: { line: "لو العميل طلب موظف بشري — البوت بيسكت وبيسيبك تتدخل.", cue: "بنوريك ميزة التدخل البشري…" },
+  COMPLETED: { line: "الإعداد خلص — موظفك جاهز يشتغل.", cue: "بنجهّز لوحة التحكم…" },
 };
 
 const businessQuestions = [
   { key: "identity", label: "عرّفنا على البيزنس", placeholder: "مثال: CUT SALON", kind: "identity" },
   { key: "link", label: "عندك موقع أو Instagram؟", placeholder: "اختياري", kind: "text" },
 ] as const;
+
+/** Topics tracked by discovery API — used for learning progress UI. */
+const DISCOVERY_TOPIC_TOTAL = 12;
+/** Minimum learning % before the user can leave the training chat. */
+const LEARNING_MIN_PCT = 70;
+
+function calcLearningPercent(covered: string[], missing: string[], turns: number): number {
+  const coveredUnique = new Set(covered.filter(Boolean));
+  const missingUnique = new Set(missing.filter(Boolean));
+  const known = new Set([...coveredUnique, ...missingUnique]).size;
+  const denom = Math.max(known, DISCOVERY_TOPIC_TOTAL);
+  let pct = Math.round((coveredUnique.size / denom) * 100);
+  if (coveredUnique.size === 0 && turns > 0) {
+    pct = Math.max(pct, Math.min(15, turns * 5));
+  }
+  return Math.min(100, Math.max(0, pct));
+}
+
+function learningTone(pct: number): "low" | "mid" | "high" {
+  if (pct >= LEARNING_MIN_PCT) return "high";
+  if (pct >= 40) return "mid";
+  return "low";
+}
+
+const PLAYGROUND_MIN_TRIES = 1;
+
+function playgroundSuggestedQuestions(businessType: string): Array<{ question: string; hint: string }> {
+  const type = businessType.trim();
+  if (type.includes("عقار") || type === "خدمات") {
+    return [
+      { question: "عندكم شقق للبيع في التجمع؟", hint: "يفهم الطلب ويقترح بدائل" },
+      { question: "إيجار شقة غرفتين بكام تقريبًا؟", hint: "يرد بأسعار واضحة" },
+      { question: "عاوز أحجز معاينة بكرة العصر", hint: "يوجه للحجز صح" },
+      { question: "بتشتغلوا لحد الساعة كام؟", hint: "مواعيد دقيقة من غير تخمين" },
+      { question: "في عمولة على الوساطة؟", hint: "يوضح السياسات بهدوء" },
+    ];
+  }
+  if (type === "صالون") {
+    return [
+      { question: "قص وتصفيف بكام؟", hint: "أسعار الخدمات" },
+      { question: "ممكن أحجز معاد بكرة؟", hint: "مسار الحجز" },
+      { question: "بتنظفوا بـ صبغة كمان؟", hint: "يعرف نطاق الخدمات" },
+      { question: "مواعيدكم إيه النهاردة؟", hint: "مواعيد فورية" },
+    ];
+  }
+  if (type === "عيادة") {
+    return [
+      { question: "كشف الدكتور بكام؟", hint: "الأسعار بوضوح" },
+      { question: "في معاد فاضي الأسبوع ده؟", hint: "الحجز والمواعيد" },
+      { question: "بتكشفوا أطفال كمان؟", hint: "نطاق التخصص" },
+      { question: "عنوان العيادة فين؟", hint: "معلومات الوصول" },
+    ];
+  }
+  if (type === "مطعم") {
+    return [
+      { question: "عندكم وجبات نباتي؟", hint: "يفهم المينيو" },
+      { question: "التوصيل لمصر الجديدة بكام؟", hint: "التوصيل والأسعار" },
+      { question: "عاوز أطلب دلوقتي", hint: "مسار الطلب" },
+      { question: "فاتحين لحد امتى؟", hint: "المواعيد" },
+    ];
+  }
+  if (type === "متجر") {
+    return [
+      { question: "المنتج ده متوفر؟", hint: "التوفر والمخزون" },
+      { question: "سعر التوصيل كام؟", hint: "الشحن بوضوح" },
+      { question: "ينفع استبدال؟", hint: "السياسات" },
+      { question: "عندكم فرع في المعادي؟", hint: "الفروع" },
+    ];
+  }
+  return [
+    { question: "بتقدموا إيه بالظبط؟", hint: "يعرّف البيزنس بثقة" },
+    { question: "الأسعار تقريبًا كام؟", hint: "يرد من غير لف" },
+    { question: "إزاي أحجز أو أطلب؟", hint: "يوضح الخطوة الجاية" },
+    { question: "مواعيدكم إيه؟", hint: "معلومة جاهزة فورًا" },
+    { question: "لو حصلت مشكلة أكلم مين؟", hint: "يعرف متى يحوّل لبشر" },
+  ];
+}
 
 const businessTypeChoices = ["صالون", "عيادة", "مطعم", "متجر", "خدمات", "أخرى"];
 const countryChoices = [
@@ -171,13 +248,27 @@ export function GuidedOnboardingPreview({
   const [knowledgeSummary, setKnowledgeSummary] = useState<Record<string, number>>({});
   const [knowledgeTreeItems, setKnowledgeTreeItems] = useState<KnowledgeTreeItem[]>([]);
   const [knowledgeApplied, setKnowledgeApplied] = useState(false);
-  const [previewQuestion, setPreviewQuestion] = useState("مواعيدكم إيه؟");
-  const [previewReply, setPreviewReply] = useState("اختار سؤال لعرض الرد.");
+  const [previewQuestion, setPreviewQuestion] = useState("");
+  const [previewReply, setPreviewReply] = useState("");
   const [previewReplies, setPreviewReplies] = useState<Record<string, string>>({});
+  const [playgroundTurns, setPlaygroundTurns] = useState<Array<{
+    question: string;
+    answer: string;
+    rating?: "up" | "down";
+    teachNote?: string;
+  }>>([]);
+  const [playgroundInput, setPlaygroundInput] = useState("");
+  const [teachTurnIndex, setTeachTurnIndex] = useState<number | null>(null);
+  const [teachDraft, setTeachDraft] = useState("");
+  const [teachSaving, setTeachSaving] = useState(false);
+  const [teachError, setTeachError] = useState<string | null>(null);
   const previewPendingRef = useRef<Set<string>>(new Set());
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [playgroundIntro, setPlaygroundIntro] = useState(true);
+  const playgroundChatEndRef = useRef<HTMLDivElement | null>(null);
   const [qrImageDataUrl, setQrImageDataUrl] = useState<string | null>(null);
   const [waReady, setWaReady] = useState(false);
+  const [waRuntimeDisabled, setWaRuntimeDisabled] = useState(false);
   const [firstMessageStage, setFirstMessageStage] = useState(0);
   const [testConversationId, setTestConversationId] = useState<string | null>(null);
   const [humanTakeoverDone, setHumanTakeoverDone] = useState(false);
@@ -212,11 +303,28 @@ export function GuidedOnboardingPreview({
 
   const index = FLOW.findIndex((item) => item.key === step);
   const progress = Math.max(0, Math.round((index / (FLOW.length - 1)) * 100));
+  const learningPercent = calcLearningPercent(discoveryCovered, discoveryMissing, discoveryTurns.length);
+  const learningLevel = learningTone(learningPercent);
+  const learningReady = learningPercent >= LEARNING_MIN_PCT;
+  const playgroundReady = playgroundTurns.length >= PLAYGROUND_MIN_TRIES;
+  const isChatStep = step === "KNOWLEDGE" || step === "PLAYGROUND";
+  const isCompactStep = step === "WHATSAPP" || step === "FIRST_MESSAGE" || step === "HUMAN_TAKEOVER" || step === "COMPLETED";
   useEffect(() => {
     if (step === "KNOWLEDGE" && !discoveryDone) {
       discoveryChatEndRef.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
     }
   }, [step, discoveryTurns, discoveryQuestion, discoveryLoading, discoveryDone]);
+  useEffect(() => {
+    if (step !== "PLAYGROUND") return;
+    setPlaygroundIntro(true);
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const timer = window.setTimeout(() => setPlaygroundIntro(false), reduceMotion ? 400 : 2600);
+    return () => window.clearTimeout(timer);
+  }, [step]);
+  useEffect(() => {
+    if (step !== "PLAYGROUND") return;
+    playgroundChatEndRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [step, playgroundTurns, previewQuestion, previewLoading, previewReply, teachTurnIndex]);
   useEffect(() => () => {
     if (sceneTimerRef.current !== null) window.clearTimeout(sceneTimerRef.current);
   }, []);
@@ -229,6 +337,10 @@ export function GuidedOnboardingPreview({
     business.type === "أخرى"
       ? business.customType?.trim() || "نشاط آخر"
       : business.type?.trim() || "";
+  const playgroundQuestions = useMemo(
+    () => playgroundSuggestedQuestions(effectiveBusinessType),
+    [effectiveBusinessType],
+  );
   const typeReady =
     business.type === "أخرى"
       ? Boolean(business.customType?.trim())
@@ -281,6 +393,10 @@ export function GuidedOnboardingPreview({
           discoveryCovered?: string[];
           discoveryMissing?: string[];
           discoveryDone?: boolean;
+          firstMessageStartedAt?: string | null;
+          firstMessageStage?: number;
+          testConversationId?: string | null;
+          humanTakeoverDone?: boolean;
         };
         if (saved.step === "WELCOME") {
           setStep("BUSINESS");
@@ -321,6 +437,16 @@ export function GuidedOnboardingPreview({
         if (Array.isArray(saved.discoveryCovered)) setDiscoveryCovered(saved.discoveryCovered);
         if (Array.isArray(saved.discoveryMissing)) setDiscoveryMissing(saved.discoveryMissing);
         if (saved.discoveryDone === true) setDiscoveryDone(true);
+        if (typeof saved.firstMessageStartedAt === "string" && saved.firstMessageStartedAt) {
+          firstMessageStartedAt.current = saved.firstMessageStartedAt;
+        }
+        if (typeof saved.firstMessageStage === "number") {
+          setFirstMessageStage(Math.min(5, Math.max(0, saved.firstMessageStage)));
+        }
+        if (typeof saved.testConversationId === "string" && saved.testConversationId) {
+          setTestConversationId(saved.testConversationId);
+        }
+        if (saved.humanTakeoverDone === true) setHumanTakeoverDone(true);
       }
     } catch {
       // Local resume is best-effort only.
@@ -368,6 +494,10 @@ export function GuidedOnboardingPreview({
           discoveryCovered,
           discoveryMissing,
           discoveryDone,
+          firstMessageStartedAt: firstMessageStartedAt.current,
+          firstMessageStage,
+          testConversationId,
+          humanTakeoverDone,
         }),
       );
     } catch {
@@ -390,9 +520,20 @@ export function GuidedOnboardingPreview({
     discoveryCovered,
     discoveryMissing,
     discoveryDone,
+    firstMessageStage,
+    testConversationId,
+    humanTakeoverDone,
     storageKey,
     draftRestored,
   ]);
+
+  useEffect(() => {
+    if (step !== "WHATSAPP") return;
+    // Don't reuse KNOWLEDGE/FIRST_MESSAGE "success" — WhatsApp readiness is waReady only.
+    if (!waReady) {
+      setMockState((current) => (current === "success" ? "default" : current));
+    }
+  }, [step, waReady]);
 
   useEffect(() => {
     if (step !== "WHATSAPP" || !workspaceReady) return;
@@ -407,15 +548,28 @@ export function GuidedOnboardingPreview({
           setMockState("success");
           return;
         }
+        if (data.uiState === "RUNTIME_DISABLED") {
+          setWaReady(false);
+          setWaRuntimeDisabled(true);
+          setQrImageDataUrl(null);
+          return;
+        }
+        setWaRuntimeDisabled(false);
+        // Still linking — never keep a stale success badge.
+        setWaReady(false);
         if (!qrImageDataUrl) {
           const qrResponse = await fetch("/api/channels/whatsapp/qr", { cache: "no-store" });
           const qrData = await qrResponse.json().catch(() => ({}));
           if (qrResponse.ok && qrData.qrImageDataUrl) {
             setQrImageDataUrl(qrData.qrImageDataUrl);
+            setLiveError(null);
+            setMockState((current) => (current === "loading" || current === "error" ? "default" : current));
           }
         }
         if (data.compatibility?.status === "DEGRADED_CRYPTO") {
           setMockState("compatibility-warning");
+        } else {
+          setMockState((current) => (current === "success" ? "default" : current));
         }
       } catch {
         // Keep polling; transient status failures should not break setup.
@@ -432,8 +586,8 @@ export function GuidedOnboardingPreview({
   useEffect(() => {
     if (step !== "FIRST_MESSAGE" || !workspaceReady) return;
     if (!firstMessageStartedAt.current) {
-      firstMessageStartedAt.current = new Date().toISOString();
-      setFirstMessageStage(0);
+      // Look back a bit so a refresh mid-step still finds the test conversation.
+      firstMessageStartedAt.current = new Date(Date.now() - 45 * 60 * 1000).toISOString();
     }
     let stopped = false;
     const tick = async () => {
@@ -442,7 +596,11 @@ export function GuidedOnboardingPreview({
         const data = await response.json();
         if (stopped || !response.ok || !Array.isArray(data.conversations)) return;
         const started = new Date(firstMessageStartedAt.current!).getTime();
-        const conversation = data.conversations.find((item: {
+        const conversation = (
+          testConversationId
+            ? data.conversations.find((item: { conversationId?: string }) => item.conversationId === testConversationId)
+            : null
+        ) ?? data.conversations.find((item: {
           lastInboundAtUtc?: string | null;
         }) => item.lastInboundAtUtc && new Date(item.lastInboundAtUtc).getTime() >= started);
         if (!conversation) return;
@@ -465,6 +623,9 @@ export function GuidedOnboardingPreview({
         if (outbound) {
           setFirstMessageStage(5);
           setMockState("success");
+        } else {
+          // Inbound landed — show "جهز الرد" while the AI worker sends.
+          setFirstMessageStage((value) => Math.max(value, 4));
         }
       } catch {
         // Polling is intentionally tolerant.
@@ -476,7 +637,7 @@ export function GuidedOnboardingPreview({
       stopped = true;
       window.clearInterval(timer);
     };
-  }, [step, workspaceReady]);
+  }, [step, workspaceReady, testConversationId]);
 
   useEffect(() => {
     if (step !== "HUMAN_TAKEOVER" || !testConversationId) return;
@@ -665,6 +826,28 @@ export function GuidedOnboardingPreview({
     await requestDiscoveryQuestion(discoveryTurns);
   }
 
+  async function finishDiscoveryAndContinue() {
+    if (!learningReady || discoveryLoading || recording || transcribing) return;
+    if (knowledgeApplied) {
+      await next();
+      return;
+    }
+    if (discoveryDone) {
+      if (mockState === "loading") return;
+      trainingStartedRef.current = true;
+      await trainKnowledge();
+      return;
+    }
+    const compiled = compileDiscoveryKnowledge(business, discoveryTurns);
+    if (!compiled) return;
+    setKnowledge(compiled);
+    setDiscoveryDone(true);
+    setDiscoveryQuestion("");
+    setDiscoveryTopic(null);
+    trainingStartedRef.current = true;
+    await trainKnowledge(compiled);
+  }
+
   async function submitDiscoveryAnswer(answerOverride?: string) {
     const answer = (answerOverride ?? discoveryInput).trim();
     if (!answer || discoveryLoading) return;
@@ -716,14 +899,26 @@ export function GuidedOnboardingPreview({
         throw new Error(data.error || "تعذر تجهيز السؤال التالي");
       }
 
-      setDiscoveryCovered(Array.isArray(data.covered) ? data.covered : []);
-      setDiscoveryMissing(Array.isArray(data.missing) ? data.missing : []);
+      const covered = Array.isArray(data.covered) ? data.covered : [];
+      const missing = Array.isArray(data.missing) ? data.missing : [];
+      setDiscoveryCovered(covered);
+      setDiscoveryMissing(missing);
+      const pct = calcLearningPercent(covered, missing, nextTurns.length);
 
-      if (data.done) {
+      if (data.done && pct >= LEARNING_MIN_PCT) {
         setDiscoveryDone(true);
         setDiscoveryQuestion("");
         setDiscoveryTopic(null);
         setKnowledge(compileDiscoveryKnowledge(business, nextTurns));
+        return;
+      }
+
+      if (data.done && pct < LEARNING_MIN_PCT) {
+        setDiscoveryQuestion(
+          data.nextQuestion?.trim()
+          || "لسه محتاج تفاصيل أكتر قبل ما نكمّل. كمّل معايا: إيه أهم حاجة العميل بيسأل عنها ولسه ما اتقالتش؟",
+        );
+        setDiscoveryTopic(data.topic ?? "faq");
         return;
       }
 
@@ -747,66 +942,78 @@ export function GuidedOnboardingPreview({
   async function ensureWorkspace() {
     if (workspaceReady) return;
 
+    const agentPayload = {
+      name: "موظف الاستقبال",
+      roleTitle: "موظف استقبال",
+      language: "ar",
+      dialect: "مصري",
+      tone: "مهني وودود",
+      instructions: "جاوب باختصار ووضوح وبناءً على معلومات النشاط فقط.",
+    };
+
     const existingResponse = await fetch("/api/businesses", { cache: "no-store" });
     const existingData = await existingResponse.json().catch(() => ({}));
-    if (existingResponse.ok
+    const hasBusiness = existingResponse.ok
       && Array.isArray(existingData.businesses)
-      && existingData.businesses.length > 0) {
+      && existingData.businesses.length > 0;
+
+    if (!hasBusiness) {
+      const summary = [
+        `اسم البيزنس: ${business.name || "غير محدد"}`,
+        `النشاط: ${effectiveBusinessType || "عام"}`,
+        `الفروع: ${business.branches || "غير محدد"}`,
+        `المواعيد: ${business.hours || "غير محددة"}`,
+        business.link ? `الرابط: ${business.link}` : "",
+      ].filter(Boolean).join("\n");
+
+      const response = await fetch("/api/onboarding/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          business: {
+            name: business.name || "نشاطي",
+            category: effectiveBusinessType || "عام",
+            countryCode: business.countryCode || "EG",
+            locale:
+              countryChoices.find((item) => item.code === business.countryCode)?.locale
+              ?? "ar-EG",
+            timezone:
+              countryChoices.find((item) => item.code === business.countryCode)?.timezone
+              ?? "Africa/Cairo",
+          },
+          location: null,
+          agent: agentPayload,
+          knowledgeItems: [{
+            category: "ABOUT",
+            title: "معلومات النشاط الأساسية",
+            content: summary,
+          }],
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error ?? data?.message ?? "تعذر إنشاء مساحة العمل");
       setWorkspaceReady(true);
-      const agentsResponse = await fetch("/api/agents", { cache: "no-store" });
-      const agentsData = await agentsResponse.json().catch(() => ({}));
-      const existingAgent = agentsData?.agents?.find((item: { isActive?: boolean }) => item.isActive)
-        ?? agentsData?.agents?.[0];
-      if (existingAgent?.agentId) setAgentId(existingAgent.agentId);
+      if (data?.agent?.agentId) setAgentId(data.agent.agentId);
       return;
     }
 
-    const summary = [
-      `اسم البيزنس: ${business.name || "غير محدد"}`,
-      `النشاط: ${effectiveBusinessType || "عام"}`,
-      `الفروع: ${business.branches || "غير محدد"}`,
-      `المواعيد: ${business.hours || "غير محددة"}`,
-      business.link ? `الرابط: ${business.link}` : "",
-    ].filter(Boolean).join("\n");
-
-    const response = await fetch("/api/onboarding/complete", {
+    // Repair partial onboarding (business without FREE subscription/agent).
+    const repairResponse = await fetch("/api/onboarding/ensure-workspace", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        business: {
-          name: business.name || "نشاطي",
-          category: effectiveBusinessType || "عام",
-          countryCode: business.countryCode || "EG",
-          locale:
-            countryChoices.find((item) => item.code === business.countryCode)?.locale
-            ?? "ar-EG",
-          timezone:
-            countryChoices.find((item) => item.code === business.countryCode)?.timezone
-            ?? "Africa/Cairo",
-        },
-        location: null,
-        agent: {
-          name: "موظف الاستقبال",
-          roleTitle: "موظف استقبال",
-          language: "ar",
-          dialect: "مصري",
-          tone: "مهني وودود",
-          instructions: "جاوب باختصار ووضوح وبناءً على معلومات النشاط فقط.",
-        },
-        knowledgeItems: [{
-          category: "ABOUT",
-          title: "معلومات النشاط الأساسية",
-          content: summary,
-        }],
-      }),
+      body: JSON.stringify({ agent: agentPayload }),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data?.error ?? data?.message ?? "تعذر إنشاء مساحة العمل");
+    const repairData = await repairResponse.json().catch(() => ({}));
+    if (!repairResponse.ok) {
+      throw new Error(repairData?.error ?? repairData?.message ?? "تعذر تجهيز مساحة العمل");
+    }
     setWorkspaceReady(true);
-    if (data?.agent?.agentId) setAgentId(data.agent.agentId);
+    if (repairData?.agent?.agentId) setAgentId(repairData.agent.agentId);
   }
 
-  async function trainKnowledge() {
+  async function trainKnowledge(knowledgeOverride?: string) {
+    const text = (knowledgeOverride ?? knowledge).trim();
+    if (!text) return;
     setLiveError(null);
     setMockState("loading");
     try {
@@ -814,7 +1021,7 @@ export function GuidedOnboardingPreview({
       const response = await fetch("/api/knowledge/ingest/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: knowledge }),
+        body: JSON.stringify({ text }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error ?? data?.message ?? "تعذر تحليل المعلومات");
@@ -866,7 +1073,13 @@ export function GuidedOnboardingPreview({
       setKnowledgeCount(Math.max(proposalIds.length, data.proposals?.length ?? 0));
       setKnowledgeApplied(true);
       setPreviewReplies({});
-      setPreviewReply("اختار سؤال لعرض الرد بعد تحديث المعلومات.");
+      setPreviewReply("");
+      setPreviewQuestion("");
+      setPlaygroundTurns([]);
+      setPlaygroundInput("");
+      setTeachTurnIndex(null);
+      setTeachDraft("");
+      setTeachError(null);
       setChatCount(0);
       setMockState("success");
     } catch (error) {
@@ -877,56 +1090,186 @@ export function GuidedOnboardingPreview({
   }
 
   async function askPreview(question: string) {
+    const trimmed = question.trim();
+    if (!trimmed || previewLoading) return;
     setLiveError(null);
-    setPreviewQuestion(question);
-    const cached = previewReplies[question];
+    setPreviewQuestion(trimmed);
+    setPlaygroundInput("");
+
+    const cached = previewReplies[trimmed];
     if (cached) {
       setPreviewReply(cached);
+      setPlaygroundTurns((turns) => [...turns, { question: trimmed, answer: cached }]);
+      setChatCount((value) => Math.min(3, value + 1));
       return;
     }
-    // Ignore rapid repeated taps while a request is running.
+
     if (previewPendingRef.current.size > 0) return;
-    previewPendingRef.current.add(question);
+    previewPendingRef.current.add(trimmed);
     setPreviewLoading(true);
-    setPreviewReply("بجهز الرد لأول مرة…");
+    setPreviewReply("");
     try {
       await ensureWorkspace();
       const response = await fetch("/api/onboarding/preview-reply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: question }),
+        body: JSON.stringify({ message: trimmed }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error ?? data?.message ?? "تعذر تجربة الرد");
-      setPreviewReplies((current) => ({ ...current, [question]: data.reply }));
-      setPreviewReply(data.reply);
+      const reply = String(data.reply ?? "").trim() || "مقدرناش نطلع الرد دلوقتي.";
+      setPreviewReplies((current) => ({ ...current, [trimmed]: reply }));
+      setPreviewReply(reply);
+      setPlaygroundTurns((turns) => [...turns, { question: trimmed, answer: reply }]);
       setChatCount((value) => Math.min(3, value + 1));
     } catch (error) {
-      setPreviewReply("مقدرناش نطلع الرد دلوقتي.");
+      const fail = "مقدرناش نطلع الرد دلوقتي.";
+      setPreviewReply(fail);
       setLiveError(error instanceof Error ? error.message : "تعذر تجربة الرد");
     } finally {
-      previewPendingRef.current.delete(question);
+      previewPendingRef.current.delete(trimmed);
       setPreviewLoading(false);
+    }
+  }
+
+  function submitPlaygroundInput() {
+    void askPreview(playgroundInput);
+  }
+
+  function ratePlaygroundTurn(index: number, rating: "up" | "down") {
+    setPlaygroundTurns((turns) =>
+      turns.map((turn, i) => (i === index ? { ...turn, rating } : turn)),
+    );
+    if (rating === "down") {
+      setTeachTurnIndex(index);
+      setTeachDraft("");
+      setTeachError(null);
+    } else if (teachTurnIndex === index) {
+      setTeachTurnIndex(null);
+      setTeachDraft("");
+      setTeachError(null);
+    }
+  }
+
+  function openTeachTurn(index: number) {
+    setTeachTurnIndex(index);
+    setTeachDraft(playgroundTurns[index]?.teachNote ?? "");
+    setTeachError(null);
+    setPlaygroundTurns((turns) =>
+      turns.map((turn, i) => (i === index ? { ...turn, rating: turn.rating ?? "down" } : turn)),
+    );
+  }
+
+  async function submitTeachNote(index: number) {
+    const turn = playgroundTurns[index];
+    const note = teachDraft.trim();
+    if (!turn || !note || teachSaving) return;
+    setTeachSaving(true);
+    setTeachError(null);
+    setLiveError(null);
+    try {
+      await ensureWorkspace();
+      const text = [
+        "تصحيح أثناء تجربة الردود:",
+        `سؤال العميل: ${turn.question}`,
+        `رد الموظف السابق: ${turn.answer}`,
+        `المعلومة الصحيحة / الناقصة من المالك: ${note}`,
+      ].join("\n");
+      const analyzeResponse = await fetch("/api/knowledge/ingest/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const analyzeData = await analyzeResponse.json().catch(() => ({}));
+      if (!analyzeResponse.ok) {
+        throw new Error(analyzeData?.error ?? analyzeData?.message ?? "تعذر حفظ المعلومة");
+      }
+      const proposalIds = (analyzeData.proposals ?? [])
+        .filter((item: { status?: string }) => item.status !== "NOOP")
+        .map((item: { proposalId: string }) => item.proposalId);
+      if (proposalIds.length > 0) {
+        const applyResponse = await fetch("/api/knowledge/ingest/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: analyzeData.session.sessionId,
+            proposalIds,
+          }),
+        });
+        const applyData = await applyResponse.json().catch(() => ({}));
+        if (!applyResponse.ok) {
+          throw new Error(applyData?.error ?? applyData?.message ?? "تعذر اعتماد المعلومة");
+        }
+      }
+      setPlaygroundTurns((turns) =>
+        turns.map((item, i) => (i === index ? { ...item, teachNote: note, rating: "down" } : item)),
+      );
+      // Invalidate cached replies so the next ask uses the new knowledge.
+      setPreviewReplies({});
+      setTeachTurnIndex(null);
+      setTeachDraft("");
+    } catch (error) {
+      setTeachError(error instanceof Error ? error.message : "تعذر حفظ المعلومة");
+    } finally {
+      setTeachSaving(false);
     }
   }
 
   async function startWhatsApp() {
     setLiveError(null);
+    setMockState("loading");
+    setQrImageDataUrl(null);
+    setWaReady(false);
     try {
       await ensureWorkspace();
+      setWorkspaceReady(true);
       const connectResponse = await fetch("/api/channels/whatsapp/connect", { method: "POST" });
-      const connectData = await connectResponse.json();
+      const connectData = await connectResponse.json().catch(() => ({}));
       if (!connectResponse.ok) {
         throw new Error(connectData?.error ?? connectData?.message ?? "تعذر بدء الربط");
       }
-      const qrResponse = await fetch("/api/channels/whatsapp/qr", { cache: "no-store" });
-      const qrData = await qrResponse.json();
-      if (!qrResponse.ok) throw new Error(qrData?.error ?? qrData?.message ?? "تعذر تحميل QR");
-      if (qrData.qrImageDataUrl) setQrImageDataUrl(qrData.qrImageDataUrl);
-      if (qrData.uiState === "READY") {
+      if (connectData.uiState === "RUNTIME_DISABLED") {
+        throw new Error(
+          "خدمة واتساب مش شغّالة. لازم الـ WhatsApp runtime يكون شغال وDRVOWA_RUNTIME_TOKEN يكون متظبط في .env.local",
+        );
+      }
+      if (connectData.uiState === "READY") {
         setWaReady(true);
         setMockState("success");
+        return;
       }
+
+      // QR often appears a moment after the runtime starts — retry briefly.
+      let lastMessage: string | null = typeof connectData.message === "string" ? connectData.message : null;
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const qrResponse = await fetch("/api/channels/whatsapp/qr", { cache: "no-store" });
+        const qrData = await qrResponse.json().catch(() => ({}));
+        if (!qrResponse.ok) {
+          throw new Error(qrData?.error ?? qrData?.message ?? "تعذر تحميل QR");
+        }
+        if (qrData.uiState === "RUNTIME_DISABLED") {
+          throw new Error(
+            "خدمة واتساب مش شغّالة. لازم الـ WhatsApp runtime يكون شغال وDRVOWA_RUNTIME_TOKEN يكون متظبط في .env.local",
+          );
+        }
+        if (qrData.uiState === "READY") {
+          setWaReady(true);
+          setMockState("success");
+          return;
+        }
+        if (typeof qrData.qrImageDataUrl === "string" && qrData.qrImageDataUrl) {
+          setQrImageDataUrl(qrData.qrImageDataUrl);
+          setMockState("default");
+          return;
+        }
+        if (typeof qrData.message === "string" && qrData.message) lastMessage = qrData.message;
+        await new Promise((resolve) => window.setTimeout(resolve, 700));
+      }
+      throw new Error(
+        lastMessage
+          ? `الـ QR مش جاهز: ${lastMessage}`
+          : "الـ QR لسه مش جاهز. تأكد إن خدمة واتساب شغّالة وحاول تاني.",
+      );
     } catch (error) {
       setLiveError(error instanceof Error ? error.message : "تعذر ربط واتساب");
       setMockState("error");
@@ -954,11 +1297,12 @@ export function GuidedOnboardingPreview({
 
   /* eslint-disable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect -- guarded one-shot async transition */
   useEffect(() => {
-    if (step !== "KNOWLEDGE" || !draftRestored || !discoveryDone || !knowledge.trim() || knowledgeApplied || mockState === "error") return;
+    if (step !== "KNOWLEDGE" || !draftRestored || !discoveryDone || !learningReady || !knowledge.trim() || knowledgeApplied || mockState === "error") return;
     if (trainingStartedRef.current) return;
     trainingStartedRef.current = true;
     void trainKnowledge();
-  }, [step, draftRestored, discoveryDone, knowledge, knowledgeApplied, mockState]);
+    // learningReady is derived from discovery coverage; keep deps length stable across HMR.
+  }, [step, draftRestored, discoveryDone, learningReady, knowledge, knowledgeApplied, mockState]);
   /* eslint-enable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
 
   const primaryLabel = useMemo(() => {
@@ -974,13 +1318,21 @@ export function GuidedOnboardingPreview({
               ? "كمّل المحادثة"
               : "بجهز موظفك...";
       case "PLAYGROUND":
-        return chatCount > 0 ? "الردود تمام — وصل واتساب" : "جرب سؤال الأول";
+        return playgroundReady ? "الردود تمام — وصل واتساب" : "جرّب سؤال واحد على الأقل";
       case "WHATSAPP":
-        return waReady ? "كمل لأول تجربة" : qrImageDataUrl ? "مستني المسح…" : "ابدأ الربط";
+        return waReady
+          ? "كمل لأول تجربة"
+          : mockState === "loading"
+            ? "بجهز الـ QR…"
+            : mockState === "error"
+              ? "حاول الربط تاني"
+              : qrImageDataUrl
+                ? "مستني المسح…"
+                : "ابدأ الربط";
       case "FIRST_MESSAGE":
         return firstMessageStage >= 5 ? "كمل تجربة التحكم" : "مستني أول رد…";
       case "HUMAN_TAKEOVER":
-        return humanTakeoverDone ? "فهمت" : "مستني ردك اليدوي…";
+        return "فهمت — كمّل";
       case "COMPLETED":
         return "افتح لوحة التحكم";
     }
@@ -994,7 +1346,7 @@ export function GuidedOnboardingPreview({
     humanTakeoverDone,
     knowledgeApplied,
     discoveryDone,
-    chatCount,
+    playgroundReady,
   ]);
 
   function sceneTransition(target: Step, afterTransition?: () => void) {
@@ -1033,13 +1385,14 @@ export function GuidedOnboardingPreview({
       return;
     }
     if (step === "KNOWLEDGE" && !knowledgeApplied && mockState !== "success") {
-      if (!discoveryDone) return;
+      if (!discoveryDone || !learningReady) return;
       if (!knowledge.trim()) return;
       await trainKnowledge();
       return;
     }
     if (step === "KNOWLEDGE" && mockState === "loading") return;
-    if (step === "PLAYGROUND" && chatCount === 0) return;
+    if (step === "KNOWLEDGE" && knowledgeApplied && !learningReady) return;
+    if (step === "PLAYGROUND" && !playgroundReady) return;
     if (step === "WHATSAPP" && !waReady) {
       if (!qrImageDataUrl) await startWhatsApp();
       return;
@@ -1054,7 +1407,6 @@ export function GuidedOnboardingPreview({
       }
     }
     if (step === "FIRST_MESSAGE" && firstMessageStage < 5) return;
-    if (step === "HUMAN_TAKEOVER" && !humanTakeoverDone) return;
 
     const nextStep = FLOW[Math.min(index + 1, FLOW.length - 1)]?.key;
     if (nextStep) {
@@ -1083,21 +1435,121 @@ export function GuidedOnboardingPreview({
         <span className="drvo-onboarding-fog drvo-onboarding-fog-two" />
         <span className="drvo-onboarding-fog drvo-onboarding-fog-three" />
       </div>
-      <div className="relative z-10 mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col gap-3 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 sm:gap-4 sm:px-6 sm:py-5">
-        {step !== "KNOWLEDGE" ? <header className="flex shrink-0 items-center justify-between gap-4">
+      <div className={cx(
+        "relative z-10 mx-auto flex h-full min-h-0 w-full flex-col",
+        isChatStep
+          ? "max-w-none gap-0 px-0 pb-[max(8px,env(safe-area-inset-bottom))] pt-0"
+          : "max-w-6xl gap-3 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 sm:gap-4 sm:px-6 sm:py-5",
+      )}>
+        {step === "KNOWLEDGE" ? (
+          <header className="drvo-ob-chat-topbar shrink-0 border-b border-border/40 px-4 py-3 sm:px-6 sm:py-4">
+            <div className="mx-auto flex w-full max-w-6xl items-start justify-between gap-3">
+              <div className="min-w-0 flex-1 text-start">
+                <div data-tech="true" className="drvo-ob-neon-text text-[10px] font-semibold tracking-[0.18em] uppercase">DRVO / تدريب</div>
+                <h1 className="mt-1 text-xl font-black tracking-[-0.03em] sm:text-2xl">شات التدريب</h1>
+                <p className="mt-1 text-xs text-muted-foreground sm:text-sm">احكي عن بيزنسك — كتابة أو فويس</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5 pt-0.5 sm:gap-2">
+                <BrandLogo className="hidden h-6 w-auto sm:block" priority />
+                <ThemeToggle />
+                {learningReady ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void finishDiscoveryAndContinue()}
+                    disabled={discoveryLoading || recording || transcribing || mockState === "loading"}
+                    className="rounded-full px-4 font-bold"
+                  >
+                    التالي
+                  </Button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={previous}
+                  className="rounded-full border border-border/70 bg-surface/70 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:border-primary/50 hover:text-foreground"
+                  aria-label="الرجوع"
+                >
+                  رجوع
+                </button>
+              </div>
+            </div>
+            <div className="mx-auto mt-3 w-full max-w-6xl" aria-label="مستوى تعلم الموظف">
+              <div className="mb-1.5 flex items-center justify-between gap-3 text-xs font-semibold">
+                <span className="text-muted-foreground">مستوى التعلم</span>
+                <span className={cx(
+                  "tabular-nums",
+                  learningLevel === "high" && "text-emerald-400",
+                  learningLevel === "mid" && "text-amber-400",
+                  learningLevel === "low" && "text-rose-400",
+                )}>
+                  {learningPercent}%
+                  <span className="ms-1.5 font-medium text-muted-foreground">/ حد أدنى {LEARNING_MIN_PCT}%</span>
+                </span>
+              </div>
+              <div className="drvo-ob-learn-track h-2.5 overflow-hidden rounded-full">
+                <div
+                  className={cx("drvo-ob-learn-fill h-full rounded-full transition-[width,background] duration-500 ease-out", `is-${learningLevel}`)}
+                  style={{ width: `${Math.max(learningPercent, 3)}%` }}
+                />
+              </div>
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                {learningReady
+                  ? "ممتاز — التعلم وصل للحد الأدنى. اضغط «التالي» لما تكون جاهز تكمّل."
+                  : "كمّل الأسئلة لحد ما الشريط يوصل للأخضر. مش هنقدر ندخل المرحلة اللي بعدها قبل كده."}
+              </p>
+            </div>
+          </header>
+        ) : null}
+
+        {step === "PLAYGROUND" ? (
+          <header className="drvo-ob-chat-topbar shrink-0 border-b border-border/40 px-4 py-2.5 sm:px-6">
+            <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3">
+              <div className="min-w-0 flex-1 text-start">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <div data-tech="true" className="drvo-ob-neon-text text-[10px] font-semibold tracking-[0.18em] uppercase">DRVO / تجربة</div>
+                  <span className={cx(
+                    "rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums",
+                    playgroundReady ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300",
+                  )}>
+                    {playgroundTurns.length}/{PLAYGROUND_MIN_TRIES} مجرَّب
+                  </span>
+                </div>
+                <h1 className="mt-0.5 truncate text-lg font-black tracking-[-0.03em] sm:text-xl">كلمه زي العميل</h1>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={previous}
+                  className="rounded-full border border-border/70 bg-surface/70 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:border-primary/50 hover:text-foreground"
+                  aria-label="الرجوع"
+                >
+                  رجوع
+                </button>
+                <ThemeToggle />
+                {playgroundReady ? (
+                  <Button type="button" size="sm" onClick={() => void next()} className="rounded-full px-4 font-bold shadow-[0_0_18px_var(--ob-neon-glow)]">
+                    التالي ←
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </header>
+        ) : null}
+
+        {!isChatStep ? <header className="flex shrink-0 items-center justify-between gap-4">
           <div>
             <BrandLogo className="h-7 w-auto" priority />
             <div className="mt-1 text-[11px] font-medium text-muted-foreground">إعداد موظف الاستقبال</div>
           </div>
           <div className="flex items-center gap-2">
-            <div data-tech="true" className="drvo-ob-chip rounded-full px-3 py-1.5 text-xs font-semibold shadow-sm backdrop-blur">
+            <div data-tech="true" dir="ltr" className="drvo-ob-chip rounded-full px-3 py-1.5 text-xs font-semibold tabular-nums shadow-sm backdrop-blur">
               {Math.min(index + 1, FLOW.length)} / {FLOW.length}
             </div>
             <ThemeToggle />
           </div>
         </header> : null}
 
-        {step !== "KNOWLEDGE" ? <section aria-label="تقدم الإعداد" className="shrink-0">
+        {!isChatStep ? <section aria-label="تقدم الإعداد" className="shrink-0">
           <div className="relative mx-auto max-w-4xl">
             <div className="absolute left-[6%] right-[6%] top-4 h-0.5 rounded-full bg-card/80 shadow-inner sm:top-5" />
             <div
@@ -1144,16 +1596,36 @@ export function GuidedOnboardingPreview({
           </div>
         </section> : null}
 
-        <section className="mx-auto flex min-h-0 w-full max-w-[920px] flex-1 flex-col">
-          <div className="drvo-ob-glass relative flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] sm:rounded-[32px]">
-            {step !== "KNOWLEDGE" ? <div aria-live="polite" className="shrink-0 border-b border-border/40 px-5 pb-3 pt-4 sm:px-9 sm:pb-4 sm:pt-5">
+        <section className={cx(
+          "mx-auto flex min-h-0 w-full flex-1 flex-col",
+          isChatStep ? "max-w-none" : "max-w-[920px]",
+        )}>
+          <div className={cx(
+            "relative flex h-full min-h-0 flex-col overflow-hidden",
+            isChatStep
+              ? "drvo-ob-chat-shell rounded-none border-0"
+              : "drvo-ob-glass rounded-[24px] sm:rounded-[32px]",
+          )}>
+            {!isChatStep ? <div aria-live="polite" className={cx(
+              "shrink-0 border-b border-border/40 px-5 sm:px-9",
+              isCompactStep ? "pb-2 pt-3 sm:pb-2.5 sm:pt-3.5" : "pb-3 pt-4 sm:pb-4 sm:pt-5",
+            )}>
               <div data-tech="true" className="drvo-ob-neon-text flex items-center gap-2 text-[10px] font-semibold tracking-[0.18em] uppercase">
                 <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_12px_var(--ob-neon-glow)]" />
                 DRVO / {FLOW[index]?.short}
               </div>
-              <p className="mt-1 text-xs font-medium leading-5 text-muted-foreground sm:text-sm">{STEP_SCENES[step].line}</p>
+              {isCompactStep ? null : (
+                <p className="mt-1 text-xs font-medium leading-5 text-muted-foreground sm:text-sm">{STEP_SCENES[step].line}</p>
+              )}
             </div> : null}
-            <div key={`${step}-${businessQuestion}`} className={cx("drvo-onboarding-step min-h-0 flex-1 overscroll-contain", step === "KNOWLEDGE" ? "overflow-hidden" : "overflow-y-auto px-5 pb-5 pt-3 sm:px-9 sm:pb-7 sm:pt-5 md:px-12")}>
+            <div key={`${step}-${businessQuestion}`} className={cx(
+              "drvo-onboarding-step min-h-0 flex-1 overscroll-contain",
+              isChatStep
+                ? "overflow-hidden"
+                : isCompactStep
+                  ? "drvo-ob-step-noscroll overflow-y-auto px-5 py-2 sm:px-9 sm:py-3 md:px-12"
+                  : "overflow-y-auto px-5 pb-5 pt-3 sm:px-9 sm:pb-7 sm:pt-5 md:px-12",
+            )}>
               {step === "BUSINESS" ? (
                 <div className="mx-auto flex min-h-full max-w-2xl flex-col justify-center">
                   <div className="mb-6 flex items-center justify-between gap-4 sm:mb-8">
@@ -1244,202 +1716,410 @@ export function GuidedOnboardingPreview({
               ) : null}
 
               {step === "KNOWLEDGE" ? (
-                <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col">
-                  <div className="flex shrink-0 items-center gap-3 border-b border-border/60 px-4 py-3 sm:px-6">
-                    <BrandLogo className="h-6 w-auto" />
-                    <div className="min-w-0 flex-1">
-                      <h1 className="text-sm font-black">شات التدريب</h1>
-                      <p className="text-xs text-muted-foreground">بنتعرف على بيزنسك</p>
-                    </div>
-                    <button type="button" onClick={previous} className="rounded-full px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-surface hover:text-foreground" aria-label="الرجوع">رجوع</button>
-                  </div>
-                  <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain bg-[#edf5f5] px-3 py-5 dark:bg-[#101e23] sm:px-6" role="log" aria-label="محادثة التدريب" aria-live="polite">
-                    <div className="max-w-[88%] self-start rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-sm leading-7 shadow-sm">
-                      أهلاً بيك 👋 أنا DRVOWA. احكيلي عن شغلك براحتك، كتابة أو فويس، وأنا هسأل بس عن التفاصيل اللي ناقصاني.
-                    </div>
-                    {discoveryTurns.map((turn, i) => (
-                      <div key={i} className="contents">
-                        <div className="max-w-[90%] self-start whitespace-pre-wrap rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-sm leading-7 shadow-sm">{turn.question}</div>
-                        <div className="max-w-[88%] self-end whitespace-pre-wrap rounded-[20px] rounded-tl-md bg-primary px-4 py-3 text-sm leading-7 text-primary-foreground shadow-sm">{turn.answer}</div>
+                <div className="flex h-full min-h-0 w-full flex-col">
+                  <div
+                    className="drvo-ob-chat-thread min-h-0 flex-1 overflow-y-auto overscroll-contain"
+                    role="log"
+                    aria-label="محادثة التدريب"
+                    aria-live="polite"
+                  >
+                    <div className="drvo-ob-chat-col mx-auto flex flex-col gap-3 px-4 py-4 sm:gap-3.5 sm:px-6 sm:py-5 md:px-8">
+                      <div className="drvo-ob-bubble-in drvo-ob-bubble self-start rounded-[20px] rounded-tr-md px-4 py-3 text-[15px] leading-7 sm:py-3.5 sm:leading-8">
+                        أهلاً بيك 👋 أنا DRVOWA. احكيلي عن شغلك براحتك، كتابة أو فويس، وأنا هسأل بس عن التفاصيل اللي ناقصاني.
                       </div>
-                    ))}
-                    {discoveryLoading ? (
-                      <div className="max-w-[88%] self-start rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-sm text-muted-foreground shadow-sm" role="status">بفهم كلامك وبجهّز السؤال اللي بعده…</div>
-                    ) : discoveryError ? (
-                      <div className="max-w-[88%] self-start rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-sm shadow-sm" role="alert">
-                        <p className="text-destructive">إجابتك محفوظة، بس حصلت مشكلة: {discoveryError}</p>
-                        <button type="button" onClick={() => void retryDiscovery()} className="mt-2 font-bold text-primary underline underline-offset-4">حاول تاني</button>
-                      </div>
-                    ) : discoveryDone ? (
-                      <div className="max-w-[90%] self-start rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-sm leading-7 shadow-sm">
-                        {knowledgeApplied ? "تمام! ✨ دلوقتي فهمت بيزنسك وجاهز أجرب أرد على العملاء." : mockState === "error" ? "أنا جمعت معلوماتك، لكن حصلت مشكلة في حفظها. جرّب تاني من غير ما تعيد أي حاجة." : "تمام ❤️ الصورة بقت واضحة. بجهّز موظفك دلوقتي…"}
-                        {mockState === "error" && liveError ? <p className="mt-2 text-xs text-destructive" role="alert">{liveError}</p> : null}
-                      </div>
-                    ) : (
-                      <div className="max-w-[90%] self-start whitespace-pre-wrap rounded-[20px] rounded-tr-md bg-card px-4 py-3 text-sm leading-7 shadow-sm">{discoveryQuestion || initialDiscoveryQuestion(effectiveBusinessType)}</div>
-                    )}
-                    <div ref={discoveryChatEndRef} aria-hidden="true" />
-                  </div>
-                  <div className="shrink-0 border-t border-border/60 bg-card px-3 py-3 sm:px-5">
-                    {discoveryDone ? (
-                      <div className="flex items-center justify-center">
-                        {knowledgeApplied ? (
-                          <Button type="button" onClick={() => void next()} className="w-full max-w-sm rounded-full">جرّب موظفك دلوقتي ←</Button>
-                        ) : mockState === "error" ? (
-                          <Button type="button" onClick={() => { trainingStartedRef.current = true; void trainKnowledge(); }} className="w-full max-w-sm rounded-full">إعادة المحاولة</Button>
-                        ) : (
-                          <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><span className="h-3 w-3 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />بجهز الموظف…</p>
-                        )}
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-end gap-2">
-                          <button
-                            type="button"
-                            aria-label={recording ? "إيقاف التسجيل وإرسال الرد" : "تسجيل رد صوتي"}
-                            disabled={transcribing || discoveryLoading || Boolean(discoveryError)}
-                            onClick={recording ? stopVoiceRecording : () => void startVoiceRecording("discovery")}
-                            className={cx("grid h-11 w-11 shrink-0 place-items-center rounded-full text-lg transition disabled:opacity-40", recording ? "bg-destructive text-white" : "bg-primary/10 text-primary")}
-                          >{recording ? "■" : "🎙"}</button>
-                          <Textarea
-                            value={discoveryInput}
-                            onChange={(event) => { setDiscoveryInput(event.target.value); discoveryInputRef.current = event.target.value; }}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                                event.preventDefault();
-                                if (discoveryInput.trim() && !discoveryLoading && !recording && !transcribing && !discoveryError) void submitDiscoveryAnswer();
-                              }
-                            }}
-                            aria-label="اكتب رسالتك"
-                            placeholder={recording ? "بسمعك دلوقتي…" : "اكتب أو سجّل ردك…"}
-                            rows={1}
-                            disabled={recording || discoveryLoading || transcribing || Boolean(discoveryError)}
-                            className="min-h-11 max-h-28 flex-1 resize-none rounded-2xl border border-border bg-background px-3 py-2 text-sm leading-6"
-                          />
-                          <button
-                            type="button"
-                            aria-label="إرسال الرسالة"
-                            disabled={!discoveryInput.trim() || discoveryLoading || recording || transcribing || Boolean(discoveryError)}
-                            onClick={() => void submitDiscoveryAnswer()}
-                            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary text-lg text-primary-foreground transition hover:opacity-90 disabled:opacity-40"
-                          >↑</button>
+                      {discoveryTurns.map((turn, i) => (
+                        <div key={i} className="contents">
+                          <div className="drvo-ob-bubble-in drvo-ob-bubble self-start whitespace-pre-wrap rounded-[20px] rounded-tr-md px-4 py-3 text-[15px] leading-7 sm:py-3.5 sm:leading-8">{turn.question}</div>
+                          <div className="drvo-ob-bubble-out drvo-ob-bubble self-end whitespace-pre-wrap rounded-[20px] rounded-tl-md px-4 py-3 text-[15px] leading-7 sm:py-3.5 sm:leading-8">{turn.answer}</div>
                         </div>
-                        {recording ? <p className="mt-2 text-xs font-semibold text-destructive" role="status">● بسجّل صوتك… اضغط على المايك لما تخلص.</p> : null}
-                        {transcribing ? <p className="mt-2 text-xs text-primary" role="status">بنحوّل الرسالة الصوتية لنص…</p> : null}
-                        {microphoneHelp ? <MicrophonePermissionHelp state={microphoneHelp} /> : null}
-                        {voiceError ? <p className="mt-2 text-xs text-destructive" role="alert">{voiceError}</p> : null}
-                      </>
-                    )}
+                      ))}
+                      {discoveryLoading ? (
+                        <div
+                          className="drvo-ob-bubble-in drvo-ob-typing self-start rounded-[20px] rounded-tr-md px-4 py-3"
+                          role="status"
+                          aria-label="بيكتب دلوقتي"
+                        >
+                          <span className="drvo-ob-typing-dot" />
+                          <span className="drvo-ob-typing-dot" />
+                          <span className="drvo-ob-typing-dot" />
+                        </div>
+                      ) : discoveryError ? (
+                        <div className="drvo-ob-bubble-in drvo-ob-bubble self-start rounded-[20px] rounded-tr-md px-4 py-3 text-[15px] leading-7" role="alert">
+                          <p className="text-destructive">إجابتك محفوظة، بس حصلت مشكلة: {discoveryError}</p>
+                          <button type="button" onClick={() => void retryDiscovery()} className="mt-2 font-bold text-primary underline underline-offset-4">حاول تاني</button>
+                        </div>
+                      ) : discoveryDone ? (
+                        <div className="drvo-ob-bubble-in drvo-ob-bubble self-start rounded-[20px] rounded-tr-md px-4 py-3 text-[15px] leading-7 sm:leading-8">
+                          {knowledgeApplied
+                            ? learningReady
+                              ? "تمام! ✨ دلوقتي فهمت بيزنسك وجاهز أجرب أرد على العملاء."
+                              : "جمعنا معلومات كويسة، بس لسه محتاجين شوية تفاصيل قبل المرحلة الجاية."
+                            : mockState === "error"
+                              ? "أنا جمعت معلوماتك، لكن حصلت مشكلة في حفظها. جرّب تاني من غير ما تعيد أي حاجة."
+                              : "تمام ❤️ الصورة بقت واضحة. بجهّز موظفك دلوقتي…"}
+                          {mockState === "error" && liveError ? <p className="mt-2 text-xs text-destructive" role="alert">{liveError}</p> : null}
+                        </div>
+                      ) : (
+                        <div className="drvo-ob-bubble-in drvo-ob-bubble self-start whitespace-pre-wrap rounded-[20px] rounded-tr-md px-4 py-3 text-[15px] leading-7 sm:leading-8">{discoveryQuestion || initialDiscoveryQuestion(effectiveBusinessType)}</div>
+                      )}
+                      <div ref={discoveryChatEndRef} className="h-2 shrink-0" aria-hidden="true" />
+                    </div>
+                  </div>
+                  <div className="shrink-0 border-t border-border/40 px-4 py-3 sm:px-6 sm:py-3.5">
+                    <div className="drvo-ob-chat-col mx-auto">
+                      {discoveryDone ? (
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          {knowledgeApplied ? (
+                            learningReady ? (
+                              <Button type="button" onClick={() => void next()} className="h-12 w-full rounded-2xl text-base font-bold">جرّب موظفك دلوقتي ←</Button>
+                            ) : (
+                              <p className="text-center text-sm text-rose-300" role="status">
+                                التعلم لسه تحت الحد الأدنى ({LEARNING_MIN_PCT}%). كمّل الشات لحد ما الشريط يبقى أخضر.
+                              </p>
+                            )
+                          ) : mockState === "error" ? (
+                            <Button type="button" onClick={() => { trainingStartedRef.current = true; void trainKnowledge(); }} className="h-12 w-full rounded-2xl text-base font-bold">إعادة المحاولة</Button>
+                          ) : (
+                            <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><span className="h-3 w-3 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />بجهز الموظف…</p>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-end gap-2.5">
+                            <button
+                              type="button"
+                              aria-label={recording ? "إيقاف التسجيل وإرسال الرد" : "تسجيل رد صوتي"}
+                              disabled={transcribing || discoveryLoading || Boolean(discoveryError)}
+                              onClick={recording ? stopVoiceRecording : () => void startVoiceRecording("discovery")}
+                              className={cx(
+                                "grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-lg transition disabled:opacity-40",
+                                recording ? "bg-destructive text-white" : "border border-border bg-primary/10 text-primary hover:border-primary/50",
+                              )}
+                            >{recording ? "■" : "🎙"}</button>
+                            <Textarea
+                              value={discoveryInput}
+                              onChange={(event) => { setDiscoveryInput(event.target.value); discoveryInputRef.current = event.target.value; }}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                                  event.preventDefault();
+                                  if (discoveryInput.trim() && !discoveryLoading && !recording && !transcribing && !discoveryError) void submitDiscoveryAnswer();
+                                }
+                              }}
+                              aria-label="اكتب رسالتك"
+                              placeholder={recording ? "بسمعك دلوقتي…" : "اكتب أو سجّل ردك…"}
+                              rows={1}
+                              disabled={recording || discoveryLoading || transcribing || Boolean(discoveryError)}
+                              className="min-h-12 max-h-32 flex-1 resize-none rounded-2xl border-2 px-4 py-3 text-[15px] leading-7"
+                            />
+                            <button
+                              type="button"
+                              aria-label="إرسال الرسالة"
+                              disabled={!discoveryInput.trim() || discoveryLoading || recording || transcribing || Boolean(discoveryError)}
+                              onClick={() => void submitDiscoveryAnswer()}
+                              className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary text-lg text-primary-foreground transition hover:opacity-90 disabled:opacity-40"
+                            >↑</button>
+                          </div>
+                          {learningReady ? (
+                            <Button
+                              type="button"
+                              onClick={() => void finishDiscoveryAndContinue()}
+                              disabled={discoveryLoading || recording || transcribing || mockState === "loading"}
+                              className="mt-3 h-12 w-full rounded-2xl text-base font-bold"
+                            >
+                              التالي — جهّز الموظف وكمّل ←
+                            </Button>
+                          ) : null}
+                          {recording ? <p className="mt-2 text-xs font-semibold text-destructive" role="status">● بسجّل صوتك… اضغط على المايك لما تخلص.</p> : null}
+                          {transcribing ? <p className="mt-2 text-xs text-primary" role="status">بنحوّل الرسالة الصوتية لنص…</p> : null}
+                          {microphoneHelp ? <div className="mt-2"><MicrophonePermissionHelp state={microphoneHelp} /></div> : null}
+                          {voiceError ? <p className="mt-2 text-xs text-destructive" role="alert">{voiceError}</p> : null}
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               ) : null}
 
               {step === "PLAYGROUND" ? (
-                <div className="mx-auto max-w-3xl">
-                  <span className="text-xs font-black text-primary">تجربة الردود</span>
-                  <h2 className="mt-2 text-3xl font-black tracking-[-0.035em]">كلمه زي العميل</h2>
-                  <p className="mt-3 text-muted-foreground">اختار أي سؤال وشوف رد موظفك. الرد بيتحفظ، والتنقل بين الأسئلة مش بيستهلك طلبات جديدة.</p>
-                  <div className="mt-6 flex flex-wrap gap-2">
-                    {["أسعاركم إيه؟", "مواعيدكم؟", "عاوز أحجز", "عندكم كام فرع؟"].map((question) => (
+                <div className="relative flex h-full min-h-0 w-full flex-col">
+                  {playgroundIntro ? (
+                    <div className="drvo-ob-role-switch absolute inset-0 z-20 flex flex-col items-center justify-center px-6 text-center" role="status" aria-live="polite">
+                      <p data-tech="true" className="drvo-ob-neon-text text-[10px] font-semibold tracking-[0.2em] uppercase">Role switch</p>
+                      <div className="drvo-ob-role-cards mt-5 flex items-center gap-3 sm:gap-5">
+                        <div className="drvo-ob-role-card is-from rounded-2xl border border-border/70 bg-surface/80 px-4 py-3 sm:px-5 sm:py-4">
+                          <div className="text-[11px] text-muted-foreground">قبل كده</div>
+                          <div className="mt-1 text-sm font-black sm:text-base">مالك البيزنس</div>
+                        </div>
+                        <div className="drvo-ob-role-arrow text-primary" aria-hidden="true">⇄</div>
+                        <div className="drvo-ob-role-card is-to rounded-2xl border border-primary/50 bg-primary/10 px-4 py-3 sm:px-5 sm:py-4">
+                          <div className="text-[11px] text-primary">دلوقتي</div>
+                          <div className="mt-1 text-sm font-black text-primary sm:text-base">العميل</div>
+                        </div>
+                      </div>
+                      <h2 className="mt-6 max-w-md text-2xl font-black tracking-[-0.03em] sm:text-3xl">اتعامل كإنك عميل… واسأل البوت</h2>
+                      <p className="mt-3 max-w-sm text-sm leading-7 text-muted-foreground">اكتب سؤالك تحت، والاقتراحات مجرد مساعدات سريعة.</p>
                       <button
-                        key={question}
                         type="button"
-                        onClick={() => void askPreview(question)}
-                        disabled={previewLoading && !previewReplies[question]}
-                        className="rounded-full border border-border bg-card px-4 py-2 text-sm font-bold shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:text-primary hover:shadow-md"
+                        onClick={() => setPlaygroundIntro(false)}
+                        className="mt-6 rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground"
                       >
-                        {question}
+                        ابدأ التجربة
                       </button>
-                    ))}
+                    </div>
+                  ) : null}
+
+                  <div className="drvo-ob-chat-thread drvo-ob-chat-thread--dock min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                    <div className="drvo-ob-chat-col mx-auto flex w-full flex-col gap-3 px-4 py-4 sm:px-6 sm:py-5">
+                      <div className="self-start rounded-2xl px-1 py-1 text-[13px] leading-6 text-muted-foreground">
+                        اسأل عن أي حاجة تخص <span className="font-semibold text-foreground/85">{business.name || "البيزنس"}</span>
+                      </div>
+                      {playgroundTurns.map((turn, index) => (
+                        <div key={`${turn.question}-${index}`} className="contents">
+                          <div className="drvo-ob-bubble-out drvo-ob-bubble self-end whitespace-pre-wrap rounded-[20px] rounded-tl-md px-4 py-3 text-[15px] leading-7">
+                            {turn.question}
+                          </div>
+                          <div className="flex w-full max-w-[min(92%,34rem)] flex-col gap-1.5 self-start">
+                            <div className="drvo-ob-bubble-in drvo-ob-bubble whitespace-pre-wrap rounded-[20px] rounded-tr-md px-4 py-3 text-[15px] leading-7">
+                              {turn.answer}
+                            </div>
+                            <div className="drvo-ob-feedback-row flex flex-wrap items-center gap-1 px-0.5">
+                              <button
+                                type="button"
+                                onClick={() => ratePlaygroundTurn(index, "up")}
+                                className={cx(
+                                  "rounded-lg px-2 py-1 text-[11px] font-bold transition",
+                                  turn.rating === "up"
+                                    ? "bg-emerald-500/20 text-emerald-300"
+                                    : "text-muted-foreground/80 hover:bg-surface hover:text-emerald-300",
+                                )}
+                              >
+                                تمام
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => ratePlaygroundTurn(index, "down")}
+                                className={cx(
+                                  "rounded-lg px-2 py-1 text-[11px] font-bold transition",
+                                  turn.rating === "down"
+                                    ? "bg-amber-500/20 text-amber-300"
+                                    : "text-muted-foreground/80 hover:bg-surface hover:text-amber-300",
+                                )}
+                              >
+                                ضعيف
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openTeachTurn(index)}
+                                className="rounded-lg px-2 py-1 text-[11px] font-bold text-primary/90 hover:bg-primary/10 hover:text-primary"
+                              >
+                                علّمه
+                              </button>
+                              {turn.teachNote ? (
+                                <span className="ms-auto text-[11px] font-semibold text-emerald-300">اتحفظ</span>
+                              ) : null}
+                            </div>
+                            {teachTurnIndex === index ? (
+                              <div className="space-y-2 rounded-2xl border border-border/60 bg-surface/60 p-3">
+                                <p className="text-xs font-semibold text-muted-foreground">
+                                  إيه المعلومة اللي المفروض يعرفها؟
+                                </p>
+                                <Textarea
+                                  value={teachDraft}
+                                  onChange={(event) => setTeachDraft(event.target.value)}
+                                  rows={2}
+                                  disabled={teachSaving}
+                                  autoFocus
+                                  placeholder="مثال: بنشتغل القاهرة والجيزة بس، ومفيش فروع في الإسكندرية."
+                                  className="min-h-16 resize-none rounded-xl border-2 px-3 py-2 text-sm leading-6"
+                                />
+                                {teachError ? <p className="text-xs text-destructive" role="alert">{teachError}</p> : null}
+                                <div className="flex gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={!teachDraft.trim() || teachSaving}
+                                    onClick={() => void submitTeachNote(index)}
+                                    className="rounded-full px-4 font-bold"
+                                  >
+                                    {teachSaving ? "بيحفظ…" : "علّم الموظف"}
+                                  </Button>
+                                  <button
+                                    type="button"
+                                    disabled={teachSaving}
+                                    onClick={() => {
+                                      setTeachTurnIndex(null);
+                                      setTeachDraft("");
+                                      setTeachError(null);
+                                    }}
+                                    className="rounded-full px-3 py-1.5 text-xs font-semibold text-muted-foreground"
+                                  >
+                                    إلغاء
+                                  </button>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))}
+                      {previewLoading ? (
+                        <>
+                          {previewQuestion
+                            && playgroundTurns[playgroundTurns.length - 1]?.question !== previewQuestion ? (
+                              <div className="drvo-ob-bubble-out drvo-ob-bubble self-end whitespace-pre-wrap rounded-[20px] rounded-tl-md px-4 py-3 text-[15px] leading-7">
+                                {previewQuestion}
+                              </div>
+                            ) : null}
+                          <div className="drvo-ob-bubble-in drvo-ob-typing self-start rounded-[20px] rounded-tr-md px-4 py-3" role="status" aria-label="بيكتب دلوقتي">
+                            <span className="drvo-ob-typing-dot" />
+                            <span className="drvo-ob-typing-dot" />
+                            <span className="drvo-ob-typing-dot" />
+                          </div>
+                        </>
+                      ) : null}
+                      {liveError && step === "PLAYGROUND" ? (
+                        <p className="text-xs text-destructive" role="alert">{liveError}</p>
+                      ) : null}
+                      <div ref={playgroundChatEndRef} className="h-1 shrink-0" aria-hidden="true" />
+                    </div>
                   </div>
-                  <div className="mt-6 rounded-[26px] border border-border bg-surface/50 p-4 sm:p-6">
-                    <div className="space-y-4">
-                      <div className="mr-auto max-w-[82%] translate-y-0 rounded-2xl rounded-bl-md bg-card p-4 text-sm shadow-sm transition-all">{previewQuestion}</div>
-                      <div className="ml-auto max-w-[86%] rounded-2xl rounded-br-md bg-primary p-4 text-sm leading-7 text-primary-foreground shadow-md">
-                        {previewReply}
-                        <div className="mt-2 text-[10px] font-semibold text-primary-foreground/70">رد حقيقي من موظفك التجريبي</div>
+
+                  <div className="drvo-ob-composer shrink-0 border-t border-border/40 px-3 py-2 sm:px-5">
+                    <div className="drvo-ob-chat-col mx-auto space-y-1.5">
+                      <div className="drvo-ob-suggest-scroll flex gap-1.5 overflow-x-auto overscroll-x-contain">
+                        {playgroundQuestions.map((item) => {
+                          const tried = playgroundTurns.some((turn) => turn.question === item.question);
+                          const active = previewQuestion === item.question && previewLoading;
+                          return (
+                            <button
+                              key={item.question}
+                              type="button"
+                              disabled={previewLoading}
+                              onClick={() => void askPreview(item.question)}
+                              title={item.hint}
+                              className={cx(
+                                "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold transition whitespace-nowrap",
+                                active
+                                  ? "border-primary bg-primary/20 text-primary"
+                                  : tried
+                                    ? "border-emerald-500/40 bg-emerald-500/12 text-emerald-200"
+                                    : "border-border bg-surface text-foreground/90 hover:border-primary/55 hover:text-foreground",
+                              )}
+                            >
+                              {tried ? "✓ " : ""}{item.question}
+                            </button>
+                          );
+                        })}
                       </div>
 
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={playgroundInput}
+                          onChange={(event) => setPlaygroundInput(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                              event.preventDefault();
+                              if (playgroundInput.trim() && !previewLoading) submitPlaygroundInput();
+                            }
+                          }}
+                          aria-label="اكتب سؤالك كعميل"
+                          placeholder={previewLoading ? "بجهز الرد…" : "اكتب سؤالك كإنك عميل…"}
+                          disabled={previewLoading}
+                          className="h-10 flex-1 rounded-xl border border-border bg-surface px-3.5 text-[15px] outline-none transition focus:border-primary disabled:opacity-60"
+                        />
+                        <button
+                          type="button"
+                          aria-label="إرسال السؤال"
+                          disabled={!playgroundInput.trim() || previewLoading}
+                          onClick={submitPlaygroundInput}
+                          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary text-base font-black text-primary-foreground transition hover:opacity-90 disabled:opacity-40"
+                        >
+                          ↑
+                        </button>
+                      </div>
+
+                      {!playgroundReady ? (
+                        <p className="text-center text-[10px] leading-4 text-muted-foreground">اسأل مرة واحدة عشان يتفتح «التالي»</p>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void next()}
+                          className="mx-auto block text-[11px] font-bold text-primary underline-offset-4 hover:underline"
+                        >
+                          الردود تمام — كمّل لواتساب ←
+                        </button>
+                      )}
                     </div>
-                    <div className="mt-4 flex gap-2">
-                      <button type="button" onClick={() => setChatCount((n) => Math.max(1, n))} className="rounded-xl bg-success-soft px-3 py-2 text-xs font-black text-success">تمام 👍</button>
-                      <button
-                        type="button"
-                        onClick={() => sceneTransition("KNOWLEDGE")}
-                        className="rounded-xl bg-card px-3 py-2 text-xs font-black text-muted-foreground shadow-sm"
-                      >
-                        عدّل المعلومة
-                      </button>
-                    </div>
-                  </div>
-                  <div className="mt-5 flex flex-wrap gap-2 text-xs font-bold">
-                    <span className="rounded-full bg-success-soft px-3 py-1.5 text-success">الخدمات ✓</span>
-                    <span className={cx("rounded-full px-3 py-1.5", chatCount > 0 ? "bg-success-soft text-success" : "bg-secondary text-muted-foreground")}>الأسعار {chatCount > 0 ? "✓" : "○"}</span>
-                    <span className={cx("rounded-full px-3 py-1.5", chatCount > 1 ? "bg-success-soft text-success" : "bg-secondary text-muted-foreground")}>المواعيد {chatCount > 1 ? "✓" : "○"}</span>
                   </div>
                 </div>
               ) : null}
 
               {step === "WHATSAPP" ? (
-                <div className="mx-auto max-w-3xl text-center">
-                  <span className="text-xs font-black text-primary">ربط واتساب</span>
-                  <h2 className="mt-2 text-3xl font-black tracking-[-0.035em]">وصّل موظفك بواتساب</h2>
-                  <p className="mt-3 text-muted-foreground">3 خطوات بسيطة، ومش هنطلب منك أي إعدادات تقنية.</p>
-                  <div className="mt-7 grid gap-3 sm:grid-cols-3">
-                    {[
-                      ["1", "افتح واتساب"],
-                      ["2", "الأجهزة المرتبطة"],
-                      ["3", "امسح QR"],
-                    ].map(([n, label]) => (
-                      <div key={n} className="rounded-2xl border border-border bg-surface/60 p-4">
-                        <span className="mx-auto grid h-8 w-8 place-items-center rounded-full bg-primary text-xs font-black text-white">{n}</span>
-                        <div className="mt-2 text-sm font-black">{label}</div>
+                <div className="mx-auto flex min-h-full max-w-xl flex-col items-center justify-center text-center">
+                  <h2 className="text-xl font-black tracking-[-0.035em] sm:text-2xl">وصّل موظفك بواتساب</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">افتح واتساب ← الأجهزة المرتبطة ← امسح الـ QR</p>
+                  <div className="mx-auto mt-3 w-full max-w-[13.5rem] rounded-2xl border border-border bg-card p-2.5">
+                    {waReady ? (
+                      <div className="mx-auto grid aspect-square w-full place-items-center rounded-xl border border-success/30 bg-success-soft/40">
+                        <div className="text-center">
+                          <div className="text-2xl font-black text-success">✓</div>
+                          <div className="mt-1 text-[11px] font-bold text-success">واتساب متصل</div>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                  <div className="mx-auto mt-7 w-full max-w-md rounded-[28px] border border-border bg-card p-5 shadow-[0_18px_55px_rgba(7,19,25,.10)]">
-                    {qrImageDataUrl ? (
+                    ) : qrImageDataUrl ? (
                       <Image
                         src={qrImageDataUrl}
                         alt="QR لربط واتساب"
-                        width={208}
-                        height={208}
+                        width={168}
+                        height={168}
                         unoptimized
-                        className="mx-auto h-52 w-52 rounded-3xl border border-border bg-card p-2"
+                        className="mx-auto aspect-square w-full rounded-xl border border-border bg-card p-1"
                       />
                     ) : (
-                      <div className="mx-auto grid h-52 w-52 place-items-center rounded-3xl border border-dashed border-border bg-surface">
-                        <div className="text-center">
-                          <div className="text-3xl">▦</div>
-                          <div className="mt-2 text-xs font-bold text-muted-foreground">اضغط ابدأ الربط</div>
+                      <div className="mx-auto grid aspect-square w-full place-items-center rounded-xl border border-dashed border-border bg-surface">
+                        <div className="text-center px-2">
+                          {mockState === "loading" ? (
+                            <>
+                              <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                              <div className="mt-2 text-[11px] font-bold text-muted-foreground">بجهز الـ QR…</div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="text-lg text-muted-foreground">▦</div>
+                              <div className="mt-1 text-[11px] font-bold text-muted-foreground">
+                                {mockState === "error" ? "الربط فشل" : "اضغط ابدأ الربط"}
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     )}
-                    <div className="mt-4 flex items-center justify-center gap-2 text-xs font-bold text-muted-foreground">
-                      <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
-                      الكود بيتجدد تلقائيًا عند الحاجة
-                    </div>
                   </div>
-                  <div className={cx(
-                    "mx-auto mt-6 max-w-md rounded-2xl border p-4 text-sm font-black transition-all",
-                    mockState === "compatibility-warning"
-                      ? "border-warning/25 bg-warning-soft text-warning"
-                      : mockState === "success"
-                        ? "border-success/20 bg-success-soft text-success"
-                        : "border-border bg-surface text-muted-foreground"
-                  )}>
-                    {mockState === "compatibility-warning"
-                      ? "الاتصال تم، لكن محتاج تهيئة إضافية لتحسين استقبال الرسائل."
-                      : mockState === "error"
-                        ? "حصلت مشكلة أثناء الربط — تقدر تحاول تاني من غير ما تبدأ من الأول."
-                        : mockState === "success"
-                          ? "تم الربط — واتساب جاهز لأول تجربة ✓"
-                          : qrImageDataUrl
-                            ? "مستني المسح…"
-                            : "ابدأ الربط علشان يظهر QR"}
-                  </div>
+                  {(waReady || mockState === "error" || mockState === "compatibility-warning" || mockState === "loading" || qrImageDataUrl || waRuntimeDisabled) ? (
+                    <p className={cx(
+                      "mx-auto mt-2.5 max-w-sm text-xs font-bold",
+                      waReady
+                        ? "text-success"
+                        : mockState === "compatibility-warning" || waRuntimeDisabled
+                          ? "text-warning"
+                          : mockState === "error"
+                            ? "text-destructive"
+                            : "text-muted-foreground",
+                    )}>
+                      {waReady
+                        ? "تم الربط — واتساب جاهز لأول تجربة ✓"
+                        : mockState === "compatibility-warning"
+                          ? "الاتصال تم، لكن محتاج تهيئة إضافية لتحسين استقبال الرسائل."
+                          : mockState === "error"
+                            ? "مفيش QR — خدمة واتساب مش جاهزة"
+                            : mockState === "loading"
+                              ? "بنطلب الـ QR من خدمة واتساب…"
+                              : waRuntimeDisabled
+                                ? "خدمة واتساب مش شغّالة على الجهاز ده — الـ QR مش هيظهر لحد ما الـ runtime يتظبط"
+                                : "مستني مسح الـ QR من واتساب…"}
+                    </p>
+                  ) : null}
                   {liveError && mockState === "error" ? (
-                    <p className="mx-auto mt-3 max-w-md text-xs font-bold text-destructive">
+                    <p className="mx-auto mt-1 max-w-sm text-[11px] font-bold leading-5 text-destructive" role="alert">
                       {liveError}
                     </p>
                   ) : null}
@@ -1447,54 +2127,105 @@ export function GuidedOnboardingPreview({
               ) : null}
 
               {step === "FIRST_MESSAGE" ? (
-                <div className="mx-auto max-w-2xl text-center">
-                  <span className="text-xs font-black text-primary">أول تجربة حقيقية</span>
-                  <h2 className="mt-2 text-3xl font-black tracking-[-0.035em]">يلا نجربه بجد</h2>
-                  <p className="mt-3 leading-7 text-muted-foreground">من أي رقم واتساب تاني ابعت لرقم البيزنس:</p>
-                  <div className="mx-auto mt-5 w-fit rounded-2xl rounded-bl-md bg-[var(--whatsapp-bubble)] text-[var(--whatsapp-bubble-text)] px-6 py-4 text-lg font-black shadow-sm">السلام عليكم</div>
-                  <div className="mt-8 space-y-3 text-start">
+                <div className="mx-auto flex min-h-full max-w-md flex-col items-center justify-center text-center">
+                  <h2 className="text-lg font-black tracking-[-0.035em] sm:text-xl">يلا نجربه بجد</h2>
+                  <p className="mt-1 text-[11px] text-muted-foreground sm:text-xs">
+                    {firstMessageStage >= 5
+                      ? "الرد اتبعت — كمّل لتجربة التحكم"
+                      : "من رقم واتساب تاني ابعت: السلام عليكم"}
+                  </p>
+                  <div className="mt-3 w-full overflow-hidden rounded-2xl border border-border/70 bg-surface/40 text-start">
                     {["مستني الرسالة", "وصلت الرسالة", "الموظف فهمها", "جهز الرد", "تم الرد"].map((label, i) => {
                       const active = firstMessageStage >= i + 1 || (i === 0 && firstMessageStage === 0);
                       return (
-                        <div key={label} className="flex items-center gap-4 rounded-2xl border border-border/70 bg-card p-4 shadow-sm">
-                          <span className={cx("grid h-9 w-9 place-items-center rounded-full font-black", active ? "bg-success text-white" : "bg-secondary text-muted-foreground")}>{active ? "✓" : "○"}</span>
-                          <span className="font-black">{label}</span>
+                        <div
+                          key={label}
+                          className={cx(
+                            "flex items-center gap-2.5 px-3 py-2",
+                            i > 0 && "border-t border-border/50",
+                            active && "bg-success-soft/30",
+                          )}
+                        >
+                          <span className={cx(
+                            "grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-black",
+                            active ? "bg-success text-white" : "bg-secondary text-muted-foreground",
+                          )}>
+                            {active ? "✓" : (i + 1)}
+                          </span>
+                          <span className={cx("text-[13px] font-bold", active ? "text-foreground" : "text-muted-foreground")}>{label}</span>
                         </div>
                       );
                     })}
                   </div>
-                  {mockState === "success" ? <div className="mt-6 text-xl font-black text-success">أول رد حقيقي تم 🎉</div> : null}
+                  {firstMessageStage >= 5 || mockState === "success" ? (
+                    <p className="mt-2.5 text-xs font-bold text-success">أول رد حقيقي تم ✓</p>
+                  ) : null}
                   {mockState === "error" ? (
-                    <div className="mt-6 rounded-2xl border border-destructive/20 bg-destructive/5 p-4 text-sm font-bold text-destructive">
-                      الرسالة موصلتش لسه. تأكد إنك بعت من رقم مختلف وجرّب تاني.
-                    </div>
+                    <p className="mt-2.5 text-[11px] font-bold text-destructive">
+                      الرسالة موصلتش لسه. ابعت من رقم مختلف وجرّب تاني.
+                    </p>
                   ) : null}
                 </div>
               ) : null}
 
               {step === "HUMAN_TAKEOVER" ? (
-                <div className="mx-auto flex min-h-[440px] max-w-2xl flex-col items-center justify-center text-center">
-                  <div className="grid h-20 w-20 place-items-center rounded-[26px] bg-primary/10 text-3xl">✋</div>
-                  <span className="mt-6 text-xs font-black text-primary">التحكم اليدوي</span>
-                  <h2 className="mt-2 text-3xl font-black tracking-[-0.035em]">وأنت دايمًا المتحكم</h2>
-                  <p className="mt-4 max-w-lg leading-8 text-muted-foreground">رد بنفسك من موبايل واتساب على نفس المحادثة. DRVOWA هيعرف إن حد من فريقك تدخل.</p>
-                  <div className={cx("mt-8 w-full max-w-md rounded-2xl p-5 text-sm font-black", humanTakeoverDone ? "bg-success-soft text-success" : "bg-surface text-muted-foreground")}>
-                    {humanTakeoverDone ? "تمام 👌 وقفنا الرد التلقائي للمحادثة دي." : "مستني ردك اليدوي…"}
+                <div className="mx-auto flex min-h-full max-w-md flex-col items-center justify-center text-center">
+                  <h2 className="text-xl font-black tracking-[-0.035em] sm:text-2xl">لما العميل يطلب موظف… البوت بيسكت</h2>
+                  <div className="mt-4 w-full overflow-hidden rounded-2xl border border-border/70 bg-surface/40 text-start">
+                    {[
+                      "العميل يطلب يتكلم مع موظف",
+                      "البوت بيوقف الرد فورًا",
+                      "بيبلّغك إنك تتدخل",
+                      "لو انت ردّيت من واتساب — بيفضل ساكت",
+                    ].map((label, i) => (
+                      <div
+                        key={label}
+                        className={cx(
+                          "flex items-center gap-2.5 px-3 py-2.5",
+                          i > 0 && "border-t border-border/50",
+                          humanTakeoverDone && "bg-success-soft/25",
+                        )}
+                      >
+                        <span className={cx(
+                          "grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-black",
+                          humanTakeoverDone ? "bg-success text-white" : "bg-primary/15 text-primary",
+                        )}>
+                          {humanTakeoverDone ? "✓" : i + 1}
+                        </span>
+                        <span className="text-[13px] font-bold text-foreground">{label}</span>
+                      </div>
+                    ))}
                   </div>
-                  {humanTakeoverDone ? <p className="mt-4 max-w-lg text-sm leading-7 text-muted-foreground">أي وقت حد من فريقك يرد بنفسه، DRVOWA يسيب المحادثة ليكم تلقائيًا.</p> : null}
+                  {humanTakeoverDone ? (
+                    <p className="mt-3 text-xs font-bold text-success">تم — المحادثة بقت ليك والبوت سكت ✓</p>
+                  ) : null}
                 </div>
               ) : null}
 
               {step === "COMPLETED" ? (
-                <div className="mx-auto flex min-h-full max-w-2xl flex-col items-center justify-center text-center">
-                  <div className="mb-6 grid h-24 w-24 place-items-center rounded-full bg-success text-4xl text-white shadow-[0_18px_55px_rgba(15,138,99,.28)]">✓</div>
-                  <span className="rounded-full bg-accent-soft px-4 py-1.5 text-xs font-black text-accent">جاهز للشغل</span>
-                  <h2 className="mt-4 text-3xl font-black tracking-[-0.035em] sm:text-4xl">موظف الاستقبال بتاعك جاهز 🎉</h2>
-                  <div className="mt-7 grid w-full gap-2 text-start sm:grid-cols-2">
-                    {["عرف بيزنسك", "اتعلم المعلومات", "جربت ردوده", "واتساب متصل", "أول رسالة اترد عليها", "التحكم اليدوي شغال"].map((label) => (
-                      <div key={label} className="flex items-center gap-3 rounded-2xl bg-surface/70 p-4 text-sm font-black">
-                        <span className="grid h-7 w-7 place-items-center rounded-full bg-success-soft text-xs text-success">✓</span>
-                        {label}
+                <div className="mx-auto flex min-h-full max-w-md flex-col items-center justify-center text-center">
+                  <div className="drvo-ob-done-hero grid h-14 w-14 place-items-center rounded-full bg-success text-2xl font-black text-white">✓</div>
+                  <h2 className="mt-3 text-xl font-black tracking-[-0.035em] sm:text-2xl">موظف الاستقبال جاهز للعمل</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">اكتمل الإعداد بنجاح. يمكنك الآن فتح لوحة التحكم.</p>
+                  <div className="mt-4 w-full overflow-hidden rounded-2xl border border-border/70 bg-surface/40 text-start">
+                    {[
+                      "تم تعريف نشاط العمل",
+                      "تم تدريب الموظف على المعلومات",
+                      "تم اختبار جودة الردود",
+                      "تم ربط واتساب بنجاح",
+                      "تم التحقق من أول رد حقيقي",
+                      "التدخل البشري يوقف الرد التلقائي",
+                    ].map((label, i) => (
+                      <div
+                        key={label}
+                        className={cx(
+                          "drvo-ob-done-row flex items-center gap-2.5 px-3 py-2",
+                          i > 0 && "border-t border-border/50",
+                        )}
+                        style={{ animationDelay: `${180 + i * 220}ms` }}
+                      >
+                        <span className="drvo-ob-done-check grid h-6 w-6 shrink-0 place-items-center rounded-full bg-success text-[11px] font-black text-white">✓</span>
+                        <span className="text-[13px] font-bold text-foreground">{label}</span>
                       </div>
                     ))}
                   </div>
@@ -1502,7 +2233,10 @@ export function GuidedOnboardingPreview({
               ) : null}
             </div>
 
-            {step !== "KNOWLEDGE" ? <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border/70 bg-transparent px-5 py-3 sm:px-9 sm:py-4 md:px-12">
+            {!isChatStep ? <div className={cx(
+              "flex shrink-0 items-center justify-between gap-3 border-t border-border/70 bg-transparent px-5 sm:px-9 md:px-12",
+              isCompactStep ? "py-2.5 sm:py-3" : "py-3 sm:py-4",
+            )}>
               <Button type="button" variant="ghost" disabled={(step === "BUSINESS" && businessQuestion === 0) || transitioning} onClick={previous}>السابق</Button>
               <Button
                 type="button"
@@ -1511,10 +2245,8 @@ export function GuidedOnboardingPreview({
                   transitioning
                   || mockState === "loading"
                   || (step === "BUSINESS" && !businessCanContinue)
-                  || (step === "PLAYGROUND" && chatCount === 0)
-                  || (step === "WHATSAPP" && Boolean(qrImageDataUrl) && !waReady)
+                  || (step === "WHATSAPP" && Boolean(qrImageDataUrl) && !waReady && mockState !== "error")
                   || (step === "FIRST_MESSAGE" && firstMessageStage < 5)
-                  || (step === "HUMAN_TAKEOVER" && !humanTakeoverDone)
                 }
                 className="min-w-36 sm:min-w-44"
               >
@@ -1532,14 +2264,30 @@ export function GuidedOnboardingPreview({
           </div>
         </section>
 
-        {process.env.NODE_ENV !== "production" ? <div className="mt-6 hidden justify-center md:flex">
-          <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-card/75 p-2 shadow-sm backdrop-blur">
-            <span className="px-2 text-[11px] font-bold text-muted-foreground">Preview state</span>
-            {(["default", "loading", "success", "error", "compatibility-warning"] as MockState[]).map((state) => (
-              <button key={state} type="button" onClick={() => setMockState(state)} className={cx("rounded-xl px-2.5 py-1.5 text-[10px] font-bold transition", mockState === state ? "bg-primary text-white" : "text-muted-foreground hover:bg-secondary")}>{state}</button>
-            ))}
+        {process.env.NODE_ENV !== "production" && !isChatStep ? (
+          <div className="pointer-events-none fixed bottom-3 left-1/2 z-50 hidden -translate-x-1/2 md:block">
+            <div className="pointer-events-auto flex items-center gap-2 rounded-2xl border border-border/70 bg-card/90 p-2 shadow-lg backdrop-blur">
+              <span className="px-2 text-[11px] font-bold text-muted-foreground">Preview state</span>
+              {(["default", "loading", "success", "error", "compatibility-warning"] as MockState[]).map((state) => (
+                <button
+                  key={state}
+                  type="button"
+                  onClick={() => {
+                    setMockState(state);
+                    // WhatsApp success copy is gated on waReady — keep preview honest.
+                    if (step === "WHATSAPP") setWaReady(state === "success");
+                  }}
+                  className={cx(
+                    "rounded-xl px-2.5 py-1.5 text-[10px] font-bold transition",
+                    mockState === state ? "bg-primary text-white" : "text-muted-foreground hover:bg-secondary",
+                  )}
+                >
+                  {state}
+                </button>
+              ))}
+            </div>
           </div>
-        </div> : null}
+        ) : null}
       </div>
 
       {voiceFlowState !== "idle" && step !== "KNOWLEDGE" ? (

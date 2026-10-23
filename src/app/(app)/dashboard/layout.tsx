@@ -28,7 +28,8 @@ export default async function DashboardLayout({
 
   const businesses = await listBusinessesForUser(user.userId);
   if (businesses.length === 0) {
-    redirect("/onboarding");
+    // Match post-login destination: plan selection before guided onboarding.
+    redirect("/choose-plan");
   }
 
   const activeBusinessId = await resolveActiveBusiness(

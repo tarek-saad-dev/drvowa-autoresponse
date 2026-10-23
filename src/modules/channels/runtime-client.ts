@@ -60,6 +60,10 @@ export type RuntimeAccountStatus = {
   lastDisconnectCode: number | null;
   lastErrorCode: string | null;
   reconnectAttempts: number;
+  /** Bot WhatsApp identity when session is open (for Message-yourself mirrors). */
+  linkedPhone?: string | null;
+  linkedJid?: string | null;
+  linkedDestination?: string | null;
   runtimeEngine?: "BAILEYS_V6" | "BAILEYS_V7";
   cryptoHealth?: RuntimeCryptoHealth | null;
   compatibilityStatus?: string | null;

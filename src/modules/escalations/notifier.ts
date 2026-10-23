@@ -3,6 +3,7 @@ import { getBusinessById } from "@/modules/businesses/service";
 import { getChannelConnection } from "@/modules/channels/repository";
 import { sendAccountMessage, WhatsAppRuntimeError } from "@/modules/channels/runtime-client";
 import { getContactForBusiness, getConversationForBusiness } from "@/modules/messaging/repository";
+import { sendBotSelfEscalationAlert } from "./bot-self-notify";
 import { escalationMessage } from "./service";
 
 type Claimed = {
@@ -15,6 +16,26 @@ type Claimed = {
 export async function deliverNextEscalationNotification(
   send: typeof sendAccountMessage = sendAccountMessage,
 ): Promise<"IDLE" | "SENT" | "RETRY" | "UNKNOWN" | "FAILED"> {
+  // Re-queue alerts cancelled only because customer phone was missing (opaque LID),
+  // once owner WhatsApp alerts are enabled + verified.
+  await query(
+    `UPDATE e
+        SET NotificationStatus = N'PENDING',
+            NotificationLastErrorCode = NULL,
+            NotificationNotBeforeUtc = SYSUTCDATETIME(),
+            UpdatedAtUtc = SYSUTCDATETIME()
+       FROM dbo.TblHumanEscalation e
+      INNER JOIN dbo.TblHumanEscalationSetting s ON s.BusinessID = e.BusinessID
+      INNER JOIN dbo.TblConversation c ON c.ConversationID = e.ConversationID
+      INNER JOIN dbo.TblContact ct ON ct.ContactID = c.ContactID
+      WHERE e.ResolvedAtUtc IS NULL
+        AND e.NotificationStatus = N'CANCELLED'
+        AND e.NotificationLastErrorCode = N'NOTIFICATION_NOT_ELIGIBLE'
+        AND s.IsEnabled = 1
+        AND s.PhoneVerifiedAtUtc IS NOT NULL
+        AND s.OwnerPhone IS NOT NULL
+        AND (ct.PhoneNormalized IS NULL OR ct.PhoneNormalized <> s.OwnerPhone)`,
+  );
   // Crash recovery is observation-only: never replay potentially sent messages.
   await query(
     `UPDATE dbo.TblHumanEscalation
@@ -65,8 +86,13 @@ export async function deliverNextEscalationNotification(
 
   try {
     const [setting, business, conversation, channel] = await Promise.all([
-      query<{ OwnerPhone: string | null; IsEnabled: boolean; PhoneVerifiedAtUtc: Date | null }>(
-        `SELECT OwnerPhone, IsEnabled, PhoneVerifiedAtUtc
+      query<{
+        OwnerPhone: string | null;
+        IsEnabled: boolean;
+        PhoneVerifiedAtUtc: Date | null;
+        NotifyBotSelfEnabled: boolean | null;
+      }>(
+        `SELECT OwnerPhone, IsEnabled, PhoneVerifiedAtUtc, NotifyBotSelfEnabled
          FROM dbo.TblHumanEscalationSetting WHERE BusinessID = @businessId`,
         [{ name: "businessId", type: sql.UniqueIdentifier, value: job.BusinessID }],
       ),
@@ -79,24 +105,44 @@ export async function deliverNextEscalationNotification(
       businessId: job.BusinessID, contactId: conversation.contactId,
     }) : null;
     if (!cfg?.IsEnabled || !cfg.OwnerPhone || !cfg.PhoneVerifiedAtUtc || !channel?.externalAccountKey
-      || !channel.isActive || !contact?.phoneNormalized || cfg.OwnerPhone === contact.phoneNormalized) {
+      || !channel.isActive || !contact
+      || (contact.phoneNormalized != null && cfg.OwnerPhone === contact.phoneNormalized)) {
       await finalize("CANCELLED", "NOTIFICATION_NOT_ELIGIBLE");
       return "FAILED";
     }
-    const message = escalationMessage({
+    const messageBase = {
       businessId: job.BusinessID,
       businessName: business?.name ?? "البيزنس",
       customerPhone: contact.phoneNormalized,
+      customerLabel: contact.externalContactKey,
       conversationId: job.ConversationID,
       reason: job.ReasonText,
+    };
+    // Owner alert: DRVO link only. wa.me deep-link is reserved for bot-self mirror.
+    const ownerMessage = escalationMessage({
+      ...messageBase,
+      includeWhatsAppDeepLink: false,
     });
     const result = await send({
       accountKey: channel.externalAccountKey,
       phone: cfg.OwnerPhone,
-      message,
+      message: ownerMessage,
       idempotencyKey: "owner-escalation:" + job.EscalationID,
     });
     if (result.success && result.messageId) {
+      // Best-effort mirror into the bot number's own chat (Message yourself).
+      if (cfg.NotifyBotSelfEnabled !== false) {
+        await sendBotSelfEscalationAlert({
+          accountKey: channel.externalAccountKey,
+          ownerPhone: cfg.OwnerPhone,
+          escalationId: job.EscalationID,
+          message: escalationMessage({
+            ...messageBase,
+            includeWhatsAppDeepLink: true,
+          }),
+          kind: "initial",
+        });
+      }
       await finalize("SENT", null, result.originalMessageId ?? result.messageId);
       return "SENT";
     }

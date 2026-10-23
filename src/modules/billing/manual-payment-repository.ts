@@ -506,17 +506,17 @@ export async function listPaymentsForAdmin(params: {
         p.CustomerNote, p.Status, p.CreatedByUserID, p.SubmittedByUserID, p.SubmittedAtUtc,
         p.ReviewedByUserID, p.ReviewedAtUtc, p.ReviewNote, p.ApprovedSubscriptionID,
         p.CreatedAtUtc, p.UpdatedAtUtc,
-        b.Name AS BusinessName,
-        COALESCE(u.Email, cu.Email) AS SubmitterEmail,
-        COALESCE(u.FullName, cu.FullName) AS SubmitterName,
+        COALESCE(b.Name, N'—') AS BusinessName,
+        COALESCE(u.Email, cu.Email, N'—') AS SubmitterEmail,
+        COALESCE(u.FullName, cu.FullName, N'—') AS SubmitterName,
         curPl.Code AS CurrentPlanCode,
         curPl.DisplayName AS CurrentPlanName,
         reqPl.MonthlyPriceAmount AS LiveRequestedPlanPrice
      FROM TblManualPaymentRequest p
-     INNER JOIN TblBusiness b ON b.BusinessID = p.BusinessID
-     INNER JOIN TblUser cu ON cu.UserID = p.CreatedByUserID
+     LEFT JOIN TblBusiness b ON b.BusinessID = p.BusinessID
+     LEFT JOIN TblUser cu ON cu.UserID = p.CreatedByUserID
      LEFT JOIN TblUser u ON u.UserID = p.SubmittedByUserID
-     INNER JOIN TblPlan reqPl ON reqPl.PlanID = p.RequestedPlanID
+     LEFT JOIN TblPlan reqPl ON reqPl.PlanID = p.RequestedPlanID
      OUTER APPLY (
        SELECT TOP 1 s.PlanID
        FROM TblSubscription s

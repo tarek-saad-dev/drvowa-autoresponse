@@ -46,8 +46,9 @@ describe("safe owner escalation delivery", () => {
     expect(await deliverNextEscalationNotification(send)).toBe("SENT");
     expect(send).toHaveBeenCalledWith(expect.objectContaining({
       phone: "201111111111", idempotencyKey: "owner-escalation:" + id,
-      message: expect.stringContaining("https://wa.me/201222222222"),
+      message: expect.stringContaining("dashboard/inbox?"),
     }));
+    expect(send.mock.calls[0]?.[0]?.message).not.toContain("https://wa.me/");
     const update = mocks.query.mock.calls.find(x => x[0].includes("NotificationStatus = @status"));
     expect(update?.[1]).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: "status", value: "SENT" }),
@@ -67,5 +68,20 @@ describe("safe owner escalation delivery", () => {
     const send = vi.fn();
     expect(await deliverNextEscalationNotification(send)).toBe("FAILED");
     expect(send).not.toHaveBeenCalled();
+  });
+
+  it("still alerts the owner when the customer identity is an opaque LID", async () => {
+    mocks.contact.mockResolvedValue({
+      phoneNormalized: null,
+      externalContactKey: "208512156172288@lid",
+    });
+    const send = vi.fn().mockResolvedValue({ success: true, status: "sent", messageId: "wa-lid" });
+    expect(await deliverNextEscalationNotification(send)).toBe("SENT");
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({
+      phone: "201111111111",
+      message: expect.stringContaining("208512156172288@lid"),
+    }));
+    expect(send.mock.calls[0]?.[0]?.message).not.toContain("https://wa.me/");
+    expect(send.mock.calls[0]?.[0]?.message).not.toContain("افتح شات العميل");
   });
 });

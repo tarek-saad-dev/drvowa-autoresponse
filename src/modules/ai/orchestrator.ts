@@ -388,7 +388,13 @@ export async function processAiReplyJob(params: {
     businessId,
     contactId: job.contactId,
   });
-  if (!contact?.phoneNormalized) {
+  const customerPhoneHint = contact?.phoneNormalized ?? null;
+  const destination =
+    customerPhoneHint
+    || (contact?.externalContactKey?.endsWith("@lid")
+      ? contact.externalContactKey
+      : null);
+  if (!destination) {
     return finishTerminal("SKIPPED", "DESTINATION_UNAVAILABLE");
   }
 
@@ -456,7 +462,7 @@ export async function processAiReplyJob(params: {
     const liveErpContext: LiveErpContextResult = await resolveLiveErpContext({
       businessId,
       recentMessages,
-      customerPhoneHint: contact.phoneNormalized,
+      customerPhoneHint,
     }).catch(() => ({
       text:
         "LIVE ERP STATUS: Live ERP lookup was unavailable. "
@@ -499,7 +505,7 @@ export async function processAiReplyJob(params: {
           createdAtUtc: m.createdAtUtc,
           messageId: m.messageId,
         })),
-        customerPhoneHint: contact.phoneNormalized,
+        customerPhoneHint,
         liveContext: liveErpContext.text,
       });
       replyText = generated.text;
@@ -688,7 +694,7 @@ export async function processAiReplyJob(params: {
   try {
     sendResult = await sendMessage({
       accountKey,
-      phone: contact.phoneNormalized,
+      phone: destination,
       message: replyText,
       idempotencyKey,
     });

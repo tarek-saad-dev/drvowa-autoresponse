@@ -8,7 +8,7 @@ import { BrandLogo } from "@/components/brand/brand-logo";
 import { WorkspaceSwitcher } from "@/components/dashboard/workspace-switcher";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { DASHBOARD_NAV } from "@/constants/nav";
+import { DASHBOARD_NAV, isNavHrefActive } from "@/constants/nav";
 import type { Business } from "@/types/domain";
 
 export function DashboardTopbar({
@@ -26,15 +26,16 @@ export function DashboardTopbar({
   const pathname = usePathname();
   const [loggingOut, setLoggingOut] = useState(false);
 
+  const activeBusiness = useMemo(
+    () => businesses.find((b) => b.businessId === activeBusinessId) ?? businesses[0] ?? null,
+    [activeBusinessId, businesses],
+  );
+
   const currentLabel = useMemo(() => {
     if (title) return title;
     const matched = [...DASHBOARD_NAV]
       .sort((a, b) => b.href.length - a.href.length)
-      .find((item) =>
-        item.href === "/dashboard"
-          ? pathname === "/dashboard"
-          : pathname === item.href || pathname.startsWith(`${item.href}/`),
-      );
+      .find((item) => isNavHrefActive(pathname, item.href));
     return matched?.label ?? "الرئيسية";
   }, [pathname, title]);
 
@@ -55,16 +56,18 @@ export function DashboardTopbar({
         <div className="min-w-0 sm:hidden">
           <BrandLogo className="h-5" />
           <p className="mt-1 truncate text-xs font-black text-foreground">
-            {currentLabel}
+            {activeBusiness?.name ?? currentLabel}
           </p>
         </div>
 
         <div className="hidden sm:block">
           <p className="truncate text-sm font-black text-foreground">
-            {title ?? `أهلاً، ${userName}`}
+            {activeBusiness?.name ?? `أهلاً، ${userName}`}
           </p>
           <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-            {title ? currentLabel : "كل حاجة محتاجها لتشغيل موظف الاستقبال."}
+            {pathname === "/dashboard"
+              ? `أهلاً، ${userName}`
+              : currentLabel}
           </p>
         </div>
       </div>
@@ -76,11 +79,11 @@ export function DashboardTopbar({
         />
         <ThemeToggle />
         <Link
-          href="/dashboard/settings"
+          href="/dashboard/account"
           className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-border bg-card text-sm text-muted-foreground transition hover:bg-surface hover:text-foreground"
-          aria-label="إعدادات النشاط"
+          aria-label="الحساب"
         >
-          ⚙
+          ◎
         </Link>
         <Button
           variant="ghost"

@@ -2,7 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 
 import { requireApiUser } from "@/lib/api/auth-context";
-import { handleApiError, jsonOk, parseJsonBody } from "@/lib/api/http";
+import { handleApiError, jsonError, jsonOk, parseJsonBody } from "@/lib/api/http";
 import { RATE_LIMITS, assertRateLimit } from "@/lib/security/rate-limit";
 
 const turnSchema = z.object({
@@ -76,7 +76,13 @@ export async function POST(request: Request) {
 
     const body = bodySchema.parse(await parseJsonBody(request));
     const apiKey = process.env.GEMINI_API_KEY?.trim();
-    if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
+    if (!apiKey) {
+      return jsonError(
+        "خدمة التدريب بالذكاء الاصطناعي غير مفعّلة. أضف GEMINI_API_KEY في .env.local ثم أعد تشغيل السيرفر.",
+        503,
+        { code: "AI_UNAVAILABLE" },
+      );
+    }
 
     const model =
       process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite";

@@ -1,9 +1,10 @@
 import { KNOWLEDGE_CATEGORIES } from "@/constants/knowledge";
 import { setSessionActiveBusiness } from "@/modules/auth/session";
 import { writeAuditEvent } from "@/modules/audit/service";
-import { createAgent } from "@/modules/agents/service";
+import { createAgent, listAgents } from "@/modules/agents/service";
 import {
   createBusiness,
+  listBusinessesForUser,
   updateBusiness,
 } from "@/modules/businesses/service";
 import {
@@ -164,4 +165,54 @@ export async function completeOnboarding(
     knowledgeItems,
     subscription,
   };
+}
+
+/**
+ * Repairs a partially-created onboarding workspace (e.g. business existed but
+ * FREE subscription insert failed). Safe to call repeatedly.
+ */
+export async function ensureOnboardingWorkspace(params: {
+  userId: string;
+  sessionId?: string;
+  agent?: Partial<CompleteOnboardingInput["agent"]>;
+}): Promise<{
+  business: Business;
+  agent: Agent;
+  subscription: Subscription;
+}> {
+  const businesses = await listBusinessesForUser(params.userId);
+  const business = businesses[0];
+  if (!business) {
+    throw new Error("NO_BUSINESS");
+  }
+
+  if (params.sessionId) {
+    await setSessionActiveBusiness({
+      sessionId: params.sessionId,
+      activeBusinessId: business.businessId,
+    });
+  }
+
+  const subscription = await ensureDefaultSubscription({
+    businessId: business.businessId,
+  });
+  await ensureDefaultKnowledgeBase({ businessId: business.businessId });
+
+  const agents = await listAgents({ businessId: business.businessId });
+  let agent = agents.find((item) => item.isActive) ?? agents[0] ?? null;
+  if (!agent) {
+    agent = await createAgent({
+      businessId: business.businessId,
+      name: params.agent?.name?.trim() || "موظف الاستقبال",
+      roleTitle: params.agent?.roleTitle?.trim() || "موظف استقبال",
+      language: params.agent?.language?.trim() || "ar",
+      dialect: params.agent?.dialect ?? "مصري",
+      tone: params.agent?.tone ?? "مهني وودود",
+      instructions:
+        params.agent?.instructions
+        ?? "جاوب باختصار ووضوح وبناءً على معلومات النشاط فقط.",
+    });
+  }
+
+  return { business, agent, subscription };
 }

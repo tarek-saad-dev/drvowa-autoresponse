@@ -76,7 +76,12 @@ export async function sendManualInboxReply(params: {
     businessId: params.businessId,
     contactId: conversation.contactId,
   });
-  if (!contact?.phoneNormalized) {
+  const destination =
+    contact?.phoneNormalized
+    || (contact?.externalContactKey?.endsWith("@lid")
+      ? contact.externalContactKey
+      : null);
+  if (!destination) {
     throw new Error("DESTINATION_UNAVAILABLE");
   }
 
@@ -115,7 +120,7 @@ export async function sendManualInboxReply(params: {
   try {
     sendResult = await sendAccountMessage({
       accountKey,
-      phone: contact.phoneNormalized,
+      phone: destination,
       message: text,
       idempotencyKey: runtimeIdempotencyKey,
     });

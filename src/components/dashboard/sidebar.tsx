@@ -2,9 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 
 import { BrandLogo } from "@/components/brand/brand-logo";
-import { DASHBOARD_NAV } from "@/constants/nav";
+import {
+  DASHBOARD_NAV_GROUPS,
+  getNavGroupChildren,
+  isNavGroupActive,
+  isNavHrefActive,
+} from "@/constants/nav";
 import { APP_NAME } from "@/constants/app";
 import { cn } from "@/lib/utils/cn";
 
@@ -14,76 +20,118 @@ export function DashboardSidebar({
   showPlatformAdminLink?: boolean;
 }) {
   const pathname = usePathname();
-  const primary = DASHBOARD_NAV.filter((item) => item.primary);
-  const secondary = DASHBOARD_NAV.filter((item) => !item.primary);
+  const [userExpanded, setUserExpanded] = useState<Record<string, boolean>>({});
 
   const itemClass = (active: boolean) =>
     cn(
-      "group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold transition-all duration-200",
+      "group flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-bold transition-all duration-200 motion-reduce:transition-none",
       active
         ? "bg-primary text-primary-foreground shadow-[0_10px_28px_rgba(0,117,154,.24)]"
         : "text-sidebar-muted hover:bg-white/5 hover:text-sidebar-foreground",
     );
 
   return (
-    <aside className="flex w-[17.5rem] shrink-0 flex-col border-e border-white/10 bg-sidebar px-3 py-4 text-sidebar-foreground">
+    <aside className="flex w-[16.5rem] shrink-0 flex-col border-e border-white/10 bg-sidebar px-3 py-4 text-sidebar-foreground">
       <div className="px-3 pb-5 pt-1">
         <Link href="/dashboard" aria-label={APP_NAME} className="block">
-          <BrandLogo surface="dark" priority className="h-auto w-full max-w-[13rem]" />
+          <BrandLogo surface="dark" priority className="h-auto w-full max-w-[12.5rem]" />
         </Link>
-        <p className="mt-2 text-[11px] text-sidebar-muted">موظف الاستقبال الذكي</p>
       </div>
 
-      <nav className="flex-1 overflow-y-auto">
-        <p className="mb-2 px-3 text-[10px] font-black tracking-[.08em] text-sidebar-muted/70">
-          كل يوم
-        </p>
+      <nav className="flex-1 overflow-y-auto" aria-label="القائمة الرئيسية">
         <div className="space-y-1">
-          {primary.map((item) => {
-            const active =
-              item.href === "/dashboard"
-                ? pathname === "/dashboard"
-                : pathname === item.href || pathname.startsWith(`${item.href}/`);
+          {DASHBOARD_NAV_GROUPS.map((group) => {
+            const groupActive = isNavGroupActive(pathname, group);
+            const children = getNavGroupChildren(group);
+            const hasChildren = children.length > 0;
+            const expanded = hasChildren
+              ? (userExpanded[group.id] ?? groupActive)
+              : false;
+
+            if (!hasChildren) {
+              return (
+                <Link
+                  key={group.id}
+                  href={group.href}
+                  className={itemClass(groupActive)}
+                >
+                  <span
+                    className={cn(
+                      "grid h-8 w-8 shrink-0 place-items-center rounded-xl text-base transition",
+                      groupActive ? "bg-white/15 text-white" : "bg-white/6",
+                    )}
+                  >
+                    {group.icon}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{group.label}</span>
+                </Link>
+              );
+            }
 
             return (
-              <Link key={item.href} href={item.href} className={itemClass(active)}>
-                <span
-                  className={cn(
-                    "grid h-8 w-8 shrink-0 place-items-center rounded-xl text-base transition",
-                    active ? "bg-white/15 text-white" : "bg-white/6",
-                  )}
-                >
-                  {item.icon}
-                </span>
-                <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                {active ? <span className="h-2 w-2 rounded-full bg-white" /> : null}
-              </Link>
-            );
-          })}
-        </div>
+              <div key={group.id} className="space-y-1">
+                <div className={cn(itemClass(groupActive), "gap-1 pe-1")}>
+                  <Link
+                    href={group.href}
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-xl py-0.5"
+                  >
+                    <span
+                      className={cn(
+                        "grid h-8 w-8 shrink-0 place-items-center rounded-xl text-base",
+                        groupActive ? "bg-white/15 text-white" : "bg-white/6",
+                      )}
+                    >
+                      {group.icon}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{group.label}</span>
+                  </Link>
+                  <button
+                    type="button"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-xs opacity-70 transition hover:bg-white/10 hover:opacity-100"
+                    aria-expanded={expanded}
+                    aria-label={expanded ? `طي ${group.label}` : `فتح ${group.label}`}
+                    onClick={() =>
+                      setUserExpanded((prev) => ({
+                        ...prev,
+                        [group.id]: !(prev[group.id] ?? groupActive),
+                      }))
+                    }
+                  >
+                    <span
+                      className={cn(
+                        "inline-block transition-transform motion-reduce:transition-none",
+                        expanded ? "rotate-90" : "",
+                      )}
+                      aria-hidden
+                    >
+                      ◂
+                    </span>
+                  </button>
+                </div>
 
-        <div className="my-4 border-t border-white/10" />
-        <p className="mb-2 px-3 text-[10px] font-black tracking-[.08em] text-sidebar-muted/70">
-          إدارة النشاط
-        </p>
-
-        <div className="space-y-1">
-          {secondary.map((item) => {
-            const active =
-              pathname === item.href || pathname.startsWith(`${item.href}/`);
-
-            return (
-              <Link key={item.href} href={item.href} className={itemClass(active)}>
-                <span
-                  className={cn(
-                    "grid h-8 w-8 shrink-0 place-items-center rounded-xl text-sm",
-                    active ? "bg-white/15 text-white" : "bg-white/6",
-                  )}
-                >
-                  {item.icon}
-                </span>
-                <span className="min-w-0 flex-1 truncate">{item.label}</span>
-              </Link>
+                {expanded ? (
+                  <div className="ms-3 space-y-0.5 border-s border-white/10 ps-3">
+                    {children.map((child) => {
+                      const active = isNavHrefActive(pathname, child.href);
+                      return (
+                        <Link
+                          key={child.href + child.key}
+                          href={child.href}
+                          className={cn(
+                            "flex items-center gap-2 rounded-xl px-2.5 py-2 text-[13px] font-bold transition motion-reduce:transition-none",
+                            active
+                              ? "bg-white/10 text-white"
+                              : "text-sidebar-muted hover:bg-white/5 hover:text-sidebar-foreground",
+                          )}
+                        >
+                          <span className="opacity-70">{child.icon}</span>
+                          <span className="truncate">{child.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
             );
           })}
         </div>
@@ -91,41 +139,13 @@ export function DashboardSidebar({
         {showPlatformAdminLink ? (
           <Link
             href="/admin"
-            className="mt-4 flex items-center gap-3 rounded-2xl border border-primary/35 px-3 py-3 text-sm font-bold text-primary transition hover:bg-primary/10"
+            className="mt-5 flex items-center gap-3 rounded-2xl border border-primary/35 px-3 py-3 text-sm font-bold text-primary transition hover:bg-primary/10"
           >
             <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary/15">◆</span>
             <span>إدارة المنصة</span>
           </Link>
         ) : null}
       </nav>
-
-      <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
-        <p className="text-[10px] font-black tracking-[.08em] text-sidebar-muted/70">
-          اختصارات
-        </p>
-        <div className="mt-2 grid gap-2">
-          <Link
-            href="/dashboard/inbox"
-            className="flex items-center justify-between gap-2 rounded-xl bg-primary px-3 py-2.5 text-xs font-black text-primary-foreground transition hover:bg-primary-hover"
-          >
-            <span className="flex items-center gap-2">
-              <span>💬</span>
-              <span>افتح المحادثات</span>
-            </span>
-            <span aria-hidden>←</span>
-          </Link>
-          <Link
-            href="/dashboard/knowledge"
-            className="flex items-center justify-between gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-xs font-black text-white transition hover:bg-white/10"
-          >
-            <span className="flex items-center gap-2">
-              <span>＋</span>
-              <span>علّمه معلومة</span>
-            </span>
-            <span aria-hidden>←</span>
-          </Link>
-        </div>
-      </div>
     </aside>
   );
 }

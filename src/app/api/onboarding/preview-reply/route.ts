@@ -9,12 +9,12 @@ import { createGeminiProvider } from "@/modules/ai";
 import { listAgents } from "@/modules/agents/service";
 import { listItems } from "@/modules/knowledge/service";
 
-const QUESTIONS = ["أسعاركم إيه؟", "مواعيدكم؟", "عاوز أحجز", "عندكم كام فرع؟"] as const;
-const MAX_GENERATIONS_PER_BUSINESS = 8;
-const bodySchema = z.object({ message: z.enum(QUESTIONS) });
+const MAX_GENERATIONS_PER_BUSINESS = 24;
+const bodySchema = z.object({
+  message: z.string().trim().min(1, "اكتب سؤال").max(500),
+});
 
 // Persisted per-business budget: browser resets, multiple tabs and worker restarts cannot reset it.
-// 8 lifetime generations allow at most two versions of the four guided questions.
 // Future paid refreshes must use an explicit, metered product entitlement.
 async function ensurePreviewTable() {
   await query(`
@@ -23,12 +23,18 @@ async function ensurePreviewTable() {
       CREATE TABLE dbo.TblOnboardingPreviewReply (
         BusinessID UNIQUEIDENTIFIER NOT NULL,
         ContentHash CHAR(64) NOT NULL,
-        Question NVARCHAR(100) NOT NULL,
+        Question NVARCHAR(500) NOT NULL,
         Reply NVARCHAR(MAX) NULL,
         Status VARCHAR(12) NOT NULL,
         CreatedAtUtc DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
         CONSTRAINT PK_OnboardingPreviewReply PRIMARY KEY (BusinessID, ContentHash, Question)
       );
+    END
+    ELSE IF COL_LENGTH(N'dbo.TblOnboardingPreviewReply', N'Question') IS NOT NULL
+      AND COL_LENGTH(N'dbo.TblOnboardingPreviewReply', N'Question') < 1000
+    BEGIN
+      ALTER TABLE dbo.TblOnboardingPreviewReply
+        ALTER COLUMN Question NVARCHAR(500) NOT NULL;
     END
   `);
 }
@@ -53,7 +59,7 @@ export async function POST(request: Request) {
     const inputs = [
       { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
       { name: "contentHash", type: sql.Char(64), value: fingerprint },
-      { name: "question", type: sql.NVarChar(100), value: message },
+      { name: "question", type: sql.NVarChar(500), value: message },
     ];
     const reservation = await withTransaction(async (trx) => {
       // Lock per business, across all app instances, before checking or reserving budget.
@@ -70,7 +76,10 @@ export async function POST(request: Request) {
       `, inputs);
       const existing = previous.recordset[0];
       if (existing?.Status === "READY" && existing.Reply) return { cached: existing.Reply };
-      if (existing) return { pending: true };
+      if (existing?.Status === "PENDING") return { pending: true };
+      if (existing?.Status === "FAILED") {
+        return { failed: true as const };
+      }
       const count = await trx.query<{ Total: number }>(`
         SELECT COUNT(*) AS Total FROM dbo.TblOnboardingPreviewReply WHERE BusinessID = @businessId
       `, inputs.slice(0, 1));
@@ -84,9 +93,18 @@ export async function POST(request: Request) {
 
     if ("cached" in reservation) return jsonOk({ reply: reservation.cached, cached: true });
     if ("exhausted" in reservation) throw new RateLimitError(86400, "انتهت محاولات المعاينة المجانية لهذا النشاط");
-    if ("pending" in reservation) return Response.json(
-      { error: "الرد بيتجهز بالفعل، جرب تاني بعد لحظات" }, { status: 409 },
-    );
+    if ("pending" in reservation) {
+      return Response.json(
+        { error: "الرد بيتجهز بالفعل، جرب تاني بعد لحظات" },
+        { status: 409 },
+      );
+    }
+    if ("failed" in reservation) {
+      return Response.json(
+        { error: "فشل تجهيز الرد لهذا السؤال قبل كده. جرّب سؤال مختلف." },
+        { status: 409 },
+      );
+    }
 
     try {
       assertRateLimit(`onboarding-preview-reply:${businessId}`, RATE_LIMITS.onboardingPreviewReply);

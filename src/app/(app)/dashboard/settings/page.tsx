@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { OwnerEscalationSettings } from "@/components/dashboard/owner-escalation-settings";
+import { SettingsDestinations } from "@/components/dashboard/settings-destinations";
 import { getMembership } from "@/modules/businesses/repository";
 import { getEscalationSetting } from "@/modules/escalations/service";
 import { BusinessSettingsForm } from "@/components/dashboard/business-settings-form";
@@ -49,14 +50,16 @@ export default async function SettingsPage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
-      <section className="rounded-[28px] border border-border bg-card p-5 shadow-sm sm:p-7">
-        <p className="text-xs font-black text-primary">إعدادات البيزنس</p>
-        <h1 className="mt-2 text-3xl font-black tracking-[-0.035em]">
-          كل الأساسيات في مكان واحد
-        </h1>
-        <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">
-          عدّل بيانات النشاط، راجع الفروع، واطمّن على بيانات حسابك من غير ما تدور بين صفحات كتير.
-        </p>
+      <section className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">
+            الإعدادات
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            واتساب، النشاط، الفروع، الخطة، والرقابة — من مكان واحد.
+          </p>
+        </div>
+        <SettingsDestinations currentHref="/dashboard/settings" />
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[1.25fr_.75fr]">

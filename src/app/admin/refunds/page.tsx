@@ -5,6 +5,8 @@ import { readSaasFinancialConfig } from "@/modules/billing/saas-financial-config
 import { configuredFinanceExportToken } from "@/modules/billing/group-finance-export-auth";
 import { isRefundProcessingAllowed, refundReadinessOptions } from "@/modules/billing/refund-readiness";
 
+export const dynamic = "force-dynamic";
+
 type Row = {
   PaymentRequestID: string; PaymentReference: string; BusinessName: string;
   RequestedPlanDisplayName: string; Amount: number; CurrencyCode: string;
