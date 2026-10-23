@@ -232,6 +232,8 @@ export function isNavGroupActive(
   group: (typeof DASHBOARD_NAV_GROUPS)[number],
 ): boolean {
   if (isNavHrefActive(pathname, group.href)) return true;
+  // Keep the employee navigation highlighted for legacy teaching links and manual knowledge management.
+  if (group.id === "employee" && isNavHrefActive(pathname, "/dashboard/knowledge")) return true;
   return getNavGroupChildren(group).some((child) =>
     isNavHrefActive(pathname, child.href),
   );
