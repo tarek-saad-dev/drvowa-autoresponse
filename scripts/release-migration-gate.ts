@@ -1,5 +1,5 @@
 /**
- * Read-only release checks for migrations 001–033.
+ * Read-only release checks for migrations 001–036.
  *
  * --files-only validates the repository without connecting to SQL Server.
  * --verified-isolated-db additionally checks an operator-verified test database.
@@ -10,7 +10,7 @@ import { resolve } from "node:path";
 
 import sql from "mssql";
 
-const lastVersion = 33;
+const lastVersion = 36;
 const mode = process.argv[2];
 
 function requireEnv(name: string): string {
