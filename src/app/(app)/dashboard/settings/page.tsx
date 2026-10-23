@@ -75,12 +75,12 @@ export default async function SettingsPage() {
       {escalationSetting ? (
         <details className="group overflow-hidden rounded-2xl border border-border bg-card">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-4 marker:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40 sm:p-5 [&::-webkit-details-marker]:hidden">
-            <div className="min-w-0">
-              <h2 className="text-sm font-black">تنبيهات التدخل البشري</h2>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            <span className="block min-w-0">
+              <span className="block text-sm font-black">تنبيهات التدخل البشري</span>
+              <span className="mt-1 block text-xs leading-5 text-muted-foreground">
                 إشعار مسؤول النشاط لما محادثة تحتاج تدخل إنسان
-              </p>
-            </div>
+              </span>
+            </span>
             <span className="flex shrink-0 items-center gap-2 text-xs font-bold text-muted-foreground">
               إدارة
               <span aria-hidden="true" className="inline-block transition-transform group-open:rotate-90">
