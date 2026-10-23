@@ -1,6 +1,4 @@
-import { AiAutoReplyPanel } from "@/components/dashboard/ai-auto-reply-panel";
-import { AgentsManager } from "@/components/dashboard/agents-manager";
-import { EmployeeDestinations } from "@/components/dashboard/employee-destinations";
+import { AgentWorkspace } from "@/components/dashboard/agent-workspace";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import { getWhatsAppAiSetting } from "@/modules/ai";
@@ -32,44 +30,35 @@ export default async function AgentPage() {
   const activeAgents = agents.filter((a) => a.isActive);
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-3">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">الموظف الذكي</h1>
-          <p className="mt-1 text-sm leading-7 text-muted-foreground">
-            ظبّط شخصيته، شغّل الرد التلقائي، وعلّمه معلومات النشاط.
-          </p>
-        </div>
-        <EmployeeDestinations currentHref="/dashboard/agent" />
-      </div>
-      <AiAutoReplyPanel
-        initialSetting={
-          setting
-            ? {
-                channelAiSettingId: setting.channelAiSettingId,
-                channelConnectionId: setting.channelConnectionId,
-                agentId: setting.agentId,
-                autoReplyEnabled: setting.autoReplyEnabled,
-                enabledAtUtc: setting.enabledAtUtc,
-                debounceMs: setting.debounceMs,
-                humanTakeoverResumePolicy:
-                  setting.humanTakeoverResumePolicy,
-              }
-            : null
-        }
-        agents={activeAgents.map((a) => ({
-          agentId: a.agentId,
-          name: a.name,
-          roleTitle: a.roleTitle,
-          isActive: a.isActive,
-        }))}
-        whatsapp={{
-          uiState: waView?.uiState ?? "NOT_CONNECTED",
-          maskedPhone: waView?.connection?.maskedPhone ?? null,
-        }}
-        knowledgeActiveCount={knowledge.length}
-      />
-      <AgentsManager agents={agents} />
-    </div>
+    <AgentWorkspace
+      agents={agents}
+      activeAgents={activeAgents.map((a) => ({
+        agentId: a.agentId,
+        name: a.name,
+        roleTitle: a.roleTitle,
+        isActive: a.isActive,
+        language: a.language,
+        dialect: a.dialect,
+        tone: a.tone,
+      }))}
+      initialSetting={
+        setting
+          ? {
+              channelAiSettingId: setting.channelAiSettingId,
+              channelConnectionId: setting.channelConnectionId,
+              agentId: setting.agentId,
+              autoReplyEnabled: setting.autoReplyEnabled,
+              enabledAtUtc: setting.enabledAtUtc,
+              debounceMs: setting.debounceMs,
+              humanTakeoverResumePolicy: setting.humanTakeoverResumePolicy,
+            }
+          : null
+      }
+      whatsapp={{
+        uiState: waView?.uiState ?? "NOT_CONNECTED",
+        maskedPhone: waView?.connection?.maskedPhone ?? null,
+      }}
+      knowledgeActiveCount={knowledge.length}
+    />
   );
 }

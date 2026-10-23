@@ -83,3 +83,19 @@ export {
   resumeInboxConversationAi,
   pauseInboxConversationAi,
 } from "./inbox-ai-service";
+export {
+  getReceptionistOperationalHealth,
+  evaluateOperationalHealth,
+  clearOperationalHealthCache,
+} from "./operational-health";
+export type {
+  ReceptionistOperationalHealth,
+  OperationalAttentionCode,
+} from "./operational-health";
+export {
+  touchAiWorkerLiveness,
+  getAiWorkerLiveness,
+  AI_WORKER_LIVENESS_STALE_MS,
+} from "./worker-liveness";
+export { getAiWorkerQueueStatus } from "./worker-status";
+export type { AiWorkerQueueStatus } from "./worker-status";

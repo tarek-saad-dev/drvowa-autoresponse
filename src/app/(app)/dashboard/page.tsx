@@ -14,8 +14,8 @@ import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import { listAgents } from "@/modules/agents/service";
 import { getWhatsAppAiSetting } from "@/modules/ai";
+import { getReceptionistOperationalHealth } from "@/modules/ai/operational-health";
 import { getBusinessById } from "@/modules/businesses/service";
-import { findWhatsAppConnection } from "@/modules/channels/repository";
 import { countOpenEscalations } from "@/modules/escalations/service";
 import { listItems } from "@/modules/knowledge/service";
 import {
@@ -63,14 +63,12 @@ export default async function DashboardOverviewPage({
     business,
     agents,
     knowledgeItems,
-    wa,
     aiSetting,
     conversations,
   ] = await Promise.all([
     getBusinessById({ businessId }),
     listAgents({ businessId }),
     listItems({ businessId }),
-    findWhatsAppConnection({ businessId }),
     getWhatsAppAiSetting({ businessId }),
     listInboxConversations({ businessId, limit: 8 }),
   ]);
@@ -93,18 +91,25 @@ export default async function DashboardOverviewPage({
     dailyActivity = null;
   }
 
-  const waActive = wa?.status === "ACTIVE";
   const aiOn = Boolean(aiSetting?.autoReplyEnabled);
   const activeKnowledge = knowledgeItems.filter((item) => item.isActive).length;
-  const activeAgent = agents.find((agent) => agent.isActive) ?? agents[0] ?? null;
+  // Only an explicitly active agent satisfies readiness — never fall back to inactive.
+  const hasActiveAgent = agents.some((agent) => agent.isActive);
+
+  const operationalHealth = await getReceptionistOperationalHealth({
+    businessId,
+    businessName: business.name,
+    autoReplyEnabled: aiOn,
+    hasActiveAgent,
+    hasActiveKnowledge: activeKnowledge > 0,
+  });
 
   const status = deriveReceptionistStatus({
     businessName: business.name,
-    whatsappStatus: wa?.status,
-    autoReplyEnabled: aiOn,
-    hasActiveAgent: Boolean(activeAgent),
-    hasActiveKnowledge: activeKnowledge > 0,
+    health: operationalHealth,
   });
+
+  const whatsappLiveConnected = operationalHealth.whatsappLiveState === "READY";
 
   const recent: OverviewConversation[] = conversations.map((conversation) => {
     const meta = conversationStatusMeta(conversation);
@@ -133,7 +138,7 @@ export default async function DashboardOverviewPage({
 
       <RecentConversations
         conversations={recent}
-        whatsappConnected={waActive}
+        whatsappConnected={whatsappLiveConnected}
       />
 
       <DailyActivitySummary activity={dailyActivity} />

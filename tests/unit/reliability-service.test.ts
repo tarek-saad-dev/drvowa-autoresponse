@@ -7,6 +7,14 @@ vi.mock("@/lib/db", () => ({
 vi.mock("@/modules/messaging/repository", () => ({
   resolveChannelByExternalAccountKey: vi.fn(),
 }));
+vi.mock("@/modules/ai/worker-liveness", () => ({
+  getAiWorkerLiveness: vi.fn(async () => ({
+    available: true,
+    lastHeartbeatAtUtc: new Date(),
+    ageMs: 100,
+    workerId: "worker-1",
+  })),
+}));
 
 import { query } from "@/lib/db";
 import { resolveChannelByExternalAccountKey } from "@/modules/messaging/repository";
@@ -50,7 +58,11 @@ describe("reliability receipts and watchdog", () => {
 
   it("does no outbound sends and excludes older coalesced texts from the scan", async () => {
     q.mockResolvedValue({ recordset: [], rowsAffected: [0] } as never);
-    expect(await runReliabilityAudit()).toEqual({ receiptIncidents: 0, aiIncidents: 0 });
+    expect(await runReliabilityAudit()).toEqual({
+      receiptIncidents: 0,
+      aiIncidents: 0,
+      workerIncidents: 0,
+    });
     const scans = q.mock.calls.map(call => call[0]).join("\n");
     expect(scans).toContain("newer.Direction=N'INBOUND'");
     expect(scans).toContain("state.ResumedAtUtc");

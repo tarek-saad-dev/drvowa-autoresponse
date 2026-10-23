@@ -8,6 +8,11 @@
  * - admin INACTIVE is preserved unless READY or LOGGED_OUT
  * - transient CONNECTING/STARTING/DISCONNECTED keep ACTIVE if previously ACTIVE (sticky reconnect)
  * - first-time QR/STARTING/CONNECTING → PENDING / false
+ *
+ * IMPORTANT: Sticky ACTIVE is persisted pairing/session metadata only.
+ * It must NEVER be treated as proof of a live WhatsApp socket.
+ * Dashboard / receptionist "working" must use live runtime uiState (READY)
+ * from getWhatsAppConnectionView — not TblChannelConnection.Status alone.
  */
 export function mapDbStatusFromRuntime(
   state: string,

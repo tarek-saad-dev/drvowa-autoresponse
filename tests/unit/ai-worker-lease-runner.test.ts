@@ -78,6 +78,7 @@ describe("AI worker runner drain + heartbeat", () => {
     });
     let claimed = 0;
     const runner = createAiWorkerRunner({
+      touchLiveness: async () => {},
       workerId: "w-test",
       concurrency: 1,
       pollMs: 50,
@@ -133,6 +134,7 @@ describe("AI worker runner drain + heartbeat", () => {
   it("idle shutdown is clean and idempotent", async () => {
     const closePool = vi.fn().mockResolvedValue(undefined);
     const runner = createAiWorkerRunner({
+      touchLiveness: async () => {},
       claimNextJob: async () => null,
       processJob: async () => ({ status: "SKIPPED" }),
       closePool,
@@ -152,6 +154,7 @@ describe("AI worker runner drain + heartbeat", () => {
     const closePool = vi.fn().mockResolvedValue(undefined);
     let claimed = 0;
     const runner = createAiWorkerRunner({
+      touchLiveness: async () => {},
       concurrency: 1,
       pollMs: 20,
       heartbeatMs: 50,
@@ -193,6 +196,7 @@ describe("AI worker runner drain + heartbeat", () => {
     const resolvers: Array<() => void> = [];
     let claimed = 0;
     const runner = createAiWorkerRunner({
+      touchLiveness: async () => {},
       concurrency: 2,
       pollMs: 20,
       heartbeatMs: 100,
@@ -252,6 +256,7 @@ describe("AI worker runner drain + heartbeat", () => {
     });
     let claimed = 0;
     const runner = createAiWorkerRunner({
+      touchLiveness: async () => {},
       concurrency: 1,
       pollMs: 20,
       heartbeatMs: 15,
@@ -294,6 +299,7 @@ describe("AI worker runner drain + heartbeat", () => {
     const closePool = vi.fn().mockResolvedValue(undefined);
     let claimed = 0;
     const runner = createAiWorkerRunner({
+      touchLiveness: async () => {},
       concurrency: 1,
       pollMs: 20,
       heartbeatMs: 100,
@@ -334,6 +340,7 @@ describe("AI worker runner drain + heartbeat", () => {
     const closePool = vi.fn().mockResolvedValue(undefined);
     let claimed = 0;
     const runner = createAiWorkerRunner({
+      touchLiveness: async () => {},
       concurrency: 1,
       pollMs: 20,
       heartbeatMs: 100,

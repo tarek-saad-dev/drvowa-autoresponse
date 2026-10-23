@@ -161,7 +161,48 @@ export async function getReliabilityOverview(businessId: string) {
  * Rule 2: Latest eligible text hasn't produced a known sent or in-flight job.
  * Coalesced older inbound messages are not counted as missing replies.
  */
-export async function runReliabilityAudit(): Promise<{ receiptIncidents: number; aiIncidents: number }> {
+export async function runReliabilityAudit(): Promise<{
+  receiptIncidents: number;
+  aiIncidents: number;
+  workerIncidents: number;
+}> {
+  let workerIncidents = 0;
+  try {
+    const { getAiWorkerLiveness } = await import("@/modules/ai/worker-liveness");
+    const liveness = await getAiWorkerLiveness();
+    if (liveness.available === false) {
+      // Tenant-scoped incidents (FK to TblBusiness). One row per auto-reply business;
+      // MERGE on (BusinessID, Kind, ReferenceKey) prevents alert spam.
+      const businesses = await query<{ BusinessID: string }>(
+        `SELECT DISTINCT TOP (500) s.BusinessID
+         FROM dbo.TblChannelAiSetting s
+         WHERE s.AutoReplyEnabled = 1`,
+      );
+      const detail = liveness.lastHeartbeatAtUtc
+        ? "HEARTBEAT_STALE"
+        : "HEARTBEAT_MISSING";
+      for (const row of businesses.recordset) {
+        await upsertIncident(
+          row.BusinessID,
+          "AI_WORKER_UNAVAILABLE",
+          "primary",
+          null,
+          detail,
+        );
+        workerIncidents += 1;
+      }
+    } else if (liveness.available === true) {
+      await query(
+        `UPDATE dbo.TblReliabilityIncident
+         SET Status=N'RESOLVED', ResolvedAtUtc=SYSUTCDATETIME(), LastSeenAtUtc=SYSUTCDATETIME()
+         WHERE Status=N'OPEN' AND IncidentKind=N'AI_WORKER_UNAVAILABLE'
+           AND ReferenceKey=N'primary'`,
+      );
+    }
+  } catch {
+    // Liveness table may be absent before migration 036 — skip quietly.
+  }
+
   const r = await query<{ BusinessID: string; ProviderMessageID: string; DeliveryStatus: string }>(
     `SELECT TOP (200) r.BusinessID, r.ProviderMessageID, r.DeliveryStatus
      FROM dbo.TblRuntimeInboundReceipt r
@@ -230,7 +271,11 @@ export async function runReliabilityAudit(): Promise<{ receiptIncidents: number;
           AND sent.Direction=N'OUTBOUND' AND sent.IsHistorical=0 AND sent.CreatedAtUtc>=m.CreatedAtUtc
           WHERE m.BusinessID=i.BusinessID AND m.MessageID=TRY_CONVERT(uniqueidentifier,i.ReferenceKey)))`,
   );
-  return { receiptIncidents: r.recordset.length, aiIncidents: missing.recordset.length };
+  return {
+    receiptIncidents: r.recordset.length,
+    aiIncidents: missing.recordset.length,
+    workerIncidents,
+  };
 }
 
 async function upsertIncident(

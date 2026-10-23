@@ -14,12 +14,14 @@ import {
   resolveLeaseSeconds,
   resolveShutdownDeadlineMs,
 } from "./lease";
+import { touchAiWorkerLiveness } from "./worker-liveness";
 import type { AiReplyJob } from "@/types/domain";
 
 export type WorkerRunnerDeps = {
   claimNextJob?: typeof claimNextJob;
   processJob?: typeof processAiReplyJob;
   extendLease?: typeof extendJobLease;
+  touchLiveness?: typeof touchAiWorkerLiveness;
   closePool?: () => Promise<void>;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -61,6 +63,7 @@ export function createAiWorkerRunner(deps: WorkerRunnerDeps = {}) {
   const claim = deps.claimNextJob ?? claimNextJob;
   const processJob = deps.processJob ?? processAiReplyJob;
   const extend = deps.extendLease ?? extendJobLease;
+  const touchLiveness = deps.touchLiveness ?? touchAiWorkerLiveness;
   const closePoolFn = deps.closePool ?? defaultClosePool;
   const sleep = deps.sleep
     ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
@@ -192,6 +195,14 @@ export function createAiWorkerRunner(deps: WorkerRunnerDeps = {}) {
 
     while (!stopping) {
       try {
+        // Process liveness independent of job leases — idle workers must stay visible.
+        try {
+          await touchLiveness({ workerId });
+        } catch (error) {
+          logger.warn("[ai-worker] liveness_touch_failed", {
+            errorCode: error instanceof Error ? error.name : "LIVENESS_ERROR",
+          });
+        }
         while (active.size < concurrency && !stopping) {
           const job = await claim({
             workerId,

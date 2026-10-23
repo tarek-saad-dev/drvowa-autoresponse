@@ -22,7 +22,14 @@ import type { Agent } from "@/types/domain";
 
 const INSTRUCTIONS_MAX = 2000;
 
-export function AgentsManager({ agents }: { agents: Agent[] }) {
+export function AgentsManager({
+  agents,
+  embedded = false,
+}: {
+  agents: Agent[];
+  /** Flatter layout for accordion panels (no nested page chrome). */
+  embedded?: boolean;
+}) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -170,18 +177,7 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
     setError(null);
   }
 
-  return (
-    <div className="grid gap-5 xl:grid-cols-[1.08fr_.92fr]">
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {editing ? "عدّل شخصية الموظف" : "خلّي طريقته شبه فريقك"}
-          </CardTitle>
-          <CardDescription>
-            الاسم واللهجة والنبرة والتعليمات اللي عايزه يمشي عليها مع العملاء.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+  const form = (
           <form
             className="space-y-3"
             onSubmit={save}
@@ -347,18 +343,64 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
               ) : null}
             </div>
           </form>
-        </CardContent>
-      </Card>
+  );
 
-      <div className="space-y-3">
+  const list = (
+      <div className={embedded ? "space-y-2" : "space-y-3"}>
         {agents.length === 0 ? (
+          embedded ? (
+            <p className="rounded-xl border border-dashed border-border/80 px-3 py-4 text-sm text-muted-foreground">
+              لسه معندكش شخصية موظف جاهزة. ابدأ من النموذج وحدد أسلوبه في دقايق.
+            </p>
+          ) : (
           <Card className="border-dashed">
             <CardContent className="py-8 text-sm text-muted-foreground">
               لسه معندكش شخصية موظف جاهزة. ابدأ من النموذج وحدد أسلوبه في دقايق.
             </CardContent>
           </Card>
+          )
         ) : (
           agents.map((agent) => (
+            embedded ? (
+              <div
+                key={agent.agentId}
+                className="rounded-xl border border-border/60 bg-surface/30 px-3 py-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-black">{agent.name}</p>
+                    <p className="text-xs text-muted-foreground">{agent.roleTitle}</p>
+                  </div>
+                  <Badge variant={agent.isActive ? "success" : "muted"}>
+                    {agent.isActive ? "نشط" : "غير نشط"}
+                  </Badge>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {agent.language}
+                  {agent.dialect ? ` · ${agent.dialect}` : ""}
+                  {agent.tone ? ` · ${agent.tone}` : ""}
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    data-testid="agent-edit"
+                    onClick={() => beginEdit(agent)}
+                  >
+                    تعديل
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    disabled={pending}
+                    onClick={() => void remove(agent.agentId)}
+                  >
+                    حذف
+                  </Button>
+                </div>
+              </div>
+            ) : (
             <Card key={agent.agentId}>
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
@@ -401,9 +443,46 @@ export function AgentsManager({ agents }: { agents: Agent[] }) {
                 </div>
               </CardContent>
             </Card>
+            )
           ))
         )}
       </div>
+  );
+
+  if (embedded) {
+    return (
+      <div className="space-y-5">
+        <div>
+          <p className="text-sm font-black">
+            {editing ? "عدّل شخصية الموظف" : "خلّي طريقته شبه فريقك"}
+          </p>
+          <p className="mt-1 text-xs leading-6 text-muted-foreground">
+            الاسم واللهجة والنبرة والتعليمات اللي عايزه يمشي عليها مع العملاء.
+          </p>
+          <div className="mt-3">{form}</div>
+        </div>
+        <div>
+          <p className="mb-2 text-xs font-bold text-muted-foreground">الشخصيات المحفوظة</p>
+          {list}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-5 xl:grid-cols-[1.08fr_.92fr]">
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            {editing ? "عدّل شخصية الموظف" : "خلّي طريقته شبه فريقك"}
+          </CardTitle>
+          <CardDescription>
+            الاسم واللهجة والنبرة والتعليمات اللي عايزه يمشي عليها مع العملاء.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>{form}</CardContent>
+      </Card>
+      {list}
     </div>
   );
 }
