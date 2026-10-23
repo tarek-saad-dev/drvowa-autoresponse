@@ -5,7 +5,11 @@ const dbCalls = vi.hoisted(() => ({
   channelLookup: vi.fn(),
   scheduleAi: vi.fn(),
 }));
-vi.mock("@/lib/db", () => ({ withTransaction: dbCalls.transaction }));
+vi.mock("@/lib/db", () => ({
+  withTransaction: dbCalls.transaction,
+  query: vi.fn(),
+  sql: {},
+}));
 vi.mock("@/modules/messaging/repository", () => ({
   resolveChannelByExternalAccountKey: dbCalls.channelLookup,
 }));
@@ -17,6 +21,9 @@ vi.mock("@/modules/escalations/service", () => ({
   createEscalation: vi.fn(),
   isEscalationOwnerPhone: vi.fn(),
   requestsHumanAgent: vi.fn(),
+}));
+vi.mock("@/modules/escalations/customer-hold", () => ({
+  maybeSendCustomerHoldAbsorbOnInbound: vi.fn(),
 }));
 
 import { inboundWhatsAppDtoSchema } from "@/modules/messaging/content";
