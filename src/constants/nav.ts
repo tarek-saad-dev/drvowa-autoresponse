@@ -46,22 +46,6 @@ export const DASHBOARD_NAV_GROUPS = [
     icon: "✦",
     href: "/dashboard/agent",
     mobilePrimary: true,
-    children: [
-      {
-        href: "/dashboard/agent",
-        label: "إعداد الموظف",
-        mobileLabel: "الإعداد",
-        key: "Receptionist",
-        icon: "✦",
-      },
-      {
-        href: "/dashboard/knowledge",
-        label: "علّم الموظف",
-        mobileLabel: "التعليم",
-        key: "Knowledge",
-        icon: "＋",
-      },
-    ],
   },
   {
     id: "settings",
@@ -248,6 +232,8 @@ export function isNavGroupActive(
   group: (typeof DASHBOARD_NAV_GROUPS)[number],
 ): boolean {
   if (isNavHrefActive(pathname, group.href)) return true;
+  // Keep the employee navigation highlighted for legacy teaching links and manual knowledge management.
+  if (group.id === "employee" && isNavHrefActive(pathname, "/dashboard/knowledge")) return true;
   return getNavGroupChildren(group).some((child) =>
     isNavHrefActive(pathname, child.href),
   );

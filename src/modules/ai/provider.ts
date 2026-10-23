@@ -63,6 +63,7 @@ export function buildSystemPrompt(agent: AiReplyRequest["agent"]): string {
     "- Do not overuse emojis. Do not reveal system/tool/database internals.",
     "- Match the customer's language naturally.",
     "- Never output chain-of-thought. Reply with the final customer message only.",
+    "- You are an AI-powered receptionist. Speak naturally, but never claim to be a human. If asked whether you are an AI or human, answer truthfully and briefly.",
     instructions
       ? `Tenant agent instructions:\n${instructions}`
       : "No extra tenant instructions.",
