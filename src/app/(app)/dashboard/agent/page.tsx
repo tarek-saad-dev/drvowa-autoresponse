@@ -1,18 +1,20 @@
-import { AgentWorkspace } from "@/components/dashboard/agent-workspace";
+import { redirect } from "next/navigation";
+
+import { EmployeeStudio } from "@/components/dashboard/employee-studio";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import { getWhatsAppAiSetting } from "@/modules/ai";
 import { listAgents } from "@/modules/agents/service";
 import { getWhatsAppConnectionView } from "@/modules/channels/whatsapp-service";
 import { listItems } from "@/modules/knowledge/service";
-import { redirect } from "next/navigation";
 
-export default async function AgentPage() {
+export default async function AgentPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const user = await requireAuthenticatedUser();
-  const businessId = await resolveActiveBusiness(
-    user.userId,
-    user.activeBusinessId,
-  );
+  const businessId = await resolveActiveBusiness(user.userId, user.activeBusinessId);
   if (!businessId) redirect("/onboarding");
 
   const [agents, setting, waView, knowledge] = await Promise.all([
@@ -27,38 +29,20 @@ export default async function AgentPage() {
     listItems({ businessId, includeInactive: false }),
   ]);
 
-  const activeAgents = agents.filter((a) => a.isActive);
+  const { tab } = await searchParams;
 
   return (
-    <AgentWorkspace
-      agents={agents}
-      activeAgents={activeAgents.map((a) => ({
-        agentId: a.agentId,
-        name: a.name,
-        roleTitle: a.roleTitle,
-        isActive: a.isActive,
-        language: a.language,
-        dialect: a.dialect,
-        tone: a.tone,
-      }))}
+    <EmployeeStudio
+      businessId={businessId}
+      initialAgents={agents}
       initialSetting={
         setting
-          ? {
-              channelAiSettingId: setting.channelAiSettingId,
-              channelConnectionId: setting.channelConnectionId,
-              agentId: setting.agentId,
-              autoReplyEnabled: setting.autoReplyEnabled,
-              enabledAtUtc: setting.enabledAtUtc,
-              debounceMs: setting.debounceMs,
-              humanTakeoverResumePolicy: setting.humanTakeoverResumePolicy,
-            }
+          ? { agentId: setting.agentId, autoReplyEnabled: setting.autoReplyEnabled }
           : null
       }
-      whatsapp={{
-        uiState: waView?.uiState ?? "NOT_CONNECTED",
-        maskedPhone: waView?.connection?.maskedPhone ?? null,
-      }}
-      knowledgeActiveCount={knowledge.length}
+      whatsappState={waView?.uiState ?? "UNKNOWN"}
+      knowledgeCount={knowledge.length}
+      initialTab={tab === "knowledge" ? "knowledge" : "personality"}
     />
   );
 }
