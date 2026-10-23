@@ -91,7 +91,7 @@ export function BusinessSettingsForm({ business }: { business: Business }) {
       <div className="px-4 pt-5 sm:px-6">
         <h2 className="text-base font-black">بيانات النشاط</h2>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          الاسم والنشاط اللي بيتعرّف بيهم البيزنس عندك.
+          الاسم والتصنيف اللي بيظهروا داخل التطبيق.
         </p>
       </div>
       <form className="space-y-5 px-4 pb-5 pt-5 sm:px-6" onSubmit={onSubmit}>
