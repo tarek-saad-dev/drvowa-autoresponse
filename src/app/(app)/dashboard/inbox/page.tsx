@@ -13,11 +13,33 @@ import {
 
 const INITIAL_PAGE_SIZE = 60;
 
+const INBOX_FILTERS = new Set([
+  "ALL",
+  "UNREAD",
+  "HUMAN",
+  "AUTO",
+  "ARCHIVED",
+  "PINNED",
+]);
+
 export default async function InboxPage({ searchParams }: {
-  searchParams: Promise<{ conversationId?: string; businessId?: string }>;
+  searchParams: Promise<{
+    conversationId?: string;
+    businessId?: string;
+    filter?: string;
+  }>;
 }) {
   const user = await requireAuthenticatedUser();
   const requested = await searchParams;
+  const initialFilter = requested.filter && INBOX_FILTERS.has(requested.filter.toUpperCase())
+    ? requested.filter.toUpperCase() as
+      | "ALL"
+      | "UNREAD"
+      | "HUMAN"
+      | "AUTO"
+      | "ARCHIVED"
+      | "PINNED"
+    : "ALL";
   const requestedBusinessId = requested.businessId && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(requested.businessId)
     ? requested.businessId : null;
   const businessId = await resolveActiveBusiness(user.userId, requestedBusinessId ?? user.activeBusinessId);
@@ -32,7 +54,11 @@ export default async function InboxPage({ searchParams }: {
   const canResumeAll = membership?.status === "ACTIVE" && ["OWNER", "ADMIN"].includes(membership.role);
 
   const [batch, counts] = await Promise.all([
-    listInboxConversations({ businessId, limit: INITIAL_PAGE_SIZE + 1 }),
+    listInboxConversations({
+      businessId,
+      limit: INITIAL_PAGE_SIZE + 1,
+      filter: initialFilter,
+    }),
     getInboxConversationCounts({ businessId }),
   ]);
 
@@ -68,6 +94,7 @@ export default async function InboxPage({ searchParams }: {
     <InboxPanel
       canResumeAll={canResumeAll}
       initialSelectedId={deepLinkId}
+      initialFilter={initialFilter}
       initialConversations={conversations.map((c) => ({
         conversationId: c.conversationId,
         contactExternalKey: c.contactExternalKey,

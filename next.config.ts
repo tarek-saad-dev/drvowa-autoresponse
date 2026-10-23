@@ -23,7 +23,7 @@ const nextConfig: NextConfig = {
               "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https://*.lottiefiles.com https://raw.githubusercontent.com",
-              "font-src 'self' data:",
+              "font-src 'self' data: https://cdn.jsdelivr.net",
               "connect-src 'self' https://*.lottiefiles.com https://raw.githubusercontent.com https://unpkg.com",
               "frame-ancestors 'none'",
               "base-uri 'self'",

@@ -59,14 +59,18 @@ async function fillLogin(page: Page, email: string, password: string) {
 }
 
 test.describe("platform admin login redirect UX", () => {
-  test("normal user without business → /onboarding", async ({ page }) => {
+  test("normal user without business → /choose-plan with visible content", async ({ page }) => {
     const email = uniqueEmail("norm_ob");
     const password = "NormalUser!23456789";
     await apiSignup(page, email, password);
     await apiLogout(page);
 
     await fillLogin(page, email, password);
-    await expect(page).toHaveURL(/\/onboarding/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/choose-plan/, { timeout: 15_000 });
+    // First post-login paint must not be a blank white screen.
+    await expect(
+      page.getByRole("heading", { name: /اختار الخطة المناسبة لشغلك/ }),
+    ).toBeVisible({ timeout: 15_000 });
   });
 
   test("normal user with business → /dashboard", async ({ page }) => {

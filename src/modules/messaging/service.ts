@@ -5,6 +5,7 @@ import {
 } from "@/lib/tenancy/errors";
 import { maybeScheduleAiReplyAfterInbound } from "@/modules/ai/schedule";
 import { pauseConversationAi } from "@/modules/ai/conversation-state-repository";
+import { maybeSendCustomerHoldAbsorbOnInbound } from "@/modules/escalations/customer-hold";
 import { createEscalation, isEscalationOwnerPhone, requestsHumanAgent } from "@/modules/escalations/service";
 import type { ConversationListItem, Message } from "@/types/domain";
 
@@ -200,20 +201,39 @@ export async function ingestWhatsAppInbound(
       businessId,
     };
   });
-  if (outcome.outcome === "accepted" && wantsHuman) {
-    // Explicit request already paused the AI transactionally. Notification
-    // creation is isolated so a transient alert issue never loses inbound.
-    try {
-      await createEscalation({
-        businessId,
-        conversationId: outcome.conversationId,
-        reasonCode: "CUSTOMER_REQUEST",
-        reason: "العميل طلب التحدث مع موظف بشري أو مسؤول.",
-      });
-    } catch (error) {
-      console.warn("[inbound] escalation_enqueue_failed", {
-        reason: error instanceof Error ? error.name : "UNKNOWN",
-      });
+  if (outcome.outcome === "accepted" && !ownerMessage) {
+    let createdEscalation = false;
+    if (wantsHuman) {
+      // Explicit request already paused the AI transactionally. Notification
+      // creation is isolated so a transient alert issue never loses inbound.
+      try {
+        const created = await createEscalation({
+          businessId,
+          conversationId: outcome.conversationId,
+          reasonCode: "CUSTOMER_REQUEST",
+          reason: "العميل طلب التحدث مع موظف بشري أو مسؤول.",
+        });
+        createdEscalation = created.created;
+      } catch (error) {
+        console.warn("[inbound] escalation_enqueue_failed", {
+          reason: error instanceof Error ? error.name : "UNKNOWN",
+        });
+      }
+    }
+    // While waiting for a human: every customer message gets an immediate "حاضر"
+    // absorb reply (first human-request uses the hold-ack queue instead).
+    if (!createdEscalation) {
+      try {
+        await maybeSendCustomerHoldAbsorbOnInbound({
+          businessId,
+          conversationId: outcome.conversationId,
+          customerText: normalized.textContent,
+        });
+      } catch (error) {
+        console.warn("[inbound] customer_hold_absorb_failed", {
+          reason: error instanceof Error ? error.name : "UNKNOWN",
+        });
+      }
     }
   }
   return outcome;
@@ -233,6 +253,15 @@ export async function getInboxConversationCounts(params: {
   businessId: string;
 }): Promise<{ total: number; unread: number }> {
   return repo.countConversationsForBusiness(params);
+}
+
+export async function getDashboardDailyActivity(params: {
+  businessId: string;
+}): Promise<{
+  conversationsToday: number;
+  interventionsToday: number | null;
+} | null> {
+  return repo.getDashboardDailyActivity(params);
 }
 
 export async function listInboxMessages(params: {

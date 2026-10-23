@@ -33,8 +33,15 @@ type SettingRow = {
   VerificationExpiresAtUtc: Date | null;
   VerificationRequestedAtUtc: Date | null;
   VerificationAttempts: number;
+  NotifyBotSelfEnabled?: boolean | null;
 };
-export type EscalationSetting = { phone: string | null; enabled: boolean; verified: boolean };
+export type EscalationSetting = {
+  phone: string | null;
+  enabled: boolean;
+  verified: boolean;
+  /** Also send the alert into the bot number's own WhatsApp chat (Message yourself). */
+  notifyBotSelf: boolean;
+};
 
 const businessParam = (id: string) => [{ name: "businessId", type: sql.UniqueIdentifier, value: id }];
 const conversationParams = (businessId: string, conversationId: string) => [
@@ -78,7 +85,8 @@ export async function requireEscalationAdmin(businessId: string, userId: string)
 async function readSetting(businessId: string, trx?: TransactionClient): Promise<SettingRow | null> {
   const result = await (trx?.query ?? query)<SettingRow>(
     `SELECT OwnerPhone, IsEnabled, PhoneVerifiedAtUtc, VerificationHash,
-            VerificationExpiresAtUtc, VerificationRequestedAtUtc, VerificationAttempts
+            VerificationExpiresAtUtc, VerificationRequestedAtUtc, VerificationAttempts,
+            NotifyBotSelfEnabled
      FROM dbo.TblHumanEscalationSetting WHERE BusinessID = @businessId`,
     businessParam(businessId),
   );
@@ -86,11 +94,20 @@ async function readSetting(businessId: string, trx?: TransactionClient): Promise
 }
 export async function getEscalationSetting(businessId: string): Promise<EscalationSetting> {
   const row = await readSetting(businessId);
-  return { phone: row?.OwnerPhone ?? null, enabled: Boolean(row?.IsEnabled), verified: Boolean(row?.PhoneVerifiedAtUtc) };
+  return {
+    phone: row?.OwnerPhone ?? null,
+    enabled: Boolean(row?.IsEnabled),
+    verified: Boolean(row?.PhoneVerifiedAtUtc),
+    notifyBotSelf: row?.NotifyBotSelfEnabled !== false,
+  };
 }
 
 export async function updateEscalationSetting(params: {
-  businessId: string; userId: string; phone: string; enabled: boolean;
+  businessId: string;
+  userId: string;
+  phone: string;
+  enabled: boolean;
+  notifyBotSelf?: boolean;
 }): Promise<EscalationSetting> {
   await requireEscalationAdmin(params.businessId, params.userId);
   const phone = normalizeOwnerPhone(params.phone);
@@ -99,28 +116,35 @@ export async function updateEscalationSetting(params: {
     if (params.enabled && (!current?.PhoneVerifiedAtUtc || current.OwnerPhone !== phone)) {
       throw new ValidationError("لازم تأكد رقم المالك بالكود قبل تفعيل إشعارات واتساب.");
     }
+    const notifyBotSelf = params.notifyBotSelf ?? (current?.NotifyBotSelfEnabled !== false);
     await trx.execute(
       `MERGE dbo.TblHumanEscalationSetting WITH (HOLDLOCK) AS target
        USING (SELECT @businessId AS BusinessID) AS src ON src.BusinessID = target.BusinessID
        WHEN MATCHED THEN UPDATE SET
          OwnerPhone = @phone, IsEnabled = @enabled,
+         NotifyBotSelfEnabled = @notifyBotSelf,
          PhoneVerifiedAtUtc = CASE WHEN target.OwnerPhone = @phone THEN target.PhoneVerifiedAtUtc ELSE NULL END,
          VerificationHash = CASE WHEN target.OwnerPhone = @phone THEN target.VerificationHash ELSE NULL END,
          VerificationExpiresAtUtc = CASE WHEN target.OwnerPhone = @phone THEN target.VerificationExpiresAtUtc ELSE NULL END,
          UpdatedAtUtc = SYSUTCDATETIME()
-       WHEN NOT MATCHED THEN INSERT (BusinessID, OwnerPhone, IsEnabled)
-         VALUES (@businessId, @phone, @enabled);`,
+       WHEN NOT MATCHED THEN INSERT (BusinessID, OwnerPhone, IsEnabled, NotifyBotSelfEnabled)
+         VALUES (@businessId, @phone, @enabled, @notifyBotSelf);`,
       [...businessParam(params.businessId),
         { name: "phone", type: sql.NVarChar(20), value: phone },
-        { name: "enabled", type: sql.Bit, value: params.enabled }],
+        { name: "enabled", type: sql.Bit, value: params.enabled },
+        { name: "notifyBotSelf", type: sql.Bit, value: notifyBotSelf }],
     );
   });
   return getEscalationSetting(params.businessId);
 }
 
 function verificationDigest(businessId: string, phone: string, code: string): string {
-  const secret = process.env.INTEGRATION_SECRET_KEY;
-  if (!secret || secret.length < 32) throw new Error("ESCALATION_OTP_SECRET_NOT_CONFIGURED");
+  const secret = process.env.INTEGRATION_SECRET_KEY?.trim();
+  if (!secret || secret.length < 32) {
+    throw new ValidationError(
+      "إعداد التحقق غير مكتمل على السيرفر (INTEGRATION_SECRET_KEY). راجع إعدادات البيئة.",
+    );
+  }
   return createHmac("sha256", secret).update([businessId, phone, code].join(":")).digest("hex");
 }
 
@@ -202,19 +226,70 @@ export async function confirmOwnerVerification(businessId: string, userId: strin
 }
 
 export function escalationMessage(params: {
-  businessId: string; businessName: string; customerPhone: string; conversationId: string; reason: string;
+  businessId: string;
+  businessName: string;
+  customerPhone?: string | null;
+  customerLabel?: string | null;
+  conversationId: string;
+  reason: string;
+  /**
+   * WhatsApp deep-link to open the customer chat.
+   * Only for bot-self ("Message yourself") mirrors — never for the owner alert.
+   */
+  includeWhatsAppDeepLink?: boolean;
 }): string {
   const safeReason = params.reason.replace(/[\r\n\t]+/g, " ").slice(0, 200);
-  const wa = "https://wa.me/" + encodeURIComponent(params.customerPhone);
+  const phone = params.customerPhone?.trim() || null;
+  const label = phone
+    ? ("+" + phone)
+    : (params.customerLabel?.trim() || "غير ظاهر حاليًا");
   const app = "https://app.drvotech.com/dashboard/inbox?businessId=" + encodeURIComponent(params.businessId)
     + "&conversationId=" + encodeURIComponent(params.conversationId);
+  // Compact bot-self mirror: just the alert + clickable customer chat.
+  if (params.includeWhatsAppDeepLink) {
+    if (phone) {
+      return "⚠️ عميل محتاج تدخل\n"
+        + label.slice(0, 64) + "\n"
+        + "https://wa.me/" + encodeURIComponent(phone);
+    }
+    return "⚠️ عميل محتاج تدخل\n"
+      + label.slice(0, 64) + "\n"
+      + app;
+  }
+
   return "⚠️ DRVO | عميل محتاج متابعة بشرية\n"
     + "البيزنس: " + params.businessName.slice(0, 100) + "\n"
-    + "رقم العميل: +" + params.customerPhone + "\n"
+    + "العميل: " + label.slice(0, 64) + "\n"
     + "السبب: " + safeReason + "\n\n"
-    + "فتح واتساب العميل:\n" + wa + "\n\n"
     + "متابعة المحادثة داخل DRVO:\n" + app + "\n\n"
     + "ادخل DRVO لتأكيد استلام الحالة ثم إنهاء المتابعة.";
+}
+
+/** Owner alert is allowed even when the customer identity is an opaque LID (no phone yet). */
+export function isOwnerNotifyEligible(params: {
+  enabled: boolean;
+  verified: boolean;
+  ownerPhone: string | null;
+  customerPhoneNormalized: string | null;
+}): boolean {
+  if (!params.enabled || !params.verified || !params.ownerPhone) return false;
+  if (params.customerPhoneNormalized && params.customerPhoneNormalized === params.ownerPhone) {
+    return false;
+  }
+  return true;
+}
+
+/** Unresolved escalations that still need an owner follow-up. */
+export async function countOpenEscalations(businessId: string): Promise<number> {
+  const result = await query<{ OpenCount: number }>(
+    `SELECT COUNT(1) AS OpenCount
+       FROM dbo.TblHumanEscalation
+      WHERE BusinessID = @businessId
+        AND ResolvedAtUtc IS NULL
+        AND Status IN (N'OPEN', N'ACKNOWLEDGED')`,
+    businessParam(businessId),
+  );
+  return Number(result.recordset[0]?.OpenCount ?? 0);
 }
 
 export async function getEscalation(businessId: string, conversationId: string) {
@@ -251,23 +326,59 @@ export async function createEscalation(params: {
   const customer = await getContactForBusiness({
     businessId: params.businessId, contactId: conversation.contactId,
   });
-  const notifyEligible = Boolean(setting.enabled && setting.verified && customer?.phoneNormalized
-    && customer.phoneNormalized !== setting.phone);
+  const notifyEligible = isOwnerNotifyEligible({
+    enabled: setting.enabled,
+    verified: setting.verified,
+    ownerPhone: setting.phone,
+    customerPhoneNormalized: customer?.phoneNormalized ?? null,
+  });
   let created = false;
   await withTransaction(async trx => {
-    const active = await trx.query<{ EscalationID: string }>(
-      `SELECT EscalationID FROM dbo.TblHumanEscalation WITH (UPDLOCK, HOLDLOCK)
+    const active = await trx.query<{
+      EscalationID: string;
+      NotificationStatus: NotifyStatus;
+      NotificationLastErrorCode: string | null;
+    }>(
+      `SELECT EscalationID, NotificationStatus, NotificationLastErrorCode
+         FROM dbo.TblHumanEscalation WITH (UPDLOCK, HOLDLOCK)
        WHERE BusinessID = @businessId AND ConversationID = @conversationId AND ResolvedAtUtc IS NULL`,
       conversationParams(params.businessId, params.conversationId),
     );
-    if (active.recordset.length) return;
+    if (active.recordset.length) {
+      const row = active.recordset[0]!;
+      // Repair cases cancelled only because customer phone was missing (opaque LID).
+      if (
+        notifyEligible
+        && row.NotificationStatus === "CANCELLED"
+        && (row.NotificationLastErrorCode === "NOTIFICATION_NOT_ELIGIBLE"
+          || row.NotificationLastErrorCode == null)
+      ) {
+        await trx.execute(
+          `UPDATE dbo.TblHumanEscalation
+              SET NotificationStatus = N'PENDING',
+                  NotificationLastErrorCode = NULL,
+                  NotificationNotBeforeUtc = SYSUTCDATETIME(),
+                  CustomerHoldNextAtUtc = COALESCE(CustomerHoldNextAtUtc, SYSUTCDATETIME()),
+                  UpdatedAtUtc = SYSUTCDATETIME()
+            WHERE EscalationID = @id AND BusinessID = @businessId
+              AND ResolvedAtUtc IS NULL AND NotificationStatus = N'CANCELLED'`,
+          [
+            { name: "id", type: sql.UniqueIdentifier, value: row.EscalationID },
+            { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+          ],
+        );
+      }
+      return;
+    }
     try {
       await trx.execute(
         `INSERT INTO dbo.TblHumanEscalation (
            EscalationID, BusinessID, ConversationID, ChannelConnectionID,
-           ReasonCode, ReasonText, NotificationStatus)
+           ReasonCode, ReasonText, NotificationStatus,
+           CustomerHoldStep, CustomerHoldNextAtUtc)
          VALUES (@id, @businessId, @conversationId, @channelConnectionId,
-           @reasonCode, @reason, @notificationStatus)`,
+           @reasonCode, @reason, @notificationStatus,
+           0, SYSUTCDATETIME())`,
         [...conversationParams(params.businessId, params.conversationId),
           { name: "id", type: sql.UniqueIdentifier, value: randomUUID() },
           { name: "channelConnectionId", type: sql.UniqueIdentifier, value: conversation.channelConnectionId },
@@ -299,6 +410,8 @@ export async function updateEscalationStatus(params: {
          ResolvedAtUtc = CASE WHEN @status = N'RESOLVED' THEN SYSUTCDATETIME() ELSE NULL END,
          NotificationStatus = CASE WHEN @status = N'RESOLVED' AND NotificationStatus = N'PENDING'
            THEN N'CANCELLED' ELSE NotificationStatus END,
+         CustomerHoldNextAtUtc = CASE WHEN @status = N'RESOLVED' THEN NULL ELSE CustomerHoldNextAtUtc END,
+         CustomerHoldClaimedAtUtc = CASE WHEN @status = N'RESOLVED' THEN NULL ELSE CustomerHoldClaimedAtUtc END,
          UpdatedAtUtc = SYSUTCDATETIME()
      WHERE BusinessID = @businessId AND ConversationID = @conversationId
        AND ResolvedAtUtc IS NULL`,

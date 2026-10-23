@@ -4,6 +4,8 @@ import { AdminPaymentsPanel } from "@/components/admin/admin-payments-panel";
 import { listPaymentsForAdmin } from "@/modules/billing/manual-payment-service";
 import type { ManualPaymentStatus } from "@/types/domain";
 
+export const dynamic = "force-dynamic";
+
 type PageProps = {
   searchParams: Promise<{ status?: string }>;
 };

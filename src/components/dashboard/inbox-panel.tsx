@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { BrandLogo } from "@/components/brand/brand-logo";
+import { useInboxChrome } from "@/components/dashboard/inbox-chrome";
 import { messageBodyDisplay } from "@/lib/ui/labels";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
 import type { AiReplyHealth, AiReplyHealthReason } from "@/types/domain";
@@ -316,9 +318,9 @@ function ActionIcon({
       type="button" onClick={onClick} disabled={disabled} title={title}
       aria-label={title} aria-pressed={active}
       className={
-        "grid h-10 w-10 shrink-0 place-items-center rounded-xl transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0e9f97] disabled:opacity-40 " +
-        (active ? "bg-[#d3f1ed] text-[#087b73] dark:bg-[#174840] dark:text-[#86e7d6]"
-          : "text-[#74817d] hover:bg-[#e5ede9] hover:text-[#1e3530] dark:text-[#9caeaa] dark:hover:bg-[#253831] dark:hover:text-white")
+        "grid h-10 w-10 shrink-0 place-items-center rounded-xl transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-40 " +
+        (active ? "bg-primary/15 text-primary"
+          : "text-muted-foreground hover:bg-surface hover:text-foreground")
       }
     >
       <Glyph name={name} />
@@ -336,7 +338,13 @@ function Avatar({ c, size = "md" }: { c: ConversationRow; size?: "sm" | "md" | "
 }
 
 export function InboxPanel({
-  initialConversations, initialCounts, initialHasMore, initialCursor, initialSelectedId, canResumeAll = false,
+  initialConversations,
+  initialCounts,
+  initialHasMore,
+  initialCursor,
+  initialSelectedId,
+  initialFilter = "ALL",
+  canResumeAll = false,
 }: {
   initialConversations: ConversationRow[];
   canResumeAll?: boolean;
@@ -344,6 +352,7 @@ export function InboxPanel({
   initialHasMore: boolean;
   initialCursor: ConversationCursor | null;
   initialSelectedId?: string | null;
+  initialFilter?: InboxFilter;
 }) {
   const [conversations, setConversations] = useState(initialConversations);
   const [counts, setCounts] = useState(initialCounts);
@@ -353,10 +362,15 @@ export function InboxPanel({
   const [loadingMore, setLoadingMore] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [filter, setFilter] = useState<InboxFilter>("ALL");
+  const [filter, setFilter] = useState<InboxFilter>(initialFilter);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedSnapshot, setSelectedSnapshot] = useState<ConversationRow | null>(null);
   const [mobileThread, setMobileThread] = useState(false);
+  const { setThreadOpen } = useInboxChrome();
+  useEffect(() => {
+    setThreadOpen(mobileThread);
+    return () => setThreadOpen(false);
+  }, [mobileThread, setThreadOpen]);
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [loadingThread, setLoadingThread] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -494,7 +508,11 @@ export function InboxPanel({
   }, [hasMore, cursor, loadingMore, loadingList, filter, debouncedSearch]);
 
   useEffect(() => {
-    if (filter === "ALL" && debouncedSearch === "" && listRequestRef.current === 0) {
+    if (
+      filter === initialFilter
+      && debouncedSearch === ""
+      && listRequestRef.current === 0
+    ) {
       // Initial server-rendered page is ready; avoid a duplicate request.
       listRequestRef.current = 1;
       return;
@@ -505,7 +523,7 @@ export function InboxPanel({
     setConversations([]);
     listScroller.current?.scrollTo({ top: 0 });
     void loadFirstPage();
-  }, [filter, debouncedSearch, loadFirstPage]);
+  }, [filter, debouncedSearch, loadFirstPage, initialFilter]);
 
   useEffect(() => {
     const root = listScroller.current;
@@ -631,7 +649,11 @@ export function InboxPanel({
     if (!initialSelectedId || initialDeepLinkOpened.current) return;
     if (!conversations.some(c => c.conversationId === initialSelectedId)) return;
     initialDeepLinkOpened.current = true;
-    selectConversation(initialSelectedId);
+    // Defer selection work so the effect only schedules an external update.
+    const timer = window.setTimeout(() => {
+      selectConversation(initialSelectedId);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [initialSelectedId, conversations, selectConversation]);
 
   const escalateConversation = useCallback(async () => {
@@ -1002,64 +1024,49 @@ export function InboxPanel({
   const failedCount = grouped.filter(c => conversationStatus(c).attention).length;
 
   return (
-    <div dir="rtl" className="flex h-full min-h-0 min-w-0 w-full isolate overflow-hidden overscroll-none bg-[#f7f9f7] font-sans text-[#172824] dark:bg-[#101b19] dark:text-[#eaf1ee]">
-      <nav className="hidden h-full w-[60px] shrink-0 flex-col items-center justify-between border-l border-[#dce6e1] bg-[#edf3ef] py-4 md:flex dark:border-[#263b34] dark:bg-[#162722]" aria-label="التنقل السريع">
-        <div className="flex w-full flex-col items-center gap-4">
-          <Link href="/dashboard" className="grid h-11 w-11 place-items-center rounded-2xl bg-[#087f76] text-xl font-black text-white shadow-sm" aria-label="DRVO الرئيسية">D</Link>
-          <div className="my-1 h-px w-7 bg-[#d2ded8] dark:bg-[#355147]" />
-          <div className="grid h-11 w-11 place-items-center rounded-xl bg-[#d0eae2] text-[#007f6f] dark:bg-[#225448] dark:text-[#9de6d2]" title="المحادثات">
-            <Glyph name="chat" size={22} />
-          </div>
-          <Link href="/dashboard/agent" title="موظف الاستقبال" aria-label="موظف الاستقبال" className="grid h-11 w-11 place-items-center rounded-xl text-[#758b83] hover:bg-white dark:hover:bg-white/10"><Glyph name="bot" /></Link>
-          <Link href="/dashboard/knowledge" title="المعرفة" aria-label="المعرفة" className="grid h-11 w-11 place-items-center rounded-xl text-[#758b83] hover:bg-white dark:hover:bg-white/10"><Glyph name="book" /></Link>
-        </div>
-        <div className="flex flex-col items-center gap-2">
-          <Link href="/dashboard/settings" title="الإعدادات" aria-label="الإعدادات" className="grid h-11 w-11 place-items-center rounded-xl text-[#758b83] hover:bg-white dark:hover:bg-white/10"><Glyph name="settings" /></Link>
-          <Link href="/dashboard" title="الرئيسية" aria-label="الرئيسية" className="grid h-11 w-11 place-items-center rounded-xl text-[#758b83] hover:bg-white dark:hover:bg-white/10"><Glyph name="home" /></Link>
-        </div>
-      </nav>
-
+    <div dir="rtl" className="flex h-full min-h-0 min-w-0 w-full isolate overflow-hidden overscroll-none bg-background font-sans text-foreground">
       <aside className={
-        "flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden border-l border-[#dbe5e0] bg-white md:w-[350px] lg:w-[370px] xl:w-[392px] dark:border-[#273d35] dark:bg-[#182622] " +
-        (mobileThread ? "hidden md:flex" : "flex")
+        "flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden border-l border-border bg-card md:w-[350px] lg:w-[370px] xl:w-[392px] " +
+        (mobileThread ? "hidden md:flex" : "flex") +
+        (!mobileThread ? " pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0" : "")
       } aria-label="قائمة المحادثات">
-        <header className="shrink-0 border-b border-[#ecf0ed] px-4 pb-3 pt-3 dark:border-[#2b4038]">
+        <header className="shrink-0 border-b border-border px-4 pb-3 pt-3">
           <div className="mb-3 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-3">
-              <Link href="/dashboard" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#e3f1ed] text-[#078b7b] md:hidden dark:bg-[#24483c]" aria-label="الرجوع للرئيسية"><Glyph name="home" /></Link>
-              <div>
-                <h1 className="text-[21px] font-extrabold tracking-tight">المحادثات</h1>
-                <p className="mt-0.5 text-xs text-[#627d70] dark:text-[#abc1b3]">
-                  {counts.total.toLocaleString("ar-EG")} محادثة محفوظة في DRVO
-                </p>
-              </div>
+            <div className="min-w-0">
+              <Link href="/dashboard" className="mb-2 inline-flex md:hidden" aria-label="DRVO AutoResponse">
+                <BrandLogo className="h-6" />
+              </Link>
+              <h1 className="text-[21px] font-extrabold tracking-tight">المحادثات</h1>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {counts.total.toLocaleString("ar-EG")} محادثة محفوظة في DRVO
+              </p>
             </div>
             <div className="flex items-center gap-0.5">
               <ActionIcon name="refresh" title="تحديث المحادثات" onClick={() => void loadFirstPage()} disabled={loadingList} />
-              <Link href="/dashboard/agent" className="grid h-10 w-10 place-items-center rounded-xl text-[#087f76] hover:bg-[#e5f5f0] dark:text-[#91dfc8] dark:hover:bg-white/10" title="إعدادات الموظف الذكي"><Glyph name="spark" /></Link>
+              <Link href="/dashboard/agent" className="grid h-10 w-10 place-items-center rounded-xl text-primary hover:bg-primary/10" title="إعدادات الموظف الذكي"><Glyph name="spark" /></Link>
             </div>
           </div>
           {canResumeAll && (
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <button type="button" onClick={() => void resumeAllAi()} disabled={resumingAll}
-                className="inline-flex min-h-9 items-center gap-2 rounded-xl bg-[#087f76] px-3 py-2 text-xs font-bold text-white transition hover:bg-[#066b63] disabled:opacity-60">
+                className="inline-flex min-h-9 items-center gap-2 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-primary-foreground transition hover:bg-primary-hover disabled:opacity-60">
                 <Glyph name="bot" size={17} />
                 {resumingAll ? "جاري إرجاع المحادثات..." : "إرجاع جميع الشاتات للبوت"}
               </button>
-              <span className="text-[10px] text-[#73897d] dark:text-[#a0b6a9]">رجوع تلقائي بعد 30 دقيقة من آخر رد بشري</span>
+              <span className="text-[10px] text-muted-foreground">رجوع تلقائي بعد 30 دقيقة من آخر رد بشري</span>
             </div>
           )}
-          {bulkFeedback && <p role="status" className="mb-2 rounded-lg bg-[#e8f6ef] px-3 py-2 text-xs font-semibold text-[#0c7567] dark:bg-[#264738] dark:text-[#a0e6cf]">{bulkFeedback}</p>}
-          <div className="flex h-11 items-center gap-2 rounded-xl bg-[#f1f5f2] px-3 ring-1 ring-transparent focus-within:ring-[#43b5a3] dark:bg-[#233630]">
-            <Glyph name="search" size={19} className="shrink-0 text-[#7f8f89]" />
+          {bulkFeedback && <p role="status" className="mb-2 rounded-lg bg-success-soft px-3 py-2 text-xs font-semibold text-success">{bulkFeedback}</p>}
+          <div className="flex h-11 items-center gap-2 rounded-xl bg-surface px-3 ring-1 ring-transparent focus-within:ring-ring">
+            <Glyph name="search" size={19} className="shrink-0 text-muted-foreground" />
             <input
               ref={searchInput} type="search" value={searchText}
               onChange={e => setSearchText(e.target.value)}
               placeholder="ابحث بالاسم أو الرقم..."
               aria-label="بحث في جميع المحادثات"
-              className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-[#869b8d]"
+              className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-muted-foreground"
             />
-            {searchText ? <button type="button" title="مسح البحث" aria-label="مسح البحث" onClick={() => setSearchText("")}><Glyph name="close" size={16} /></button> : <kbd className="hidden text-[10px] text-[#99a7a1] lg:block">Ctrl K</kbd>}
+            {searchText ? <button type="button" title="مسح البحث" aria-label="مسح البحث" onClick={() => setSearchText("")}><Glyph name="close" size={16} /></button> : <kbd className="hidden text-[10px] text-muted-foreground lg:block">Ctrl K</kbd>}
           </div>
           <div className="mt-3 flex gap-1.5 overflow-x-auto [scrollbar-width:none]" role="group" aria-label="فلاتر المحادثات">
             {actionFilters.map(item => (
@@ -1069,8 +1076,8 @@ export function InboxPanel({
                 className={
                   "flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-bold transition " +
                   (filter === item.id
-                    ? "bg-[#087f76] text-white"
-                    : "bg-[#eff3f0] text-[#6e8278] hover:bg-[#e1ece5] dark:bg-[#273c34] dark:text-[#bdd0c6] dark:hover:bg-[#355044]")
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground")
                 }
               >
                 {item.label}
@@ -1084,14 +1091,14 @@ export function InboxPanel({
         <div ref={listScroller} className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:thin]" aria-live="polite">
           {loadingList && grouped.length === 0 ? (
             <div className="space-y-1 p-3" aria-label="جاري تحميل المحادثات">
-              {Array.from({ length: 7 }, (_,i) => <div key={i} className="flex animate-pulse gap-3 rounded-xl p-3"><span className="h-11 w-11 rounded-full bg-[#e9efea] dark:bg-[#30473d]" /><span className="flex-1 space-y-2 pt-1"><span className="block h-3 w-1/2 rounded bg-[#e9efea] dark:bg-[#30473d]" /><span className="block h-2 w-5/6 rounded bg-[#e9efea] dark:bg-[#30473d]" /></span></div>)}
+              {Array.from({ length: 7 }, (_,i) => <div key={i} className="flex animate-pulse gap-3 rounded-xl p-3"><span className="h-11 w-11 rounded-full bg-surface" /><span className="flex-1 space-y-2 pt-1"><span className="block h-3 w-1/2 rounded bg-surface" /><span className="block h-2 w-5/6 rounded bg-surface" /></span></div>)}
             </div>
           ) : grouped.length === 0 ? (
             <div className="flex h-64 flex-col items-center justify-center px-8 text-center">
-              <span className="mb-3 grid h-14 w-14 place-items-center rounded-full bg-[#e7f4ee] text-[#0a8777] dark:bg-[#23473c]"><Glyph name="chat" size={26} /></span>
+              <span className="mb-3 grid h-14 w-14 place-items-center rounded-full bg-primary/10 text-primary"><Glyph name="chat" size={26} /></span>
               <p className="text-sm font-bold">{debouncedSearch ? "مفيش نتائج مطابقة" : "مفيش محادثات في الفلتر ده"}</p>
-              <p className="mt-1.5 text-xs leading-6 text-[#84968b]">جرّب اسم تاني أو غيّر الفلتر لعرض محادثات أكتر.</p>
-              {(debouncedSearch || filter !== "ALL") && <button type="button" onClick={() => { setSearchText(""); setFilter("ALL"); }} className="mt-3 rounded-lg bg-[#e5f4ef] px-4 py-2 text-xs font-bold text-[#087f76]">اعرض الكل</button>}
+              <p className="mt-1.5 text-xs leading-6 text-muted-foreground">جرّب اسم تاني أو غيّر الفلتر لعرض محادثات أكتر.</p>
+              {(debouncedSearch || filter !== "ALL") && <button type="button" onClick={() => { setSearchText(""); setFilter("ALL"); }} className="mt-3 rounded-lg bg-primary/10 px-4 py-2 text-xs font-bold text-primary">اعرض الكل</button>}
             </div>
           ) : (
             <ul>
@@ -1104,8 +1111,8 @@ export function InboxPanel({
                       type="button" onClick={() => selectConversation(c.conversationId)}
                       aria-current={active ? "true" : undefined}
                       className={
-                        "group flex min-h-[70px] w-full items-center gap-3 border-b border-[#f1f4f1] px-4 py-2.5 text-right transition-colors hover:bg-[#f4f8f4] focus-visible:bg-[#e8f6ee] dark:border-[#25382f] dark:hover:bg-[#20372d] " +
-                        (active ? "bg-[#e2f2ed] shadow-[inset_3px_0_0_#0c9f89] dark:bg-[#23483e]" : "") +
+                        "group flex min-h-[70px] w-full items-center gap-3 border-b border-border/70 px-4 py-2.5 text-right transition-colors hover:bg-surface focus-visible:bg-primary/10 " +
+                        (active ? "bg-primary/10 shadow-[inset_3px_0_0_var(--primary)]" : "") +
                         (c.unread ? " font-bold" : "")
                       }
                     >
@@ -1113,24 +1120,24 @@ export function InboxPanel({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <span className="min-w-0 truncate text-[14px] font-semibold" dir="auto">{contactLabel(c)}</span>
-                          {c.isPinned && <span title="محادثة مثبتة" className="text-[10px] text-[#087f76]">📌</span>}
+                          {c.isPinned && <span title="محادثة مثبتة" className="text-[10px] text-primary">📌</span>}
                           {s.attention ? (
                             <span className={"h-2 w-2 shrink-0 rounded-full " + s.dot} title={s.label} aria-label={s.label} />
                           ) : null}
                           <time className={
                             "shrink-0 text-[10px] tabular-nums " +
-                            (c.unread ? "font-bold text-[#079e84]" : "font-medium text-[#9aa8a1] dark:text-[#90a39a]")
+                            (c.unread ? "font-bold text-primary" : "font-medium text-muted-foreground")
                           }>{timeLabel(c.lastMessageAtUtc, true)}</time>
                         </div>
                         <div className="mt-1 flex items-center gap-2">
                           <p className={
                             "min-w-0 flex-1 truncate text-[12.5px] leading-5 " +
-                            (c.unread ? "text-[#405b51] dark:text-[#d6e4dc]" : "text-[#62796d] dark:text-[#b1c7b8]")
+                            (c.unread ? "text-foreground" : "text-muted-foreground")
                           } dir="auto">
                             {c.lastMessageDirection === "OUTBOUND" ? "✓ " : ""}
                             {c.lastMessagePreview?.trim() || "مرفق أو رسالة بدون نص"}
                           </p>
-                          {c.unread ? <span className="grid h-[19px] min-w-[19px] place-items-center rounded-full bg-[#087f76] px-1 text-[10px] text-white" aria-label="رسالة غير مقروءة">●</span>
+                          {c.unread ? <span className="grid h-[19px] min-w-[19px] place-items-center rounded-full bg-primary px-1 text-[10px] text-primary-foreground" aria-label="رسالة غير مقروءة">●</span>
                             : s.attention ? <span className={"h-[7px] w-[7px] shrink-0 rounded-full " + s.dot} aria-label={s.label} />
                               : null}
                         </div>
@@ -1144,33 +1151,33 @@ export function InboxPanel({
               })}
             </ul>
           )}
-          <div ref={listSentinel} className="flex min-h-10 items-center justify-center px-4 text-[11px] text-[#8fa19a]">
+          <div ref={listSentinel} className="flex min-h-10 items-center justify-center px-4 text-[11px] text-muted-foreground">
             {loadingMore ? "بنحمّل شاتات أكتر..." : hasMore ? (
-              <button type="button" className="w-full py-3 font-bold hover:text-[#087f76]" onClick={() => void loadNextPage()}>عرض محادثات أقدم</button>
+              <button type="button" className="w-full py-3 font-bold hover:text-primary" onClick={() => void loadNextPage()}>عرض محادثات أقدم</button>
             ) : grouped.length > 0 ? (
               filter === "ALL" && !debouncedSearch ? "كل المحادثات المحفوظة ظهرت" : "نهاية النتائج"
             ) : null}
           </div>
         </div>
-        <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-t border-[#edf2ee] bg-[#fbfdfb] px-4 text-[10px] text-[#899c91] dark:border-[#2a4036] dark:bg-[#1b2d26]">
+        <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-t border-border bg-surface/80 px-4 text-[10px] text-muted-foreground">
           <span>{filter === "ALL" && !debouncedSearch ? "معروض " + loadedCount + " من " + counts.total : "معروض " + loadedCount + " نتيجة"}</span>
-          {failedCount > 0 ? <span className="font-bold text-amber-600">{failedCount} محتاج متابعة من الظاهرين</span> : <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-[#19aa83]" />متابعة مباشرة</span>}
+          {failedCount > 0 ? <span className="font-bold text-amber-600">{failedCount} محتاج متابعة من الظاهرين</span> : <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-success" />متابعة مباشرة</span>}
         </div>
       </aside>
 
       <main className={
-        "relative h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f3f5ef] dark:bg-[#0d1916] " +
+        "relative h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface " +
         (mobileThread ? "flex" : "hidden md:flex")
       } aria-label="محتوى المحادثة">
         {selected && status ? (
           <>
-            <header className="z-10 flex h-[64px] shrink-0 items-center justify-between gap-3 border-b border-[#dfe8df] bg-[#fafdfa] px-3 sm:px-5 dark:border-[#293d33] dark:bg-[#1b2a24]">
+            <header className="z-10 flex h-[64px] shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-3 sm:px-5">
               <div className="flex min-w-0 items-center gap-2.5">
-                <button type="button" onClick={() => setMobileThread(false)} className="grid h-9 w-9 place-items-center rounded-xl hover:bg-[#e8efe9] md:hidden" aria-label="رجوع لقائمة المحادثات"><Glyph name="back" /></button>
+                <button type="button" onClick={() => setMobileThread(false)} className="grid h-9 w-9 place-items-center rounded-xl hover:bg-surface md:hidden" aria-label="رجوع لقائمة المحادثات"><Glyph name="back" /></button>
                 <Avatar c={selected} size="sm" />
                 <div className="min-w-0">
                   <h2 className="truncate text-[15px] font-bold">{contactLabel(selected)}</h2>
-                  <p className="mt-0.5 flex items-center gap-2 text-xs text-[#6d8877]">
+                  <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                     <span className={"h-1.5 w-1.5 shrink-0 rounded-full " + status.dot} />
                     <span className={"truncate " + status.color}>{status.label}</span>
                     {selected.contactPhoneNormalized && <span className="hidden truncate opacity-75 sm:inline" dir="ltr">{selected.contactPhoneNormalized}</span>}
@@ -1181,11 +1188,11 @@ export function InboxPanel({
                 {selected.aiMode !== "AUTO" ? (
                   <button
                     type="button" onClick={() => void resumeAi()} disabled={resuming}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#087f76] px-3 text-[11px] font-bold text-white transition hover:bg-[#066c64] disabled:opacity-50 sm:px-4"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-primary px-3 text-[11px] font-bold text-primary-foreground transition hover:bg-primary-hover disabled:opacity-50 sm:px-4"
                   >
                     <Glyph name="spark" size={16} /><span className="hidden sm:inline">{resuming ? "جارٍ التشغيل" : "رجّع البوت"}</span><span className="sm:hidden">AI</span>
                   </button>
-                ) : <div className="hidden items-center gap-1.5 rounded-full bg-[#e2f3e8] px-3 py-2 text-[10px] font-bold text-[#16805e] sm:flex dark:bg-[#204338] dark:text-[#9be1bb]"><Glyph name="bot" size={15} />AI بيتابع</div>}
+                ) : <div className="hidden items-center gap-1.5 rounded-full bg-success-soft px-3 py-2 text-[10px] font-bold text-success sm:flex"><Glyph name="bot" size={15} />AI بيتابع</div>}
                 {!escalation ? (
                   <button type="button" onClick={() => void escalateConversation()} disabled={escalating}
                     className="rounded-xl border border-amber-300 px-2 py-2 text-[11px] font-bold text-amber-800 hover:bg-amber-50 disabled:opacity-50 dark:text-amber-300"
@@ -1199,7 +1206,7 @@ export function InboxPanel({
               <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100">
                 <strong>تدخل بشري: {escalation.status === "OPEN" ? "مفتوح" : "قيد المتابعة"}</strong>
                 <span className="min-w-0 flex-1 truncate">{escalation.reason}</span>
-                <span className="text-[10px]" title={escalation.notificationError ?? undefined}>إشعار المالك: {escalation.notificationStatus === "SENT" ? "تم الإرسال" : escalation.notificationStatus === "PENDING" ? "منتظر الإرسال" : escalation.notificationStatus === "SENDING" ? "جارٍ الإرسال" : escalation.notificationStatus === "CANCELLED" ? "غير مُفعّل" : escalation.notificationStatus === "UNKNOWN" ? "النتيجة غير مؤكدة" : "فشل الإرسال"}</span>
+                <span className="text-[10px]" title={escalation.notificationError ?? undefined}>إشعار المالك: {escalation.notificationStatus === "SENT" ? "تم الإرسال" : escalation.notificationStatus === "PENDING" ? "منتظر الإرسال" : escalation.notificationStatus === "SENDING" ? "جارٍ الإرسال" : escalation.notificationStatus === "CANCELLED" ? "لم يُرسل" : escalation.notificationStatus === "UNKNOWN" ? "النتيجة غير مؤكدة" : "فشل الإرسال"}</span>
                 {escalation.status === "OPEN" ? (
                   <button type="button" disabled={escalating} className="rounded-lg border border-amber-400 px-2 py-1 font-bold"
                     onClick={() => void updateEscalation("ACKNOWLEDGED")}>استلمت الحالة</button>
@@ -1209,13 +1216,13 @@ export function InboxPanel({
               </div>
             )}
             {(error || notice || status.attention) && (
-              <div className="z-10 shrink-0 border-b border-[#e5eae4] bg-white/90 px-4 py-2 text-xs dark:border-[#2c4035] dark:bg-[#1b2b24]">
+              <div className="z-10 shrink-0 border-b border-border bg-card/90 px-4 py-2 text-xs">
                 {error && <p role="alert" className="font-bold text-red-600">{error}</p>}
-                {notice && <p role="status" className="font-bold text-[#087c6a] dark:text-[#82dbc1]">{notice}</p>}
+                {notice && <p role="status" className="font-bold text-primary">{notice}</p>}
                 {!error && !notice && status.attention && <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300"><Glyph name="alert" size={15} />{status.detail}{selected.aiMode === "AUTO" ? " — تقدر ترد بنفسك من تحت." : ""}</div>}
                 {selected.aiMode === "AUTO" && (status.attention || Boolean(notice)) && (
                   <button type="button" onClick={() => void checkLastAiDelivery()} disabled={checkingAi}
-                    className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border border-[#c6e0d5] px-2.5 py-1.5 font-bold text-[#087c6a] hover:bg-[#e6f5ed] disabled:opacity-60 dark:border-[#426a58] dark:text-[#8cd9b7]"
+                    className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border border-primary/25 px-2.5 py-1.5 font-bold text-primary hover:bg-primary/10 disabled:opacity-60"
                   ><Glyph name="refresh" size={14} />{checkingAi ? "جاري فحص الرد..." : "تحقق من آخر محاولة رد"}</button>
                 )}
               </div>
@@ -1233,32 +1240,32 @@ export function InboxPanel({
                 className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 [scrollbar-width:thin] sm:px-8 lg:px-10"
                 style={{
                   backgroundColor: "transparent",
-                  backgroundImage: "radial-gradient(circle at 2px 2px, rgba(110,143,121,.075) 1px, transparent 0)",
+                  backgroundImage: "radial-gradient(circle at 2px 2px, rgb(0 117 154 / 0.08) 1px, transparent 0)",
                   backgroundSize: "34px 34px",
                 }}
                 aria-label="رسائل المحادثة"
               >
                 <div className="mx-auto flex min-h-full max-w-[900px] flex-col">
-                  {loadingThread ? <div className="m-auto text-sm text-[#8b9e91]">بنفتح المحادثة...</div>
-                    : messages.length === 0 ? <div className="m-auto rounded-xl bg-white/80 p-5 text-center text-sm text-[#7f9285] dark:bg-[#263a31]">لسه مفيش رسائل محفوظة للمحادثة دي.</div>
+                  {loadingThread ? <div className="m-auto text-sm text-muted-foreground">بنفتح المحادثة...</div>
+                    : messages.length === 0 ? <div className="m-auto rounded-xl bg-card/80 p-5 text-center text-sm text-muted-foreground">لسه مفيش رسائل محفوظة للمحادثة دي.</div>
                       : <>
                           {hasOlder ? (
-                            <button type="button" onClick={() => void loadOlder()} disabled={loadingOlder} className="mx-auto mb-5 rounded-full bg-white/90 px-5 py-2 text-[11px] font-bold text-[#087d6d] shadow-sm hover:bg-[#e7f3ec] dark:bg-[#23382e] dark:text-[#96dfc1]">
+                            <button type="button" onClick={() => void loadOlder()} disabled={loadingOlder} className="mx-auto mb-5 rounded-full bg-card/90 px-5 py-2 text-[11px] font-bold text-primary shadow-sm hover:bg-primary/10">
                               {loadingOlder ? "بنحمّل الأقدم..." : "تحميل رسائل أقدم"}
                             </button>
-                          ) : <p className="mb-4 text-center text-[10px] text-[#9ba99e]">بداية السجل المحفوظ</p>}
+                          ) : <p className="mb-4 text-center text-[10px] text-muted-foreground">بداية السجل المحفوظ</p>}
                           {messages.map((m, index) => {
                             const outgoing = m.direction === "OUTBOUND";
                             const showDay = index === 0 || messageDayKey(messages[index - 1]) !== messageDayKey(m);
                             return (
                               <div key={m.messageId}>
-                                {showDay && <div className="my-5 flex justify-center"><span className="rounded-lg bg-white/85 px-3 py-1.5 text-[10px] font-bold text-[#7e9486] shadow-sm dark:bg-[#26382f] dark:text-[#adc4b5]">{messageDay(m)}</span></div>}
+                                {showDay && <div className="my-5 flex justify-center"><span className="rounded-lg bg-card/90 px-3 py-1.5 text-[10px] font-bold text-muted-foreground shadow-sm">{messageDay(m)}</span></div>}
                                 <div className={"mb-2 flex " + (outgoing ? "justify-start" : "justify-end")}>
                                   <article id={"message-" + m.messageId} dir="rtl" className={
                                     "max-w-[88%] rounded-[13px] px-3.5 py-2 shadow-[0_1px_1px_rgba(0,0,0,.045)] sm:max-w-[76%] " +
                                     (outgoing
-                                      ? "rounded-tr-[3px] bg-[#d8f1e0] text-[#1b3a2c] dark:bg-[#255444] dark:text-[#e7f8ed]"
-                                      : "rounded-tl-[3px] bg-white text-[#1d3028] dark:bg-[#26372f] dark:text-[#eff7ee]")
+                                      ? "rounded-tr-[3px] bg-whatsapp-bubble text-whatsapp-bubble-text"
+                                      : "rounded-tl-[3px] bg-card text-foreground")
                                   }>
                                     {outgoing && (
                                       <div className="mb-1 flex items-center gap-1.5 text-[10px] font-bold opacity-70">
@@ -1268,7 +1275,7 @@ export function InboxPanel({
                                     )}
                                     {m.isHistorical && <span className="mb-1 block text-[9px] opacity-65">من سجل واتساب السابق</span>}
                                     {m.quotedProviderMessageId && (
-                                      <div className="mb-2 rounded-lg border-r-2 border-[#087f76] bg-black/[.035] px-2 py-1 text-[11px] dark:bg-white/[.06]">
+                                      <div className="mb-2 rounded-lg border-r-2 border-primary bg-black/[.035] px-2 py-1 text-[11px] dark:bg-white/[.06]">
                                         <span className="opacity-60">رد على رسالة سابقة</span>
                                         <p className="truncate" dir="auto">{messages.find(prev =>
                                           prev.providerMessageId === m.quotedProviderMessageId ||
@@ -1320,12 +1327,12 @@ export function InboxPanel({
                         </>}
                 </div>
               </div>
-              {showScrollDown && <button type="button" onClick={scrollToBottom} aria-label="آخر الرسائل" title="آخر الرسائل" className="absolute bottom-3 left-4 grid h-10 w-10 place-items-center rounded-full bg-white text-[#45856a] shadow-md dark:bg-[#2b4337]"><Glyph name="arrow-down" size={18} /></button>}
+              {showScrollDown && <button type="button" onClick={scrollToBottom} aria-label="آخر الرسائل" title="آخر الرسائل" className="absolute bottom-3 left-4 grid h-10 w-10 place-items-center rounded-full bg-card text-primary shadow-md"><Glyph name="arrow-down" size={18} /></button>}
             </div>
 
-            <footer className="z-10 shrink-0 border-t border-[#e5e9e3] bg-[#f7f9f5] px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 dark:border-[#2c4035] dark:bg-[#1a2b24]">
+            <footer className="z-10 shrink-0 border-t border-border bg-card px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
               <div className="mx-auto flex max-w-[940px] items-end gap-2">
-                <div className="flex min-h-[48px] min-w-0 flex-1 items-end gap-2 rounded-2xl border border-[#e4ebe4] bg-white px-4 py-2 shadow-[0_2px_14px_rgba(21,69,49,.04)] focus-within:border-[#75bba7] dark:border-[#365144] dark:bg-[#263a30]">
+                <div className="flex min-h-[48px] min-w-0 flex-1 items-end gap-2 rounded-2xl border border-border bg-background px-4 py-2 shadow-sm focus-within:border-primary">
                   <textarea
                     ref={textArea} value={draft}
                     onChange={e => setDraft(e.target.value)}
@@ -1343,17 +1350,17 @@ export function InboxPanel({
                         void sendManual();
                       }
                     }}
-                    className="min-h-[30px] max-h-36 w-full resize-none overflow-y-auto bg-transparent py-1 text-sm leading-6 outline-none placeholder:text-[#839c8a]"
+                    className="min-h-[30px] max-h-36 w-full resize-none overflow-y-auto bg-transparent py-1 text-sm leading-6 outline-none placeholder:text-muted-foreground"
                     style={{ height: "auto" }}
                   />
                 </div>
                 <button
                   type="button" onClick={() => void sendManual()} disabled={sending || !draft.trim()}
-                  className="grid h-[48px] w-[48px] shrink-0 place-items-center rounded-2xl bg-[#087f76] text-white transition hover:bg-[#056e64] disabled:cursor-not-allowed disabled:bg-[#a5bdb3] dark:disabled:bg-[#3b594c]"
+                  className="grid h-[48px] w-[48px] shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-muted"
                   title="إرسال الرسالة" aria-label="إرسال الرسالة"
                 ><Glyph name="send" size={20} /></button>
               </div>
-              <p className="mx-auto mt-1.5 hidden max-w-[940px] text-[11px] text-[#698473] sm:block">
+              <p className="mx-auto mt-1.5 hidden max-w-[940px] text-[11px] text-muted-foreground sm:block">
                 {selected.aiMode === "AUTO"
                   ? "أول رد يدوي منك هيوقف الـAI في المحادثة دي تلقائيًا."
                   : selected.aiMode === "HUMAN_PAUSED"
@@ -1365,10 +1372,9 @@ export function InboxPanel({
           </>
         ) : (
           <div className="flex h-full flex-col items-center justify-center px-8 text-center">
-            <span className="mb-6 grid h-24 w-24 place-items-center rounded-[32px] bg-[#dcede3] text-[#087e72] dark:bg-[#204638]"><Glyph name="chat" size={46} /></span>
+            <BrandLogo className="mb-6 h-8" />
             <h2 className="text-2xl font-extrabold">كل محادثاتك. في مكان واحد.</h2>
-            <p className="mt-3 max-w-sm text-sm leading-7 text-[#7e9487]">افتح أي شات من القائمة، والـAI يتابع معاك أو ترد بنفسك في أي وقت.</p>
-            <span className="mt-7 inline-flex items-center gap-2 rounded-full border border-[#cfe8d8] px-4 py-2 text-xs font-bold text-[#17816a] dark:border-[#305e49]"><Glyph name="spark" size={15} />DRVO AutoRespond</span>
+            <p className="mt-3 max-w-sm text-sm leading-7 text-muted-foreground">افتح أي شات من القائمة، والـAI يتابع معاك أو ترد بنفسك في أي وقت.</p>
           </div>
         )}
       </main>
@@ -1376,46 +1382,46 @@ export function InboxPanel({
       {selected && detailsOpen && (
         <div className="fixed inset-0 z-30 bg-black/40 lg:static lg:z-auto lg:flex lg:w-[300px] lg:shrink-0 lg:bg-transparent">
           <button type="button" aria-label="إغلاق تفاصيل العميل" onClick={() => setDetailsOpen(false)} className="absolute inset-0 lg:hidden" />
-          <aside className="absolute bottom-0 left-0 top-0 z-10 flex w-[min(340px,90vw)] flex-col overflow-y-auto border-r border-[#dce8dd] bg-white shadow-2xl lg:static lg:h-full lg:w-full lg:shadow-none dark:border-[#30493b] dark:bg-[#1b2b23]" aria-label="تفاصيل العميل">
-            <header className="flex h-[74px] shrink-0 items-center justify-between border-b border-[#edf1ed] px-5 dark:border-[#30463a]">
+          <aside className="absolute bottom-0 left-0 top-0 z-10 flex w-[min(340px,90vw)] flex-col overflow-y-auto border-r border-border bg-card shadow-2xl lg:static lg:h-full lg:w-full lg:shadow-none" aria-label="تفاصيل العميل">
+            <header className="flex h-[74px] shrink-0 items-center justify-between border-b border-border px-5">
               <h3 className="text-[15px] font-bold">تفاصيل العميل</h3>
               <ActionIcon name="close" title="إغلاق" onClick={() => setDetailsOpen(false)} />
             </header>
-            <div className="flex flex-col items-center border-b border-[#edf1ed] px-6 py-8 dark:border-[#30463a]">
+            <div className="flex flex-col items-center border-b border-border px-6 py-8">
               <Avatar c={selected} size="lg" />
               <h4 className="mt-3 max-w-full truncate text-lg font-bold">{contactLabel(selected)}</h4>
-              <p className="mt-1 text-xs text-[#8b9e90]" dir="ltr">{selected.contactPhoneNormalized || "الرقم غير متاح"}</p>
+              <p className="mt-1 text-xs text-muted-foreground" dir="ltr">{selected.contactPhoneNormalized || "الرقم غير متاح"}</p>
             </div>
             <div className="space-y-5 p-5">
               <div>
-                <h4 className="mb-2 text-[11px] font-bold text-[#9cae9f]">المسؤول عن الرد</h4>
-                <div className="rounded-2xl bg-[#f0f6f0] p-4 dark:bg-[#263e31]">
+                <h4 className="mb-2 text-[11px] font-bold text-muted-foreground">المسؤول عن الرد</h4>
+                <div className="rounded-2xl bg-surface p-4">
                   <p className={"flex items-center gap-2 text-sm font-bold " + status?.color}><span className={"h-2 w-2 rounded-full " + status?.dot} />{status?.label}</p>
-                  <p className="mt-2 text-[11px] leading-6 text-[#688275] dark:text-[#b0c9b8]">{status?.detail}</p>
+                  <p className="mt-2 text-[11px] leading-6 text-muted-foreground">{status?.detail}</p>
                 </div>
               </div>
               <div>
-                <h4 className="mb-2 text-[11px] font-bold text-[#9cae9f]">آخر نشاط</h4>
+                <h4 className="mb-2 text-[11px] font-bold text-muted-foreground">آخر نشاط</h4>
                 <p className="text-sm font-bold">{timeLabel(selected.lastMessageAtUtc)}</p>
-                <p className="mt-1 text-[11px] text-[#899b8c]">{selected.unread ? "في رسالة غير مقروءة" : "تم عرض الرسائل المسجلة"}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{selected.unread ? "في رسالة غير مقروءة" : "تم عرض الرسائل المسجلة"}</p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => void updateChatMetadata("pinned", !selected.isPinned)}
-                  className="rounded-xl border border-[#cde4d5] px-3 py-2.5 text-xs font-bold text-[#087c6a] dark:border-[#3b6850] dark:text-[#a0e6cf]">
+                  className="rounded-xl border border-border px-3 py-2.5 text-xs font-bold text-primary">
                   {selected.isPinned ? "إلغاء التثبيت" : "📌 تثبيت"}
                 </button>
                 <button type="button" onClick={() => void updateChatMetadata("archived", !selected.isArchived)}
-                  className="rounded-xl border border-[#cde4d5] px-3 py-2.5 text-xs font-bold text-[#087c6a] dark:border-[#3b6850] dark:text-[#a0e6cf]">
+                  className="rounded-xl border border-border px-3 py-2.5 text-xs font-bold text-primary">
                   {selected.isArchived ? "إلغاء الأرشفة" : "أرشفة الشات"}
                 </button>
               </div>
               <button
                 type="button"
                 onClick={() => { setDetailsOpen(false); textArea.current?.focus(); }}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#cde4d5] px-3 py-3 text-xs font-bold text-[#078174] dark:border-[#3b6850]"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-border px-3 py-3 text-xs font-bold text-primary"
               ><Glyph name="chat" size={17} />رد يدوي على العميل</button>
               {selected.aiMode !== "AUTO" && (
-                <button type="button" onClick={() => void resumeAi()} disabled={resuming} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#087f76] px-3 py-3 text-xs font-bold text-white disabled:opacity-50"><Glyph name="spark" size={17} />رجّع الرد التلقائي</button>
+                <button type="button" onClick={() => void resumeAi()} disabled={resuming} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-3 text-xs font-bold text-primary-foreground disabled:opacity-50"><Glyph name="spark" size={17} />رجّع الرد التلقائي</button>
               )}
             </div>
           </aside>

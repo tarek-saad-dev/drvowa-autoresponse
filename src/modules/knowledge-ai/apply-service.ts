@@ -6,6 +6,7 @@ import {
   requireUsablePlanInTransaction,
 } from "@/modules/billing/entitlements";
 import { PlanEntitlementError, PLAN_ERROR_CODES } from "@/modules/billing/errors";
+import { ensureDefaultSubscription } from "@/modules/billing/service";
 import * as knowledgeRepo from "@/modules/knowledge/repository";
 import {
   ensureDefaultKnowledgeBase,
@@ -160,6 +161,9 @@ export async function applyKnowledgeIngest(params: {
   sessionId: string;
   proposalIds?: string[];
 }): Promise<ApplyResult> {
+  // Bootstrap FREE if onboarding created a business but subscription insert failed.
+  await ensureDefaultSubscription({ businessId: params.businessId });
+
   const result = await withTransaction(async (trx) => {
     await repo.acquireKnowledgeIngestAppLock(params.businessId, trx);
 

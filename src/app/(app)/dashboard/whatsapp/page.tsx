@@ -1,3 +1,4 @@
+import { SettingsDestinations } from "@/components/dashboard/settings-destinations";
 import { WhatsAppConnectionPanel } from "@/components/dashboard/whatsapp-panel";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
@@ -38,12 +39,14 @@ export default async function WhatsAppPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-xs font-black text-primary">اتصال واتساب</p>
-        <h1 className="mt-1 text-3xl font-black tracking-[-0.035em]">خلّي الموظف يستقبل العملاء على واتساب</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
-          اربط الرقم في كام خطوة بسيطة، وهنا هتشوف حالة الاتصال واستقبال الرسائل بشكل واضح.
-        </p>
+      <div className="space-y-3">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">واتساب</h1>
+          <p className="mt-1 text-sm leading-7 text-muted-foreground">
+            اربط الرقم وتابع حالة الاتصال واستقبال الرسائل.
+          </p>
+        </div>
+        <SettingsDestinations currentHref="/dashboard/whatsapp" />
       </div>
       <WhatsAppConnectionPanel initial={initial} />
     </div>

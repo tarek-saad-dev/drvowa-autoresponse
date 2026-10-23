@@ -1,3 +1,4 @@
+import { EmployeeDestinations } from "@/components/dashboard/employee-destinations";
 import { KnowledgePageClient } from "@/components/dashboard/knowledge-page-client";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
@@ -23,12 +24,14 @@ export default async function KnowledgePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-xs font-black text-primary">تدريب الموظف</p>
-        <h1 className="mt-1 text-3xl font-black tracking-[-0.035em]">خلّي موظفك يعرف البيزنس زيك</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
-          علّمه الأسعار والخدمات والمواعيد والسياسات بالكلام الطبيعي، وراجع كل اللي عارفه من نفس المكان.
-        </p>
+      <div className="space-y-3">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">علّم الموظف</h1>
+          <p className="mt-1 text-sm leading-7 text-muted-foreground">
+            علّمه الأسعار والخدمات والمواعيد والسياسات بالكلام الطبيعي.
+          </p>
+        </div>
+        <EmployeeDestinations currentHref="/dashboard/knowledge" />
       </div>
       <KnowledgePageClient
         items={items}

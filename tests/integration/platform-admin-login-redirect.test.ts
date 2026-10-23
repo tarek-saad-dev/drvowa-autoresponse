@@ -143,7 +143,7 @@ describe("platform admin post-login redirect (integration)", () => {
         isPlatformAdmin: isAdmin,
         hasBusiness: false,
       }),
-    ).toBe("/onboarding");
+    ).toBe("/choose-plan");
     await logout();
   });
 });

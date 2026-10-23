@@ -12,6 +12,7 @@ import { resolve } from "node:path";
 
 import { getPool } from "../src/lib/db";
 import { deliverNextEscalationNotification } from "../src/modules/escalations/notifier";
+import { deliverNextCustomerHoldMessage } from "../src/modules/escalations/customer-hold";
 import { createAiWorkerRunner } from "../src/modules/ai/worker-runner";
 import { resumeDueHumanConversations } from "../src/modules/ai/bulk-resume-service";
 import { runReliabilityAudit } from "../src/modules/reliability/service";
@@ -22,24 +23,27 @@ import {
 } from "../src/modules/ai/lease";
 
 function loadDotEnvIfPresent(): void {
-  const envPath = resolve(process.cwd(), ".env");
-  if (!existsSync(envPath)) return;
-  const text = readFileSync(envPath, "utf8");
-  for (const line of text.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq <= 0) continue;
-    const key = trimmed.slice(0, eq).trim();
-    let value = trimmed.slice(eq + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"'))
-      || (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    if (process.env[key] === undefined) {
-      process.env[key] = value;
+  // Prefer .env.local (dev secrets) then .env — same order as Next.js.
+  for (const name of [".env.local", ".env"]) {
+    const envPath = resolve(process.cwd(), name);
+    if (!existsSync(envPath)) continue;
+    const text = readFileSync(envPath, "utf8");
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq <= 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      let value = trimmed.slice(eq + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"'))
+        || (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      if (process.env[key] === undefined) {
+        process.env[key] = value;
+      }
     }
   }
 }
@@ -91,6 +95,26 @@ async function main(): Promise<void> {
   };
   const notificationTimer = setInterval(() => void notificationTick(), 5_000);
   void notificationTick();
+
+  // Programmed customer hold / delay apologies while waiting for a human agent.
+  let stoppingCustomerHold = false;
+  let customerHoldBusy = false;
+  const customerHoldTick = async () => {
+    if (stoppingCustomerHold || customerHoldBusy) return;
+    customerHoldBusy = true;
+    try {
+      const outcome = await deliverNextCustomerHoldMessage();
+      if (outcome === "SENT") {
+        console.info("[customer-hold] sent");
+      }
+    } catch (error) {
+      console.error("[customer-hold] tick_failed", {
+        code: error instanceof Error ? error.name : "UNKNOWN",
+      });
+    } finally { customerHoldBusy = false; }
+  };
+  const customerHoldTimer = setInterval(() => void customerHoldTick(), 5_000);
+  void customerHoldTick();
   
   // 30 minutes since the last human reply, never from midnight or initial handoff.
   // Each sweep is idempotent and refuses open escalations / safety pauses.
@@ -128,6 +152,8 @@ async function main(): Promise<void> {
   const shutdown = () => {
     stoppingNotifications = true;
     clearInterval(notificationTimer);
+    stoppingCustomerHold = true;
+    clearInterval(customerHoldTimer);
     stoppingDailyResume = true;
     clearInterval(dailyResumeTimer);
     stoppingAudit = true;
@@ -140,6 +166,8 @@ async function main(): Promise<void> {
   const result = await runner.loop();
   stoppingNotifications = true;
   clearInterval(notificationTimer);
+  stoppingCustomerHold = true;
+  clearInterval(customerHoldTimer);
   stoppingDailyResume = true;
   clearInterval(dailyResumeTimer);
   stoppingAudit = true;

@@ -58,6 +58,10 @@ const TECHNICAL_PATTERNS: RegExp[] = [
   /stack/i,
   /ECONNREFUSED/i,
   /mssql/i,
+  /invalid column name/i,
+  /invalid object name/i,
+  /cannot insert the value null/i,
+  /violation of .* constraint/i,
 ];
 
 function looksTechnical(text: string): boolean {

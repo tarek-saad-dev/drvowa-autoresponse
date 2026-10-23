@@ -8,6 +8,7 @@ import {
 const schema = z.object({
   phone: z.string().trim().min(8).max(28),
   enabled: z.boolean(),
+  notifyBotSelf: z.boolean().optional(),
 });
 
 export async function GET() {

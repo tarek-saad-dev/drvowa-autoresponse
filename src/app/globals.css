@@ -142,7 +142,10 @@ html[data-theme="dark"],
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-muted: var(--sidebar-muted);
   --color-sidebar-active: var(--sidebar-active);
+  --color-whatsapp-bubble: var(--whatsapp-bubble);
+  --color-whatsapp-bubble-text: var(--whatsapp-bubble-text);
   --font-sans: var(--font-ibm-plex-arabic);
+  --font-mono: var(--font-space-grotesk), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

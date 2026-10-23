@@ -1,5 +1,6 @@
 import { AiAutoReplyPanel } from "@/components/dashboard/ai-auto-reply-panel";
 import { AgentsManager } from "@/components/dashboard/agents-manager";
+import { EmployeeDestinations } from "@/components/dashboard/employee-destinations";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import { getWhatsAppAiSetting } from "@/modules/ai";
@@ -32,12 +33,14 @@ export default async function AgentPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-xs font-black text-primary">شخصية الموظف</p>
-        <h1 className="mt-1 text-3xl font-black tracking-[-0.035em]">ظبّط موظف الاستقبال بطريقتك</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
-          اختار شخصيته وطريقة كلامه، وبعدها شغّل أو وقف الرد التلقائي وقت ما تحب.
-        </p>
+      <div className="space-y-3">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">الموظف الذكي</h1>
+          <p className="mt-1 text-sm leading-7 text-muted-foreground">
+            ظبّط شخصيته، شغّل الرد التلقائي، وعلّمه معلومات النشاط.
+          </p>
+        </div>
+        <EmployeeDestinations currentHref="/dashboard/agent" />
       </div>
       <AiAutoReplyPanel
         initialSetting={

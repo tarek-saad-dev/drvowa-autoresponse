@@ -8,10 +8,18 @@ import { Label } from "@/components/ui/label";
 export function OwnerEscalationSettings({
   initial,
 }: {
-  initial: { phone: string | null; enabled: boolean; verified: boolean };
+  initial: {
+    phone: string | null;
+    enabled: boolean;
+    verified: boolean;
+    notifyBotSelf?: boolean;
+  };
 }) {
   const [phone, setPhone] = useState(initial.phone ?? "");
-  const [setting, setSetting] = useState(initial);
+  const [setting, setSetting] = useState({
+    ...initial,
+    notifyBotSelf: initial.notifyBotSelf !== false,
+  });
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -41,7 +49,8 @@ export function OwnerEscalationSettings({
     <section className="rounded-2xl border border-border bg-card p-5 shadow-sm" aria-label="تنبيهات التصعيد البشري">
       <h2 className="text-lg font-black">تنبيهات التدخل البشري على واتساب</h2>
       <p className="mt-1 text-xs leading-6 text-muted-foreground">
-        عند طلب تدخل بشري، هنبعت لصاحب البيزنس سبب الطلب ورابط العميل على واتساب ورابط المحادثة داخل DRVO.
+        عند طلب تدخل بشري، هنبعت لصاحب البيزنس سبب الطلب ورابط المحادثة داخل DRVO.
+        وعلى محادثة رقم البوت نفسه رسالة قصيرة مع رابط يفتح شات العميل مباشرة.
         إرسال التنبيهات لا يبدأ قبل تأكيد رقم الاستقبال.
       </p>
       <div className="mt-4 space-y-3">
@@ -91,13 +100,42 @@ export function OwnerEscalationSettings({
             disabled={busy || !setting.verified || !savedNumber}
             onChange={async e => {
               const wanted = e.currentTarget.checked;
-              const data = await call(base, "PATCH", { phone, enabled: wanted });
+              const data = await call(base, "PATCH", {
+                phone,
+                enabled: wanted,
+                notifyBotSelf: setting.notifyBotSelf,
+              });
               if (data?.setting) {
-                setSetting(data.setting);
+                setSetting({
+                  ...data.setting,
+                  notifyBotSelf: data.setting.notifyBotSelf !== false,
+                });
                 setNotice(wanted ? "تم تفعيل التنبيهات." : "تم إيقاف التنبيهات.");
               }
             }} />
           تفعيل إرسال إشعارات التدخل البشري
+        </label>
+        <label className="flex items-center gap-3 rounded-xl bg-surface px-3 py-3 text-sm font-bold">
+          <input type="checkbox" className="h-4 w-4" checked={setting.notifyBotSelf !== false}
+            disabled={busy || !setting.verified || !savedNumber || !setting.enabled}
+            onChange={async e => {
+              const wanted = e.currentTarget.checked;
+              const data = await call(base, "PATCH", {
+                phone,
+                enabled: setting.enabled,
+                notifyBotSelf: wanted,
+              });
+              if (data?.setting) {
+                setSetting({
+                  ...data.setting,
+                  notifyBotSelf: data.setting.notifyBotSelf !== false,
+                });
+                setNotice(wanted
+                  ? "هيتبعت كمان تنبيه على محادثة رقم البوت نفسه."
+                  : "اتوقف تنبيه محادثة رقم البوت.");
+              }
+            }} />
+          نبّه كمان على محادثة رقم البوت (رسالة لنفسه)
         </label>
         {error ? <p role="alert" className="text-xs font-bold text-red-600">{error}</p> : null}
         {notice ? <p role="status" className="text-xs font-bold text-emerald-700">{notice}</p> : null}

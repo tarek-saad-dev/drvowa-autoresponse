@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  isMissingObjectError,
   isUniqueViolationError,
   query,
   sql,
@@ -1082,6 +1083,54 @@ export async function countConversationsForBusiness(params: {
     total: Number(result.recordset[0]?.TotalCount ?? 0),
     unread: Number(result.recordset[0]?.UnreadCount ?? 0),
   };
+}
+
+/**
+ * Calendar-day (UTC) activity for the dashboard summary.
+ * `interventionsToday` is null when escalation storage is unavailable.
+ */
+export async function getDashboardDailyActivity(params: {
+  businessId: string;
+}): Promise<{
+  conversationsToday: number;
+  interventionsToday: number | null;
+} | null> {
+  const args = [
+    { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+  ];
+  const conversations = await query<{ ConversationsToday: number }>(
+    `SELECT COUNT(1) AS ConversationsToday
+       FROM dbo.TblConversation c
+      WHERE c.BusinessID = @businessId
+        AND c.IsArchived = 0
+        AND ISNULL(c.LastMessageAtUtc, c.CreatedAtUtc) >= CAST(SYSUTCDATETIME() AS date)`,
+    args,
+  );
+  const conversationsToday = Number(
+    conversations.recordset[0]?.ConversationsToday ?? 0,
+  );
+
+  try {
+    const interventions = await query<{ InterventionsToday: number }>(
+      `SELECT COUNT(1) AS InterventionsToday
+         FROM dbo.TblHumanEscalation e
+        WHERE e.BusinessID = @businessId
+          AND e.CreatedAtUtc >= CAST(SYSUTCDATETIME() AS date)`,
+      args,
+    );
+    return {
+      conversationsToday,
+      interventionsToday: Number(
+        interventions.recordset[0]?.InterventionsToday ?? 0,
+      ),
+    };
+  } catch (error) {
+    if (!isMissingObjectError(error)) throw error;
+    return {
+      conversationsToday,
+      interventionsToday: null,
+    };
+  }
 }
 
 export async function listConversationsForBusiness(params: {
