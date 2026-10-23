@@ -1,20 +1,20 @@
-import { AiAutoReplyPanel } from "@/components/dashboard/ai-auto-reply-panel";
-import { AgentsManager } from "@/components/dashboard/agents-manager";
-import { EmployeeDestinations } from "@/components/dashboard/employee-destinations";
+import { redirect } from "next/navigation";
+
+import { EmployeeStudio } from "@/components/dashboard/employee-studio";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import { getWhatsAppAiSetting } from "@/modules/ai";
 import { listAgents } from "@/modules/agents/service";
 import { getWhatsAppConnectionView } from "@/modules/channels/whatsapp-service";
 import { listItems } from "@/modules/knowledge/service";
-import { redirect } from "next/navigation";
 
-export default async function AgentPage() {
+export default async function AgentPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const user = await requireAuthenticatedUser();
-  const businessId = await resolveActiveBusiness(
-    user.userId,
-    user.activeBusinessId,
-  );
+  const businessId = await resolveActiveBusiness(user.userId, user.activeBusinessId);
   if (!businessId) redirect("/onboarding");
 
   const [agents, setting, waView, knowledge] = await Promise.all([
@@ -29,47 +29,20 @@ export default async function AgentPage() {
     listItems({ businessId, includeInactive: false }),
   ]);
 
-  const activeAgents = agents.filter((a) => a.isActive);
+  const { tab } = await searchParams;
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-3">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">الموظف الذكي</h1>
-          <p className="mt-1 text-sm leading-7 text-muted-foreground">
-            ظبّط شخصيته، شغّل الرد التلقائي، وعلّمه معلومات النشاط.
-          </p>
-        </div>
-        <EmployeeDestinations currentHref="/dashboard/agent" />
-      </div>
-      <AiAutoReplyPanel
-        initialSetting={
-          setting
-            ? {
-                channelAiSettingId: setting.channelAiSettingId,
-                channelConnectionId: setting.channelConnectionId,
-                agentId: setting.agentId,
-                autoReplyEnabled: setting.autoReplyEnabled,
-                enabledAtUtc: setting.enabledAtUtc,
-                debounceMs: setting.debounceMs,
-                humanTakeoverResumePolicy:
-                  setting.humanTakeoverResumePolicy,
-              }
-            : null
-        }
-        agents={activeAgents.map((a) => ({
-          agentId: a.agentId,
-          name: a.name,
-          roleTitle: a.roleTitle,
-          isActive: a.isActive,
-        }))}
-        whatsapp={{
-          uiState: waView?.uiState ?? "NOT_CONNECTED",
-          maskedPhone: waView?.connection?.maskedPhone ?? null,
-        }}
-        knowledgeActiveCount={knowledge.length}
-      />
-      <AgentsManager agents={agents} />
-    </div>
+    <EmployeeStudio
+      businessId={businessId}
+      initialAgents={agents}
+      initialSetting={
+        setting
+          ? { agentId: setting.agentId, autoReplyEnabled: setting.autoReplyEnabled }
+          : null
+      }
+      whatsappState={waView?.uiState ?? "UNKNOWN"}
+      knowledgeCount={knowledge.length}
+      initialTab={tab === "knowledge" ? "knowledge" : "personality"}
+    />
   );
 }
