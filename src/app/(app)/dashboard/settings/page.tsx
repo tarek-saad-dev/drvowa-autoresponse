@@ -47,7 +47,7 @@ export default async function SettingsPage() {
           إعدادات النشاط
         </h1>
         <p className="text-sm leading-6 text-muted-foreground">
-          البيانات الأساسية لنشاطك، من غير إعدادات مالهاش علاقة بيه.
+          عدّل بيانات نشاطك والفروع والتنبيهات المرتبطة بيه.
         </p>
       </header>
 
@@ -82,9 +82,7 @@ export default async function SettingsPage() {
               </p>
             </div>
             <span className="flex shrink-0 items-center gap-2 text-xs font-bold text-muted-foreground">
-              {escalationSetting.verified && escalationSetting.enabled
-                ? "مفعّلة"
-                : "غير مفعّلة"}
+              إدارة
               <span aria-hidden="true" className="inline-block transition-transform group-open:rotate-90">
                 ‹
               </span>
