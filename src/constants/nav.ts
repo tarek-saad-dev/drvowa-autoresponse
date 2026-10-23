@@ -46,22 +46,6 @@ export const DASHBOARD_NAV_GROUPS = [
     icon: "✦",
     href: "/dashboard/agent",
     mobilePrimary: true,
-    children: [
-      {
-        href: "/dashboard/agent",
-        label: "إعداد الموظف",
-        mobileLabel: "الإعداد",
-        key: "Receptionist",
-        icon: "✦",
-      },
-      {
-        href: "/dashboard/knowledge",
-        label: "علّم الموظف",
-        mobileLabel: "التعليم",
-        key: "Knowledge",
-        icon: "＋",
-      },
-    ],
   },
   {
     id: "settings",
