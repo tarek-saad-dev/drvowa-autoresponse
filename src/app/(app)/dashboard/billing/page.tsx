@@ -1,37 +1,87 @@
 import Link from "next/link";
-import { getScheduledBillingChange } from "@/modules/billing/documents";
-import { Alert } from "@/components/ui/alert";
-import { Progress } from "@/components/ui/progress";
+import { redirect } from "next/navigation";
+
 import { BillingPlansClient } from "@/components/dashboard/billing-plans-client";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
-import {
-  subscriptionStatusLabel,
-} from "@/lib/ui/labels";
+import { subscriptionStatusLabel } from "@/lib/ui/labels";
+import { getScheduledBillingChange } from "@/modules/billing/documents";
 import {
   getInstaPayDisplayConfig,
   isManualInstaPayEnabled,
 } from "@/modules/billing/instapay-config";
 import { getBusinessPaymentStatus } from "@/modules/billing/manual-payment-service";
-import {
-  getBillingOverview,
-  listActivePlans,
-} from "@/modules/billing/service";
-import { redirect } from "next/navigation";
+import { getBillingOverview, listActivePlans } from "@/modules/billing/service";
+import { listUsageEvents } from "@/modules/usage/service";
 
 function formatDate(value: Date | null | undefined): string {
   if (!value) return "—";
-  return new Intl.DateTimeFormat("ar-SA", {
-    dateStyle: "medium",
+  return new Intl.DateTimeFormat("ar-EG", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
     timeZone: "UTC",
   }).format(value);
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat("en-US").format(value);
 }
 
 function paymentStatusLabel(status: string): string {
   if (status === "AWAITING_TRANSFER") return "بانتظار التحويل";
   if (status === "PENDING") return "قيد المراجعة";
-  if (status === "REJECTED") return "تعذر اعتماد الدفع";
+  if (status === "REJECTED") return "لم يُعتمد الدفع";
   return "—";
+}
+
+function UsageMeter({
+  title,
+  used,
+  limit,
+}: {
+  title: string;
+  used: number;
+  limit: number | null | undefined;
+}) {
+  const bounded = limit != null && limit > 0;
+  const percent = bounded ? Math.min(100, Math.max(0, (used / limit) * 100)) : 0;
+  const remaining = bounded ? Math.max(0, limit - used) : null;
+  return (
+    <article className="space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
+      <div className="space-y-1">
+        <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
+        <p className="text-2xl font-black tabular-nums sm:text-[26px]" dir="ltr">
+          {formatNumber(used)}
+          <span className="text-sm font-medium text-muted-foreground">
+            {bounded ? \` / \${formatNumber(limit)}\` : " · بلا حد"}
+          </span>
+        </p>
+      </div>
+      <div
+        role={bounded ? "progressbar" : undefined}
+        aria-label={bounded ? title : undefined}
+        aria-valuemin={bounded ? 0 : undefined}
+        aria-valuemax={bounded ? limit : undefined}
+        aria-valuenow={bounded ? Math.min(used, limit) : undefined}
+        className="h-1.5 overflow-hidden rounded-full bg-secondary"
+      >
+        <div
+          className={\`h-full rounded-full \${percent >= 85 ? "bg-warning" : "bg-primary"}\`}
+          style={{ width: bounded ? \`\${percent}%\` : "0%" }}
+        />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {remaining === null ? "استخدام غير محدود حسب الباقة" : \`المتبقي \${formatNumber(remaining)}\`}
+      </p>
+    </article>
+  );
+}
+
+function eventTypeLabel(type: string) {
+  if (type === "AI_REPLY_GENERATED") return "رد الموظف الذكي";
+  if (type === "WHATSAPP_OUTBOUND_MESSAGE") return "رسالة واتساب";
+  return "استخدام مسجّل";
 }
 
 export default async function BillingPage() {
@@ -43,184 +93,251 @@ export default async function BillingPage() {
   if (!businessId) redirect("/onboarding");
 
   const manualEnabled = isManualInstaPayEnabled();
-  const [overview, availablePlans, paymentStatus] = await Promise.all([
+  const [overview, availablePlans, paymentStatus, scheduled, events] = await Promise.all([
     getBillingOverview({ businessId }),
     listActivePlans(),
     getBusinessPaymentStatus({ businessId }),
+    getScheduledBillingChange(businessId),
+    listUsageEvents({ businessId, limit: 12 }),
   ]);
 
   const plan = overview.plan;
   const sub = overview.subscription;
-  const instructions = manualEnabled ? getInstaPayDisplayConfig() : null;
-  const latest = paymentStatus.open ?? (paymentStatus.latest?.status === "REJECTED" ? paymentStatus.latest : null);
-  const scheduled = await getScheduledBillingChange(businessId);
-  const requiresReview =
-    !sub || !plan ||
-    (sub.status === "ACTIVE" && !overview.canAct) ||
-    (sub.periodStartUtc && sub.periodEndUtc && sub.periodEndUtc <= sub.periodStartUtc) ||
-    (plan.maxWhatsAppConnections != null && overview.whatsappConnectionsUsed > plan.maxWhatsAppConnections) ||
-    (plan.maxAgents != null && overview.agentsUsed > plan.maxAgents) ||
-    (plan.maxActiveKnowledgeItems != null && overview.activeKnowledgeUsed > plan.maxActiveKnowledgeItems) ||
-    (plan.monthlyAiReplies != null && overview.aiUsed > plan.monthlyAiReplies) ||
-    (plan.monthlyWhatsAppOutbound != null && overview.whatsappOutboundUsed > plan.monthlyWhatsAppOutbound);
-  const scheduledNeedsReview = Boolean(scheduled && scheduled.Kind !== "CANCEL" && !scheduled.PlanDisplayName);
+  const latest = paymentStatus.open ??
+    (paymentStatus.latest?.status === "REJECTED" ? paymentStatus.latest : null);
+  const awaitingTransfer = latest?.status === "AWAITING_TRANSFER";
+  const pendingReview = latest?.status === "PENDING";
+  const rejected = latest?.status === "REJECTED";
+  const paid = Boolean(plan && plan.code !== "FREE");
+  const grace = Boolean(paid && sub?.periodEndUtc && sub.periodEndUtc <= new Date());
+  const scheduledIncomplete = Boolean(scheduled && scheduled.Kind !== "CANCEL" && !scheduled.PlanDisplayName);
+  const inconsistent = !sub || !plan ||
+    (sub.status === "ACTIVE" && !overview.canAct && !grace) ||
+    (sub.periodStartUtc && sub.periodEndUtc && sub.periodEndUtc <= sub.periodStartUtc);
+  const needsAttention = Boolean(inconsistent || scheduledIncomplete);
+  const nearExhaustion = Boolean(plan && [
+    [overview.aiUsed, plan.monthlyAiReplies],
+    [overview.whatsappOutboundUsed, plan.monthlyWhatsAppOutbound],
+  ].some(([value, max]) => max != null && max > 0 && value >= max));
+  const statusText = needsAttention
+    ? "يحتاج مراجعة"
+    : grace
+      ? "فترة سماح"
+      : overview.canAct
+        ? subscriptionStatusLabel(sub?.status)
+        : sub?.status === "PAST_DUE"
+          ? "متأخر الدفع"
+          : sub?.status === "EXPIRED" || sub?.status === "CANCELED"
+            ? subscriptionStatusLabel(sub?.status)
+            : "غير متاح";
+  const statusTone = needsAttention || grace || !overview.canAct
+    ? "bg-warning-soft text-warning"
+    : "bg-success-soft text-success";
+  const catalogPrice = plan?.monthlyPriceAmount;
+  const currency = plan?.currencyCode ?? "EGP";
+  const priceText = plan?.code === "FREE"
+    ? "مجانية"
+    : catalogPrice == null
+      ? "غير محدد"
+      : \`\${formatNumber(catalogPrice)} \${currency}\`;
+
+  const otherLimits = [
+    { label: "أرقام واتساب", used: overview.whatsappConnectionsUsed, max: plan?.maxWhatsAppConnections },
+    { label: "موظفو الاستقبال", used: overview.agentsUsed, max: plan?.maxAgents },
+    { label: "المعلومات النشطة", used: overview.activeKnowledgeUsed, max: plan?.maxActiveKnowledgeItems },
+  ];
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6">
-      <section className="rounded-[28px] border border-border bg-card p-5 shadow-sm sm:p-7">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-black text-primary">الخطة والفوترة</p>
-            <h1 className="mt-2 text-3xl font-black tracking-[-0.035em]">
-              خطتك واضحة، والترقية وقت ما تحتاج
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">
-              راجع حالة اشتراكك واستخدامك، واختار الخطة المناسبة من غير تفاصيل محاسبية معقدة.
-            </p>
-          </div>
-          <div className="rounded-2xl bg-surface px-4 py-3">
-            <p className="text-[11px] font-bold text-muted-foreground">نهاية الفترة الحالية</p>
-            <p className="mt-1 text-sm font-black">
-              {requiresReview ? "يحتاج مراجعة" : sub?.periodEndUtc ? formatDate(sub.periodEndUtc) : "لا يوجد موعد تجديد محدد"}
-            </p>
-          </div>
-        </div>
-      </section>
+    <main className="mx-auto w-full max-w-5xl space-y-6 pb-12">
+      <header className="space-y-1">
+        <h1 className="text-2xl font-black tracking-tight sm:text-3xl">
+          الاشتراك والاستخدام
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          باقتك، استهلاكك، ومدفوعاتك في مكان واحد.
+        </p>
+      </header>
 
-      <Link className="inline-block rounded-xl border border-border bg-card px-4 py-3 font-bold text-primary" href="/dashboard/billing/documents">الفواتير والإيصالات</Link>
-      {requiresReview ? <Alert variant="info" title="بيانات الاشتراك تحتاج مراجعة">بعض بيانات الاشتراك أو الاستخدام غير متسقة حاليًا. راجع الفواتير والإيصالات أو تواصل مع الدعم قبل اتخاذ قرار دفع جديد.</Alert> : null}
-      {scheduledNeedsReview ? <Alert variant="info" title="تغيير الباقة يحتاج مراجعة">هناك تغيير مسجل للاشتراك لكن تفاصيل الباقة المستهدفة غير مكتملة. برجاء مراجعته قبل إجراء دفع جديد.</Alert> : null}
-      {scheduled && !scheduledNeedsReview ? <Alert variant="info" title="تغيير مجدول">{scheduled.Kind === "CANCEL" ? "الإلغاء والتحويل إلى المجاني" : `الانتقال إلى ${scheduled.PlanDisplayName}`} يوم {formatDate(scheduled.EffectiveAtUtc)}. باقتك الحالية مستمرة حتى ذلك الموعد.</Alert> : null}
-      {!requiresReview && sub?.periodEndUtc && sub.periodEndUtc <= new Date() && plan?.code !== "FREE" ? <Alert variant="info" title="فترة السماح">يمكنك التجديد خلال 5 أيام من انتهاء الاشتراك. بعدها تتحول إلى الباقة المجانية.</Alert> : null}
-      {latest && (latest.status === "AWAITING_TRANSFER" || latest.status === "PENDING" || latest.status === "REJECTED") ? (
-        <Alert
-          variant={latest.status === "REJECTED" ? "error" : "info"}
-          title={paymentStatusLabel(latest.status)}
-        >
-          <p className="text-sm">
-            مرجع الدفع:{" "}
-            <span className="font-mono font-semibold">
-              {latest.paymentReference}
-            </span>
-          </p>
-          {latest.status === "REJECTED" && latest.reviewNote ? (
-            <p className="mt-1 text-sm">{latest.reviewNote}</p>
-          ) : null}
-          {latest.status === "AWAITING_TRANSFER" ? (
-            <p className="mt-1 text-sm">
-              أكمل التحويل عبر InstaPay ثم أكّد العملية من شاشة الدفع أدناه.
-            </p>
-          ) : null}
-          {latest.status === "PENDING" ? (
-            <p className="mt-1 text-sm">
-              نراجع التحويل يدوياً. لا ترسل طلباً جديداً حتى تظهر النتيجة.
-            </p>
-          ) : null}
-        </Alert>
+      {needsAttention ? (
+        <div role="alert" className="rounded-xl border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-warning">
+          معلومات الاشتراك أو التغيير المجدول تحتاج مراجعة. لا تعتمد على حالة التفعيل أو أي مبلغ قبل التأكد من بيانات الحساب.
+        </div>
+      ) : grace ? (
+        <div role="status" className="rounded-xl border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-warning">
+          انتهت فترة الاشتراك المدفوعة يوم {formatDate(sub?.periodEndUtc)}. أنت في فترة السماح قبل التحويل للباقة المجانية؛ راجع التجديد.
+        </div>
+      ) : nearExhaustion ? (
+        <div role="status" className="rounded-xl border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-warning">
+          وصلت للحد المتاح من بعض استخدامات باقتك. راجع الأرقام أدناه أو غيّر الباقة.
+        </div>
       ) : null}
 
       <section className="rounded-[24px] border border-border bg-card p-5 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-xs font-black text-primary">اشتراكك الحالي</p>
-            <h2 className="mt-1 text-2xl font-black">{requiresReview ? "يحتاج مراجعة" : plan?.displayName ?? "—"}</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {requiresReview
-                ? "بيانات الاشتراك تحتاج مراجعة قبل الاعتماد عليها."
-                : overview.canAct
-                  ? "التشغيل متاح دلوقتي ضمن حدود الخطة."
-                  : "التشغيل متوقف مؤقتًا — راجع حالة الاشتراك."}
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1.5">
+            <p className="text-xs text-muted-foreground">باقتك الحالية</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-2xl font-black">{plan?.displayName ?? "غير محددة"}</h2>
+              <span className={\`rounded-full px-2.5 py-1 text-xs font-bold \${statusTone}\`}>
+                {statusText}
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {sub?.periodEndUtc
+                ? \`نهاية الفترة الحالية: \${formatDate(sub.periodEndUtc)}\`
+                : plan?.code === "FREE"
+                  ? "الباقة المجانية بدون موعد انتهاء محدد"
+                  : "لا يوجد موعد تجديد مؤكد"}
             </p>
+            {!overview.canAct && !needsAttention ? (
+              <p className="text-xs text-warning">التشغيل غير متاح في حالة الاشتراك الحالية.</p>
+            ) : null}
           </div>
-          <div className={`rounded-full px-3 py-1.5 text-xs font-black ${
-            overview.canAct
-              ? "bg-success-soft text-success"
-              : "bg-warning-soft text-warning"
-          }`}>
-            {requiresReview ? "يحتاج مراجعة" : subscriptionStatusLabel(sub?.status)}
+          <div className="space-y-1 sm:text-end">
+            <p className="text-xs text-muted-foreground">السعر الأساسي للباقة</p>
+            <p className="text-xl font-black tabular-nums">{priceText}</p>
+            {catalogPrice != null && catalogPrice > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                السعر الشهري المعلن، وقد يختلف المدفوع حسب الخصومات ودورة الفوترة
+              </p>
+            ) : null}
           </div>
         </div>
-
-        <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
-
-          <div>
-            <dt className="text-muted-foreground">تاريخ الانتهاء</dt>
-            <dd className="font-medium">{formatDate(sub?.periodEndUtc)}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">حالة التشغيل</dt>
-            <dd className="font-medium">
-              {requiresReview ? "يحتاج مراجعة" : overview.canAct ? "جاهز للاستخدام" : "محتاج مراجعة"}
-            </dd>
-          </div>
-        </dl>
+        {scheduled && !scheduledIncomplete ? (
+          <p className="mt-5 rounded-xl bg-surface px-4 py-3 text-xs leading-6 text-muted-foreground">
+            التغيير المجدول: {scheduled.Kind === "CANCEL"
+              ? "الانتقال إلى المجاني"
+              : \`الانتقال إلى \${scheduled.PlanDisplayName}\`} يوم {formatDate(scheduled.EffectiveAtUtc)}. لا يعني ذلك أنه طُبّق الآن.
+          </p>
+        ) : null}
+        <div className="mt-5 border-t border-border pt-4">
+          <BillingPlansClient
+            enabled={manualEnabled}
+            currentPlanCode={plan?.code ?? null}
+            instructions={manualEnabled ? getInstaPayDisplayConfig() : null}
+            initialOpenIntent={awaitingTransfer && paymentStatus.open
+              ? {
+                  paymentRequestId: paymentStatus.open.paymentRequestId,
+                  paymentReference: paymentStatus.open.paymentReference,
+                  amount: paymentStatus.open.amount,
+                  currencyCode: paymentStatus.open.currencyCode,
+                  planDisplayName: paymentStatus.open.requestedPlanDisplayName,
+                  planCode: paymentStatus.open.requestedPlanCode,
+                }
+              : null}
+            initialPendingReview={pendingReview}
+            plans={availablePlans.map((item) => ({
+              code: item.code,
+              displayName: item.displayName,
+              monthlyPriceAmount: item.monthlyPriceAmount ?? null,
+              currencyCode: item.currencyCode ?? "EGP",
+              maxWhatsAppConnections: item.maxWhatsAppConnections ?? null,
+              maxAgents: item.maxAgents ?? null,
+              maxActiveKnowledgeItems: item.maxActiveKnowledgeItems ?? null,
+              monthlyAiReplies: item.monthlyAiReplies ?? null,
+              monthlyWhatsAppOutbound: item.monthlyWhatsAppOutbound ?? null,
+            }))}
+          />
+        </div>
       </section>
 
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-lg font-black">استخدامك الحالي</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            نظرة سريعة قبل ما تقرر إذا كنت محتاج ترقية.
+      <section className="space-y-3" aria-labelledby="usage-heading">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="usage-heading" className="text-lg font-black">استخدامك هذا الشهر</h2>
+          <p className="text-xs text-muted-foreground">
+            تتجدد حدود الرسائل والردود في {formatDate(overview.usagePeriod.usagePeriodEndUtc)}
           </p>
         </div>
-        <div className="grid gap-4 rounded-[24px] border border-border bg-card p-5 shadow-sm sm:grid-cols-2 sm:p-6">
-          <Progress
-            label="ردود الذكاء الاصطناعي"
-            value={overview.aiUsed}
-            max={plan?.monthlyAiReplies}
-          />
-          <Progress
-            label="رسائل واتساب الصادرة"
-            value={overview.whatsappOutboundUsed}
-            max={plan?.monthlyWhatsAppOutbound}
-          />
-          <Progress
-            label="اتصالات واتساب المفعّلة"
-            value={overview.whatsappConnectionsUsed}
-            max={plan?.maxWhatsAppConnections}
-          />
-          <Progress
-            label="موظفو الاستقبال"
-            value={overview.agentsUsed}
-            max={plan?.maxAgents}
-          />
-          <Progress
-            label="معرفة نشطة"
-            value={overview.activeKnowledgeUsed}
-            max={plan?.maxActiveKnowledgeItems}
-          />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <UsageMeter title="ردود الموظف الذكي" used={overview.aiUsed} limit={plan?.monthlyAiReplies} />
+          <UsageMeter title="رسائل واتساب الصادرة" used={overview.whatsappOutboundUsed} limit={plan?.monthlyWhatsAppOutbound} />
         </div>
-        <p className="text-xs leading-6 text-muted-foreground">اتصالات واتساب المفعّلة فقط هي الظاهرة هنا. أي اتصال قيد الإعداد قد يحجز مكانًا مؤقتًا من سعة الباقة حتى يتم إكماله أو إلغاؤه.</p>
+        <details className="group rounded-2xl border border-border bg-card">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 [&::-webkit-details-marker]:hidden">
+            <span className="text-sm font-bold">باقي حدود الباقة</span>
+            <span aria-hidden="true" className="text-muted-foreground transition-transform group-open:rotate-90">‹</span>
+          </summary>
+          <div className="grid gap-4 border-t border-border px-4 py-4 sm:grid-cols-3">
+            {otherLimits.map((metric) => (
+              <div className="space-y-1" key={metric.label}>
+                <p className="text-xs text-muted-foreground">{metric.label}</p>
+                <p className="text-base font-bold tabular-nums" dir="ltr">
+                  {formatNumber(metric.used)} / {metric.max != null ? formatNumber(metric.max) : "بلا حد"}
+                </p>
+              </div>
+            ))}
+            <p className="text-xs leading-5 text-muted-foreground sm:col-span-3">
+              عداد واتساب يعرض الاتصالات النشطة، وقد تحجز الاتصالات قيد الربط مكانًا من الحد المتاح.
+            </p>
+          </div>
+        </details>
       </section>
 
-      <BillingPlansClient
-        enabled={manualEnabled}
-        currentPlanCode={plan?.code ?? null}
-        instructions={instructions}
-        initialOpenIntent={
-          paymentStatus.open?.status === "AWAITING_TRANSFER"
-            ? {
-                paymentRequestId: paymentStatus.open.paymentRequestId,
-                paymentReference: paymentStatus.open.paymentReference,
-                amount: paymentStatus.open.amount,
-                currencyCode: paymentStatus.open.currencyCode,
-                planDisplayName: paymentStatus.open.requestedPlanDisplayName,
-                planCode: paymentStatus.open.requestedPlanCode,
-              }
-            : null
-        }
-        plans={availablePlans.map((p) => ({
-          code: p.code,
-          displayName: p.displayName,
-          monthlyPriceAmount: p.monthlyPriceAmount ?? null,
-          currencyCode: p.currencyCode ?? "EGP",
-          maxWhatsAppConnections: p.maxWhatsAppConnections ?? null,
-          maxAgents: p.maxAgents ?? null,
-          maxActiveKnowledgeItems: p.maxActiveKnowledgeItems ?? null,
-          monthlyAiReplies: p.monthlyAiReplies ?? null,
-          monthlyWhatsAppOutbound: p.monthlyWhatsAppOutbound ?? null,
-        }))}
-      />
-    </div>
+      <section className="space-y-3" aria-labelledby="payment-heading">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="payment-heading" className="text-lg font-black">المدفوعات والفواتير</h2>
+          <Link href="/dashboard/billing/documents" className="text-sm font-bold text-primary hover:underline">
+            الفواتير والإيصالات ←
+          </Link>
+        </div>
+        {latest && (awaitingTransfer || pendingReview || rejected) ? (
+          <div className="space-y-3 rounded-2xl border border-border bg-card p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="space-y-1">
+                <p className="font-bold">{paymentStatusLabel(latest.status)}</p>
+                <p className="text-xs text-muted-foreground">
+                  طلب {latest.requestedPlanDisplayName} · المبلغ {formatNumber(latest.amount)} {latest.currencyCode}
+                </p>
+              </div>
+              <span className={\`rounded-full px-2.5 py-1 text-xs font-bold \${rejected
+                ? "bg-destructive/10 text-destructive"
+                : "bg-warning-soft text-warning"}\`}>
+                {paymentStatusLabel(latest.status)}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              مرجع الدفع: <b dir="ltr" className="inline-block font-mono">{latest.paymentReference}</b>
+            </p>
+            {pendingReview ? (
+              <p className="text-sm text-muted-foreground">
+                استلمنا تأكيد التحويل، وبنراجعه. مش معنى كده إن الدفع اتعتمد أو الباقة اتفعّلت.
+              </p>
+            ) : rejected ? (
+              <p className="text-sm text-destructive">
+                {latest.reviewNote || "طلب الدفع لم يُعتمد. راجع البيانات قبل تقديم طلب جديد."}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                الطلب لسه بانتظار التحويل. افتح تعليمات الدفع وقت ما تكون جاهز.
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
+            مفيش طلب دفع محتاج متابعة حاليًا. تقدر تراجع مستنداتك من الفواتير والإيصالات.
+          </div>
+        )}
+      </section>
+
+      <details className="group rounded-2xl border border-border bg-card">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 [&::-webkit-details-marker]:hidden">
+          <span className="text-sm font-bold">سجل الاستخدام</span>
+          <span aria-hidden="true" className="text-muted-foreground transition-transform group-open:rotate-90">‹</span>
+        </summary>
+        <div className="divide-y divide-border border-t border-border px-4">
+          {events.length ? events.map((event) => (
+            <div key={event.usageEventId} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
+              <div>
+                <p className="font-medium">{eventTypeLabel(event.eventType)}</p>
+                <p className="text-xs text-muted-foreground">{formatDate(event.occurredAtUtc)}</p>
+              </div>
+              <span className="tabular-nums">+{formatNumber(event.quantity)}</span>
+            </div>
+          )) : (
+            <p className="py-4 text-sm text-muted-foreground">لا يوجد استخدام مسجل حتى الآن.</p>
+          )}
+        </div>
+      </details>
+    </main>
   );
 }
