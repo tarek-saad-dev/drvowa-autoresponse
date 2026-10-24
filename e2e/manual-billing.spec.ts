@@ -86,6 +86,7 @@ test.describe.serial("manual instapay billing e2e", () => {
     await apiOnboarding(page);
 
     await page.goto("/dashboard/billing");
+    await page.getByRole("button", { name: "تغيير الباقة" }).click();
     await page
       .getByTestId("plan-card-STARTER")
       .getByRole("button", { name: "اختيار الباقة" })
@@ -149,9 +150,10 @@ test.describe.serial("manual instapay billing e2e", () => {
 
     await apiLogin(page, customerEmail, password);
     await page.goto("/dashboard/billing");
-    await expect(page.getByText("تم اعتماد الدفع وتفعيل الباقة")).toBeVisible({
+    await expect(page.getByText("باقتك الحالية")).toBeVisible({
       timeout: 15_000,
     });
+    await page.getByRole("button", { name: "تغيير الباقة" }).click();
     await expect(page.getByTestId("plan-card-STARTER")).toContainText("خطتك الحالية");
     await expect(page.getByText(/3000/).first()).toBeVisible();
 
@@ -167,6 +169,7 @@ test.describe.serial("manual instapay billing e2e", () => {
     await apiSignup(page, customerEmail, password);
     await apiOnboarding(page);
     await page.goto("/dashboard/billing");
+    await page.getByRole("button", { name: "تغيير الباقة" }).click();
     await page
       .getByTestId("plan-card-PRO")
       .getByRole("button", { name: "اختيار الباقة" })
