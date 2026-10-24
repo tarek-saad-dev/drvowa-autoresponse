@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BrandLogo } from "@/components/brand/brand-logo";
+import { OnboardingChatBrand } from "@/components/onboarding/onboarding-chat-brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -1450,7 +1451,7 @@ export function GuidedOnboardingPreview({
                 <p className="mt-1 text-xs text-muted-foreground sm:text-sm">احكي عن بيزنسك — كتابة أو فويس</p>
               </div>
               <div className="flex shrink-0 items-center gap-1.5 pt-0.5 sm:gap-2">
-                <BrandLogo className="hidden h-6 w-auto sm:block" priority />
+                <OnboardingChatBrand />
                 <ThemeToggle />
                 {learningReady ? (
                   <Button
