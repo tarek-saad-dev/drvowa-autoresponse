@@ -22,7 +22,7 @@ export function MobileNav({
       aria-label="التنقل الرئيسي"
       className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 px-1.5 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-10px_35px_rgba(15,28,36,.08)] backdrop-blur-xl md:hidden"
     >
-      <div className="mx-auto grid max-w-lg grid-cols-5 gap-0.5">
+      <div className="mx-auto grid max-w-lg grid-cols-4 gap-0.5">
         {primary.map((item) => {
           const active = isNavGroupActive(pathname, item);
           const isInbox = item.id === "inbox";

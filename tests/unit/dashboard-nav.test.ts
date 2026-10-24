@@ -9,14 +9,13 @@ import {
 } from "@/constants/nav";
 
 describe("dashboard navigation IA", () => {
-  it("exposes five mobile-primary destinations", () => {
+  it("exposes four mobile-primary destinations", () => {
     const mobile = DASHBOARD_NAV_GROUPS.filter((group) => group.mobilePrimary);
     expect(mobile.map((group) => group.id)).toEqual([
       "home",
       "inbox",
       "employee",
       "settings",
-      "account",
     ]);
   });
 
@@ -50,6 +49,15 @@ describe("dashboard navigation IA", () => {
     expect(getNavGroupChildren(settings).filter((item) => item.href === "/dashboard/billing")).toHaveLength(1);
     expect(getNavGroupChildren(settings).some((item) => item.href === "/dashboard/usage")).toBe(false);
     expect(isNavGroupActive("/dashboard", settings)).toBe(false);
+  });
+
+  it("keeps hidden legacy pages in settings group", () => {
+    const settings = DASHBOARD_NAV_GROUPS.find((group) => group.id === "settings")!;
+    for (const url of ["/dashboard/account", "/dashboard/locations", "/dashboard/reliability", "/dashboard/usage"]) {
+      expect(isNavGroupActive(url, settings)).toBe(true);
+    }
+    expect(getNavGroupChildren(settings).some((child) => child.href === "/dashboard/locations")).toBe(false);
+    expect(getNavGroupChildren(settings).some((child) => child.href === "/dashboard/whatsapp")).toBe(false);
   });
 
   it("matches overview only on the exact dashboard path", () => {

@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { EmployeeLocationSuggestion } from "@/components/dashboard/employee-location-suggestion";
+import { locationSuggestionFromFact, type LocationSuggestion } from "@/lib/knowledge/location-from-fact";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -13,6 +15,7 @@ type Turn = { role: "user" | "assistant"; text: string; at?: string };
 type Proposal = {
   proposalId: string;
   action: "CREATE" | "MERGE" | "NOOP" | "CONFLICT";
+  category: string;
   proposedTitle: string;
   proposedContent: string;
   existingContent: string | null;
@@ -48,6 +51,7 @@ export function EmployeeKnowledgeChat({
   const [session, setSession] = useState<Session | null>(null);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [count, setCount] = useState(initialCount);
+  const [locationsToReview, setLocationsToReview] = useState<Array<{ key: string; value: LocationSuggestion }>>([]);
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
@@ -206,6 +210,10 @@ export function EmployeeKnowledgeChat({
       setCount((old) => old + created);
       setProposals([]);
       setSession(null);
+      setLocationsToReview(selected.map((proposal) => ({
+        key: proposal.proposalId,
+        value: locationSuggestionFromFact(proposal),
+      })).filter((item): item is { key: string; value: LocationSuggestion } => Boolean(item.value)));
       setTurns((old) => [...old, {
         role: "assistant",
         text: "تمام، حفظت " + created + " معلومة جديدة وحدّثت " + merged + " معلومة. تحب تعلّمني إيه كمان؟",
@@ -357,6 +365,11 @@ export function EmployeeKnowledgeChat({
         </div>
       ) : null}
 
+      {locationsToReview.length ? (
+        <div className="space-y-2 border-t border-border p-4">
+          {locationsToReview.map((item) => <EmployeeLocationSuggestion key={item.key} suggestion={item.value} />)}
+        </div>
+      ) : null}
       {error ? <div className="px-4 pt-3"><Alert variant="error">{error}</Alert></div> : null}
       <form onSubmit={submit} className="flex items-end gap-2 border-t border-border p-3 sm:p-4">
         <button type="button" aria-label={recording ? "إنهاء التسجيل" : "سجل رسالة صوتية"}
