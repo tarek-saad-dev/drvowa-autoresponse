@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ type Location = {
 };
 
 export function EmployeeLocationSuggestion({ suggestion }: { suggestion: LocationSuggestion }) {
+  const inputId = useId();
   const [name, setName] = useState(suggestion.name);
   const [address, setAddress] = useState(suggestion.addressLine);
   const [phone, setPhone] = useState(suggestion.phone);
@@ -85,16 +86,16 @@ export function EmployeeLocationSuggestion({ suggestion }: { suggestion: Locatio
       {!saved && expanded ? (
         <div className="mt-3 space-y-3 border-t border-border/60 pt-3">
           <div>
-            <Label htmlFor="teaching-location-name">اسم الفرع</Label>
-            <Input id="teaching-location-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={200} />
+            <Label htmlFor={inputId + "-name"}>اسم الفرع</Label>
+            <Input id={inputId + "-name"} value={name} onChange={(e) => setName(e.target.value)} maxLength={200} />
           </div>
           <div>
-            <Label htmlFor="teaching-location-address">العنوان (اختياري)</Label>
-            <Input id="teaching-location-address" value={address} onChange={(e) => setAddress(e.target.value)} maxLength={300} placeholder="اكتبه لو محددتوش في الشات" />
+            <Label htmlFor={inputId + "-address"}>العنوان (اختياري)</Label>
+            <Input id={inputId + "-address"} value={address} onChange={(e) => setAddress(e.target.value)} maxLength={300} placeholder="اكتبه لو محددتوش في الشات" />
           </div>
           <div>
-            <Label htmlFor="teaching-location-phone">هاتف الفرع (اختياري)</Label>
-            <Input id="teaching-location-phone" dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={32} />
+            <Label htmlFor={inputId + "-phone"}>هاتف الفرع (اختياري)</Label>
+            <Input id={inputId + "-phone"} dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={32} />
           </div>
           {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}
           <div className="flex flex-wrap gap-2">
