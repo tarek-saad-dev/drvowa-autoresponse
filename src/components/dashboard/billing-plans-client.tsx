@@ -93,9 +93,7 @@ export function BillingPlansClient({
 
   function openPlans() {
     if (initialPendingReview) return;
-    if (step !== "done" && step !== "confirm") {
-      setStep("plans");
-    }
+    setStep("plans");
     setError(null);
     setDialogOpen(true);
   }
