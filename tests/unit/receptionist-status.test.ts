@@ -58,10 +58,12 @@ describe("deriveReceptionistStatus", () => {
         overall: "attention",
         attentionCode: "inbound_degraded",
         inboundHealth: "degraded",
+        inboundIssue: "delivery_stopped",
       }),
     });
     expect(status.kind).toBe("attention");
-    expect(status.detail).toContain("استقبال رسائل واتساب");
+    expect(status.detail).toContain("متوقفة");
+    expect(status.headline).toContain("خدمة توصيل الرسائل");
     expect(status.action?.href).toBe("/dashboard/whatsapp");
   });
 
