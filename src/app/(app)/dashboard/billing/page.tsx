@@ -31,7 +31,7 @@ function formatNumber(value: number): string {
 function paymentStatusLabel(status: string): string {
   if (status === "AWAITING_TRANSFER") return "بانتظار التحويل";
   if (status === "PENDING") return "قيد المراجعة";
-  if (status === "REJECTED") return "لم يُعتمد الدفع";
+  if (status === "REJECTED") return "تعذر اعتماد الدفع";
   return "—";
 }
 
@@ -104,7 +104,7 @@ export default async function BillingPage() {
 
   const plan = overview.plan;
   const sub = overview.subscription;
-  const latest = paymentStatus.open ?? paymentStatus.pending ??
+  const latest = paymentStatus.pending ?? paymentStatus.open ??
     (paymentStatus.latest?.status === "REJECTED" ? paymentStatus.latest : null);
   const awaitingTransfer = latest?.status === "AWAITING_TRANSFER";
   const pendingReview = latest?.status === "PENDING";
