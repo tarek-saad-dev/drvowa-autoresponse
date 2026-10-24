@@ -35,8 +35,8 @@ export function RecentConversations({
   whatsappConnected: boolean;
 }) {
   return (
-    <section aria-label="آخر المحادثات" className="min-w-0">
-      <div className="mb-3 flex items-end justify-between gap-3">
+    <section aria-label="آخر المحادثات" className="min-w-0 rounded-[24px] border border-border bg-card p-4 shadow-[0_14px_42px_-34px_rgba(5,43,58,.46)] sm:p-5">
+      <div className="mb-4 flex items-end justify-between gap-3">
         <h2 className="text-base font-black sm:text-lg">آخر المحادثات</h2>
         <Link
           href="/dashboard/inbox"
@@ -47,7 +47,7 @@ export function RecentConversations({
       </div>
 
       {conversations.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-card/60 px-4 py-10 text-center">
+        <div className="rounded-2xl border border-dashed border-border bg-surface/30 px-4 py-10 text-center">
           <p className="font-black">لسه مفيش محادثات</p>
           <p className="mt-1 text-sm text-muted-foreground">
             أول رسالة واتساب هتظهر هنا تلقائيًا.
@@ -62,14 +62,14 @@ export function RecentConversations({
           ) : null}
         </div>
       ) : (
-        <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
+        <ul className="divide-y divide-border/70 overflow-hidden">
           {conversations.map((conversation) => (
             <li key={conversation.conversationId}>
               <Link
                 href={`/dashboard/inbox?conversationId=${encodeURIComponent(conversation.conversationId)}`}
-                className="flex items-center gap-3 px-3 py-3 transition hover:bg-surface/80 focus-visible:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-4"
+                className="flex items-center gap-3 rounded-xl px-2 py-3 transition hover:bg-surface/65 focus-visible:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-3"
               >
-                <div className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full bg-secondary text-sm font-black">
+                <div className="relative grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-primary/10 text-sm font-black text-primary">
                   <span dir="auto">{initial(conversation)}</span>
                   {conversation.unread ? (
                     <span
@@ -123,6 +123,11 @@ export function RecentConversations({
           ))}
         </ul>
       )}
+      {!whatsappConnected && conversations.length > 0 ? (
+        <p className="mt-3 rounded-xl bg-surface px-3 py-2 text-[11px] text-muted-foreground">
+          المحادثات المحفوظة متاحة للقراءة. الإرسال يحتاج اتصال واتساب نشط.
+        </p>
+      ) : null}
     </section>
   );
 }
