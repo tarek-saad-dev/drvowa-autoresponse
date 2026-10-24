@@ -113,7 +113,7 @@ test.describe.serial("manual instapay billing e2e", () => {
     await page.getByRole("button", { name: "لقد حوّلت المبلغ" }).click();
     await page.locator("#payerName").fill("عميل تجريبي");
     await page.getByRole("button", { name: "إرسال تأكيد الدفع" }).click();
-    await expect(page.getByText("طلب الدفع قيد المراجعة")).toBeVisible({
+    await expect(page.getByText("تم إرسال تأكيد التحويل")).toBeVisible({
       timeout: 15_000,
     });
 
@@ -180,7 +180,7 @@ test.describe.serial("manual instapay billing e2e", () => {
     await page.getByRole("button", { name: "لقد حوّلت المبلغ" }).click();
     await page.locator("#payerName").fill("مرفوض");
     await page.getByRole("button", { name: "إرسال تأكيد الدفع" }).click();
-    await expect(page.getByText("طلب الدفع قيد المراجعة")).toBeVisible({
+    await expect(page.getByText("تم إرسال تأكيد التحويل")).toBeVisible({
       timeout: 15_000,
     });
 
