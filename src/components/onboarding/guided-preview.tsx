@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { OnboardingChatBrand } from "@/components/onboarding/onboarding-chat-brand";
+import { OnboardingLogoutButton } from "@/components/onboarding/onboarding-logout-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -1495,6 +1496,7 @@ export function GuidedOnboardingPreview({
                 >
                   رجوع
                 </button>
+                <OnboardingLogoutButton />
               </div>
             </div>
             <div className="mx-auto mt-3 w-full max-w-6xl" aria-label="مستوى تعلم الموظف">
@@ -1550,6 +1552,7 @@ export function GuidedOnboardingPreview({
                   رجوع
                 </button>
                 <ThemeToggle />
+                <OnboardingLogoutButton />
                 {playgroundReady ? (
                   <Button type="button" size="sm" onClick={() => void next()} className="rounded-full px-4 font-bold shadow-[0_0_18px_var(--ob-neon-glow)]">
                     التالي ←
@@ -1570,6 +1573,7 @@ export function GuidedOnboardingPreview({
               {Math.min(index + 1, FLOW.length)} / {FLOW.length}
             </div>
             <ThemeToggle />
+            <OnboardingLogoutButton />
           </div>
         </header> : null}
 
