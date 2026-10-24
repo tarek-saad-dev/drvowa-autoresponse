@@ -24,7 +24,7 @@ describe("dashboard live WhatsApp states", () => {
     const view = describeOverviewConnection("READY", "degraded");
     expect(view.tone).toBe("warning");
     expect(view.canSend).toBe(true);
-    expect(view.detail).toContain("استقبال");
+    expect(view.detail).toContain("وصول الرسائل");
   });
 
   it("shows the underlying issue, not a generic warning, when one is available", () => {
