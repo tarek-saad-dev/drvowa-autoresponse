@@ -4,10 +4,16 @@ import { z } from "zod";
 import { requireApiUser } from "@/lib/api/auth-context";
 import { handleApiError, jsonError, jsonOk, parseJsonBody } from "@/lib/api/http";
 import { RATE_LIMITS, assertRateLimit } from "@/lib/security/rate-limit";
+import {
+  DISCOVERY_ANSWER_MAX_CHARS,
+  DISCOVERY_QUESTION_MAX_CHARS,
+  DISCOVERY_MAX_TURNS,
+  formatDiscoveryTranscript,
+} from "@/lib/onboarding/discovery-limits";
 
 const turnSchema = z.object({
-  question: z.string().min(1).max(700),
-  answer: z.string().min(1).max(4000),
+  question: z.string().min(1).max(DISCOVERY_QUESTION_MAX_CHARS),
+  answer: z.string().min(1).max(DISCOVERY_ANSWER_MAX_CHARS),
   topic: z.string().max(80).optional(),
 });
 
@@ -19,7 +25,7 @@ const bodySchema = z.object({
     hours: z.string().max(300).optional().default(""),
     link: z.string().max(500).optional().default(""),
   }),
-  turns: z.array(turnSchema).max(24),
+  turns: z.array(turnSchema).max(DISCOVERY_MAX_TURNS),
 });
 
 const COVERAGE_KEYS = [
@@ -88,11 +94,7 @@ export async function POST(request: Request) {
       process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite";
     const client = new GoogleGenAI({ apiKey });
 
-    const transcript = body.turns
-      .map((turn, index) =>
-        `${index + 1}. س: ${turn.question}\nج: ${turn.answer}`,
-      )
-      .join("\n\n");
+    const transcript = formatDiscoveryTranscript(body.turns);
 
     const prompt = `
 أنت Business Discovery Interviewer داخل onboarding لنظام موظف استقبال ذكي.
