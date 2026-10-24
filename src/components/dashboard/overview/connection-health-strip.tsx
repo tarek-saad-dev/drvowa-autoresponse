@@ -127,7 +127,7 @@ export function ConnectionHealthStrip({
         ? "جاري فحص الموظف"
         : status.kind === "ai_paused"
           ? "الموظف متوقف مؤقتًا"
-          : "الموظف محتاج مراجعة";
+          : status.headline;
   const otherIssue = connection.tone === "success"
     && status.kind !== "working" && status.kind !== "checking";
   const displayTone = otherIssue ? status.tone : connection.tone;
