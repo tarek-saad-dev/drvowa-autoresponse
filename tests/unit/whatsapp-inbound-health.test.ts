@@ -57,6 +57,7 @@ vi.mock("qrcode", () => ({
 
 import {
   assessInboundDeliveryHealth,
+  diagnoseInboundDelivery,
   getWhatsAppConnectionView,
   inboundErrorCodeLabelAr,
 } from "@/modules/channels/whatsapp-service";
@@ -176,60 +177,75 @@ describe("inbound delivery health assessment", () => {
     expect(assessInboundDeliveryHealth(undefined)).toBe("unknown");
   });
 
-  it("READY + capture quarantine stall → degraded", () => {
+  it("historical quarantine counters do not keep recovered WhatsApp in warning forever", () => {
     expect(
-      assessInboundDeliveryHealth(
+      diagnoseInboundDelivery(
         {
-          running: true,
-          pending: 0,
-          delivered: 1,
-          failed: 0,
-          quarantined: 0,
-          inFlight: false,
-          lastDeliveryAt: "2026-09-23T05:21:13.197Z",
-          lastErrorCode: null,
+          running: true, pending: 0, delivered: 10, failed: 0,
+          quarantined: 3, inFlight: false, lastDeliveryAt: null, lastErrorCode: null,
         },
         {
-          rawUpsert: 4,
-          captured: 1,
-          unresolvedLid: 3,
-          decryptFailed: 0,
-          emptyContent: 0,
-          quarantined: 3,
-          pendingLid: 0,
-          listening: true,
-          lastEventAt: "2026-09-23T05:52:00.000Z",
+          rawUpsert: 12, captured: 9, unresolvedLid: 3,
+          decryptFailed: 2, emptyContent: 0, quarantined: 3,
+          pendingLid: 0, listening: true, lastEventAt: "2026-10-24T03:00:00Z",
+          lastDecryptFailureAt: "2026-10-24T02:30:00Z",
+          lastPlaintextInboundAt: "2026-10-24T03:00:00Z",
+          activeFailureStreak: 0,
         },
+        new Date("2026-10-24T03:01:00Z"),
       ),
-    ).toBe("degraded");
+    ).toEqual({ health: "healthy", issue: null });
   });
 
-  it("READY + decryptFailed stall → degraded", () => {
-    expect(
-      assessInboundDeliveryHealth(
-        {
-          running: true,
-          pending: 0,
-          delivered: 1,
-          failed: 0,
-          quarantined: 0,
-          inFlight: false,
-          lastDeliveryAt: null,
-          lastErrorCode: null,
-        },
-        {
-          rawUpsert: 2,
-          captured: 0,
-          unresolvedLid: 0,
-          decryptFailed: 2,
-          emptyContent: 0,
-          quarantined: 0,
-          pendingLid: 0,
-          listening: true,
-          lastEventAt: null,
-        },
-      ),
-    ).toBe("degraded");
+  it("recent repeated active decryption failure produces an explicit diagnosis", () => {
+    const result = diagnoseInboundDelivery(
+      {
+        running: true, pending: 0, delivered: 1, failed: 0,
+        quarantined: 0, inFlight: false, lastDeliveryAt: null, lastErrorCode: null,
+      },
+      {
+        rawUpsert: 4, captured: 1, unresolvedLid: 0,
+        decryptFailed: 3, emptyContent: 0, quarantined: 0,
+        pendingLid: 0, listening: true, lastEventAt: "2026-10-24T03:00:00Z",
+        lastDecryptFailureAt: "2026-10-24T03:00:00Z",
+        lastPlaintextInboundAt: "2026-10-24T02:50:00Z",
+        activeFailureStreak: 3,
+      },
+      new Date("2026-10-24T03:01:00Z"),
+    );
+    expect(result).toEqual({ health: "degraded", issue: "decrypt_failures" });
+  });
+
+  it("does not keep an expired error episode in a permanent degraded state", () => {
+    expect(diagnoseInboundDelivery(
+      {
+        running: true, pending: 0, delivered: 1, failed: 0,
+        quarantined: 0, inFlight: false, lastDeliveryAt: null, lastErrorCode: null,
+      },
+      {
+        rawUpsert: 3, captured: 1, unresolvedLid: 0,
+        decryptFailed: 2, emptyContent: 0, quarantined: 0,
+        pendingLid: 0, listening: true, lastEventAt: "2026-10-24T02:00:00Z",
+        lastDecryptFailureAt: "2026-10-24T02:00:00Z",
+        activeFailureStreak: 2,
+      },
+      new Date("2026-10-24T03:01:00Z"),
+    )).toEqual({ health: "healthy", issue: null });
+  });
+
+  it("active stalled listener and stopped delivery worker have separate reasons", () => {
+    const inbound = {
+      running: true, pending: 1, delivered: 2, failed: 0, quarantined: 0,
+      inFlight: false, lastDeliveryAt: null, lastErrorCode: null,
+    };
+    expect(diagnoseInboundDelivery({ ...inbound, running: false })).toEqual({
+      health: "degraded", issue: "delivery_stopped",
+    });
+    expect(diagnoseInboundDelivery(inbound, {
+      rawUpsert: 2, captured: 1, unresolvedLid: 1, decryptFailed: 0,
+      emptyContent: 0, quarantined: 0, pendingLid: 1,
+      listening: false, lastEventAt: null,
+    })).toEqual({ health: "degraded", issue: "capture_listener_stopped" });
   });
 
   it("maps config codes to Arabic without leaking internals", () => {
@@ -285,6 +301,7 @@ describe("WhatsApp connection view exposes safe inboundDelivery", () => {
     expect(view.uiState).toBe("READY");
     expect(view.runtime?.inboundDelivery?.health).toBe("degraded");
     expect(view.runtime?.inboundDelivery?.running).toBe(false);
+    expect(view.runtime?.inboundDelivery?.issue).toBe("delivery_stopped");
     expect(view.runtime?.inboundDelivery?.pending).toBe(3);
   });
 
