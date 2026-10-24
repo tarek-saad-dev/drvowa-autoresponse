@@ -1,3 +1,4 @@
+import { inboundIssueCopy } from "@/lib/dashboard/inbound-issue-copy";
 import type {
   OperationalAttentionCode,
   ReceptionistOperationalHealth,
@@ -151,6 +152,15 @@ export function deriveReceptionistStatus(
     }
     if (health.overall === "checking" || !health.attentionCode) {
       return attentionCopy("runtime_unknown", name);
+    }
+    if (health.attentionCode === "inbound_degraded") {
+      const info = inboundIssueCopy(health.inboundIssue);
+      return {
+        ...attentionCopy("inbound_degraded", name),
+        headline: info.title,
+        detail: info.detail,
+        action: { href: "/dashboard/whatsapp", label: "شوف السبب والحل" },
+      };
     }
     return attentionCopy(health.attentionCode, name);
   }
