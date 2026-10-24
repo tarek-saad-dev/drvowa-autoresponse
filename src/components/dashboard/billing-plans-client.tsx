@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,7 @@ type Props = {
   instructions: Instructions | null;
   enabled: boolean;
   initialOpenIntent?: IntentState | null;
+  initialPendingReview?: boolean;
 };
 
 function formatLimit(value: number | null | undefined): string {
@@ -61,6 +62,7 @@ export function BillingPlansClient({
   instructions,
   enabled,
   initialOpenIntent = null,
+  initialPendingReview = false,
 }: Props) {
   const router = useRouter();
   const [billingInterval, setBillingInterval] = useState<"MONTHLY" | "ANNUAL">("MONTHLY");
@@ -78,6 +80,34 @@ export function BillingPlansClient({
   const [submitting, setSubmitting] = useState(false);
   const [creating, setCreating] = useState(false);
   const [showPending, setShowPending] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  useEffect(() => {
+    if (!dialogOpen) return;
+    function onEscape(event: KeyboardEvent) {
+      if (event.key === "Escape" && !creating && !submitting) setDialogOpen(false);
+    }
+    document.addEventListener("keydown", onEscape);
+    return () => document.removeEventListener("keydown", onEscape);
+  }, [dialogOpen, creating, submitting]);
+
+  function openPlans() {
+    if (initialPendingReview) return;
+    if (step !== "done" && step !== "confirm") {
+      setStep("plans");
+    }
+    setError(null);
+    setDialogOpen(true);
+  }
+
+  function openExistingPayment() {
+    if (!initialOpenIntent) return;
+    setIntent(initialOpenIntent);
+    setStep("pay");
+    setError(null);
+    setDialogOpen(true);
+  }
+
 
   async function choosePlan(planCode: string) {
     setSelectedCode(planCode);
@@ -169,8 +199,10 @@ export function BillingPlansClient({
     }
   }
 
+  let content: ReactNode;
+
   if (step === "done" && intent) {
-    return (
+    content = (
       <Alert variant="info" title={showPending ? "طلب الدفع قيد المراجعة بالفعل" : "تم إرسال تأكيد التحويل"}>
         <p className="mt-1">
           {showPending ? "طلب التحويل مسجل بالفعل وفي انتظار مراجعة الإدارة. لا داعي لإعادة إرساله." : "استلمنا بيانات التحويل، وفي انتظار مراجعتها يدويًا قبل تطبيق أي تغيير على اشتراكك."}
@@ -195,8 +227,8 @@ export function BillingPlansClient({
     );
   }
 
-  if ((step === "pay" || step === "confirm") && intent) {
-    return (
+  else if ((step === "pay" || step === "confirm") && intent) {
+    content = (
       <section className="space-y-5 rounded-xl border border-border bg-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -328,7 +360,8 @@ export function BillingPlansClient({
     );
   }
 
-  return (
+  else {
+    content = (
     <section className="space-y-4">
       <h2 className="text-lg font-semibold">الباقات المتاحة</h2>
       <label className="flex items-center gap-3">دورة الاشتراك
@@ -396,5 +429,65 @@ export function BillingPlansClient({
         })}
       </div>
     </section>
+  );
+  }
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={initialPendingReview}
+          onClick={openPlans}
+        >
+          تغيير الباقة
+        </Button>
+        {initialOpenIntent ? (
+          <Button type="button" variant="ghost" onClick={openExistingPayment}>
+            عرض تعليمات الدفع
+          </Button>
+        ) : null}
+        {initialPendingReview ? (
+          <span className="text-xs text-muted-foreground">
+            لا يمكن بدء طلب جديد أثناء مراجعة التحويل الحالي.
+          </span>
+        ) : null}
+      </div>
+
+      {dialogOpen ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-3 sm:p-6">
+          <button
+            type="button"
+            aria-label="إغلاق نافذة الباقات"
+            disabled={creating || submitting}
+            className="absolute inset-0 bg-black/55 backdrop-blur-sm"
+            onClick={() => setDialogOpen(false)}
+          />
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="billing-modal-title"
+            className="relative z-10 max-h-[calc(100dvh-2rem)] w-full max-w-5xl overflow-y-auto rounded-2xl border border-border bg-card p-4 shadow-2xl sm:max-h-[calc(100dvh-3rem)] sm:p-6"
+          >
+            <div className="mb-5 flex items-center justify-between gap-3 border-b border-border pb-4">
+              <h2 id="billing-modal-title" className="text-lg font-black">
+                إدارة الباقة والدفع
+              </h2>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={creating || submitting}
+                onClick={() => setDialogOpen(false)}
+              >
+                إغلاق
+              </Button>
+            </div>
+            {content}
+          </section>
+        </div>
+      ) : null}
+    </>
   );
 }
