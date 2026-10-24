@@ -381,6 +381,32 @@ export function InboxPanel({
   const [escalating, setEscalating] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
+  const [whatsappSendReady, setWhatsappSendReady] = useState<boolean | null>(null);
+  useEffect(() => {
+    let active = true;
+    const probe = async () => {
+      try {
+        const response = await fetch("/api/channels/whatsapp/status", { cache: "no-store" });
+        if (!response.ok) throw new Error("Unable to check WhatsApp");
+        const state = await response.json() as { uiState?: string };
+        if (active) setWhatsappSendReady(state.uiState === "READY");
+      } catch {
+        // A failed live probe must never leave manual sending enabled.
+        if (active) setWhatsappSendReady(false);
+      }
+    };
+    void probe();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void probe();
+    }, 20_000);
+    window.addEventListener("focus", probe);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", probe);
+    };
+  }, []);
+
   const [resuming, setResuming] = useState(false);
   const [resumingAll, setResumingAll] = useState(false);
   const [bulkFeedback, setBulkFeedback] = useState<string | null>(null);
@@ -836,6 +862,10 @@ export function InboxPanel({
     const id = selectedIdRef.current;
     const text = (id ? drafts[id] ?? "" : "").trim();
     if (!id || !text || sending) return;
+    if (whatsappSendReady !== true) {
+      setError("الإرسال متوقف لحد ما اتصال واتساب يتأكد. الرسالة لسه محفوظة في المسودة.");
+      return;
+    }
     setSending(true);
     setError(null);
     const idempotencyKey = crypto.randomUUID();
@@ -881,7 +911,7 @@ export function InboxPanel({
     } finally {
       setSending(false);
     }
-  }, [drafts, sending, loadMessages, scrollToBottom]);
+  }, [drafts, sending, whatsappSendReady, loadMessages, scrollToBottom]);
 
   const resumeAi = useCallback(async () => {
     const id = selectedIdRef.current;
@@ -1355,11 +1385,17 @@ export function InboxPanel({
                   />
                 </div>
                 <button
-                  type="button" onClick={() => void sendManual()} disabled={sending || !draft.trim()}
+                  type="button" onClick={() => void sendManual()} disabled={sending || !draft.trim() || whatsappSendReady !== true}
                   className="grid h-[48px] w-[48px] shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-muted"
-                  title="إرسال الرسالة" aria-label="إرسال الرسالة"
+                  title={whatsappSendReady === true ? "إرسال الرسالة" : "الإرسال غير متاح حتى اتصال واتساب"} aria-label="إرسال الرسالة"
                 ><Glyph name="send" size={20} /></button>
               </div>
+              {whatsappSendReady !== true ? (
+                <p role="status" className="mx-auto mt-2 max-w-[940px] rounded-xl border border-warning/25 bg-warning-soft/25 px-3 py-2 text-center text-xs font-semibold text-warning">
+                  {whatsappSendReady === null ? "جاري التحقق من اتصال واتساب قبل الإرسال…" : "واتساب غير متصل أو الاتصال غير مؤكد. تقدر تقرأ المحادثات وتحفظ مسودتك، لكن الإرسال متوقف."}
+                  <Link href="/dashboard/whatsapp" className="ms-2 underline underline-offset-2">راجع الاتصال</Link>
+                </p>
+              ) : null}
               <p className="mx-auto mt-1.5 hidden max-w-[940px] text-[11px] text-muted-foreground sm:block">
                 {selected.aiMode === "AUTO"
                   ? "أول رد يدوي منك هيوقف الـAI في المحادثة دي تلقائيًا."
