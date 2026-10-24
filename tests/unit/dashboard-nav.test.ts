@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DASHBOARD_NAV,
   DASHBOARD_NAV_GROUPS,
+  getNavGroupChildren,
   isNavGroupActive,
   isNavHrefActive,
 } from "@/constants/nav";
@@ -30,7 +31,6 @@ describe("dashboard navigation IA", () => {
       "/dashboard/settings",
       "/dashboard/locations",
       "/dashboard/billing",
-      "/dashboard/usage",
       "/dashboard/reliability",
       "/dashboard/integrations",
       "/dashboard/account",
@@ -47,6 +47,8 @@ describe("dashboard navigation IA", () => {
     const settings = DASHBOARD_NAV_GROUPS.find((group) => group.id === "settings")!;
     expect(isNavGroupActive("/dashboard/whatsapp", settings)).toBe(true);
     expect(isNavGroupActive("/dashboard/billing", settings)).toBe(true);
+    expect(getNavGroupChildren(settings).filter((item) => item.href === "/dashboard/billing")).toHaveLength(1);
+    expect(getNavGroupChildren(settings).some((item) => item.href === "/dashboard/usage")).toBe(false);
     expect(isNavGroupActive("/dashboard", settings)).toBe(false);
   });
 
