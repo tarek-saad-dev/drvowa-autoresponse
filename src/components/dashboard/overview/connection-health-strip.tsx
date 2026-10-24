@@ -128,8 +128,10 @@ export function ConnectionHealthStrip({
         : status.kind === "ai_paused"
           ? "الموظف متوقف مؤقتًا"
           : "الموظف محتاج مراجعة";
-  const needsAttention = connection.tone === "warning" || connection.tone === "danger"
-    || (status.kind !== "checking" && status.kind !== "working");
+  const otherIssue = connection.tone === "success"
+    && status.kind !== "working" && status.kind !== "checking";
+  const displayTone = otherIssue ? status.tone : connection.tone;
+  const needsAttention = displayTone === "warning" || displayTone === "danger";
   const primaryAction = !connection.canSend || snapshot.inboundHealth === "degraded"
     ? { href: "/dashboard/whatsapp", label: connection.actionLabel ?? "راجع واتساب" }
     : status.action;
@@ -140,23 +142,23 @@ export function ConnectionHealthStrip({
       aria-live="polite"
       className={cn(
         "rounded-[22px] border px-4 py-4 shadow-[0_12px_32px_-27px_rgba(5,50,69,.45)] sm:px-5",
-        toneClasses[connection.tone],
+        toneClasses[displayTone],
       )}
     >
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3">
           <span aria-hidden className={cn(
             "mt-2 h-2.5 w-2.5 shrink-0 rounded-full",
-            dotClasses[connection.tone],
+            dotClasses[displayTone],
           )} />
           <div className="min-w-0">
             <h2 className="text-sm font-black sm:text-base">
-              {aiWorking ? "كل الأنظمة تعمل بشكل طبيعي" : connection.title}
+              {aiWorking ? "كل الأنظمة تعمل بشكل طبيعي" : otherIssue ? status.headline : connection.title}
             </h2>
             <p className="mt-1 text-xs leading-6 text-muted-foreground sm:text-sm">
-              {aiWorking ? "واتساب متصل، والموظف الذكي جاهز للرد على العملاء." : connection.detail}
+              {aiWorking ? "واتساب متصل، والموظف الذكي جاهز للرد على العملاء." : otherIssue ? status.detail : connection.detail}
             </p>
-            {connection.canSend && !aiWorking && status.kind !== "checking" ? (
+            {connection.canSend && !aiWorking && !otherIssue && status.kind !== "checking" && status.detail !== connection.detail ? (
               <p className="mt-1 text-xs font-semibold text-foreground/80">
                 {status.detail}
               </p>
