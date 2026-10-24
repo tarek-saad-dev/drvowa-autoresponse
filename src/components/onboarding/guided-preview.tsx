@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { DISCOVERY_ANSWER_MAX_CHARS, DISCOVERY_MAX_TURNS } from "@/lib/onboarding/discovery-limits";
 
 import "./onboarding-theme.css";
 
@@ -294,6 +295,7 @@ export function GuidedOnboardingPreview({
   const [discoveryDone, setDiscoveryDone] = useState(false);
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [discoveryInputError, setDiscoveryInputError] = useState<string | null>(null);
   const voiceTargetRef = useRef<"knowledge" | "discovery">("knowledge");
   const discoveryInputRef = useRef("");
   const discoveryChatEndRef = useRef<HTMLDivElement | null>(null);
@@ -852,6 +854,15 @@ export function GuidedOnboardingPreview({
   async function submitDiscoveryAnswer(answerOverride?: string) {
     const answer = (answerOverride ?? discoveryInput).trim();
     if (!answer || discoveryLoading) return;
+    if (answer.length > DISCOVERY_ANSWER_MAX_CHARS) {
+      setDiscoveryInputError("إجابتك طويلة جدًا. قسّمها على رسالتين أو أكتر، وكلامك هيفضل موجود هنا لحد ما تعدّله.");
+      return;
+    }
+    if (discoveryTurns.length >= DISCOVERY_MAX_TURNS) {
+      setDiscoveryInputError("وصلنا للحد المتاح من الأسئلة. خلينا نجهز الموظف بالمعلومات اللي جمعناها.");
+      return;
+    }
+    setDiscoveryInputError(null);
 
     const question = discoveryQuestion || initialDiscoveryQuestion(effectiveBusinessType);
     const nextTurns: DiscoveryTurn[] = [
@@ -897,6 +908,9 @@ export function GuidedOnboardingPreview({
         error?: string;
       };
       if (!response.ok) {
+        if (response.status === 400 && /Too big|expected string|4000 characters/i.test(data.error ?? "")) {
+          throw new Error("المعلومة أطول من الحد اللي بيسمح بيه السيرفر. حدّث الصفحة لو الإصلاح اتنشر، أو عدّل إجابتك وحاول تاني.");
+        }
         throw new Error(data.error || "تعذر تجهيز السؤال التالي");
       }
 
@@ -1746,8 +1760,21 @@ export function GuidedOnboardingPreview({
                         </div>
                       ) : discoveryError ? (
                         <div className="drvo-ob-bubble-in drvo-ob-bubble self-start rounded-[20px] rounded-tr-md px-4 py-3 text-[15px] leading-7" role="alert">
-                          <p className="text-destructive">إجابتك محفوظة، بس حصلت مشكلة: {discoveryError}</p>
-                          <button type="button" onClick={() => void retryDiscovery()} className="mt-2 font-bold text-primary underline underline-offset-4">حاول تاني</button>
+                          <p className="text-destructive">إجابتك موجودة في مسودة التدريب، لكن مقدرتش أجهز السؤال التالي: {discoveryError}</p>
+                          <div className="mt-2 flex flex-wrap gap-4">
+                            <button type="button" onClick={() => void retryDiscovery()} className="font-bold text-primary underline underline-offset-4">حاول تاني</button>
+                            <button type="button" onClick={() => {
+                              const last = discoveryTurns.at(-1);
+                              if (!last) return;
+                              setDiscoveryTurns((turns) => turns.slice(0, -1));
+                              setDiscoveryQuestion(last.question);
+                              setDiscoveryTopic(last.topic ?? null);
+                              setDiscoveryInput(last.answer);
+                              discoveryInputRef.current = last.answer;
+                              setDiscoveryError(null);
+                              setDiscoveryInputError(null);
+                            }} className="font-bold text-primary underline underline-offset-4">تعديل آخر إجابة</button>
+                          </div>
                         </div>
                       ) : discoveryDone ? (
                         <div className="drvo-ob-bubble-in drvo-ob-bubble self-start rounded-[20px] rounded-tr-md px-4 py-3 text-[15px] leading-7 sm:leading-8">
@@ -1799,7 +1826,7 @@ export function GuidedOnboardingPreview({
                             >{recording ? "■" : "🎙"}</button>
                             <Textarea
                               value={discoveryInput}
-                              onChange={(event) => { setDiscoveryInput(event.target.value); discoveryInputRef.current = event.target.value; }}
+                              onChange={(event) => { setDiscoveryInput(event.target.value); discoveryInputRef.current = event.target.value; setDiscoveryInputError(null); }}
                               onKeyDown={(event) => {
                                 if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                                   event.preventDefault();
@@ -1820,6 +1847,10 @@ export function GuidedOnboardingPreview({
                               className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary text-lg text-primary-foreground transition hover:opacity-90 disabled:opacity-40"
                             >↑</button>
                           </div>
+                          {discoveryInputError ? <p role="alert" className="mt-2 text-xs font-semibold text-destructive">{discoveryInputError}</p> : null}
+                          {discoveryInput.length > DISCOVERY_ANSWER_MAX_CHARS * 0.85 ? (
+                            <p className="mt-1 text-xs text-muted-foreground" role="status">{discoveryInput.length.toLocaleString("ar-EG")} / {DISCOVERY_ANSWER_MAX_CHARS.toLocaleString("ar-EG")} حرف</p>
+                          ) : null}
                           {learningReady ? (
                             <Button
                               type="button"
