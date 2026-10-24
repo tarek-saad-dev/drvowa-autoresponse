@@ -28,7 +28,7 @@ export type ReceptionistOperationalHealth = {
   attentionCode: OperationalAttentionCode | null;
   whatsappLiveState: string | null;
   inboundHealth: "healthy" | "degraded" | "unknown" | null;
-  inboundIssue: InboundDeliveryIssue | null;
+  inboundIssue?: InboundDeliveryIssue | null;
   worker: AiWorkerLiveness;
   autoReplyEnabled: boolean;
   hasActiveAgent: boolean;
