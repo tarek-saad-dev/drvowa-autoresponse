@@ -45,6 +45,14 @@ export type WhatsAppUiState =
 
 /** Socket can be READY while inbound delivery is unhealthy — surface separately. */
 export type InboundReceiveHealth = "healthy" | "degraded" | "unknown";
+/** Only present for currently evidenced inbound delivery failures. */
+export type InboundDeliveryIssue =
+  | "delivery_stopped"
+  | "config_missing"
+  | "auth_config"
+  | "mapping_config"
+  | "capture_listener_stopped"
+  | "decrypt_failures";
 
 export type InboundDeliveryView = {
   running: boolean;
@@ -53,6 +61,7 @@ export type InboundDeliveryView = {
   lastDeliveryAt: string | null;
   lastErrorCode: string | null;
   health: InboundReceiveHealth;
+  issue?: InboundDeliveryIssue | null;
   /** Optional Baileys capture health (safe counters only). */
   capture?: {
     rawUpsert: number;
@@ -251,27 +260,48 @@ const INBOUND_CONFIG_ERROR_CODES = new Set([
  * READY socket ≠ healthy inbound. Degrade when the delivery worker is stopped
  * or last error is a durable config/auth/mapping failure.
  */
+/**
+ * Distinguish active faults from historical cumulative counters.
+ * A nonzero lifetime quarantine/decrypt count is NOT proof that inbound is
+ * currently broken; those totals can survive a successful recovery.
+ */
+export function diagnoseInboundDelivery(
+  inbound: RuntimeInboundDelivery | null | undefined,
+  capture?: RuntimeAccountStatus["inboundCapture"] | null,
+  now: Date = new Date(),
+): { health: InboundReceiveHealth; issue: InboundDeliveryIssue | null } {
+  if (!inbound) return { health: "unknown", issue: null };
+  if (!inbound.running) return { health: "degraded", issue: "delivery_stopped" };
+  const code = inbound.lastErrorCode?.trim() || null;
+  if (code && INBOUND_CONFIG_ERROR_CODES.has(code)) {
+    const issue: InboundDeliveryIssue =
+      code === "AUTH_CONFIG" ? "auth_config"
+        : code === "MAPPING_CONFIG" ? "mapping_config" : "config_missing";
+    return { health: "degraded", issue };
+  }
+  if (capture) {
+    if ((capture.pendingLid ?? 0) > 0 && capture.listening === false) {
+      return { health: "degraded", issue: "capture_listener_stopped" };
+    }
+    // Only flag a currently active, recent decryption-failure episode,
+    // not failures accumulated during earlier sessions.
+    const lastFailure = Date.parse(capture.lastDecryptFailureAt ?? "");
+    const lastSuccess = Date.parse(capture.lastPlaintextInboundAt ?? "");
+    const age = now.getTime() - lastFailure;
+    const recent = Number.isFinite(lastFailure) && age >= 0 && age <= 10 * 60_000;
+    const recovered = Number.isFinite(lastSuccess) && lastSuccess >= lastFailure;
+    if (recent && !recovered && (capture.activeFailureStreak ?? 0) >= 2) {
+      return { health: "degraded", issue: "decrypt_failures" };
+    }
+  }
+  return { health: "healthy", issue: null };
+}
+
 export function assessInboundDeliveryHealth(
   inbound: RuntimeInboundDelivery | null | undefined,
   capture?: RuntimeAccountStatus["inboundCapture"] | null,
 ): InboundReceiveHealth {
-  if (!inbound) return "unknown";
-  if (!inbound.running) return "degraded";
-  const code = inbound.lastErrorCode?.trim() || null;
-  if (code && INBOUND_CONFIG_ERROR_CODES.has(code)) return "degraded";
-  // Capture stall: Baileys saw upserts but messages were quarantined / stuck on LID / decrypt.
-  if (capture) {
-    if ((capture.quarantined ?? 0) > 0 && (capture.rawUpsert ?? 0) > (capture.captured ?? 0)) {
-      return "degraded";
-    }
-    if ((capture.decryptFailed ?? 0) > 0 && (capture.rawUpsert ?? 0) > (capture.captured ?? 0)) {
-      return "degraded";
-    }
-    if ((capture.pendingLid ?? 0) > 0 && (capture.listening === false)) {
-      return "degraded";
-    }
-  }
-  return "healthy";
+  return diagnoseInboundDelivery(inbound, capture).health;
 }
 
 export function inboundErrorCodeLabelAr(code: string | null | undefined): string | null {
@@ -315,7 +345,7 @@ function sanitizeInboundDeliveryView(
     lastDeliveryAt: inbound.lastDeliveryAt ?? null,
     // Safe code only — UI maps to Arabic; never expose HTTP bodies/tokens.
     lastErrorCode: inbound.lastErrorCode ?? null,
-    health: assessInboundDeliveryHealth(inbound, capture),
+    ...diagnoseInboundDelivery(inbound, capture),
     capture: safeCapture,
   };
 }

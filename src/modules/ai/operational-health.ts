@@ -4,7 +4,7 @@
  */
 
 import { getWhatsAppConnectionView } from "@/modules/channels/whatsapp-service";
-import type { WhatsAppConnectionView } from "@/modules/channels/whatsapp-service";
+import type { WhatsAppConnectionView, InboundDeliveryIssue } from "@/modules/channels/whatsapp-service";
 import { getAiWorkerQueueStatus } from "./worker-status";
 import {
   AI_WORKER_LIVENESS_STALE_MS,
@@ -28,6 +28,7 @@ export type ReceptionistOperationalHealth = {
   attentionCode: OperationalAttentionCode | null;
   whatsappLiveState: string | null;
   inboundHealth: "healthy" | "degraded" | "unknown" | null;
+  inboundIssue?: InboundDeliveryIssue | null;
   worker: AiWorkerLiveness;
   autoReplyEnabled: boolean;
   hasActiveAgent: boolean;
@@ -93,10 +94,12 @@ export function evaluateOperationalHealth(
   const uiState = input.whatsappView?.uiState ?? null;
   const inbound =
     input.whatsappView?.runtime?.inboundDelivery?.health ?? null;
+  const inboundIssue = input.whatsappView?.runtime?.inboundDelivery?.issue ?? null;
 
   const base = {
     whatsappLiveState: uiState,
     inboundHealth: inbound,
+    inboundIssue,
     worker: input.worker,
     autoReplyEnabled: input.autoReplyEnabled,
     hasActiveAgent: input.hasActiveAgent,

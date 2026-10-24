@@ -118,7 +118,7 @@ export default async function DashboardOverviewPage({ searchParams }: { searchPa
       </div>
       <span className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold text-muted-foreground">ملخص اليوم</span>
     </header>
-    <ConnectionHealthStrip initialUiState={health.whatsappLiveState} initialInboundHealth={health.inboundHealth} status={status} />
+    <ConnectionHealthStrip initialUiState={health.whatsappLiveState} initialInboundHealth={health.inboundHealth} initialInboundIssue={health.inboundIssue} status={status} />
     {openEscalations !== null && openEscalations > 0 && <Link href="/dashboard/inbox?filter=HUMAN" className="group flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-warning/25 bg-warning-soft/35 px-4 py-3 transition hover:border-warning/50 sm:px-5">
       <div className="flex items-center gap-3">
         <span aria-hidden className="grid h-9 w-9 place-items-center rounded-xl bg-warning/10 font-black text-warning">!</span>
@@ -145,7 +145,7 @@ export default async function DashboardOverviewPage({ searchParams }: { searchPa
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
           <span className={`rounded-full px-3 py-1.5 text-[11px] font-black ${status.kind === "working" ? "bg-success-soft text-success" : "bg-warning-soft text-warning"}`}>
-            {status.kind === "working" ? "● نشط عند آخر فحص" : status.kind === "checking" ? "◌ جاري الفحص" : "● يحتاج مراجعة"}
+            {status.kind === "working" ? "● نشط عند آخر فحص" : status.kind === "checking" ? "◌ جاري الفحص" : status.headline}
           </span>
           <span className="rounded-full bg-surface px-3 py-1.5 text-[11px] font-bold text-muted-foreground">{activeKnowledge.toLocaleString("en-US")} معلومة نشطة</span>
         </div>
@@ -166,7 +166,7 @@ export default async function DashboardOverviewPage({ searchParams }: { searchPa
             <span className="text-xs text-muted-foreground">واتساب</span><span className={`text-xs font-black ${health.whatsappLiveState === "READY" ? "text-success" : "text-warning"}`}>{health.whatsappLiveState === "READY" ? "متصل عند آخر فحص" : "غير جاهز عند آخر فحص"}</span>
           </div>
           <div className="flex items-center justify-between gap-2 border-b border-border pb-4">
-            <span className="text-xs text-muted-foreground">الرد الآلي</span><span className={`text-xs font-black ${status.kind === "working" ? "text-success" : "text-warning"}`}>{status.kind === "working" ? "جاهز عند آخر فحص" : status.kind === "checking" ? "جاري التحقق" : "محتاج مراجعة"}</span>
+            <span className="text-xs text-muted-foreground">الرد الآلي</span><span className={`text-xs font-black ${status.kind === "working" ? "text-success" : "text-warning"}`}>{status.kind === "working" ? "جاهز عند آخر فحص" : status.kind === "checking" ? "جاري التحقق" : status.headline}</span>
           </div>
           <div className="flex items-center justify-between gap-2"><span className="text-xs text-muted-foreground">غير مقروءة</span>
             <span dir="ltr" className="font-mono text-sm font-semibold tabular-nums">{inboxCounts.unread.toLocaleString("en-US")}</span></div>

@@ -1,3 +1,4 @@
+import { inboundIssueCopy } from "@/lib/dashboard/inbound-issue-copy";
 import type {
   OperationalAttentionCode,
   ReceptionistOperationalHealth,
@@ -45,7 +46,7 @@ function attentionCopy(
     case "whatsapp_disconnected":
       return {
         kind: "whatsapp_disconnected",
-        headline: "الموظف محتاج مراجعة",
+        headline: "واتساب غير متصل",
         detail: "واتساب مش متصل دلوقتي — الموظف مش هيستقبل رسائل العملاء.",
         whatsappLine: "واتساب غير متصل",
         tone: "warning",
@@ -54,7 +55,7 @@ function attentionCopy(
     case "inbound_degraded":
       return {
         kind: "attention",
-        headline: "الموظف محتاج مراجعة",
+        headline: "استقبال الرسائل فيه مشكلة",
         detail: "في مشكلة في استقبال رسائل واتساب.",
         whatsappLine: "واتساب متصل لكن الاستقبال متأثر",
         tone: "warning",
@@ -63,7 +64,7 @@ function attentionCopy(
     case "worker_unavailable":
       return {
         kind: "attention",
-        headline: "الموظف محتاج مراجعة",
+        headline: "الردود الآلية متوقفة",
         detail: "الردود الآلية متوقفة مؤقتًا — نظام الرد غير متاح حاليًا.",
         whatsappLine: "واتساب متصل",
         tone: "warning",
@@ -72,7 +73,7 @@ function attentionCopy(
     case "job_backlog":
       return {
         kind: "attention",
-        headline: "الموظف محتاج مراجعة",
+        headline: "الردود الآلية متأخرة",
         detail: "في تأخير في معالجة الردود الآلية.",
         whatsappLine: "واتساب متصل",
         tone: "warning",
@@ -81,7 +82,7 @@ function attentionCopy(
     case "outbound_failures":
       return {
         kind: "attention",
-        headline: "الموظف محتاج مراجعة",
+        headline: "تعذر إرسال بعض الردود",
         detail: "في مشكلة في إرسال الردود.",
         whatsappLine: "واتساب متصل",
         tone: "warning",
@@ -90,7 +91,7 @@ function attentionCopy(
     case "ai_paused":
       return {
         kind: "ai_paused",
-        headline: "الموظف محتاج مراجعة",
+        headline: "الرد التلقائي متوقف",
         detail: `الردود الآلية متوقفة مؤقتًا لـ ${name}.`,
         whatsappLine: "واتساب متصل",
         tone: "warning",
@@ -99,7 +100,7 @@ function attentionCopy(
     case "setup_incomplete":
       return {
         kind: "setup_incomplete",
-        headline: "الموظف محتاج مراجعة",
+        headline: "إعداد الموظف غير مكتمل",
         detail: "لسه فيه خطوة ناقصة قبل ما يعتمد عليه العملاء.",
         whatsappLine: "إعداد غير مكتمل",
         tone: "neutral",
@@ -108,7 +109,7 @@ function attentionCopy(
     case "runtime_error":
       return {
         kind: "error",
-        headline: "الموظف محتاج مراجعة",
+        headline: "عطل في اتصال واتساب",
         detail: "في مشكلة في الاتصال بواتساب. رجّع الربط عشان الموظف يقدر يرد.",
         whatsappLine: "واتساب فيه خطأ",
         tone: "danger",
@@ -151,6 +152,15 @@ export function deriveReceptionistStatus(
     }
     if (health.overall === "checking" || !health.attentionCode) {
       return attentionCopy("runtime_unknown", name);
+    }
+    if (health.attentionCode === "inbound_degraded") {
+      const info = inboundIssueCopy(health.inboundIssue);
+      return {
+        ...attentionCopy("inbound_degraded", name),
+        headline: info.title,
+        detail: info.detail,
+        action: { href: "/dashboard/whatsapp", label: "شوف السبب والحل" },
+      };
     }
     return attentionCopy(health.attentionCode, name);
   }

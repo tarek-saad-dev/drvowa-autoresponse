@@ -13,6 +13,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
+import { inboundIssueCopy } from "@/lib/dashboard/inbound-issue-copy";
+import type { InboundDeliveryIssue } from "@/modules/channels/whatsapp-service";
 
 type UiState =
   | "NOT_CONNECTED"
@@ -32,6 +34,7 @@ type InboundDeliveryPayload = {
   lastDeliveryAt: string | null;
   lastErrorCode: string | null;
   health: "healthy" | "degraded" | "unknown";
+  issue?: InboundDeliveryIssue | null;
 };
 
 type ConnectionPayload = {
@@ -117,22 +120,6 @@ function stateExplanation(
       return "حدث خطأ أثناء الاتصال. يمكنك المحاولة مرة أخرى.";
     default:
       return "";
-  }
-}
-
-function inboundErrorLabelAr(code: string | null | undefined): string | null {
-  if (!code?.trim()) return null;
-  switch (code.trim()) {
-    case "CONFIG_MISSING":
-      return "إعدادات استقبال الرسائل غير مكتملة";
-    case "AUTH_CONFIG":
-      return "مشكلة مصادقة مع خادم الاستقبال";
-    case "MAPPING_CONFIG":
-      return "ربط رقم واتساب غير متطابق";
-    case "NETWORK_ERROR":
-      return "مشكلة شبكة مؤقتة أثناء التسليم";
-    default:
-      return null;
   }
 }
 
@@ -257,6 +244,17 @@ export function WhatsAppConnectionPanel({
     })();
   }, [refreshStatus, refreshQr]);
 
+  // Refresh reception telemetry without re-pairing when the socket is READY.
+  useEffect(() => {
+    if (view.uiState !== "READY") return;
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void refreshStatus().catch(() => undefined);
+      }
+    }, 20_000);
+    return () => window.clearInterval(id);
+  }, [view.uiState, refreshStatus]);
+
   useEffect(() => {
     if (!ACTIVE_POLL_STATES.includes(view.uiState)) {
       return;
@@ -340,14 +338,11 @@ export function WhatsAppConnectionPanel({
   const inbound = view.runtime?.inboundDelivery ?? null;
   const socketConnected = state === "READY";
   const inboundDegraded = socketConnected && inbound?.health === "degraded";
-  const inboundLabel = (() => {
-    if (!socketConnected) return null;
-    if (!inbound || inbound.health === "unknown") return "يعمل";
-    return inbound.health === "healthy" ? "يعمل" : "توجد مشكلة";
-  })();
-  const inboundDetail = inboundDegraded
-    ? inboundErrorLabelAr(inbound?.lastErrorCode)
-    : null;
+  const inboundUnknown = socketConnected && (!inbound || inbound.health === "unknown");
+  const inboundProblem = inboundIssueCopy(inbound?.issue);
+  const inboundLabel = inboundDegraded
+    ? inboundProblem.title
+    : inboundUnknown ? "غير مؤكد" : "شغال";
   const lastDeliveryRelative = formatRelativeAr(
     inbound?.lastDeliveryAt ?? null,
     nowMs,
@@ -381,7 +376,7 @@ export function WhatsAppConnectionPanel({
             <h2 className="mt-3 text-2xl font-black tracking-[-0.03em]">
               {state === "READY"
                 ? inboundDegraded
-                  ? "واتساب متصل، بس محتاج مراجعة"
+                  ? inboundProblem.title
                   : "واتساب شغال وجاهز"
                 : state === "QR_REQUIRED"
                   ? "امسح QR من موبايلك"
@@ -390,8 +385,8 @@ export function WhatsAppConnectionPanel({
                     : "وصّل رقم واتساب"}
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
-              {inboundDegraded && !compatibilityMessageAr
-                ? "الاتصال موجود، لكن استقبال الرسائل محتاج مراجعة بسيطة."
+              {inboundDegraded ? inboundProblem.detail : inboundUnknown
+                ? "واتساب متصل، لكن لسه ما قدرناش نتأكد من فحص استقبال الرسائل."
                 : explanation}
             </p>
           </div>
@@ -521,10 +516,10 @@ export function WhatsAppConnectionPanel({
                 <div>
                   <p className="text-xs font-bold text-muted-foreground">استقبال الرسائل</p>
                   <p className="mt-1 text-sm font-black">
-                    {inboundDegraded ? "محتاج مراجعة" : "شغال"}
+                    {inboundLabel}
                   </p>
                 </div>
-                <span className={`h-3 w-3 rounded-full ${inboundDegraded ? "bg-warning" : "bg-success"}`} />
+                <span className={`h-3 w-3 shrink-0 rounded-full ${inboundDegraded ? "bg-warning" : inboundUnknown ? "bg-muted-foreground" : "bg-success"}`} />
               </div>
 
               {lastDeliveryRelative ? (
@@ -535,13 +530,32 @@ export function WhatsAppConnectionPanel({
               ) : null}
 
               {inboundDegraded ? (
-                <Alert variant="warning">
-                  استقبال الرسائل محتاج مراجعة.
-                  {inboundDetail ? ` ${inboundDetail}.` : null}
+                <div className="space-y-3 rounded-xl border border-warning/30 bg-warning-soft/25 p-4">
+                  <p className="text-sm font-black text-warning">{inboundProblem.title}</p>
+                  <p className="text-sm leading-6 text-foreground">{inboundProblem.detail}</p>
+                  <p className="text-xs leading-6 text-muted-foreground">{inboundProblem.nextStep}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => {
+                      setBusy(true);
+                      setError(null);
+                      void refreshStatus().catch(() => {
+                        setError("تعذّر فحص الاستقبال حاليًا. حاول مرة تانية.");
+                      }).finally(() => setBusy(false));
+                    }}
+                  >
+                    {busy ? "بنراجع الحالة..." : "إعادة فحص الاستقبال"}
+                  </Button>
+                </div>
+              ) : inboundUnknown ? (
+                <Alert variant="info">
+                  الاتصال شغّال، لكن ما عندناش نتيجة مؤكدة لفحص الرسائل حاليًا. جرّب إرسال رسالة من رقم تاني وتأكد إنها ظهرت في المحادثات.
                 </Alert>
               ) : (
                 <Alert variant="success">
-                  كل شيء جاهز — الرسائل الجديدة هتظهر في المحادثات تلقائيًا.
+                  اتصال واتساب وخدمة استقبال الرسائل جاهزين حسب آخر فحص.
                 </Alert>
               )}
             </CardContent>

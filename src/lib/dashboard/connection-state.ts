@@ -1,3 +1,6 @@
+import { inboundIssueCopy } from "@/lib/dashboard/inbound-issue-copy";
+import type { InboundDeliveryIssue } from "@/modules/channels/whatsapp-service";
+
 export type OverviewWhatsAppState =
   | "NOT_CONNECTED" | "STARTING" | "QR_REQUIRED" | "CONNECTING"
   | "READY" | "DISCONNECTED" | "LOGGED_OUT" | "ERROR"
@@ -16,20 +19,22 @@ export type OverviewConnectionState = {
 export function describeOverviewConnection(
   state: OverviewWhatsAppState | null,
   inbound: OverviewInboundHealth,
+  issue?: InboundDeliveryIssue | null,
 ): OverviewConnectionState {
   switch (state) {
     case "READY":
       if (inbound === "degraded") {
+        const issueCopy = inboundIssueCopy(issue);
         return {
-          title: "واتساب متصل، والاستقبال محتاج مراجعة",
-          detail: "تقدر تراجع المحادثات المحفوظة، لكن وصول الرسائل الجديدة ممكن يتأثر.",
-          tone: "warning", canSend: true, actionLabel: "راجع واتساب",
+          title: issueCopy.title,
+          detail: issueCopy.detail,
+          tone: "warning", canSend: true, actionLabel: "شوف السبب والحل",
         };
       }
       if (inbound !== "healthy") {
         return {
-          title: "واتساب متصل — بنراجع الاستقبال",
-          detail: "تم تأكيد الاتصال، لكن حالة استقبال الرسائل لسه مش مؤكدة.",
+          title: "واتساب متصل — الاستقبال غير مؤكد",
+          detail: "الاتصال سليم، لكن بيانات فحص وصول الرسائل مش متاحة دلوقتي. ده مش دليل على وجود عطل.",
           tone: "neutral", canSend: true, actionLabel: "حالة واتساب",
         };
       }
