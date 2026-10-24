@@ -54,7 +54,7 @@ function UsageMeter({
         <p className="text-2xl font-black tabular-nums sm:text-[26px]" dir="ltr">
           {formatNumber(used)}
           <span className="text-sm font-medium text-muted-foreground">
-            {bounded ? \` / \${formatNumber(limit)}\` : " · بلا حد"}
+            {bounded ? ` / ${formatNumber(limit)}` : " · بلا حد"}
           </span>
         </p>
       </div>
@@ -67,12 +67,12 @@ function UsageMeter({
         className="h-1.5 overflow-hidden rounded-full bg-secondary"
       >
         <div
-          className={\`h-full rounded-full \${percent >= 85 ? "bg-warning" : "bg-primary"}\`}
-          style={{ width: bounded ? \`\${percent}%\` : "0%" }}
+          className={`h-full rounded-full ${percent >= 85 ? "bg-warning" : "bg-primary"}`}
+          style={{ width: bounded ? `${percent}%` : "0%" }}
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        {remaining === null ? "استخدام غير محدود حسب الباقة" : \`المتبقي \${formatNumber(remaining)}\`}
+        {remaining === null ? "استخدام غير محدود حسب الباقة" : `المتبقي ${formatNumber(remaining)}`}
       </p>
     </article>
   );
@@ -139,7 +139,7 @@ export default async function BillingPage() {
     ? "مجانية"
     : catalogPrice == null
       ? "غير محدد"
-      : \`\${formatNumber(catalogPrice)} \${currency}\`;
+      : `${formatNumber(catalogPrice)} ${currency}`;
 
   const otherLimits = [
     { label: "أرقام واتساب", used: overview.whatsappConnectionsUsed, max: plan?.maxWhatsAppConnections },
@@ -178,13 +178,13 @@ export default async function BillingPage() {
             <p className="text-xs text-muted-foreground">باقتك الحالية</p>
             <div className="flex flex-wrap items-center gap-3">
               <h2 className="text-2xl font-black">{plan?.displayName ?? "غير محددة"}</h2>
-              <span className={\`rounded-full px-2.5 py-1 text-xs font-bold \${statusTone}\`}>
+              <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${statusTone}`}>
                 {statusText}
               </span>
             </div>
             <p className="text-sm text-muted-foreground">
               {sub?.periodEndUtc
-                ? \`نهاية الفترة الحالية: \${formatDate(sub.periodEndUtc)}\`
+                ? `نهاية الفترة الحالية: ${formatDate(sub.periodEndUtc)}`
                 : plan?.code === "FREE"
                   ? "الباقة المجانية بدون موعد انتهاء محدد"
                   : "لا يوجد موعد تجديد مؤكد"}
@@ -207,7 +207,7 @@ export default async function BillingPage() {
           <p className="mt-5 rounded-xl bg-surface px-4 py-3 text-xs leading-6 text-muted-foreground">
             التغيير المجدول: {scheduled.Kind === "CANCEL"
               ? "الانتقال إلى المجاني"
-              : \`الانتقال إلى \${scheduled.PlanDisplayName}\`} يوم {formatDate(scheduled.EffectiveAtUtc)}. لا يعني ذلك أنه طُبّق الآن.
+              : `الانتقال إلى ${scheduled.PlanDisplayName}`} يوم {formatDate(scheduled.EffectiveAtUtc)}. لا يعني ذلك أنه طُبّق الآن.
           </p>
         ) : null}
         <div className="mt-5 border-t border-border pt-4">
@@ -289,9 +289,9 @@ export default async function BillingPage() {
                   طلب {latest.requestedPlanDisplayName} · المبلغ {formatNumber(latest.amount)} {latest.currencyCode}
                 </p>
               </div>
-              <span className={\`rounded-full px-2.5 py-1 text-xs font-bold \${rejected
+              <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${rejected
                 ? "bg-destructive/10 text-destructive"
-                : "bg-warning-soft text-warning"}\`}>
+                : "bg-warning-soft text-warning"}`}>
                 {paymentStatusLabel(latest.status)}
               </span>
             </div>
