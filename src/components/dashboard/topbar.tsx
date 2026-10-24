@@ -79,7 +79,7 @@ export function DashboardTopbar({
         />
         <ThemeToggle />
         <Link
-          href="/dashboard/account"
+          href="/dashboard/settings?tab=account"
           className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-border bg-card text-sm text-muted-foreground transition hover:bg-surface hover:text-foreground"
           aria-label="الحساب"
         >
