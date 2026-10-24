@@ -10,11 +10,13 @@ import {
   type OverviewWhatsAppState,
 } from "@/lib/dashboard/connection-state";
 import type { ReceptionistStatus } from "@/lib/dashboard/receptionist-status";
+import type { InboundDeliveryIssue } from "@/modules/channels/whatsapp-service";
 import { cn } from "@/lib/utils/cn";
 
 type ConnectionSnapshot = {
   uiState: OverviewWhatsAppState | null;
   inboundHealth: OverviewInboundHealth;
+  inboundIssue: InboundDeliveryIssue | null;
 };
 
 const toneClasses = {
@@ -33,28 +35,32 @@ const dotClasses = {
 export function ConnectionHealthStrip({
   initialUiState,
   initialInboundHealth,
+  initialInboundIssue = null,
   status,
 }: {
   initialUiState: string | null;
   initialInboundHealth: OverviewInboundHealth;
+  initialInboundIssue?: InboundDeliveryIssue | null;
   status: ReceptionistStatus;
 }) {
   const router = useRouter();
   const [snapshot, setSnapshot] = useState<ConnectionSnapshot>({
     uiState: (initialUiState as OverviewWhatsAppState | null) ?? null,
     inboundHealth: initialInboundHealth,
+    inboundIssue: initialInboundIssue,
   });
   const [refreshing, setRefreshing] = useState(false);
-  const lastUiState = useRef(snapshot.uiState);
+  const lastHealth = useRef(`${snapshot.uiState}|${snapshot.inboundHealth}|${snapshot.inboundIssue}`);
   const controller = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setSnapshot({
       uiState: (initialUiState as OverviewWhatsAppState | null) ?? null,
       inboundHealth: initialInboundHealth,
+      inboundIssue: initialInboundIssue,
     });
-    lastUiState.current = (initialUiState as OverviewWhatsAppState | null) ?? null;
-  }, [initialUiState, initialInboundHealth]);
+    lastHealth.current = `${initialUiState}|${initialInboundHealth}|${initialInboundIssue}`;
+  }, [initialUiState, initialInboundHealth, initialInboundIssue]);
 
   const refresh = useCallback(async (manual = false) => {
     controller.current?.abort();
@@ -69,23 +75,24 @@ export function ConnectionHealthStrip({
       if (!response.ok) throw new Error("status unavailable");
       const data = await response.json() as {
         uiState?: OverviewWhatsAppState;
-        runtime?: { inboundDelivery?: { health?: OverviewInboundHealth } | null } | null;
+        runtime?: { inboundDelivery?: { health?: OverviewInboundHealth; issue?: InboundDeliveryIssue | null } | null } | null;
       };
       if (abort.signal.aborted) return;
       const nextState = data.uiState ?? null;
-      setSnapshot({
-        uiState: nextState,
-        inboundHealth: data.runtime?.inboundDelivery?.health ?? null,
-      });
-      if (lastUiState.current !== nextState) {
-        lastUiState.current = nextState;
+      const nextInbound = data.runtime?.inboundDelivery?.health ?? null;
+      const nextIssue = data.runtime?.inboundDelivery?.issue ?? null;
+      setSnapshot({ uiState: nextState, inboundHealth: nextInbound, inboundIssue: nextIssue });
+      const healthKey = `${nextState}|${nextInbound}|${nextIssue}`;
+      if (lastHealth.current !== healthKey) {
+        lastHealth.current = healthKey;
+        router.refresh();
+      } else if (manual) {
         router.refresh();
       }
-      if (manual) router.refresh();
     } catch {
       if (abort.signal.aborted) return;
       // Fail closed: never keep an old green "connected" state after a failed probe.
-      setSnapshot({ uiState: null, inboundHealth: null });
+      setSnapshot({ uiState: null, inboundHealth: null, inboundIssue: null });
     } finally {
       if (!abort.signal.aborted) setRefreshing(false);
     }
@@ -108,6 +115,7 @@ export function ConnectionHealthStrip({
   const connection = describeOverviewConnection(
     snapshot.uiState,
     snapshot.inboundHealth,
+    snapshot.inboundIssue,
   );
   const aiWorking = connection.canSend && status.kind === "working"
     && snapshot.inboundHealth === "healthy";
@@ -120,7 +128,8 @@ export function ConnectionHealthStrip({
         : status.kind === "ai_paused"
           ? "الموظف متوقف مؤقتًا"
           : "الموظف محتاج مراجعة";
-  const needsAttention = connection.tone !== "success" || !aiWorking;
+  const needsAttention = connection.tone === "warning" || connection.tone === "danger"
+    || (status.kind !== "checking" && status.kind !== "working");
   const primaryAction = !connection.canSend || snapshot.inboundHealth === "degraded"
     ? { href: "/dashboard/whatsapp", label: connection.actionLabel ?? "راجع واتساب" }
     : status.action;
