@@ -433,7 +433,16 @@ export function GuidedOnboardingPreview({
         if (saved.knowledgeMode === "guided" || saved.knowledgeMode === "freeform") {
           setKnowledgeMode(saved.knowledgeMode);
         }
-        if (Array.isArray(saved.discoveryTurns)) setDiscoveryTurns(saved.discoveryTurns);
+        if (Array.isArray(saved.discoveryTurns)) {
+          setDiscoveryTurns(saved.discoveryTurns);
+          const lastSavedTurn = saved.discoveryTurns.at(-1);
+          if (saved.step === "KNOWLEDGE" && !saved.discoveryDone && lastSavedTurn
+            && lastSavedTurn.question === saved.discoveryQuestion) {
+            // Older clients saved the answer before the API rejected the next-question request.
+            // Preserve the reply and expose Retry after a reload, rather than asking it again.
+            setDiscoveryError("معلومتك موجودة في المسودة. اضغط «حاول تاني» عشان نكمل من آخر إجابة.");
+          }
+        }
         if (typeof saved.discoveryQuestion === "string") setDiscoveryQuestion(saved.discoveryQuestion);
         if (typeof saved.discoveryTopic === "string" || saved.discoveryTopic === null) setDiscoveryTopic(saved.discoveryTopic ?? null);
         if (typeof saved.discoveryInput === "string") setDiscoveryInput(saved.discoveryInput);
