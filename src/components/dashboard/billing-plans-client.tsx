@@ -476,6 +476,7 @@ export function BillingPlansClient({
                 type="button"
                 variant="ghost"
                 size="sm"
+                autoFocus
                 disabled={creating || submitting}
                 onClick={() => setDialogOpen(false)}
               >
