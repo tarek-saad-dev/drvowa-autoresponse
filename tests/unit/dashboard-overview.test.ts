@@ -24,7 +24,14 @@ describe("dashboard live WhatsApp states", () => {
     const view = describeOverviewConnection("READY", "degraded");
     expect(view.tone).toBe("warning");
     expect(view.canSend).toBe(true);
-    expect(view.detail).toContain("وصول الرسائل");
+    expect(view.detail).toContain("استقبال");
+  });
+
+  it("shows the underlying issue, not a generic warning, when one is available", () => {
+    const view = describeOverviewConnection("READY", "degraded", "delivery_stopped");
+    expect(view.title).toContain("خدمة توصيل الرسائل");
+    expect(view.detail).toContain("متوقفة");
+    expect(view.actionLabel).toBe("شوف السبب والحل");
   });
 
   it("never claims healthy inbound when reception has not been verified", () => {
