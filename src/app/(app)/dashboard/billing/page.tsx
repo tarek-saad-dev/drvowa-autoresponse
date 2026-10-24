@@ -44,9 +44,10 @@ function UsageMeter({
   used: number;
   limit: number | null | undefined;
 }) {
-  const bounded = limit != null && limit > 0;
-  const percent = bounded ? Math.min(100, Math.max(0, (used / limit) * 100)) : 0;
-  const remaining = bounded ? Math.max(0, limit - used) : null;
+  const safeLimit = limit != null && limit > 0 ? limit : null;
+  const bounded = safeLimit !== null;
+  const percent = safeLimit !== null ? Math.min(100, Math.max(0, (used / safeLimit) * 100)) : 0;
+  const remaining = safeLimit !== null ? Math.max(0, safeLimit - used) : null;
   return (
     <article className="space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
       <div className="space-y-1">
@@ -54,7 +55,7 @@ function UsageMeter({
         <p className="text-2xl font-black tabular-nums sm:text-[26px]" dir="ltr">
           {formatNumber(used)}
           <span className="text-sm font-medium text-muted-foreground">
-            {bounded ? ` / ${formatNumber(limit)}` : " · بلا حد"}
+            {safeLimit !== null ? ` / ${formatNumber(safeLimit)}` : " · بلا حد"}
           </span>
         </p>
       </div>
@@ -62,8 +63,8 @@ function UsageMeter({
         role={bounded ? "progressbar" : undefined}
         aria-label={bounded ? title : undefined}
         aria-valuemin={bounded ? 0 : undefined}
-        aria-valuemax={bounded ? limit : undefined}
-        aria-valuenow={bounded ? Math.min(used, limit) : undefined}
+        aria-valuemax={safeLimit ?? undefined}
+        aria-valuenow={safeLimit !== null ? Math.min(used, safeLimit) : undefined}
         className="h-1.5 overflow-hidden rounded-full bg-secondary"
       >
         <div
@@ -103,7 +104,7 @@ export default async function BillingPage() {
 
   const plan = overview.plan;
   const sub = overview.subscription;
-  const latest = paymentStatus.open ??
+  const latest = paymentStatus.open ?? paymentStatus.pending ??
     (paymentStatus.latest?.status === "REJECTED" ? paymentStatus.latest : null);
   const awaitingTransfer = latest?.status === "AWAITING_TRANSFER";
   const pendingReview = latest?.status === "PENDING";
@@ -115,10 +116,12 @@ export default async function BillingPage() {
     (sub.status === "ACTIVE" && !overview.canAct && !grace) ||
     (sub.periodStartUtc && sub.periodEndUtc && sub.periodEndUtc <= sub.periodStartUtc);
   const needsAttention = Boolean(inconsistent || scheduledIncomplete);
-  const nearExhaustion = Boolean(plan && [
-    [overview.aiUsed, plan.monthlyAiReplies],
-    [overview.whatsappOutboundUsed, plan.monthlyWhatsAppOutbound],
-  ].some(([value, max]) => max != null && max > 0 && value >= max));
+  const exhausted = (used: number, max: number | null | undefined) =>
+    max != null && max > 0 && used >= max;
+  const nearExhaustion = Boolean(plan && (
+    exhausted(overview.aiUsed, plan.monthlyAiReplies) ||
+    exhausted(overview.whatsappOutboundUsed, plan.monthlyWhatsAppOutbound)
+  ));
   const statusText = needsAttention
     ? "يحتاج مراجعة"
     : grace
