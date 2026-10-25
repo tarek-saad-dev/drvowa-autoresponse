@@ -203,7 +203,7 @@ export function EmployeeKnowledgeChat({
         }),
       });
       const data = (await response.json().catch(() => ({}))) as {
-        applied?: { created: number; merged: number };
+        applied?: { created: number; merged: number; conflictsResolved?: number };
         code?: string;
         error?: string;
       };
