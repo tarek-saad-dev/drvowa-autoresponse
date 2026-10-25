@@ -463,6 +463,21 @@ export async function processAiReplyJob(params: {
       businessId,
       recentMessages,
       customerPhoneHint,
+      beforeWrite: async () => {
+        if (!(await requireLiveLease("before_erp_write"))) return false;
+        const active = await getChannelAiSettingByConnection({
+          businessId,
+          channelConnectionId: job.channelConnectionId,
+        });
+        if (!active?.autoReplyEnabled || !active.enabledAtUtc ||
+            job.createdAtUtc.getTime() < active.enabledAtUtc.getTime()) return false;
+        const gate = await evaluateConversationAiSendGate({
+          businessId,
+          conversationId: job.conversationId,
+          jobCreatedAtUtc: job.createdAtUtc,
+        });
+        return gate.allow;
+      },
     }).catch(() => ({
       text:
         "LIVE ERP STATUS: Live ERP lookup was unavailable. "
