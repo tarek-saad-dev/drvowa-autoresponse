@@ -130,6 +130,35 @@ describe("WhatsApp ERP booking write path", () => {
     expect(calls[0].input.idempotencyKey).not.toBe(calls[1].input.idempotencyKey);
   });
 
+  it("cancels both explicitly confirmed phone-owned bookings with confirmed ERP results", async () => {
+    mocks.generateContent
+      .mockResolvedValueOnce({ text: JSON.stringify({ action: "CANCEL", tool: null, input: {} }) })
+      .mockResolvedValueOnce({ text: JSON.stringify({
+        confirmed: true, expectedCount: 2, bookingCodes: [a.code, b.code],
+        workDate: null, sameTime: false, newTime: null,
+      }) });
+    mocks.invokeDrvoErpTool.mockImplementation(async () => ({
+      ok: true, data: { ok: true, cancellation: { status: "cancelled" } },
+    }));
+    const result = await resolveLiveErpContext({ ...base, beforeWrite: async () => true });
+    expect(result.replyText).toContain("BK-ABCD2 اتلغى");
+    expect(result.replyText).toContain("BK-BCDE3 اتلغى");
+    expect(mocks.invokeDrvoErpTool).toHaveBeenCalledTimes(2);
+    expect(mocks.invokeDrvoErpTool.mock.calls.every(([item]) =>
+      item.tool === "booking.cancel" && item.customerConfirmed === true,
+    )).toBe(true);
+  });
+
+  it("blocks bulk mutations if more bookings are on the phone than the customer identified", async () => {
+    modelPlan();
+    mocks.callIntegrationTool.mockImplementationOnce(async () => ({
+      ok: true, data: { bookings: [a, b, booking("BK-CDEF4", "23:45")] },
+    }));
+    const result = await resolveLiveErpContext({ ...base, beforeWrite: async () => true });
+    expect(result.replyText).toContain("أكتر من حجز");
+    expect(mocks.invokeDrvoErpTool).not.toHaveBeenCalled();
+  });
+
   it("never calls WRITE without an explicit confirmation", async () => {
     modelPlan(false);
     const result = await resolveLiveErpContext({ ...base, beforeWrite: async () => true });
