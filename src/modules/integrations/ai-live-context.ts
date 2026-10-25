@@ -98,6 +98,7 @@ async function executeCustomerBookingChange(args: {
   action: "CANCEL" | "RESCHEDULE";
   client: GoogleGenAI;
   model: string;
+  beforeWrite?: () => Promise<boolean>;
 }): Promise<LiveErpContextResult> {
   const tool = args.action === "CANCEL" ? "booking.cancel" : "booking.reschedule";
   const available = args.manifest.tools;
@@ -225,6 +226,13 @@ async function executeCustomerBookingChange(args: {
       ? { code: change.booking.code, phone: args.customerPhone, idempotencyKey }
       : { code: change.booking.code, phone: args.customerPhone, desired: change.desired, idempotencyKey };
     try {
+      // Recheck the AI job lease and human-takeover state just before EVERY write.
+      // Missing callback means no permission to mutate.
+      const stillAuthorized = args.beforeWrite ? await args.beforeWrite().catch(() => false) : false;
+      if (!stillAuthorized) {
+        failures.push(`${change.booking.code} (BOT_PAUSED_OR_LEASE_LOST)`);
+        continue;
+      }
       // This service enforces manifest approval (CUSTOMER_CONFIRM) server-side.
       const result = await invokeDrvoErpTool({
         businessId: args.businessId, tool, input, requestId: idempotencyKey, customerConfirmed: true,
@@ -272,6 +280,7 @@ export async function resolveLiveErpContext(params: {
     Pick<Message, "direction" | "textContent" | "createdAtUtc" | "messageId">
   >;
   customerPhoneHint?: string | null;
+  beforeWrite?: () => Promise<boolean>;
 }): Promise<LiveErpContextResult> {
   const inbound = latestInbound(params.recentMessages);
   const customerMessage = inbound?.textContent?.trim() ?? "";
@@ -349,7 +358,7 @@ export async function resolveLiveErpContext(params: {
       integration, manifest, businessId: params.businessId,
       customerPhone: params.customerPhoneHint ?? null,
       recentMessages: params.recentMessages,
-      action: action.action, client, model,
+      action: action.action, client, model, beforeWrite: params.beforeWrite,
     }).catch(() => mutationReply(
       "مقدرتش أتأكد من تنفيذ طلب الحجز بسبب مشكلة في الاتصال. ماقدرش أؤكد إن أي تغيير حصل؛ تواصل مع الاستقبال للتأكيد.",
     ));
