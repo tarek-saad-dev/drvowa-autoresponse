@@ -55,6 +55,8 @@ const recentMessages = [
     createdAtUtc: new Date("2026-10-25T20:14:00.000Z"),
   },
 ];
+const originalGeminiKey = process.env.GEMINI_API_KEY;
+
 const base = {
   businessId: "cut-business",
   customerPhoneHint: "201000000000",
@@ -105,7 +107,11 @@ beforeEach(() => {
   }));
 });
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  if (originalGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
+  else process.env.GEMINI_API_KEY = originalGeminiKey;
+});
 
 describe("WhatsApp ERP booking write path", () => {
   it("executes both reschedules after verified ownership and fresh job authorization", async () => {
