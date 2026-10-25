@@ -178,6 +178,15 @@ async function executeCustomerBookingChange(args: {
     return mutationReply("محتاج أتأكد من أنهي حجز أو حجوزات والميعاد الجديد قبل ما أغيّر أي حاجة. ابعتلي التفاصيل أو كود الحجز.", tool);
   }
 
+  // "Both" is unsafe when this phone has additional upcoming bookings and
+  // the ERP summary does not expose customer names for disambiguation.
+  if (planned.expectedCount > 1 && summaries.length !== planned.expectedCount) {
+    return mutationReply(
+      "فيه أكتر من حجز على الرقم ده، ومش عايز أغيّر حجز غلط. ابعت أكواد الحجوزات المطلوبة أو خلي الاستقبال يأكدها. لسه مفيش تغيير اتنفذ.",
+      tool,
+    );
+  }
+
   const fullBookings: BookingCandidate[] = [];
   for (const code of planned.bookingCodes) {
     const verified = await callIntegrationTool({
