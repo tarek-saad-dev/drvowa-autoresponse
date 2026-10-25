@@ -21,6 +21,7 @@ function DashboardShellInner({
 }) {
   const pathname = usePathname();
   const isInbox = pathname === "/dashboard/inbox";
+  const isAgent = pathname === "/dashboard/agent";
   const { threadOpen } = useInboxChrome();
 
   // Mobile: keep global nav on the conversation list; hide it inside an open thread
@@ -30,7 +31,7 @@ function DashboardShellInner({
   return (
     <div
       className={
-        isInbox
+        (isInbox || isAgent)
           ? "fixed inset-0 z-40 flex h-[100dvh] w-screen min-h-0 min-w-0 overflow-hidden overscroll-none bg-background"
           : "flex min-h-full flex-1 bg-background"
       }
@@ -42,7 +43,9 @@ function DashboardShellInner({
           className={
             isInbox
               ? "flex min-h-0 min-w-0 flex-1 overflow-hidden p-0"
-              : "flex-1 overflow-auto p-4 pb-24 sm:p-6 sm:pb-24 md:pb-6"
+              : isAgent
+                ? "flex min-h-0 min-w-0 flex-1 overflow-hidden p-3 pb-[calc(5.75rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-[calc(5.75rem+env(safe-area-inset-bottom))] md:p-5"
+                : "flex-1 overflow-auto p-4 pb-24 sm:p-6 sm:pb-24 md:pb-6"
           }
         >
           {children}

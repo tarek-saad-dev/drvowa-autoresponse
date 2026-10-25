@@ -10,6 +10,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
+import { trainingReplyForAnalysis } from "@/lib/ui/knowledge-chat-replies";
 
 type Turn = { role: "user" | "assistant"; text: string; at?: string };
 type Proposal = {
@@ -26,6 +27,7 @@ type Session = {
   sessionId: string;
   status: string;
   conversation?: Turn[];
+  summary?: { clarifications?: string[] } | null;
 };
 type AnalyzeResponse = {
   session?: Session;
@@ -59,7 +61,7 @@ export function EmployeeKnowledgeChat({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const endRef = useRef<HTMLDivElement | null>(null);
+  const logRef = useRef<HTMLDivElement | null>(null);
   const storageKey = "drvo-knowledge-session:" + businessId;
 
   useEffect(() => {
@@ -74,12 +76,17 @@ export function EmployeeKnowledgeChat({
           );
           const data = (await response.json()) as AnalyzeResponse;
           if (!response.ok || cancelled) return;
-          if (data.session?.conversation?.length) {
-            setTurns(data.session.conversation);
-            if (data.session.status !== "APPLIED") {
-              setSession(data.session);
-              setProposals(data.proposals ?? []);
-            }
+          if (data.session?.conversation?.length && data.session.status !== "APPLIED") {
+            const restored = data.session.conversation.map((turn) =>
+              turn.role === "assistant" && turn.text.startsWith("حللت المعلومات ووجدت")
+                ? { ...turn, text: trainingReplyForAnalysis(data.proposals ?? []) }
+                : turn
+            );
+            setTurns(restored);
+            setSession(data.session);
+            setProposals(data.proposals ?? []);
+          } else if (data.session?.status === "APPLIED") {
+            window.localStorage.removeItem(storageKey);
           }
         } catch {
           // A previous session may have expired; teaching must remain usable.
@@ -95,23 +102,21 @@ export function EmployeeKnowledgeChat({
   }, [storageKey]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [turns, proposals, busy]);
+    // Only the chat timeline scrolls; never drag the surrounding dashboard.
+    const log = logRef.current;
+    if (log) log.scrollTo({ top: log.scrollHeight, behavior: "smooth" });
+  }, [turns, proposals, busy, locationsToReview]);
 
   const selected = proposals.filter((p) =>
     p.action !== "NOOP" && p.selected
     && (p.action !== "CONFLICT" || p.resolution === "USE_NEW" || p.resolution === "MANUAL")
   );
-  const unresolved = proposals.some((p) => p.action === "CONFLICT" && p.selected
-    && p.resolution !== "USE_NEW" && p.resolution !== "MANUAL");
+  const unresolved = proposals.some((p) => p.action === "CONFLICT" && !p.resolution);
+  const actionable = proposals.filter((p) => p.action !== "NOOP");
 
   async function sendText(value: string) {
     const message = value.trim();
     if (!message || busy || recording || transcribing) return;
-    if (proposals.length > 0 && session) {
-      setError("راجع التغييرات المقترحة واعتمدها أو تجاهلها قبل ما تبعت معلومة تانية.");
-      return;
-    }
     setBusy(true);
     setError(null);
     setInput("");
@@ -120,31 +125,29 @@ export function EmployeeKnowledgeChat({
       const response = await fetch("/api/knowledge/ingest/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: message, sessionId: null }),
+        body: JSON.stringify({ text: message, sessionId: session?.sessionId ?? null }),
       });
       const data = (await response.json().catch(() => ({}))) as AnalyzeResponse;
       if (!response.ok || !data.session) {
         setError(mapUserFacingError(data, "مقدرتش أفهم المعلومة دلوقتي. حاول تاني."));
         setInput(message);
+        setTurns((previous) => previous.slice(0, -1));
         return;
       }
       setSession(data.session);
       setProposals(data.proposals ?? []);
       window.localStorage.setItem(storageKey, data.session.sessionId);
-      const reply = data.session.conversation?.filter((turn) => turn.role === "assistant").at(-1)?.text;
-      const proposalsCount = (data.proposals ?? []).filter((p) => p.action !== "NOOP").length;
       setTurns((previous) => [
         ...previous,
-        {
-          role: "assistant",
-          text: reply || (proposalsCount
-            ? "فهمت المعلومة. راجع التغيير المقترح تحت وبعدين اعتمده عشان أفتكره."
-            : "المعلومة دي عندي بالفعل، ومش محتاجة تتحفظ مرة تانية."),
-        },
+        { role: "assistant", text: trainingReplyForAnalysis(data.proposals ?? [], {
+          clarification: data.session?.summary?.clarifications?.[0],
+          sourceText: message,
+        }) },
       ]);
     } catch {
       setError("في مشكلة في الاتصال. جرب تاني.");
       setInput(message);
+      setTurns((previous) => previous.slice(0, -1));
     } finally {
       setBusy(false);
     }
@@ -194,10 +197,13 @@ export function EmployeeKnowledgeChat({
       const response = await fetch("/api/knowledge/ingest/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session.sessionId }),
+        body: JSON.stringify({
+          sessionId: session.sessionId,
+          proposalIds: selected.map((proposal) => proposal.proposalId),
+        }),
       });
       const data = (await response.json().catch(() => ({}))) as {
-        applied?: { created: number; merged: number };
+        applied?: { created: number; merged: number; conflictsResolved?: number };
         code?: string;
         error?: string;
       };
@@ -207,16 +213,21 @@ export function EmployeeKnowledgeChat({
       }
       const created = data.applied?.created ?? 0;
       const merged = data.applied?.merged ?? 0;
+      const resolved = data.applied?.conflictsResolved ?? 0;
+      const savedTotal = created + merged + resolved;
       setCount((old) => old + created);
       setProposals([]);
       setSession(null);
+      window.localStorage.removeItem(storageKey);
       setLocationsToReview(selected.map((proposal) => ({
         key: proposal.proposalId,
         value: locationSuggestionFromFact(proposal),
       })).filter((item): item is { key: string; value: LocationSuggestion } => Boolean(item.value)));
       setTurns((old) => [...old, {
         role: "assistant",
-        text: "تمام، حفظت " + created + " معلومة جديدة وحدّثت " + merged + " معلومة. تحب تعلّمني إيه كمان؟",
+        text: savedTotal > 0
+          ? "تمام، حفظت اللي اتفقنا عليه ✅ تقدر تعدّله معايا في أي وقت. تحب تعلّمني إيه تاني؟"
+          : "المعلومات دي كانت محفوظة بالفعل. قولّي تحب نغيّر إيه.",
       }]);
       router.refresh();
     } catch {
@@ -286,7 +297,7 @@ export function EmployeeKnowledgeChat({
     } catch {
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
-      setError("السماح بالميكروفون مطلوب للتسجيل. تقدر تكتب بدلًا منه.");
+      // The browser owns the mic permission prompt; keep the composer usable.
     }
   }
 
@@ -295,104 +306,171 @@ export function EmployeeKnowledgeChat({
   }
 
   return (
-    <section aria-label="محادثة تعليم الموظف" className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm">
-      <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
-        <div className="flex items-center gap-3">
-          <span aria-hidden="true" className="grid h-10 w-10 place-items-center rounded-2xl bg-primary/10 text-xl text-primary">✦</span>
-          <div>
+    <section aria-label="محادثة تعليم الموظف" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-3 py-3 sm:px-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/10 text-xl text-primary">✦</span>
+          <div className="min-w-0">
             <h2 className="text-sm font-black">علّم موظفك</h2>
-            <p className="text-xs text-muted-foreground">اتكلم معاه براحتك، كتابة أو فويس</p>
+            <p className="text-xs text-muted-foreground">اتكلم بطريقتك، وأنا هفهمك</p>
           </div>
         </div>
-        <span className="rounded-full bg-surface px-3 py-1.5 text-xs font-bold text-muted-foreground">
-          {count} معلومة
-        </span>
+        <Link href="/dashboard/knowledge/manage"
+          className="shrink-0 rounded-full border border-border px-3 py-2 text-xs font-bold text-muted-foreground transition hover:border-primary/30 hover:text-primary">
+          المعلومات المحفوظة <span className="ms-1 font-normal">({count})</span>
+        </Link>
       </header>
 
-      <div role="log" aria-live="polite" className="flex min-h-[300px] max-h-[52vh] flex-col gap-3 overflow-y-auto bg-surface/35 p-4 sm:min-h-[350px] sm:p-5">
+      <div ref={logRef} role="log" aria-label="رسائل تعليم الموظف" aria-live="polite"
+        className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain bg-surface/30 px-3 py-5 sm:px-6">
         {turns.map((turn, index) => (
           <div key={index} className={turn.role === "assistant" ? "flex justify-start" : "flex justify-end"}>
-            <p className={
-              "max-w-[88%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-7 " +
-              (turn.role === "assistant"
-                ? "border border-border bg-card text-foreground"
-                : "bg-primary/10 text-foreground")
-            }>
-              {turn.text}
-            </p>
+            {turn.role === "user" && turn.text.length > 420 ? (
+              <details className="group max-w-[90%] rounded-2xl rounded-tr-md bg-primary/10 px-4 py-3 text-sm leading-7 text-foreground sm:max-w-[78%]">
+                <summary className="cursor-pointer list-none text-start marker:hidden [&::-webkit-details-marker]:hidden">
+                  {turn.text.slice(0, 230)}…
+                  <span className="mt-1 block text-xs font-bold text-primary group-open:hidden">اقرأ باقي رسالتي</span>
+                </summary>
+                <p className="mt-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{turn.text.slice(230)}</p>
+              </details>
+            ) : (
+              <p dir="auto" className={
+                "max-w-[90%] whitespace-pre-wrap break-words rounded-2xl px-4 py-3 text-sm leading-7 [overflow-wrap:anywhere] sm:max-w-[78%] " +
+                (turn.role === "assistant"
+                  ? "rounded-tl-md border border-border bg-card text-foreground shadow-sm"
+                  : "rounded-tr-md bg-primary/10 text-foreground")
+              }>
+                {turn.text}
+              </p>
+            )}
           </div>
         ))}
-        {busy ? <p className="text-xs text-muted-foreground">براجع المعلومات...</p> : null}
-        <div ref={endRef} />
+
+        {busy ? (
+          <div className="flex justify-start" role="status" aria-label="الموظف بيفكر">
+            <span className="inline-flex items-center gap-1 rounded-2xl border border-border bg-card px-4 py-3 text-muted-foreground">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:150ms]" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:300ms]" />
+              <span className="sr-only">بيفهم كلامك...</span>
+            </span>
+          </div>
+        ) : null}
+
+        {proposals.length > 0 && !busy ? (
+          <div className="flex justify-start">
+            <div className="w-full max-w-[96%] space-y-3 rounded-2xl rounded-tl-md border border-border bg-card p-3 shadow-sm sm:max-w-[83%] sm:p-4">
+              {actionable.length ? (
+                <>
+                  <div>
+                    <p className="text-sm font-black">ده اللي فهمته من كلامك</p>
+                    <p className="mt-1 text-xs leading-6 text-muted-foreground">
+                      راجع التفاصيل لو حابب، ومش هيتحفظ أي تغيير قبل موافقتك.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    {actionable.map((proposal) => (
+                      <details key={proposal.proposalId} className="group rounded-xl border border-border bg-surface/45">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-start [&::-webkit-details-marker]:hidden">
+                          <span className="min-w-0 flex-1 break-words text-xs font-bold leading-6">{proposal.proposedTitle}</span>
+                          <span className={
+                            "shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold " +
+                            (proposal.action === "CONFLICT" ? "bg-warning-soft text-warning" : "bg-primary/5 text-muted-foreground")
+                          }>
+                            {proposal.action === "CONFLICT"
+                              ? proposal.resolution === "USE_NEW" ? "اخترت الجديدة" : proposal.resolution === "KEEP_EXISTING" ? "الاحتفاظ بالقديمة" : "محتاجة قرار"
+                              : proposal.action === "MERGE" ? "تحديث" : "جديدة"}
+                          </span>
+                          <span className="text-muted-foreground transition group-open:rotate-180" aria-hidden="true">⌄</span>
+                        </summary>
+                        <div className="space-y-3 border-t border-border px-3 py-3">
+                          <p className="whitespace-pre-wrap break-words text-xs leading-6 text-foreground [overflow-wrap:anywhere]">{proposal.proposedContent}</p>
+                          {proposal.action === "CONFLICT" ? (
+                            <div className="space-y-2">
+                              {proposal.existingContent ? (
+                                <p className="whitespace-pre-wrap rounded-lg bg-card p-2 text-xs leading-6 text-muted-foreground">المحفوظ حاليًا: {proposal.existingContent}</p>
+                              ) : null}
+                              <p className="text-xs font-bold">أنهي واحدة نعتمد؟</p>
+                              <div className="flex flex-wrap gap-2">
+                                <Button type="button" size="sm" disabled={busy}
+                                  variant={proposal.resolution === "USE_NEW" ? "default" : "outline"}
+                                  onClick={() => void updateConflict(proposal.proposalId, true)}>الجديدة</Button>
+                                <Button type="button" size="sm" disabled={busy}
+                                  variant={proposal.resolution === "KEEP_EXISTING" ? "default" : "outline"}
+                                  onClick={() => void updateConflict(proposal.proposalId, false)}>خلي القديمة</Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-muted-foreground">
+                              {proposal.action === "MERGE" ? "هنحدّث المعلومة الحالية لما توافق." : "هضيف المعلومة دي لما توافق."}
+                            </p>
+                          )}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                  {unresolved ? (
+                    <p className="text-xs font-semibold text-warning" role="status">
+                      فيه معلومة متعارضة. افتحها واختار الصح الأول.
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <Button type="button" size="sm" disabled={busy || selected.length === 0 || unresolved}
+                      onClick={() => void applyChanges()}>
+                      {busy ? "بحفظ..." : "تمام، احفظ اللي فهمته"}
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={discardChanges}>
+                      تجاهل
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs leading-6 text-muted-foreground">مفيش تغييرات جديدة للحفظ. كمل كلامك عادي.</p>
+                  <Button type="button" size="sm" variant="ghost" onClick={discardChanges}>تمام</Button>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {locationsToReview.length ? (
+          <details className="max-w-[96%] rounded-xl border border-border bg-card p-3 sm:max-w-[83%]">
+            <summary className="cursor-pointer text-xs font-bold">فيه بيانات فروع تقدر تراجعها كمان (اختياري)</summary>
+            <div className="mt-3 space-y-2">
+              {locationsToReview.map((item) => (
+                <EmployeeLocationSuggestion key={item.key} suggestion={item.value} />
+              ))}
+            </div>
+          </details>
+        ) : null}
       </div>
 
-      {proposals.length > 0 ? (
-        <div className="space-y-3 border-t border-border bg-card p-4 sm:p-5">
-          <div>
-            <p className="text-sm font-black">راجع اللي فهمته قبل الحفظ</p>
-            <p className="mt-1 text-xs text-muted-foreground">مش هغيّر معلومات نشاطك من غير موافقتك.</p>
-          </div>
-          {proposals.map((proposal) => (
-            <div key={proposal.proposalId} className="rounded-xl border border-border bg-surface/50 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm font-bold">{proposal.proposedTitle}</span>
-                <span className="text-xs text-muted-foreground">
-                  {proposal.action === "CREATE" ? "جديدة" : proposal.action === "MERGE" ? "تحديث"
-                    : proposal.action === "CONFLICT" ? "محتاجة تأكيد" : "موجودة بالفعل"}
-                </span>
-              </div>
-              <p className="mt-2 whitespace-pre-wrap text-xs leading-6 text-muted-foreground">{proposal.proposedContent}</p>
-              {proposal.action === "CONFLICT" ? (
-                <div className="mt-3 space-y-2">
-                  {proposal.existingContent ? <p className="rounded-lg bg-card p-2 text-xs">الحالي: {proposal.existingContent}</p> : null}
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="button" size="sm" variant="outline" disabled={busy}
-                      onClick={() => void updateConflict(proposal.proposalId, true)}>استخدم الجديدة</Button>
-                    <Button type="button" size="sm" variant="outline" disabled={busy}
-                      onClick={() => void updateConflict(proposal.proposalId, false)}>احتفظ بالحالية</Button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ))}
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" disabled={busy || !selected.length || unresolved}
-              onClick={() => void applyChanges()}>
-              {busy ? "بنحفظ..." : "احفظ " + selected.length + " تغيير"}
-            </Button>
-            <Button type="button" variant="ghost" disabled={busy} onClick={discardChanges}>تجاهل</Button>
-          </div>
-        </div>
-      ) : null}
-
-      {locationsToReview.length ? (
-        <div className="space-y-2 border-t border-border p-4">
-          {locationsToReview.map((item) => <EmployeeLocationSuggestion key={item.key} suggestion={item.value} />)}
-        </div>
-      ) : null}
-      {error ? <div className="px-4 pt-3"><Alert variant="error">{error}</Alert></div> : null}
-      <form onSubmit={submit} className="flex items-end gap-2 border-t border-border p-3 sm:p-4">
+      {error ? <div className="shrink-0 border-t border-border px-3 pt-3"><Alert variant="error">{error}</Alert></div> : null}
+      <form onSubmit={submit} className="flex shrink-0 items-end gap-2 border-t border-border bg-card p-3 sm:p-4">
         <button type="button" aria-label={recording ? "إنهاء التسجيل" : "سجل رسالة صوتية"}
           title={recording ? "إنهاء التسجيل" : "رسالة صوتية"}
-          disabled={busy || transcribing || Boolean(session && proposals.length)}
+          disabled={busy || transcribing}
           onClick={() => void (recording ? stopRecording() : startRecording())}
           className={"grid h-11 w-11 shrink-0 place-items-center rounded-full border border-border text-lg transition hover:bg-primary/5 disabled:opacity-40 " +
-            (recording ? "bg-destructive-soft text-destructive" : "bg-card text-primary")}>
+            (recording ? "border-destructive bg-destructive-soft text-destructive" : "bg-card text-primary")}>
           {recording ? "■" : "🎙"}
         </button>
-        <Textarea rows={1} value={input} onChange={(e) => setInput(e.target.value)}
-          aria-label="رسالتك للموظف" placeholder={transcribing ? "بحوّل الفويس لنص..." : recording ? "بيسجل صوتك..." : "علّمه حاجة جديدة..."}
-          maxLength={12000} disabled={busy || recording || transcribing || Boolean(session && proposals.length)}
-          className="min-h-11 max-h-32 flex-1 resize-none rounded-xl" />
-        <Button type="submit" disabled={!input.trim() || busy || recording || transcribing || Boolean(session && proposals.length)}>
+        <Textarea rows={1} value={input} onChange={(event) => setInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              void sendText(input);
+            }
+          }}
+          aria-label="رسالتك للموظف"
+          placeholder={transcribing ? "بحوّل الفويس لنص..." : recording ? "جاري تسجيل صوتك..." : "قولي عايز تعلّمني إيه..."}
+          maxLength={12000} disabled={busy || recording || transcribing}
+          className="min-h-11 max-h-32 flex-1 resize-none rounded-2xl text-sm leading-6" />
+        <Button type="submit" disabled={!input.trim() || busy || recording || transcribing} className="h-11 shrink-0 rounded-xl">
           إرسال
         </Button>
       </form>
-      <div className="px-4 pb-3 text-end">
-        <Link href="/dashboard/knowledge/manage" className="text-xs text-muted-foreground underline-offset-4 hover:text-primary hover:underline">
-          مراجعة المعلومات المحفوظة
-        </Link>
-      </div>
     </section>
   );
 }
