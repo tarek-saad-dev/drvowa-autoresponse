@@ -463,6 +463,21 @@ export async function processAiReplyJob(params: {
       businessId,
       recentMessages,
       customerPhoneHint,
+      beforeWrite: async () => {
+        if (!(await requireLiveLease("before_erp_write"))) return false;
+        const active = await getChannelAiSettingByConnection({
+          businessId,
+          channelConnectionId: job.channelConnectionId,
+        });
+        if (!active?.autoReplyEnabled || !active.enabledAtUtc ||
+            job.createdAtUtc.getTime() < active.enabledAtUtc.getTime()) return false;
+        const gate = await evaluateConversationAiSendGate({
+          businessId,
+          conversationId: job.conversationId,
+          jobCreatedAtUtc: job.createdAtUtc,
+        });
+        return gate.allow;
+      },
     }).catch(() => ({
       text:
         "LIVE ERP STATUS: Live ERP lookup was unavailable. "
@@ -487,30 +502,38 @@ export async function processAiReplyJob(params: {
     }, logger);
 
     try {
-      const generated = await provider.generateReply({
-        businessId,
-        conversationId: job.conversationId,
-        agent: {
-          name: agent.name,
-          roleTitle: agent.roleTitle,
-          language: agent.language,
-          dialect: agent.dialect,
-          tone: agent.tone,
-          instructions: agent.instructions,
-        },
-        knowledge,
-        recentMessages: recentMessages.map((m) => ({
-          direction: m.direction,
-          textContent: m.textContent,
-          createdAtUtc: m.createdAtUtc,
-          messageId: m.messageId,
-        })),
-        customerPhoneHint,
-        liveContext: liveErpContext.text,
-      });
-      replyText = generated.text;
-      modelName = generated.model;
-      genLatency = generated.latencyMs;
+      // A write result must never be paraphrased by generative AI: the
+      // customer must only hear exactly what the ERP confirmed.
+      if (liveErpContext.replyText) {
+        replyText = liveErpContext.replyText;
+        modelName = "erp-verified-action";
+        genLatency = 0;
+      } else {
+        const generated = await provider.generateReply({
+          businessId,
+          conversationId: job.conversationId,
+          agent: {
+            name: agent.name,
+            roleTitle: agent.roleTitle,
+            language: agent.language,
+            dialect: agent.dialect,
+            tone: agent.tone,
+            instructions: agent.instructions,
+          },
+          knowledge,
+          recentMessages: recentMessages.map((m) => ({
+            direction: m.direction,
+            textContent: m.textContent,
+            createdAtUtc: m.createdAtUtc,
+            messageId: m.messageId,
+          })),
+          customerPhoneHint,
+          liveContext: liveErpContext.text,
+        });
+        replyText = generated.text;
+        modelName = generated.model;
+        genLatency = generated.latencyMs;
+      }
       if (!replyText.trim()) {
         await releaseAiQuota();
         return finishTerminal("FAILED", "GEMINI_EMPTY");
