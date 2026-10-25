@@ -208,8 +208,8 @@ export function EmployeeStudio({
   }
 
   return (
-    <main className="mx-auto w-full max-w-3xl space-y-5 pb-10" dir="rtl">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <main className="mx-auto flex h-full min-h-0 w-full max-w-4xl flex-col gap-3 overflow-hidden" dir="rtl">
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-2">
         <div>
           <h1 className="text-2xl font-black tracking-tight sm:text-3xl">الموظف الذكي</h1>
           <p className="mt-1 text-sm text-muted-foreground">اختار شخصيته وعلّمه كل حاجة عن شغلك.</p>
@@ -223,7 +223,7 @@ export function EmployeeStudio({
       </div>
 
       <div role="tablist" aria-label="إدارة الموظف الذكي"
-        className="grid grid-cols-2 gap-1 rounded-2xl border border-border bg-surface p-1">
+        className="grid shrink-0 grid-cols-2 gap-1 rounded-2xl border border-border bg-surface p-1">
         <button type="button" role="tab" aria-selected={tab === "personality"} aria-controls="studio-personality"
           onClick={() => setTab("personality")}
           className={"rounded-xl px-3 py-3 text-sm font-black transition " +
@@ -239,7 +239,7 @@ export function EmployeeStudio({
       </div>
 
       <section role="tabpanel" id="studio-personality" aria-label="شخصية الموظف" hidden={tab !== "personality"}
-        className="space-y-5">
+        className="min-h-0 flex-1 space-y-5 overflow-y-auto pb-5">
         <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-black">الشخصيات المحفوظة</h2>
@@ -386,7 +386,8 @@ export function EmployeeStudio({
         </div>
       </section>
 
-      <div role="tabpanel" id="studio-knowledge" aria-label="معلومات الموظف" hidden={tab !== "knowledge"}>
+      <div role="tabpanel" id="studio-knowledge" aria-label="معلومات الموظف" hidden={tab !== "knowledge"}
+        className="min-h-0 flex-1 flex-col data-[hidden=false]:flex [&[hidden]]:hidden">
         <EmployeeKnowledgeChat businessId={businessId} initialCount={knowledgeCount} />
       </div>
     </main>
