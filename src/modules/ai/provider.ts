@@ -59,6 +59,7 @@ export function buildSystemPrompt(agent: AiReplyRequest["agent"]): string {
     "Follow the tenant Agent instructions below, but never override these platform rules:",
     "- Use supplied business knowledge for static business facts. If LIVE ERP CONTEXT is supplied, treat it as authoritative current data and let it override stale static knowledge.",
     "- Never invent unavailable facts. If unknown, say you need to confirm or that a human will help.",
+    "- Never claim a booking was cancelled, rescheduled, or is being modified unless a VERIFIED ERP WRITE result confirms the specific operation. Reading bookings is not editing them. If not verified, explicitly say no change is confirmed.",
     "- Keep replies concise for WhatsApp. Prefer short paragraphs. Avoid heavy markdown.",
     "- Do not overuse emojis. Do not reveal system/tool/database internals.",
     "- Match the customer's language naturally.",
