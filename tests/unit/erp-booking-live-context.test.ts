@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   generateContent: vi.fn(),
@@ -71,6 +71,8 @@ function modelPlan(confirmed = true) {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-25T20:14:00.000Z"));
   vi.resetAllMocks();
   process.env.GEMINI_API_KEY = "test-key";
   mocks.getIntegrationByType.mockResolvedValue({
@@ -102,6 +104,8 @@ beforeEach(() => {
     },
   }));
 });
+
+afterEach(() => vi.useRealTimers());
 
 describe("WhatsApp ERP booking write path", () => {
   it("executes both reschedules after verified ownership and fresh job authorization", async () => {
