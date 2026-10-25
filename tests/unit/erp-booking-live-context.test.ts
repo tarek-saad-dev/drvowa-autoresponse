@@ -140,7 +140,14 @@ describe("WhatsApp ERP booking write path", () => {
     mocks.invokeDrvoErpTool.mockImplementation(async () => ({
       ok: true, data: { ok: true, cancellation: { status: "cancelled" } },
     }));
-    const result = await resolveLiveErpContext({ ...base, beforeWrite: async () => true });
+    const messagesForCancellation = recentMessages.map((message, index) =>
+      index === recentMessages.length - 1
+        ? { ...message, textContent: "ألغي الحجزين من فضلك" }
+        : message
+    );
+    const result = await resolveLiveErpContext({
+      ...base, recentMessages: messagesForCancellation, beforeWrite: async () => true,
+    });
     expect(result.replyText).toContain("BK-ABCD2 اتلغى");
     expect(result.replyText).toContain("BK-BCDE3 اتلغى");
     expect(mocks.invokeDrvoErpTool).toHaveBeenCalledTimes(2);
