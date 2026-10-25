@@ -387,7 +387,7 @@ export function EmployeeStudio({
       </section>
 
       <div role="tabpanel" id="studio-knowledge" aria-label="معلومات الموظف" hidden={tab !== "knowledge"}
-        className="min-h-0 flex-1 flex-col data-[hidden=false]:flex [&[hidden]]:hidden">
+        className="flex min-h-0 flex-1 flex-col [&[hidden]]:hidden">
         <EmployeeKnowledgeChat businessId={businessId} initialCount={knowledgeCount} />
       </div>
     </main>
