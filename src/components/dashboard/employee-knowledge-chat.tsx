@@ -10,6 +10,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
+import { trainingReplyForAnalysis } from "@/lib/ui/knowledge-chat-replies";
 
 type Turn = { role: "user" | "assistant"; text: string; at?: string };
 type Proposal = {
@@ -26,6 +27,7 @@ type Session = {
   sessionId: string;
   status: string;
   conversation?: Turn[];
+  summary?: { clarifications?: string[] } | null;
 };
 type AnalyzeResponse = {
   session?: Session;
@@ -59,7 +61,7 @@ export function EmployeeKnowledgeChat({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const endRef = useRef<HTMLDivElement | null>(null);
+  const logRef = useRef<HTMLDivElement | null>(null);
   const storageKey = "drvo-knowledge-session:" + businessId;
 
   useEffect(() => {
@@ -74,12 +76,17 @@ export function EmployeeKnowledgeChat({
           );
           const data = (await response.json()) as AnalyzeResponse;
           if (!response.ok || cancelled) return;
-          if (data.session?.conversation?.length) {
-            setTurns(data.session.conversation);
-            if (data.session.status !== "APPLIED") {
-              setSession(data.session);
-              setProposals(data.proposals ?? []);
-            }
+          if (data.session?.conversation?.length && data.session.status !== "APPLIED") {
+            const restored = data.session.conversation.map((turn) =>
+              turn.role === "assistant" && turn.text.startsWith("حللت المعلومات ووجدت")
+                ? { ...turn, text: trainingReplyForAnalysis(data.proposals ?? []) }
+                : turn
+            );
+            setTurns(restored);
+            setSession(data.session);
+            setProposals(data.proposals ?? []);
+          } else if (data.session?.status === "APPLIED") {
+            window.localStorage.removeItem(storageKey);
           }
         } catch {
           // A previous session may have expired; teaching must remain usable.
@@ -95,23 +102,21 @@ export function EmployeeKnowledgeChat({
   }, [storageKey]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [turns, proposals, busy]);
+    // Only the chat timeline scrolls; never drag the surrounding dashboard.
+    const log = logRef.current;
+    if (log) log.scrollTo({ top: log.scrollHeight, behavior: "smooth" });
+  }, [turns, proposals, busy, locationsToReview]);
 
   const selected = proposals.filter((p) =>
     p.action !== "NOOP" && p.selected
     && (p.action !== "CONFLICT" || p.resolution === "USE_NEW" || p.resolution === "MANUAL")
   );
-  const unresolved = proposals.some((p) => p.action === "CONFLICT" && p.selected
-    && p.resolution !== "USE_NEW" && p.resolution !== "MANUAL");
+  const unresolved = proposals.some((p) => p.action === "CONFLICT" && !p.resolution);
+  const actionable = proposals.filter((p) => p.action !== "NOOP");
 
   async function sendText(value: string) {
     const message = value.trim();
     if (!message || busy || recording || transcribing) return;
-    if (proposals.length > 0 && session) {
-      setError("راجع التغييرات المقترحة واعتمدها أو تجاهلها قبل ما تبعت معلومة تانية.");
-      return;
-    }
     setBusy(true);
     setError(null);
     setInput("");
@@ -120,31 +125,29 @@ export function EmployeeKnowledgeChat({
       const response = await fetch("/api/knowledge/ingest/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: message, sessionId: null }),
+        body: JSON.stringify({ text: message, sessionId: session?.sessionId ?? null }),
       });
       const data = (await response.json().catch(() => ({}))) as AnalyzeResponse;
       if (!response.ok || !data.session) {
         setError(mapUserFacingError(data, "مقدرتش أفهم المعلومة دلوقتي. حاول تاني."));
         setInput(message);
+        setTurns((previous) => previous.slice(0, -1));
         return;
       }
       setSession(data.session);
       setProposals(data.proposals ?? []);
       window.localStorage.setItem(storageKey, data.session.sessionId);
-      const reply = data.session.conversation?.filter((turn) => turn.role === "assistant").at(-1)?.text;
-      const proposalsCount = (data.proposals ?? []).filter((p) => p.action !== "NOOP").length;
       setTurns((previous) => [
         ...previous,
-        {
-          role: "assistant",
-          text: reply || (proposalsCount
-            ? "فهمت المعلومة. راجع التغيير المقترح تحت وبعدين اعتمده عشان أفتكره."
-            : "المعلومة دي عندي بالفعل، ومش محتاجة تتحفظ مرة تانية."),
-        },
+        { role: "assistant", text: trainingReplyForAnalysis(data.proposals ?? [], {
+          clarification: data.session?.summary?.clarifications?.[0],
+          sourceText: message,
+        }) },
       ]);
     } catch {
       setError("في مشكلة في الاتصال. جرب تاني.");
       setInput(message);
+      setTurns((previous) => previous.slice(0, -1));
     } finally {
       setBusy(false);
     }
@@ -194,7 +197,10 @@ export function EmployeeKnowledgeChat({
       const response = await fetch("/api/knowledge/ingest/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: session.sessionId }),
+        body: JSON.stringify({
+          sessionId: session.sessionId,
+          proposalIds: selected.map((proposal) => proposal.proposalId),
+        }),
       });
       const data = (await response.json().catch(() => ({}))) as {
         applied?: { created: number; merged: number };
@@ -207,16 +213,21 @@ export function EmployeeKnowledgeChat({
       }
       const created = data.applied?.created ?? 0;
       const merged = data.applied?.merged ?? 0;
+      const resolved = data.applied?.conflictsResolved ?? 0;
+      const savedTotal = created + merged + resolved;
       setCount((old) => old + created);
       setProposals([]);
       setSession(null);
+      window.localStorage.removeItem(storageKey);
       setLocationsToReview(selected.map((proposal) => ({
         key: proposal.proposalId,
         value: locationSuggestionFromFact(proposal),
       })).filter((item): item is { key: string; value: LocationSuggestion } => Boolean(item.value)));
       setTurns((old) => [...old, {
         role: "assistant",
-        text: "تمام، حفظت " + created + " معلومة جديدة وحدّثت " + merged + " معلومة. تحب تعلّمني إيه كمان؟",
+        text: savedTotal > 0
+          ? "تمام، حفظت اللي اتفقنا عليه ✅ تقدر تعدّله معايا في أي وقت. تحب تعلّمني إيه تاني؟"
+          : "المعلومات دي كانت محفوظة بالفعل. قولّي تحب نغيّر إيه.",
       }]);
       router.refresh();
     } catch {
@@ -286,7 +297,7 @@ export function EmployeeKnowledgeChat({
     } catch {
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
-      setError("السماح بالميكروفون مطلوب للتسجيل. تقدر تكتب بدلًا منه.");
+      // The browser owns the mic permission prompt; keep the composer usable.
     }
   }
 
