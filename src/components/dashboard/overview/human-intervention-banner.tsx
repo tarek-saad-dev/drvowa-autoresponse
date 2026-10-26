@@ -26,7 +26,7 @@ export function HumanInterventionBanner({
             الموظف حوّل المحادثة ليك عشان تكمل معاه
           </p>
         </div>
-        <Link href="/dashboard/inbox?filter=HUMAN" className="shrink-0">
+        <Link href="/dashboard/inbox?filter=FOLLOW_UP" className="shrink-0">
           <Button size="sm">راجع المحادثات</Button>
         </Link>
       </div>
