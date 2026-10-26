@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { explicitlyConfirmedResolved, followUpPhaseLabel } from "@/modules/escalations/followup-policy";
+import { explicitlyConfirmedResolved, explicitlyReportedRecurrence, followUpPhaseLabel } from "@/modules/escalations/followup-policy";
 
 const mocks = vi.hoisted(() => ({
   query: vi.fn(),
@@ -33,6 +33,16 @@ describe("Smart Follow-up deterministic resolution policy", () => {
   ])("never assumes success from %s", text => {
     expect(explicitlyConfirmedResolved(text)).toBe(false);
   });
+  it.each(["المشكله رجعت تاني", "نفس المشكلة رجعت", "لسه نفس المشكلة", "same issue again"])(
+    "detects explicit return of the same complaint: %s", text => {
+      expect(explicitlyReportedRecurrence(text)).toBe(true);
+    },
+  );
+  it.each(["فين الفرع؟", "ممكن مساعدة", "شكرا", "شكرا المشكلة اتحلت", "new issue", "okay"])(
+    "does not mistake ordinary chat for a recurring case: %s", text => {
+      expect(explicitlyReportedRecurrence(text)).toBe(false);
+    },
+  );
   it("keeps the follow-up phase copy compact", () => {
     expect(followUpPhaseLabel("NEEDS_ATTENTION")).toContain("تحتاج");
     expect(followUpPhaseLabel("IN_PROGRESS")).toContain("جاري");
