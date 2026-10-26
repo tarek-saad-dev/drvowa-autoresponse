@@ -12,7 +12,7 @@ export function LiveOwnership({initial,businessId}:{initial:HumanOwnershipSnapsh
     const poll=async()=>{
       if(document.visibilityState!=="visible")return;
       try{
-        const r=await fetch("/api/pulse/ownership",{cache:"no-store",credentials:"same-origin",signal:controller.signal});
+        const r=await fetch("/api/pulse/ownership?businessId="+encodeURIComponent(businessId),{cache:"no-store",credentials:"same-origin",signal:controller.signal});
         if(!r.ok)return;
         const body=await r.json() as HumanOwnershipSnapshot;
         if(active&&Number.isInteger(body.withTeam)&&Array.isArray(body.chats))setState(body);
@@ -30,7 +30,7 @@ export function LiveOwnership({initial,businessId}:{initial:HumanOwnershipSnapsh
       document.removeEventListener("visibilitychange",onFocus);
       window.removeEventListener("focus",onFocus);
     };
-  },[]);
+  },[businessId]);
   const href="/dashboard/inbox?filter=HUMAN";
   return <section aria-label="حالة المحادثات مع الفريق" className="rounded-[22px] border border-border bg-card p-4 sm:p-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
