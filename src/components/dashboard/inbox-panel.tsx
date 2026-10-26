@@ -1152,7 +1152,7 @@ export function InboxPanel({
                 <Glyph name="bot" size={17} />
                 {resumingAll ? "جاري إرجاع المحادثات..." : "إرجاع جميع الشاتات للبوت"}
               </button>
-              <span className="text-[10px] text-muted-foreground">رجوع تلقائي بعد 30 دقيقة من آخر رد بشري</span>
+              <span className="text-[10px] text-muted-foreground">يرجع للبوت بعد 90 دقيقة هدوء، بشرط عدم وجود رد أو متابعة معلّقة</span>
             </div>
           )}
           {bulkFeedback && <p role="status" className="mb-2 rounded-lg bg-success-soft px-3 py-2 text-xs font-semibold text-success">{bulkFeedback}</p>}
