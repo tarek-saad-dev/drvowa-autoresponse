@@ -365,7 +365,10 @@ export async function createEscalation(params: {
               SET NotificationStatus = N'PENDING',
                   NotificationLastErrorCode = NULL,
                   NotificationNotBeforeUtc = SYSUTCDATETIME(),
-                  CustomerHoldNextAtUtc = COALESCE(CustomerHoldNextAtUtc, SYSUTCDATETIME()),
+                  CustomerHoldNextAtUtc = CASE
+                    WHEN CustomerHoldStep = 0 AND LastHumanReplyAtUtc IS NULL
+                      THEN COALESCE(CustomerHoldNextAtUtc, SYSUTCDATETIME())
+                    ELSE NULL END,
                   UpdatedAtUtc = SYSUTCDATETIME()
             WHERE EscalationID = @id AND BusinessID = @businessId
               AND ResolvedAtUtc IS NULL AND NotificationStatus = N'CANCELLED'`,
@@ -377,6 +380,7 @@ export async function createEscalation(params: {
       }
       return;
     }
+    const escalationId = randomUUID();
     try {
       await trx.execute(
         `INSERT INTO dbo.TblHumanEscalation (
@@ -387,11 +391,18 @@ export async function createEscalation(params: {
            @reasonCode, @reason, @notificationStatus,
            0, SYSUTCDATETIME())`,
         [...conversationParams(params.businessId, params.conversationId),
-          { name: "id", type: sql.UniqueIdentifier, value: randomUUID() },
+          { name: "id", type: sql.UniqueIdentifier, value: escalationId },
           { name: "channelConnectionId", type: sql.UniqueIdentifier, value: conversation.channelConnectionId },
           { name: "reasonCode", type: sql.NVarChar(48), value: params.reasonCode.slice(0, 48) },
           { name: "reason", type: sql.NVarChar(300), value: params.reason.slice(0, 300) },
           { name: "notificationStatus", type: sql.NVarChar(20), value: notifyEligible ? "PENDING" : "CANCELLED" }],
+      );
+      await trx.execute(
+        `INSERT INTO dbo.TblFollowUpEvent
+           (BusinessID, EscalationID, ConversationID, EventKey, EventType, EventAtUtc)
+         VALUES (@businessId,@escalationId,@conversationId,N'CREATED',N'CASE_OPENED',SYSUTCDATETIME())`,
+        [...conversationParams(params.businessId, params.conversationId),
+         { name: "escalationId", type: sql.UniqueIdentifier, value: escalationId }],
       );
       created = true;
     } catch (error) {
@@ -420,7 +431,7 @@ export async function updateEscalationStatus(params: {
            ResolutionSource = CASE WHEN @status = N'RESOLVED' THEN N'MANUAL_CONFIRMED' ELSE e.ResolutionSource END,
            NotificationStatus = CASE WHEN @status = N'RESOLVED' AND e.NotificationStatus = N'PENDING'
              THEN N'CANCELLED' ELSE e.NotificationStatus END,
-           CustomerHoldNextAtUtc = CASE WHEN @status = N'RESOLVED' THEN NULL ELSE e.CustomerHoldNextAtUtc END,
+           CustomerHoldNextAtUtc = NULL,
            CustomerHoldClaimedAtUtc = CASE WHEN @status = N'RESOLVED' THEN NULL ELSE e.CustomerHoldClaimedAtUtc END,
            UpdatedAtUtc = SYSUTCDATETIME()
        OUTPUT INSERTED.EscalationID
