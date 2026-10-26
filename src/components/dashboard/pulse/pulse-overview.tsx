@@ -11,9 +11,9 @@ function Count({label,value,hint}:{label:string;value:number|string;hint:string}
   <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>
  </div>;
 }
-function periodHref(period:"today"|"month",all=false){return "/dashboard?period="+period+(all?"&view=reviews":"");}
+function periodHref(period:"today"|"yesterday"|"month",all=false){return "/dashboard?period="+period+(all?"&view=reviews":"");}
 export function PulseOverview({data,businessName,businessId,allReviews=false}:{data:PulseSnapshot|null;businessName:string;businessId:string;allReviews?:boolean}) {
- const period=data?.period||"today",monthly=period==="month";
+ const period=data?.period||"today",monthly=period==="month",yesterday=period==="yesterday";
  const ready=Boolean(data),pending=data?Math.max(0,data.eligible-data.analyzed):0;
  const actionable=(data?.needsAttentionFollowups??0)+(data?.pendingSignals??0);
  const handling=(data?.handlingFollowups??0)+(data?.handlingSignals??0);
@@ -21,7 +21,7 @@ export function PulseOverview({data,businessName,businessId,allReviews=false}:{d
   ?"ملخص Pulse غير متاح حاليًا. المحادثات والمتابعة ما زالوا متاحين في قائمة المحادثات."
   :data!.messages===0
    ?"مفيش رسائل واردة جديدة خلال الفترة المختارة. متابعات العملاء المفتوحة بتفضل ظاهرة حتى لو بدأت قبل الفترة دي."
-   :"خلال "+(monthly?"الشهر الحالي":"اليوم")+" وصلتك "+data!.messages.toLocaleString("ar-EG")+" رسالة واردة ضمن "+data!.conversations.toLocaleString("ar-EG")+" محادثة. "+
+   :"خلال "+(monthly?"الشهر الحالي":yesterday?"أمس":"اليوم")+" وصلتك "+data!.messages.toLocaleString("ar-EG")+" رسالة واردة ضمن "+data!.conversations.toLocaleString("ar-EG")+" محادثة. "+
     (actionable>0?"عندك "+actionable.toLocaleString("ar-EG")+" متابعة أو إشارة محتاجة مراجعة.":"مفيش طلبات مراجعة مفتوحة مصنفة حتى الآن.")+
     (pending>0?" ولسه بيتم تحليل بعض الرسائل.":"");
  const maxTopic=data?.categories[0],totalTopics=(data?.categories??[]).reduce((s,t)=>s+t.conversations,0);
@@ -33,12 +33,13 @@ export function PulseOverview({data,businessName,businessId,allReviews=false}:{d
     <p className="mt-1 text-sm text-muted-foreground">كل المهم عن {businessName}، من غير زحمة.</p>
    </div>
    <nav aria-label="الفترة" className="flex rounded-xl border border-border bg-card p-1">
-    <Link aria-current={!monthly?"page":undefined} href={periodHref("today")} className={"rounded-lg px-4 py-2 text-xs font-black "+(!monthly?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-surface")}>ملخص اليوم</Link>
+    <Link aria-current={period==="today"?"page":undefined} href={periodHref("today")} className={"rounded-lg px-4 py-2 text-xs font-black "+(period==="today"?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-surface")}>ملخص اليوم</Link>
+    <Link aria-current={yesterday?"page":undefined} href={periodHref("yesterday")} className={"rounded-lg px-4 py-2 text-xs font-black "+(yesterday?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-surface")}>أمس</Link>
     <Link aria-current={monthly?"page":undefined} href={periodHref("month")} className={"rounded-lg px-4 py-2 text-xs font-black "+(monthly?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-surface")}>ملخص الشهر</Link>
    </nav>
   </header>
   <section className={card+" border-primary/15 bg-primary/[.035] p-4 sm:p-6"} aria-label="ملخص نبض النشاط">
-   <div className="flex items-center gap-2 text-sm font-black"><span className="text-lg text-primary">✦</span> إيه اللي حصل {monthly?"الشهر ده":"النهارده"}؟</div>
+   <div className="flex items-center gap-2 text-sm font-black"><span className="text-lg text-primary">✦</span> إيه اللي حصل {monthly?"الشهر ده":yesterday?"أمس":"النهارده"}؟</div>
    <p className="mt-3 max-w-4xl text-sm leading-8 text-foreground/90">{summary}</p>
    {ready && handling>0?<p className="mt-2 text-xs leading-6 text-muted-foreground">وفيه {handling.toLocaleString("ar-EG")} متابعة بدأ الفريق التعامل معاها بالفعل؛ مش محسوبة كطلبات محتاجة رد جديد.</p>:null}
    {data?<p className="mt-3 text-xs text-muted-foreground">التصنيف المبدئي: {data.analyzed.toLocaleString("en-US")} من {data.eligible.toLocaleString("en-US")} رسالة نصية متاحة في الفترة • الحجوزات والمشتريات المعروضة استفسارات، وليست عمليات مؤكدة.</p>:null}
