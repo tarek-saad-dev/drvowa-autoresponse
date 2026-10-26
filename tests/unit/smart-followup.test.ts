@@ -78,7 +78,10 @@ describe("Smart Follow-up guarded event transitions", () => {
     expect(statement).toContain("@at > e.LastHumanReplyAtUtc");
     expect(statement).toContain("ResolutionSource = N'CUSTOMER_EXPLICIT'");
     expect(statement).toContain("ResolutionEvidenceMessageID = @messageId");
-    expect(mocks.execute.mock.calls[0][0]).toContain("CUSTOMER_CONFIRMED_RESOLVED");
+    expect(mocks.execute.mock.calls[0][0]).toContain("TblFollowUpEvent");
+    expect(mocks.execute.mock.calls[0][1]).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "kind", value: "CUSTOMER_CONFIRMED_RESOLVED" }),
+    ]));
     expect(mocks.execute.mock.calls[1][0]).toContain("PauseReason=N'ESCALATION'");
   });
   it("late or duplicate inbound does not falsely close or emit another audit event", async () => {
