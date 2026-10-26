@@ -1,3 +1,4 @@
+import { OPEN_ESCALATION_SQL } from "@/modules/escalations/open-escalation-sql";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -104,6 +105,7 @@ type ConversationListRow = ConversationRow & {
   LastInboundJobStatus: string | null;
   LastInboundJobErrorCode: string | null;
   LastInboundJobNotBeforeUtc: Date | null;
+  HasOpenEscalation: boolean | number | null;
 };
 
 function mapChannel(row: ChannelRow): ChannelConnection {
@@ -1060,7 +1062,7 @@ export async function insertUsageEventInTrx(
   );
 }
 
-export type ConversationFilter = "ALL" | "UNREAD" | "HUMAN" | "AUTO" | "ARCHIVED" | "PINNED";
+export type ConversationFilter = "ALL" | "UNREAD" | "HUMAN" | "FOLLOW_UP" | "AUTO" | "ARCHIVED" | "PINNED";
 
 export type ConversationPageCursor = {
   at: Date;
@@ -1150,10 +1152,15 @@ export async function listConversationsForBusiness(params: {
     ? "AND c.LastInboundAtUtc IS NOT NULL AND (c.LastReadAtUtc IS NULL OR c.LastInboundAtUtc > c.LastReadAtUtc)"
     : filter === "HUMAN"
       ? "AND ai.Mode IN (N'HUMAN_PAUSED', N'SAFETY_PAUSED')"
+      : filter === "FOLLOW_UP"
+        ? `AND EXISTS (SELECT 1 FROM dbo.TblHumanEscalation e
+            WHERE e.BusinessID = c.BusinessID AND e.ConversationID = c.ConversationID
+            AND ${OPEN_ESCALATION_SQL})`
       : filter === "AUTO"
         ? "AND (ai.Mode = N'AUTO' OR ai.Mode IS NULL)"
         : "";
-  const visibleSql = filter === "ARCHIVED" ? "" : "AND c.IsArchived=0";
+  // Open cases remain visible even if a chat has been archived.
+  const visibleSql = filter === "ARCHIVED" || filter === "FOLLOW_UP" ? "" : "AND c.IsArchived=0";
   // Resolve the anchor's full DATETIME2 precision on SQL Server. JavaScript
   // Date JSON loses sub-millisecond precision and can otherwise skip chats.
   const cursorSql = before
@@ -1203,6 +1210,10 @@ export async function listConversationsForBusiness(params: {
         ) AS LastMessageDirection,
         ai.Mode AS AiMode,
         ai.PauseReason AS AiPauseReason,
+        CASE WHEN EXISTS (SELECT 1 FROM dbo.TblHumanEscalation e
+          WHERE e.BusinessID = c.BusinessID AND e.ConversationID = c.ConversationID
+            AND ${OPEN_ESCALATION_SQL})
+          THEN 1 ELSE 0 END AS HasOpenEscalation,
         s.AutoReplyEnabled,
         s.EnabledAtUtc AS AiEnabledAtUtc,
         li.ReceivedAtUtc AS LastInboundReceivedAtUtc,
@@ -1277,6 +1288,7 @@ export async function listConversationsForBusiness(params: {
         : null,
       aiMode,
       aiPauseReason: row.AiPauseReason,
+      hasOpenEscalation: Boolean(row.HasOpenEscalation),
       unread: Boolean(
         row.LastInboundAtUtc
         && (!row.LastReadAtUtc || row.LastInboundAtUtc > row.LastReadAtUtc)
