@@ -11,7 +11,7 @@ import { listAgents } from "@/modules/agents/service";
 import { getWhatsAppAiSetting } from "@/modules/ai";
 import { getReceptionistOperationalHealth } from "@/modules/ai/operational-health";
 import { getBusinessById } from "@/modules/businesses/service";
-import { countOpenEscalations } from "@/modules/escalations/service";
+import { countOpenEscalations, countFollowUpsNeedingAttention } from "@/modules/escalations/service";
 import { listItems } from "@/modules/knowledge/service";
 import { getDashboardDailyActivity, getInboxConversationCounts, listInboxConversations } from "@/modules/messaging";
 
@@ -90,8 +90,12 @@ export default async function DashboardOverviewPage({ searchParams }: { searchPa
     getWhatsAppAiSetting({businessId}), listInboxConversations({businessId,limit: 5}), getInboxConversationCounts({businessId}),
   ]);
   let openEscalations: number | null = null;
-  try { openEscalations = await countOpenEscalations(businessId); }
-  catch (error) { if (!isMissingObjectError(error)) throw error; }
+  let needsFollowUp: number | null = null;
+  try {
+    [openEscalations, needsFollowUp] = await Promise.all([
+      countOpenEscalations(businessId), countFollowUpsNeedingAttention(businessId),
+    ]);
+  } catch (error) { if (!isMissingObjectError(error)) throw error; }
   let dailyActivity: Awaited<ReturnType<typeof getDashboardDailyActivity>> = null;
   try { dailyActivity = await getDashboardDailyActivity({businessId}); }
   catch (error) { if (!isMissingObjectError(error)) throw error; }
@@ -122,7 +126,7 @@ export default async function DashboardOverviewPage({ searchParams }: { searchPa
     <ConnectionHealthStrip initialUiState={health.whatsappLiveState} initialInboundHealth={health.inboundHealth} initialInboundIssue={health.inboundIssue} status={status} />
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
       <Metric label="محادثات اليوم" value={dailyActivity?.conversationsToday ?? null} hint="محادثات نشطة اليوم" glyph="▤" />
-      <Metric label="تحتاج متابعتك" value={openEscalations} hint="حالات تصعيد مفتوحة الآن" glyph="!" attention href={openEscalations !== null && openEscalations > 0 ? "/dashboard/inbox?filter=FOLLOW_UP" : undefined} />
+      <Metric label="متابعات العملاء" value={openEscalations} hint={needsFollowUp !== null && needsFollowUp > 0 ? needsFollowUp + " حالة محتاجة تدخلك" : openEscalations ? "متابعات جارية مع الفريق" : "مفيش متابعات مفتوحة"} glyph="◉" attention={Boolean(needsFollowUp)} href={openEscalations !== null && openEscalations > 0 ? "/dashboard/inbox?filter=FOLLOW_UP" : undefined} />
       <Metric label="غير مقروءة" value={inboxCounts.unread} hint="من كل المحادثات الحالية" glyph="◉" />
       <Metric label="تحويلات للفريق" value={dailyActivity?.interventionsToday ?? null} hint="إجمالي تحويلات اليوم" glyph="↗" />
     </div>
