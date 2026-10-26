@@ -137,7 +137,7 @@ export default async function DashboardOverviewPage({ searchParams }: { searchPa
             <p className="mt-1 text-xs text-muted-foreground">{activeAgent?.roleTitle ?? "مساعد العملاء"}</p></div>
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
-          <span className={`rounded-full px-3 py-1.5 text-[11px] font-black ${status.kind === "working" ? "bg-success-soft text-success" : "bg-warning-soft text-warning"}`}>
+          <span className={`rounded-full px-3 py-1.5 text-[11px] font-black ${status.kind === "working" ? "bg-success-soft text-success" : status.kind === "checking" ? "bg-surface text-muted-foreground" : "bg-warning-soft text-warning"}`}>
             {status.kind === "working" ? "● نشط عند آخر فحص" : status.kind === "checking" ? "◌ جاري الفحص" : status.headline}
           </span>
           <span className="rounded-full bg-surface px-3 py-1.5 text-[11px] font-bold text-muted-foreground">{activeKnowledge.toLocaleString("en-US")} معلومة نشطة</span>
@@ -159,7 +159,7 @@ export default async function DashboardOverviewPage({ searchParams }: { searchPa
             <span className="text-xs text-muted-foreground">واتساب</span><span className={`text-xs font-black ${health.whatsappLiveState === "READY" ? "text-success" : "text-warning"}`}>{health.whatsappLiveState === "READY" ? "متصل عند آخر فحص" : "غير جاهز عند آخر فحص"}</span>
           </div>
           <div className="flex items-center justify-between gap-2 border-b border-border pb-4">
-            <span className="text-xs text-muted-foreground">الرد الآلي</span><span className={`text-xs font-black ${status.kind === "working" ? "text-success" : "text-warning"}`}>{status.kind === "working" ? "جاهز عند آخر فحص" : status.kind === "checking" ? "جاري التحقق" : status.headline}</span>
+            <span className="text-xs text-muted-foreground">الرد الآلي</span><span className={`text-xs font-black ${status.kind === "working" ? "text-success" : status.kind === "checking" ? "text-muted-foreground" : "text-warning"}`}>{status.kind === "working" ? "جاهز عند آخر فحص" : status.kind === "checking" ? "جاري التحقق" : status.headline}</span>
           </div>
           <div className="flex items-center justify-between gap-2"><span className="text-xs text-muted-foreground">غير مقروءة</span>
             <span dir="ltr" className="font-mono text-sm font-semibold tabular-nums">{inboxCounts.unread.toLocaleString("en-US")}</span></div>
