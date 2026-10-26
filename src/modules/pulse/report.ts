@@ -68,8 +68,11 @@ export async function getPulseSnapshot(input:{
    "JOIN dbo.TblContact ct ON ct.ContactID=c.ContactID AND ct.BusinessID=c.BusinessID",
    "WHERE p.rn=1 ORDER BY CASE WHEN p.Priority=N'URGENT' THEN 0 ELSE 1 END,p.MessageAtUtc DESC"
   ].join(" "),args(input.businessId)),
-  query<{Total:number}>([
-   "SELECT COUNT(1) AS Total FROM dbo.TblHumanEscalation e WHERE e.BusinessID=@businessId",
+  query<{Total:number; NeedsAttention:number; Handling:number}>([
+   "SELECT COUNT(1) AS Total,",
+   "COALESCE(SUM(CASE WHEN e.FollowUpPhase=N'NEEDS_ATTENTION' THEN 1 ELSE 0 END),0) AS NeedsAttention,",
+   "COALESCE(SUM(CASE WHEN e.FollowUpPhase IN(N'IN_PROGRESS',N'WAITING_CUSTOMER') THEN 1 ELSE 0 END),0) AS Handling",
+   "FROM dbo.TblHumanEscalation e WHERE e.BusinessID=@businessId",
    "AND e.ResolvedAtUtc IS NULL AND e.Status IN(N'OPEN',N'ACKNOWLEDGED')"
   ].join(" "),args(input.businessId)),
   query<{Total:number}>([
@@ -87,6 +90,9 @@ export async function getPulseSnapshot(input:{
    "FROM dbo.TblPulseSignal p WHERE p.BusinessID=@businessId",
    "AND p.ReviewStatus=N'OPEN' AND p.ActionType IS NOT NULL",
    "AND p.ActionState=N'IN_PROGRESS' AND p.MessageAtUtc>=DATEADD(day,-60,SYSUTCDATETIME())",
+   "AND NOT EXISTS(SELECT 1 FROM dbo.TblHumanEscalation e WHERE e.BusinessID=p.BusinessID",
+   "AND e.ConversationID=p.ConversationID AND e.ResolvedAtUtc IS NULL",
+   "AND e.Status IN(N'OPEN',N'ACKNOWLEDGED'))",
    "GROUP BY p.ConversationID,p.Intent) q"
   ].join(" "),args(input.businessId)),
  ]);
@@ -118,8 +124,8 @@ export async function getPulseSnapshot(input:{
   pendingSignals:Number(signalCount.recordset[0]?.Total??0),
   categories:topics.recordset.map(x=>({intent:x.Intent,label:PULSE_INTENT_LABELS[x.Intent]||x.Intent,conversations:Number(x.Total)})),
   handlingSignals:Number(handlingSignals.recordset[0]?.Total??0),
-  handlingFollowups:followups.recordset.filter(x=>x.Phase==="IN_PROGRESS"||x.Phase==="WAITING_CUSTOMER").length,
-  needsAttentionFollowups:follow.length,
+  handlingFollowups:Number(followCount.recordset[0]?.Handling??0),
+  needsAttentionFollowups:Number(followCount.recordset[0]?.NeedsAttention??0),
   reviews,
  };
 }
