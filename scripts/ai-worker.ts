@@ -17,6 +17,7 @@ import { createAiWorkerRunner } from "../src/modules/ai/worker-runner";
 import { resumeDueHumanConversations } from "../src/modules/ai/bulk-resume-service";
 import { runReliabilityAudit } from "../src/modules/reliability/service";
 import { scanPulseBatch } from "../src/modules/pulse/scanner";
+import { runPulseShadowBatch } from "../src/modules/pulse/shadow-worker";
 import {
   resolveHeartbeatMs,
   resolveLeaseSeconds,
@@ -158,6 +159,8 @@ async function main(): Promise<void> {
     pulseBusy = true;
     try {
       const scanned = await scanPulseBatch(160);
+      // Opt-in only. At most 24 assessments globally per UTC day; never writes to action queues.
+      if (process.env.PULSE_AI_SHADOW_ENABLED !== "false") await runPulseShadowBatch();
       if (scanned > 0) console.info("[pulse] messages_scanned", { scanned });
     } catch (error) {
       console.warn("[pulse] scan_unavailable", { reason: error instanceof Error ? error.name : "UNKNOWN" });
