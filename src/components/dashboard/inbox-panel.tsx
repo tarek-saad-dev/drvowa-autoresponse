@@ -17,14 +17,14 @@ import { mapUserFacingError } from "@/lib/ui/user-errors";
 import type { AiReplyHealth, AiReplyHealthReason } from "@/types/domain";
 
 export type ConversationAiMode = "AUTO" | "HUMAN_PAUSED" | "SAFETY_PAUSED";
-type InboxFilter = "ALL" | "UNREAD" | "HUMAN" | "AUTO" | "ARCHIVED" | "PINNED";
+type InboxFilter = "ALL" | "UNREAD" | "HUMAN" | "FOLLOW_UP" | "AUTO" | "ARCHIVED" | "PINNED";
 type GlyphName =
   | "chat" | "back" | "search" | "refresh" | "settings" | "bot"
   | "book" | "send" | "info" | "close" | "check" | "alert"
   | "chevron" | "menu" | "home" | "spark" | "arrow-down" | "user";
 
 type ConversationCursor = { beforeAt: string; beforeId: string };
-type Counts = { total: number; unread: number };
+type Counts = { total: number; unread: number; followUp?: number };
 
 export type ConversationRow = {
   conversationId: string;
@@ -39,6 +39,7 @@ export type ConversationRow = {
   status: string;
   aiMode: ConversationAiMode;
   aiPauseReason: string | null;
+  hasOpenEscalation?: boolean;
   aiReplyHealth: AiReplyHealth | null;
   unread: boolean;
 };
@@ -238,6 +239,11 @@ const FAILURES: Partial<Record<AiReplyHealthReason, string>> = {
 function conversationStatus(c: ConversationRow): {
   label: string; detail: string; color: string; dot: string; attention: boolean;
 } {
+  if (c.hasOpenEscalation) return {
+    label: "متابعة مفتوحة", detail: "العميل محتاج متابعة؛ افتح المحادثة لمراجعة السبب",
+    color: "text-amber-700 dark:text-amber-300",
+    dot: "bg-amber-500", attention: true,
+  };
   if (c.aiMode === "SAFETY_PAUSED") return {
     label: "محتاج مراجعة", detail: "مراجعة أمان قبل تشغيل الرد",
     color: "text-rose-600 dark:text-rose-300",
@@ -287,6 +293,7 @@ export function serializeConversations(rows: Array<{
   status: string;
   aiMode?: ConversationAiMode | null;
   aiPauseReason?: string | null;
+  hasOpenEscalation?: boolean;
   aiReplyHealth?: AiReplyHealth | null;
   unread?: boolean;
 }>): ConversationRow[] {
@@ -303,6 +310,7 @@ export function serializeConversations(rows: Array<{
     isPinned: Boolean(c.isPinned),
     aiMode: c.aiMode ?? "AUTO",
     aiPauseReason: c.aiPauseReason ?? null,
+    hasOpenEscalation: Boolean(c.hasOpenEscalation),
     aiReplyHealth: c.aiReplyHealth ?? null,
     unread: Boolean(c.unread),
   }));
@@ -704,9 +712,10 @@ export function InboxPanel({
             : "اتفتحت حالة تدخل بشري، لكن إشعارات المالك مش مفعلة أو الرقم مش مؤكد."
           : "المحادثة لها بالفعل حالة تدخل بشري مفتوحة؛ مش هيتبعت تنبيه مكرر.");
         setConversations(prev => prev.map(row => row.conversationId === id
-          ? { ...row, aiMode: "HUMAN_PAUSED", aiPauseReason: "ESCALATION" } : row));
+          ? { ...row, hasOpenEscalation: true, aiMode: "HUMAN_PAUSED", aiPauseReason: "ESCALATION" } : row));
         setSelectedSnapshot(prev => prev?.conversationId === id
-          ? { ...prev, aiMode: "HUMAN_PAUSED", aiPauseReason: "ESCALATION" } : prev);
+          ? { ...prev, hasOpenEscalation: true, aiMode: "HUMAN_PAUSED", aiPauseReason: "ESCALATION" } : prev);
+        if (data.created) setCounts(prev => ({ ...prev, followUp: (prev.followUp ?? 0) + 1 }));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تصعيد المحادثة");
@@ -727,13 +736,22 @@ export function InboxPanel({
       if (!res.ok) throw new Error(mapUserFacingError(data, "تعذر تحديث التصعيد"));
       if (selectedIdRef.current === id) {
         setEscalation(data.escalation ?? null);
+        if (status === "RESOLVED") {
+          setConversations(prev => prev.map(row => row.conversationId === id
+            ? { ...row, hasOpenEscalation: false } : row));
+          setSelectedSnapshot(prev => prev?.conversationId === id
+            ? { ...prev, hasOpenEscalation: false } : prev);
+          // The follow-up filter must immediately stop listing a resolved case.
+          if (filter === "FOLLOW_UP") void loadFirstPage();
+          setCounts(prev => ({ ...prev, followUp: Math.max(0, (prev.followUp ?? 0) - 1) }));
+        }
         setNotice(status === "RESOLVED"
           ? "تم إغلاق حالة التدخل. تقدر ترجع البوت من أعلى المحادثة لما تكون جاهز."
           : "تم تأكيد استلام الحالة. صاحب البيزنس يعرف إنها قيد المتابعة.");
       }
     } catch (err) { setError(err instanceof Error ? err.message : "تعذر تحديث التصعيد"); }
     finally { setEscalating(false); }
-  }, []);
+  }, [filter, loadFirstPage]);
 
   const loadOlder = useCallback(async () => {
     const id = selectedIdRef.current;
@@ -1043,6 +1061,7 @@ export function InboxPanel({
   const actionFilters: Array<{ id: InboxFilter; label: string; count?: number }> = [
     { id: "ALL", label: "الكل", count: counts.total },
     { id: "UNREAD", label: "غير مقروء", count: counts.unread },
+    { id: "FOLLOW_UP", label: "تحتاج متابعة", count: counts.followUp ?? 0 },
     { id: "HUMAN", label: "مع الفريق" },
     { id: "AUTO", label: "الرد الآلي" },
     { id: "PINNED", label: "المثبتة" },
@@ -1126,7 +1145,7 @@ export function InboxPanel({
           ) : grouped.length === 0 ? (
             <div className="flex h-64 flex-col items-center justify-center px-8 text-center">
               <span className="mb-3 grid h-14 w-14 place-items-center rounded-full bg-primary/10 text-primary"><Glyph name="chat" size={26} /></span>
-              <p className="text-sm font-bold">{debouncedSearch ? "مفيش نتائج مطابقة" : "مفيش محادثات في الفلتر ده"}</p>
+              <p className="text-sm font-bold">{debouncedSearch ? "مفيش نتائج مطابقة" : filter === "FOLLOW_UP" ? "مفيش حالات متابعة مفتوحة" : "مفيش محادثات في الفلتر ده"}</p>
               <p className="mt-1.5 text-xs leading-6 text-muted-foreground">جرّب اسم تاني أو غيّر الفلتر لعرض محادثات أكتر.</p>
               {(debouncedSearch || filter !== "ALL") && <button type="button" onClick={() => { setSearchText(""); setFilter("ALL"); }} className="mt-3 rounded-lg bg-primary/10 px-4 py-2 text-xs font-bold text-primary">اعرض الكل</button>}
             </div>

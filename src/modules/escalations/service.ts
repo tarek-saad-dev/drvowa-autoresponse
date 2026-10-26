@@ -7,6 +7,7 @@ import { findWhatsAppConnection } from "@/modules/channels/repository";
 import { sendAccountMessage } from "@/modules/channels/runtime-client";
 import { getConversationForBusiness, getContactForBusiness } from "@/modules/messaging/repository";
 import { pauseConversationAi } from "@/modules/ai/conversation-state-repository";
+import { OPEN_ESCALATION_SQL } from "./open-escalation-sql";
 
 export type EscalationStatus = "OPEN" | "ACKNOWLEDGED" | "RESOLVED";
 export type NotifyStatus = "PENDING" | "SENDING" | "SENT" | "UNKNOWN" | "FAILED" | "CANCELLED";
@@ -283,10 +284,8 @@ export function isOwnerNotifyEligible(params: {
 export async function countOpenEscalations(businessId: string): Promise<number> {
   const result = await query<{ OpenCount: number }>(
     `SELECT COUNT(1) AS OpenCount
-       FROM dbo.TblHumanEscalation
-      WHERE BusinessID = @businessId
-        AND ResolvedAtUtc IS NULL
-        AND Status IN (N'OPEN', N'ACKNOWLEDGED')`,
+       FROM dbo.TblHumanEscalation e
+      WHERE e.BusinessID = @businessId AND ${OPEN_ESCALATION_SQL}`,
     businessParam(businessId),
   );
   return Number(result.recordset[0]?.OpenCount ?? 0);

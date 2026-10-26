@@ -1,4 +1,4 @@
-import { withTransaction } from "@/lib/db";
+import { isMissingObjectError, withTransaction } from "@/lib/db";
 import {
   ForbiddenError,
   NotFoundError,
@@ -6,7 +6,7 @@ import {
 import { maybeScheduleAiReplyAfterInbound } from "@/modules/ai/schedule";
 import { pauseConversationAi } from "@/modules/ai/conversation-state-repository";
 import { maybeSendCustomerHoldAbsorbOnInbound } from "@/modules/escalations/customer-hold";
-import { createEscalation, isEscalationOwnerPhone, requestsHumanAgent } from "@/modules/escalations/service";
+import { countOpenEscalations, createEscalation, isEscalationOwnerPhone, requestsHumanAgent } from "@/modules/escalations/service";
 import type { ConversationListItem, Message } from "@/types/domain";
 
 import {
@@ -251,8 +251,16 @@ export async function listInboxConversations(params: {
 
 export async function getInboxConversationCounts(params: {
   businessId: string;
-}): Promise<{ total: number; unread: number }> {
-  return repo.countConversationsForBusiness(params);
+}): Promise<{ total: number; unread: number; followUp: number }> {
+  const [counts, followUp] = await Promise.all([
+    repo.countConversationsForBusiness(params),
+    countOpenEscalations(params.businessId).catch((error: unknown) => {
+      // Old workspaces may not have escalations storage yet.
+      if (isMissingObjectError(error)) return 0;
+      throw error;
+    }),
+  ]);
+  return { ...counts, followUp };
 }
 
 export async function getDashboardDailyActivity(params: {

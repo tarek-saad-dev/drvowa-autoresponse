@@ -17,6 +17,7 @@ const INBOX_FILTERS = new Set([
   "ALL",
   "UNREAD",
   "HUMAN",
+  "FOLLOW_UP",
   "AUTO",
   "ARCHIVED",
   "PINNED",
@@ -36,6 +37,7 @@ export default async function InboxPage({ searchParams }: {
       | "ALL"
       | "UNREAD"
       | "HUMAN"
+      | "FOLLOW_UP"
       | "AUTO"
       | "ARCHIVED"
       | "PINNED"
@@ -82,6 +84,7 @@ export default async function InboxPage({ searchParams }: {
         lastMessageDirection: null,
         aiMode: aiState.mode,
         aiPauseReason: aiState.pauseReason,
+        hasOpenEscalation: false,
         aiReplyHealth: null,
         unread: false,
       });
@@ -108,6 +111,7 @@ export default async function InboxPage({ searchParams }: {
         status: c.status,
         aiMode: c.aiMode ?? "AUTO",
         aiPauseReason: c.aiPauseReason,
+        hasOpenEscalation: c.hasOpenEscalation,
         aiReplyHealth: c.aiReplyHealth,
         unread: c.unread,
       }))}

@@ -209,6 +209,8 @@ export type ConversationListItem = Conversation & {
   lastMessageDirection: MessageDirection | null;
   aiMode: ConversationAiMode;
   aiPauseReason: string | null;
+  /** Open follow-up cases are independent of AI mode and archive state. */
+  hasOpenEscalation?: boolean;
   unread: boolean;
   /** Null when nothing is awaiting an AI reply (or AI isn't responsible). */
   aiReplyHealth: AiReplyHealth | null;
