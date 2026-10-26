@@ -1,6 +1,7 @@
 import { withTransaction } from "@/lib/db";
 import { NotFoundError } from "@/lib/tenancy/errors";
 import { pauseConversationAi } from "@/modules/ai/conversation-state-repository";
+import { recordHumanFollowUpReply } from "@/modules/escalations/followup-service";
 import {
   consumeQuotaReservation,
   markQuotaReservationUncertain,
@@ -253,6 +254,14 @@ export async function sendManualInboxReply(params: {
       },
       trx,
     );
+    // One human reply (from DRVO) acknowledges follow-up and stops hold messages,
+    // but does not claim the customer's underlying issue is resolved.
+    await recordHumanFollowUpReply({
+      businessId: params.businessId,
+      conversationId: params.conversationId,
+      providerMessageId,
+      repliedAtUtc: sentAt,
+    }, trx);
   });
 
   return {
