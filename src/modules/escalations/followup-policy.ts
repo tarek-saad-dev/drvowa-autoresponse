@@ -8,7 +8,10 @@ export function explicitlyConfirmedResolved(text: string | null | undefined): bo
     .replace(/[\u064b-\u065f\u0670\u0640]/g, "")
     .replace(/[أإآ]/g, "ا").replace(/ى/g, "ي")
     .replace(/[.,!؟?؛:،\-_]+/g, " ").replace(/\s+/g, " ").trim();
-  if (!normalized) return false;
+  if (!normalized || normalized.length > 160) return false;
+  // A conditional, a question, or a new recurrence can never be considered
+  // explicit proof that the customer's CURRENT issue was resolved.
+  if (/(?:^|\\s)(?:لو|اذا|لوكان|لو كانت|if|when|هل|ممكن|ولا|رجعت|رجع|تاني|لكن|بس رجعت)(?:\\s|$)/iu.test(normalized)) return false;
   // Do not interpret negations, complaints or hypothetical statements as success.
   if (/(?:مش|ما|لم|لسه|بعده|مازالت|مازال|not|isn't|isnt|still|never|اذا|لو)\s+(?:اتحل|اتحلت|انحل|انحلت|تحل|حلت|حلينا|resolved|fixed)/iu.test(normalized)) return false;
   if (/(?:لسه|مازال|مازالت|لم|مش|ما|not|still)\s+(?:في|عندي|المشكله|المشكلة|issue|problem)/iu.test(normalized)) return false;
