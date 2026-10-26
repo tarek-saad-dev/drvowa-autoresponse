@@ -53,7 +53,7 @@ export default async function DashboardOverviewPage({searchParams}:{
  return <div className="mx-auto w-full max-w-[1420px] space-y-5 pb-6 sm:space-y-6">
   <ConnectionHealthStrip initialUiState={health.whatsappLiveState}
    initialInboundHealth={health.inboundHealth} initialInboundIssue={health.inboundIssue} status={status}/>
-  <PulseOverview data={pulse} businessName={business.name} allReviews={allReviews}/>
+  <PulseOverview data={pulse} businessName={business.name} businessId={businessId} allReviews={allReviews}/>
   <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(290px,.8fr)]" aria-label="تفاصيل إضافية">
    <RecentConversations conversations={recent} whatsappConnected={health.whatsappLiveState==="READY"}/>
    <div className={panel+" flex flex-col"}>
