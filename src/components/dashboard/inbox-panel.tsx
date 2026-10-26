@@ -381,9 +381,18 @@ export function InboxPanel({
   const [searchText, setSearchText] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filter, setFilter] = useState<InboxFilter>(initialFilter);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedSnapshot, setSelectedSnapshot] = useState<ConversationRow | null>(null);
-  const [mobileThread, setMobileThread] = useState(false);
+  // A deep-linked conversation must be selected on the very first render.
+  // Otherwise a cancelled mount-time timer can leave a valid URL on an empty pane.
+  const [selectedId, setSelectedId] = useState<string | null>(() =>
+    initialConversations.some(c => c.conversationId === initialSelectedId)
+      ? (initialSelectedId ?? null) : null,
+  );
+  const [selectedSnapshot, setSelectedSnapshot] = useState<ConversationRow | null>(() =>
+    initialConversations.find(c => c.conversationId === initialSelectedId) ?? null,
+  );
+  const [mobileThread, setMobileThread] = useState(() =>
+    initialConversations.some(c => c.conversationId === initialSelectedId),
+  );
   const { setThreadOpen } = useInboxChrome();
   useEffect(() => {
     setThreadOpen(mobileThread);
@@ -440,7 +449,7 @@ export function InboxPanel({
   const [showScrollDown, setShowScrollDown] = useState(false);
 
   const selectedIdRef = useRef<string | null>(null);
-  const initialDeepLinkOpened = useRef(false);
+  const initialDeepLinkOpened = useRef<string | null>(null);
   const mobileThreadRef = useRef(false);
   const readWatermarksRef = useRef<Map<string, string>>(new Map());
   const listRequestRef = useRef(0);
@@ -494,7 +503,14 @@ export function InboxPanel({
       if (requestId !== listRequestRef.current) return;
       const latest = serializeConversations(data.conversations ?? []);
       setConversations(prev => {
-        if (!silent) return latest;
+        if (!silent) {
+          // Preserve the selected deep-link target even when it predates the
+          // most recent page or is archived and absent from the active filter.
+          const wanted = selectedIdRef.current ?? initialSelectedId;
+          const selectedRow = wanted ? prev.find(c => c.conversationId === wanted) : null;
+          return selectedRow && !latest.some(c => c.conversationId === wanted)
+            ? [selectedRow, ...latest] : latest;
+        }
         const byId = new Map<string, ConversationRow>();
         for (const row of prev) byId.set(row.conversationId, row);
         for (const row of latest) byId.set(row.conversationId, row);
@@ -512,7 +528,7 @@ export function InboxPanel({
     } finally {
       if (requestId === listRequestRef.current) setLoadingList(false);
     }
-  }, [filter, debouncedSearch]);
+  }, [filter, debouncedSearch, initialSelectedId]);
 
   const loadNextPage = useCallback(async () => {
     if (!hasMore || !cursor || loadingMore || loadingList || listBusyRef.current) return;
@@ -699,11 +715,14 @@ export function InboxPanel({
   }, [selectedId, fetchEscalation]);
 
   useEffect(() => {
-    if (!initialSelectedId || initialDeepLinkOpened.current) return;
+    if (!initialSelectedId || initialDeepLinkOpened.current === initialSelectedId) return;
     if (!conversations.some(c => c.conversationId === initialSelectedId)) return;
-    initialDeepLinkOpened.current = true;
-    // Defer selection work so the effect only schedules an external update.
+    // Crucially, mark the link as handled AFTER the timer actually executes.
+    // React can cancel a scheduled effect due to a list update or StrictMode;
+    // marking beforehand made the original bug unrecoverable.
     const timer = window.setTimeout(() => {
+      if (initialDeepLinkOpened.current === initialSelectedId) return;
+      initialDeepLinkOpened.current = initialSelectedId;
       selectConversation(initialSelectedId);
     }, 0);
     return () => window.clearTimeout(timer);
