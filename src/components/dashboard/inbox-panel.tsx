@@ -361,6 +361,7 @@ export function InboxPanel({
   initialHasMore,
   initialCursor,
   initialSelectedId,
+  requestedConversationUnavailable = false,
   initialFilter = "ALL",
   canResumeAll = false,
 }: {
@@ -370,6 +371,7 @@ export function InboxPanel({
   initialHasMore: boolean;
   initialCursor: ConversationCursor | null;
   initialSelectedId?: string | null;
+  requestedConversationUnavailable?: boolean;
   initialFilter?: InboxFilter;
 }) {
   const [conversations, setConversations] = useState(initialConversations);
@@ -1512,9 +1514,19 @@ export function InboxPanel({
           </>
         ) : (
           <div className="flex h-full flex-col items-center justify-center px-8 text-center">
-            <BrandLogo className="mb-6 h-8" />
-            <h2 className="text-2xl font-extrabold">كل محادثاتك. في مكان واحد.</h2>
-            <p className="mt-3 max-w-sm text-sm leading-7 text-muted-foreground">افتح أي شات من القائمة، والـAI يتابع معاك أو ترد بنفسك في أي وقت.</p>
+            {requestedConversationUnavailable ? (
+              <>
+                <h2 className="text-xl font-extrabold">المحادثة المطلوبة مش متاحة</h2>
+                <p className="mt-3 max-w-sm text-sm leading-7 text-muted-foreground">المحادثة مش موجودة في النشاط الحالي أو اتنقلت. تقدر تفتح محادثة تانية من القائمة أو ترجع للمراجعات.</p>
+                <Link href="/dashboard" className="mt-4 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">العودة للمراجعات</Link>
+              </>
+            ) : (
+              <>
+                <BrandLogo className="mb-6 h-8" />
+                <h2 className="text-2xl font-extrabold">كل محادثاتك. في مكان واحد.</h2>
+                <p className="mt-3 max-w-sm text-sm leading-7 text-muted-foreground">افتح أي شات من القائمة، والـAI يتابع معاك أو ترد بنفسك في أي وقت.</p>
+              </>
+            )}
           </div>
         )}
       </main>
