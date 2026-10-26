@@ -48,7 +48,7 @@ export function LiveOwnership({initial,businessId}:{initial:HumanOwnershipSnapsh
         <Link href={href} className={"rounded-xl px-4 py-3 text-sm font-bold "+(state.awaitingTeamReply?"bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-200":"bg-surface")}>
           مستنيين رد الفريق <span className="ms-2 text-xl tabular-nums">{state.awaitingTeamReply.toLocaleString("en-US")}</span>
         </Link>
-        <span className="text-xs text-muted-foreground">بانتظار العميل: {state.waitingCustomer.toLocaleString("en-US")}</span>
+        <span className="text-xs text-muted-foreground">مع الفريق بدون رد جديد: {state.waitingCustomer.toLocaleString("en-US")}</span>
       </div>}
     {state&&state.chats.length>0?<div className="mt-3 grid min-w-0 gap-2 md:grid-cols-2">
       {state.chats.slice(0,4).map(chat=><Link key={chat.conversationId}
