@@ -6,6 +6,7 @@ import {
 import { maybeScheduleAiReplyAfterInbound } from "@/modules/ai/schedule";
 import { pauseConversationAi } from "@/modules/ai/conversation-state-repository";
 import { hadRecentlyResolvedFollowUp, recordCustomerFollowUpReply } from "@/modules/escalations/followup-service";
+import { recordCustomerPulseFollowUp } from "@/modules/pulse/action-tracking";
 import { explicitlyReportedRecurrence } from "@/modules/escalations/followup-policy";
 import { countOpenEscalations, createEscalation, isEscalationOwnerPhone, requestsHumanAgent } from "@/modules/escalations/service";
 import type { ConversationListItem, Message } from "@/types/domain";
@@ -258,6 +259,20 @@ export async function ingestWhatsAppInbound(
     } catch (error) {
       // A follow-up projection failure must not lose the customer's message.
       console.warn("[inbound] followup_transition_failed", {
+        reason: error instanceof Error ? error.name : "UNKNOWN",
+      });
+    }
+    // Strong explicit unanswered reply after human intervention: re-queue the
+    // existing Pulse request. Ordinary thanks never reopens it.
+    try {
+      await withTransaction(trx => recordCustomerPulseFollowUp({
+        businessId,
+        conversationId: outcome.conversationId,
+        text: normalized.textContent,
+        receivedAtUtc,
+      }, trx));
+    } catch (error) {
+      console.warn("[inbound] pulse_followup_transition_failed", {
         reason: error instanceof Error ? error.name : "UNKNOWN",
       });
     }
