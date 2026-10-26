@@ -277,6 +277,22 @@ export async function resumeConversationAi(params: {
 /**
  * Scheduling gate: conversation must be AUTO and inbound must be at/after ResumedAtUtc.
  */
+/** One open human case blocks AI even if a past manual action set mode=AUTO.
+ * AI mode describes the bot, follow-up status describes unresolved responsibility.
+ */
+export async function hasActiveFollowUp(params: { businessId: string; conversationId: string }, trx?: TransactionClient): Promise<boolean> {
+  const rows = await db(trx).query<{ EscalationID: string }>(
+    `SELECT TOP 1 EscalationID FROM dbo.TblHumanEscalation
+      WHERE BusinessID=@businessId AND ConversationID=@conversationId
+        AND ResolvedAtUtc IS NULL AND Status IN (N'OPEN', N'ACKNOWLEDGED')`,
+    [
+      { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+      { name: "conversationId", type: sql.UniqueIdentifier, value: params.conversationId },
+    ],
+  );
+  return rows.recordset.length > 0;
+}
+
 export async function evaluateConversationAiScheduleGate(params: {
   businessId: string;
   conversationId: string;
@@ -368,6 +384,10 @@ export async function evaluateConversationAiScheduleGate(params: {
     return { allow: false, reason: "STALE_CONVERSATION_ACTIVATION", state };
   }
 
+  if (await hasActiveFollowUp(params, trx)) {
+    return { allow: false, reason: "ACTIVE_ESCALATION", state };
+  }
+
   return { allow: true, state };
 }
 
@@ -403,6 +423,10 @@ export async function evaluateConversationAiSendGate(params: {
     && params.jobCreatedAtUtc.getTime() < state.resumedAtUtc.getTime()
   ) {
     return { allow: false, reason: "STALE_CONVERSATION_ACTIVATION", state };
+  }
+
+  if (await hasActiveFollowUp(params, trx)) {
+    return { allow: false, reason: "ACTIVE_ESCALATION", state };
   }
 
   return { allow: true, state };
