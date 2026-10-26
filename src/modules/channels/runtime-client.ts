@@ -5,7 +5,8 @@
 
 /** Safe inbound delivery counters from the managed WhatsApp runtime (no tokens/paths). */
 export type RuntimeInboundDelivery = {
-  running: boolean;
+  /** V6 reports this flag; older V7 snapshots omit it (unknown, not stopped). */
+  running?: boolean;
   pending: number;
   delivered: number;
   failed: number;
