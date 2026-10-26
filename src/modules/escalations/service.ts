@@ -294,6 +294,18 @@ export async function countOpenEscalations(businessId: string): Promise<number> 
   return Number(result.recordset[0]?.OpenCount ?? 0);
 }
 
+/** Actionable subset of unresolved cases, not all work already in progress. */
+export async function countFollowUpsNeedingAttention(businessId: string): Promise<number> {
+  const result = await query<{ AttentionCount: number }>(
+    `SELECT COUNT(1) AS AttentionCount
+       FROM dbo.TblHumanEscalation e
+      WHERE e.BusinessID = @businessId AND ${OPEN_ESCALATION_SQL}
+        AND e.FollowUpPhase = N'NEEDS_ATTENTION'`,
+    businessParam(businessId),
+  );
+  return Number(result.recordset[0]?.AttentionCount ?? 0);
+}
+
 export async function getEscalation(businessId: string, conversationId: string) {
   const result = await query<EscalationRow>(
     `SELECT TOP 1 EscalationID, BusinessID, ConversationID, ChannelConnectionID, ReasonCode, ReasonText,
