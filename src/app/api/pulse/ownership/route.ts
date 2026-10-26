@@ -3,9 +3,10 @@ import { handleApiError, jsonOk } from "@/lib/api/http";
 import { getHumanOwnershipSnapshot } from "@/modules/ai/human-ownership";
 
 /** Lightweight authenticated poll; no message bodies or customer phone numbers. */
-export async function GET() {
+export async function GET(request:Request) {
   try {
-    const {businessId}=await requireApiBusiness();
+    const requestedBusiness=new URL(request.url).searchParams.get("businessId");
+    const {businessId}=await requireApiBusiness({businessId:requestedBusiness});
     const result=jsonOk(await getHumanOwnershipSnapshot(businessId));
     result.headers.set("Cache-Control","private, no-store");
     return result;
