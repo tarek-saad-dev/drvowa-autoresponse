@@ -12,11 +12,10 @@ import { normalizeUuid } from "@/lib/ids/uuid";
 import type {
   ConversationAiMode,
   ConversationAiState,
-  HumanTakeoverResumePolicy,
 } from "@/types/domain";
 
 import { logAiSafety } from "./guard-repository";
-import { shouldAutoResumeHumanTakeover } from "./safety-policy";
+
 
 type StateRow = {
   BusinessID: string;
@@ -55,45 +54,6 @@ function db(trx?: TransactionClient) {
           const result = await query(text, inputs);
           return result.rowsAffected.reduce((s, n) => s + n, 0);
         },
-  };
-}
-
-async function getHumanTakeoverResumeContext(params: {
-  businessId: string;
-  conversationId: string;
-}, trx?: TransactionClient): Promise<{
-  policy: HumanTakeoverResumePolicy;
-  businessTimezone: string;
-}> {
-  const result = await db(trx).query<{
-    HumanTakeoverResumePolicy: string | null;
-    Timezone: string | null;
-  }>(
-    `SELECT TOP 1
-       s.HumanTakeoverResumePolicy,
-       b.Timezone
-     FROM TblConversation c
-     INNER JOIN TblBusiness b
-       ON b.BusinessID = c.BusinessID
-     LEFT JOIN TblChannelAiSetting s
-       ON s.BusinessID = c.BusinessID
-      AND s.ChannelConnectionID = c.ChannelConnectionID
-     WHERE c.BusinessID = @businessId
-       AND c.ConversationID = @conversationId`,
-    [
-      { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
-      {
-        name: "conversationId",
-        type: sql.UniqueIdentifier,
-        value: params.conversationId,
-      },
-    ],
-  );
-
-  const row = result.recordset[0];
-  return {
-    policy: "AFTER_30_MIN",
-    businessTimezone: row?.Timezone?.trim() || "UTC",
   };
 }
 
@@ -302,7 +262,7 @@ export async function evaluateConversationAiScheduleGate(params: {
   reason?: string;
   state: ConversationAiState;
 }> {
-  let state = await getEffectiveConversationAiState(
+  const state = await getEffectiveConversationAiState(
     {
       businessId: params.businessId,
       conversationId: params.conversationId,
@@ -310,66 +270,9 @@ export async function evaluateConversationAiScheduleGate(params: {
     trx,
   );
 
-  if (
-    state.mode === "HUMAN_PAUSED"
-    && state.pauseReason === "HUMAN_TAKEOVER"
-    && state.lastHumanReplyAtUtc
-  ) {
-    const resumeContext = await getHumanTakeoverResumeContext(
-      {
-        businessId: params.businessId,
-        conversationId: params.conversationId,
-      },
-      trx,
-    );
-    const pausedAtUtc = state.lastHumanReplyAtUtc;
-
-    if (
-      shouldAutoResumeHumanTakeover({
-        policy: resumeContext.policy,
-        pausedAtUtc,
-        messageReceivedAtUtc: params.messageReceivedAt,
-        businessTimezone: resumeContext.businessTimezone,
-      })
-    ) {
-      const unresolvedEscalation = await db(trx).query<{ EscalationID: string }>(
-        `SELECT TOP 1 EscalationID FROM dbo.TblHumanEscalation
-         WHERE BusinessID = @businessId AND ConversationID = @conversationId
-           AND ResolvedAtUtc IS NULL`,
-        [
-          { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
-          { name: "conversationId", type: sql.UniqueIdentifier, value: params.conversationId },
-        ],
-      );
-      if (unresolvedEscalation.recordset.length) {
-        return { allow: false, reason: "ACTIVE_ESCALATION", state };
-      }
-      // The inbound that expired the takeover must itself be answered, so the
-      // watermark cannot be later than its receive time.
-      state = await resumeConversationAi(
-        {
-          businessId: params.businessId,
-          conversationId: params.conversationId,
-          resumedAtUtc: new Date(
-            Math.min(params.messageReceivedAt.getTime(), Date.now()),
-          ),
-        },
-        trx,
-      );
-      logAiSafety(
-        "human_takeover_auto_resumed",
-        {
-          businessId: params.businessId,
-          conversationId: params.conversationId,
-          pausedAtUtc,
-          resumedAtUtc: state.resumedAtUtc,
-          policy: resumeContext.policy,
-          reason: "HUMAN_TAKEOVER_TIMEOUT",
-        },
-      );
-    }
-  }
-
+  // Never allow a new inbound message to expire human ownership.
+  // Only the atomic quiet-and-answered worker sweep (or explicit handback)
+  // may release the conversation to the AI.
   if (state.mode === "HUMAN_PAUSED") {
     return { allow: false, reason: "HUMAN_PAUSED", state };
   }
