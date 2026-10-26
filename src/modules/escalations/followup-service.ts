@@ -144,3 +144,21 @@ export async function listFollowUpEvents(params: Scope, limit = 10) {
   );
   return result.recordset.map(row => ({ type: row.EventType, at: row.EventAtUtc.toISOString() }));
 }
+
+/** A resolved case reopens only if the customer explicitly reports the SAME
+ * issue returning within 14 days. This never guesses from generic complaints.
+ */
+export async function hadRecentlyResolvedFollowUp(params: Scope & {
+  atUtc: Date;
+}): Promise<boolean> {
+  const rows = await query<{ EscalationID: string }>(
+    `SELECT TOP 1 EscalationID FROM dbo.TblHumanEscalation
+      WHERE BusinessID=@businessId AND ConversationID=@conversationId
+        AND ResolvedAtUtc IS NOT NULL
+        AND ResolvedAtUtc BETWEEN DATEADD(day,-14,@at) AND @at
+        AND ResolutionSource IN (N'CUSTOMER_EXPLICIT',N'MANUAL_CONFIRMED')
+      ORDER BY ResolvedAtUtc DESC`,
+    [...scopeArgs(params), { name: "at", type: sql.DateTime2, value: params.atUtc }],
+  );
+  return Boolean(rows.recordset[0]);
+}
