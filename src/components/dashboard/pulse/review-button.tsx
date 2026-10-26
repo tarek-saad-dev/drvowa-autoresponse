@@ -15,10 +15,10 @@ export function ReviewButton({conversationId,intent}:{conversationId:string;inte
       body:JSON.stringify({conversationId,intent})});
     if(!result.ok)throw new Error("REVIEW_FAILED");
     router.refresh();
-   }catch{setError("لم يتم تسجيل المراجعة. حاول تاني.");}
+   }catch{setError("تعذر استبعاد التنبيه. حاول تاني.");}
    finally{setBusy(false);}
   }} className="rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-muted-foreground transition hover:bg-surface disabled:opacity-50">
-   {busy?"جارٍ الحفظ...":"تمت المراجعة"}
+   {busy?"جارٍ الحفظ...":"لا يحتاج إجراء"}
   </button>
   {error?<span role="alert" className="text-[11px] text-warning">{error}</span>:null}
  </div>;
