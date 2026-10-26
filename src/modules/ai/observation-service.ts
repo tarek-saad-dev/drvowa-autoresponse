@@ -4,6 +4,7 @@ import { withTransaction } from "@/lib/db";
 import { NotFoundError } from "@/lib/tenancy/errors";
 import { parseOptionalUtc } from "@/modules/messaging/content";
 import { recordHumanFollowUpReply } from "@/modules/escalations/followup-service";
+import { recordHumanPulseReply } from "@/modules/pulse/action-tracking";
 import * as messagingRepo from "@/modules/messaging/repository";
 import { canonicalizeWhatsAppContactIdentity } from "@/modules/messaging/whatsapp-identity";
 
@@ -245,6 +246,13 @@ export async function ingestWhatsAppOutboundObserved(
       // Only accepted HUMAN_MANUAL events update the follow-up. Replayed
       // observations are rejected above and timestamp guards prevent stale handovers.
       await recordHumanFollowUpReply({
+        businessId,
+        conversationId,
+        providerMessageId: dto.providerMessageId,
+        repliedAtUtc: occurredAtUtc,
+      }, trx);
+      // WhatsApp/desktop manual replies acknowledge older Pulse tasks as well.
+      await recordHumanPulseReply({
         businessId,
         conversationId,
         providerMessageId: dto.providerMessageId,

@@ -9,9 +9,9 @@ export type ClassifiedSignal = {
   confidence: number; evidence: string;
 };
 const rules: Array<{ intent: PulseIntent; priority: "URGENT" | "NORMAL"; actionType: PulseActionType; confidence: number; terms: RegExp[] }> = [
-  {intent:"REFUND",priority:"URGENT",actionType:"REVIEW",confidence:93,terms:[/استرجاع\s+(?:فلوس|مبلغ|الفلوس)/u,/عايز\s+(?:فلوسي|فلوسى)\s+(?:ترجع|تاني)/u,/رد\s+(?:الفلوس|المبلغ)/u,/refund\b/i,/استرداد/u]},
-  {intent:"HUMAN",priority:"URGENT",actionType:"REVIEW",confidence:94,terms:[/عايز\s+(?:اكلم|اتكلم\s+مع)\s+(?:المدير|المسؤول|موظف)/u,/كلموني\s+من\s+الاداره/u,/حد\s+من\s+الاداره/u,/human\s+agent/i,/talk\s+to\s+(?:manager|person)/i]},
-  {intent:"COMPLAINT",priority:"URGENT",actionType:"REVIEW",confidence:88,terms:[/اشتكي|شكوى|شكوي/u,/اسو[اأ]ء\s+(?:خدمه|تجربه)/u,/محدش\s+(?:رد|كلمني|اهتم)/u,/اتاخرت\s+(?:كتير|جدا)/u,/خدمه\s+وحشه/u,/complaint|terrible\s+service/i]},
+  {intent:"REFUND",priority:"URGENT",actionType:"REVIEW",confidence:93,terms:[/(?:عايز|محتاج|ممكن|اريد|طلب)\s+(?:استرجاع|استرداد)\s+(?:فلوس|الفلوس|فلوسي|المبلغ|مبلغ)/u,/(?:رجعولي|ارجعولي|رجع)\s+(?:فلوسي|الفلوس|المبلغ)/u,/عايز\s+فلوسي\s+(?:ترجع|تاني)/u,/(?:i\s+(?:want|need)|please)\s+(?:a\s+)?refund\b/i,/refund\s+(?:my|me)\b/i]},
+  {intent:"HUMAN",priority:"URGENT",actionType:"REVIEW",confidence:94,terms:[/(?:عايز|محتاج|ممكن)\s+(?:اكلم|اتكلم\s+مع)\s+(?:المدير|المسؤول|موظف|حد\s+من\s+الاداره)/u,/(?:عايز|محتاج|ممكن)\s+حد\s+من\s+(?:الاداره|الإدارة)/u,/كلموني\s+من\s+الاداره/u,/human\s+agent/i,/talk\s+to\s+(?:manager|person)/i]},
+  {intent:"COMPLAINT",priority:"URGENT",actionType:"REVIEW",confidence:88,terms:[/(?:عايز|محتاج|عندي)\s+(?:اشتكي|شكوي|شكوى)/u,/اسو[اأ]ء\s+(?:خدمه|تجربه)/u,/محدش\s+(?:رد|كلمني|اهتم)/u,/اتاخرت\s+(?:كتير|جدا)/u,/استنيت\s+\d{1,3}\s*(?:دقيقه|ساعه)/u,/خدمه\s+وحشه/u,/terrible\s+service|i\s+(?:have\s+a\s+)?complaint/i]},
   {intent:"BOOKING",priority:"NORMAL",actionType:null,confidence:91,terms:[/عايز\s+احجز/u,/احجزلي|احجزلى/u,/ممكن\s+احجز/u,/عندي\s+حجز/u,/booking|appointment|reserve\s+(?:a|my)/i]},
   {intent:"PRICE",priority:"NORMAL",actionType:null,confidence:87,terms:[/بكام|بكام؟/u,/السعر\s+(?:كام|ايه)/u,/اسعار|السعر|التكلفه/u,/كم\s+(?:السعر|تكلفه)/u,/how\s+much|price\s+list|pricing/i]},
   {intent:"PURCHASE",priority:"NORMAL",actionType:"OPPORTUNITY",confidence:84,terms:[/عايز\s+اشترك/u,/ازاي\s+اشترك/u,/عايز\s+اشتري/u,/محتاج\s+الباقه/u,/عايز\s+ادفع/u,/ready\s+to\s+(?:buy|subscribe)/i]},
@@ -29,6 +29,11 @@ export function classifyCustomerText(text: string | null | undefined): Classifie
   if (!normalized) return [];
   // Recognize first-person complaints, not questions about whether others complained.
   return rules.flatMap(rule => {
+    // A negated request is not a request. Plain references to "refund",
+    // complaints, policies or chargebacks are not actionable by themselves.
+    if (rule.intent === "HUMAN"
+      && /(?:^|\s)(?:مش|ما)\s+(?:عايز|محتاج)\s+(?:اكلم|اتكلم|حد)/u.test(normalized)
+      && !/(?:بس|لكن)\s+(?:عايز|محتاج)\s+اكلم\s+(?:المدير|المسؤول)/u.test(normalized)) return [];
     const match = rule.terms.map(term => term.exec(normalized)).find(Boolean);
     if (!match) return [];
     // Explicit mention of a refund request is reviewable; do not infer money actually refunded.

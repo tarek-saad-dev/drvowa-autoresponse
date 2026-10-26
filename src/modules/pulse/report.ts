@@ -11,6 +11,7 @@ export type PulseSnapshot={
   period:PulsePeriod; start:string; end:string;
   conversations:number;messages:number;aiConversations:number;
   eligible:number;analyzed:number;openFollowups:number;pendingSignals:number;
+  handlingSignals:number;handlingFollowups:number;needsAttentionFollowups:number;
   categories:Array<{intent:PulseIntent;label:string;conversations:number}>;
   reviews:PulseReview[];
 };
@@ -23,7 +24,7 @@ export async function getPulseSnapshot(input:{
  const {start,end}=pulseBounds(input.period,input.timezone);
  const a=[...args(input.businessId),{name:"start",type:sql.DateTime2,value:start},
    {name:"end",type:sql.DateTime2,value:end}];
- const [volume,ai,coverage,topics,followups,signals,followCount,signalCount]=await Promise.all([
+ const [volume,ai,coverage,topics,followups,signals,followCount,signalCount,handlingSignals]=await Promise.all([
   query<{Conversations:number;Messages:number;Eligible:number}>([
    "SELECT COUNT(DISTINCT m.ConversationID) AS Conversations,COUNT(1) AS Messages,",
    "COALESCE(SUM(CASE WHEN m.ContentType=N'TEXT' AND m.TextContent IS NOT NULL THEN 1 ELSE 0 END),0) AS Eligible",
@@ -61,27 +62,49 @@ export async function getPulseSnapshot(input:{
    "(SELECT p.*,ROW_NUMBER() OVER(PARTITION BY p.ConversationID,p.Intent",
    "ORDER BY p.MessageAtUtc DESC,p.SignalID DESC) AS rn FROM dbo.TblPulseSignal p",
    "WHERE p.BusinessID=@businessId AND p.ActionType IS NOT NULL AND p.ReviewStatus=N'OPEN'",
+   "AND p.ActionState=N'NEEDS_REPLY'",
    "AND p.MessageAtUtc>=DATEADD(day,-60,SYSUTCDATETIME())) p",
    "JOIN dbo.TblConversation c ON c.ConversationID=p.ConversationID AND c.BusinessID=p.BusinessID",
    "JOIN dbo.TblContact ct ON ct.ContactID=c.ContactID AND ct.BusinessID=c.BusinessID",
    "WHERE p.rn=1 ORDER BY CASE WHEN p.Priority=N'URGENT' THEN 0 ELSE 1 END,p.MessageAtUtc DESC"
   ].join(" "),args(input.businessId)),
-  query<{Total:number}>([
-   "SELECT COUNT(1) AS Total FROM dbo.TblHumanEscalation e WHERE e.BusinessID=@businessId",
+  query<{Total:number; NeedsAttention:number; Handling:number}>([
+   "SELECT COUNT(1) AS Total,",
+   "COALESCE(SUM(CASE WHEN e.FollowUpPhase=N'NEEDS_ATTENTION' THEN 1 ELSE 0 END),0) AS NeedsAttention,",
+   "COALESCE(SUM(CASE WHEN e.FollowUpPhase IN(N'IN_PROGRESS',N'WAITING_CUSTOMER') THEN 1 ELSE 0 END),0) AS Handling",
+   "FROM dbo.TblHumanEscalation e WHERE e.BusinessID=@businessId",
    "AND e.ResolvedAtUtc IS NULL AND e.Status IN(N'OPEN',N'ACKNOWLEDGED')"
   ].join(" "),args(input.businessId)),
   query<{Total:number}>([
    "SELECT COUNT(1) AS Total FROM (SELECT p.ConversationID,p.Intent FROM dbo.TblPulseSignal p",
    "WHERE p.BusinessID=@businessId AND p.ReviewStatus=N'OPEN' AND p.ActionType IS NOT NULL",
-   "AND p.MessageAtUtc>=DATEADD(day,-60,SYSUTCDATETIME()) GROUP BY p.ConversationID,p.Intent) q"
+   "AND p.ActionState=N'NEEDS_REPLY'",
+   "AND p.MessageAtUtc>=DATEADD(day,-60,SYSUTCDATETIME())",
+   "AND NOT EXISTS(SELECT 1 FROM dbo.TblHumanEscalation e WHERE e.BusinessID=p.BusinessID",
+   "AND e.ConversationID=p.ConversationID AND e.ResolvedAtUtc IS NULL",
+   "AND e.Status IN(N'OPEN',N'ACKNOWLEDGED'))",
+   "GROUP BY p.ConversationID,p.Intent) q"
+  ].join(" "),args(input.businessId)),
+  query<{Total:number}>([
+   "SELECT COUNT(1) AS Total FROM (SELECT p.ConversationID,p.Intent",
+   "FROM dbo.TblPulseSignal p WHERE p.BusinessID=@businessId",
+   "AND p.ReviewStatus=N'OPEN' AND p.ActionType IS NOT NULL",
+   "AND p.ActionState=N'IN_PROGRESS' AND p.MessageAtUtc>=DATEADD(day,-60,SYSUTCDATETIME())",
+   "AND NOT EXISTS(SELECT 1 FROM dbo.TblHumanEscalation e WHERE e.BusinessID=p.BusinessID",
+   "AND e.ConversationID=p.ConversationID AND e.ResolvedAtUtc IS NULL",
+   "AND e.Status IN(N'OPEN',N'ACKNOWLEDGED'))",
+   "GROUP BY p.ConversationID,p.Intent) q"
   ].join(" "),args(input.businessId)),
  ]);
- const follow:PulseReview[]=followups.recordset.map(x=>({
+ const follow:PulseReview[]=followups.recordset
+   .filter(x=>x.Phase==="NEEDS_ATTENTION")
+   .map(x=>({
   conversationId:x.ConversationID,intent:"FOLLOW_UP",label:x.Phase==="IN_PROGRESS"?"جاري التعامل":"متابعة بشرية",
   evidence:x.Reason||"متابعة مفتوحة",priority:x.Phase==="NEEDS_ATTENTION"?"URGENT":"NORMAL",
   actionType:"REVIEW",name:x.Name||"عميل",at:x.At.toISOString(),kind:"ESCALATION",
  }));
- const openIds=new Set(follow.map(x=>x.conversationId));
+ // An open Smart Follow-up owns this conversation even when a human is handling it.
+ const openIds=new Set(followups.recordset.map(x=>x.ConversationID));
  const inferred:PulseReview[]=signals.recordset.filter(x=>!openIds.has(x.ConversationID)).map(x=>({
   conversationId:x.ConversationID,intent:x.Intent,label:PULSE_INTENT_LABELS[x.Intent as PulseIntent]||x.Intent,
   evidence:x.Evidence,priority:x.Priority==="URGENT"?"URGENT":"NORMAL",
@@ -100,12 +123,16 @@ export async function getPulseSnapshot(input:{
   openFollowups:Number(followCount.recordset[0]?.Total??0),
   pendingSignals:Number(signalCount.recordset[0]?.Total??0),
   categories:topics.recordset.map(x=>({intent:x.Intent,label:PULSE_INTENT_LABELS[x.Intent]||x.Intent,conversations:Number(x.Total)})),
+  handlingSignals:Number(handlingSignals.recordset[0]?.Total??0),
+  handlingFollowups:Number(followCount.recordset[0]?.Handling??0),
+  needsAttentionFollowups:Number(followCount.recordset[0]?.NeedsAttention??0),
   reviews,
  };
 }
 export async function markPulseSignalReviewed(input:{businessId:string;conversationId:string;intent:PulseIntent}) {
  const r=await query([
-  "UPDATE dbo.TblPulseSignal SET ReviewStatus=N'REVIEWED',ReviewedAtUtc=SYSUTCDATETIME()",
+  "UPDATE dbo.TblPulseSignal SET ReviewStatus=N'REVIEWED',ReviewedAtUtc=SYSUTCDATETIME(),",
+  "ActionState=N'DISMISSED',ActionSource=N'MANUAL_DISMISSED',ActionUpdatedAtUtc=SYSUTCDATETIME()",
   "WHERE BusinessID=@businessId AND ConversationID=@conversationId AND Intent=@intent",
   "AND ActionType IS NOT NULL AND ReviewStatus=N'OPEN'"
  ].join(" "),[...args(input.businessId),{name:"conversationId",type:sql.UniqueIdentifier,value:input.conversationId},

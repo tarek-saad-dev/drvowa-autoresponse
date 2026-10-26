@@ -15,7 +15,8 @@ function periodHref(period:"today"|"month",all=false){return "/dashboard?period=
 export function PulseOverview({data,businessName,businessId,allReviews=false}:{data:PulseSnapshot|null;businessName:string;businessId:string;allReviews?:boolean}) {
  const period=data?.period||"today",monthly=period==="month";
  const ready=Boolean(data),pending=data?Math.max(0,data.eligible-data.analyzed):0;
- const actionable=(data?.openFollowups??0)+(data?.pendingSignals??0);
+ const actionable=(data?.needsAttentionFollowups??0)+(data?.pendingSignals??0);
+ const handling=(data?.handlingFollowups??0)+(data?.handlingSignals??0);
  const summary=!ready
   ?"ملخص Pulse غير متاح حاليًا. المحادثات والمتابعة ما زالوا متاحين في قائمة المحادثات."
   :data!.messages===0
@@ -39,27 +40,31 @@ export function PulseOverview({data,businessName,businessId,allReviews=false}:{d
   <section className={card+" border-primary/15 bg-primary/[.035] p-4 sm:p-6"} aria-label="ملخص نبض النشاط">
    <div className="flex items-center gap-2 text-sm font-black"><span className="text-lg text-primary">✦</span> إيه اللي حصل {monthly?"الشهر ده":"النهارده"}؟</div>
    <p className="mt-3 max-w-4xl text-sm leading-8 text-foreground/90">{summary}</p>
+   {ready && handling>0?<p className="mt-2 text-xs leading-6 text-muted-foreground">وفيه {handling.toLocaleString("ar-EG")} متابعة بدأ الفريق التعامل معاها بالفعل؛ مش محسوبة كطلبات محتاجة رد جديد.</p>:null}
    {data?<p className="mt-3 text-xs text-muted-foreground">التصنيف المبدئي: {data.analyzed.toLocaleString("en-US")} من {data.eligible.toLocaleString("en-US")} رسالة نصية متاحة في الفترة • الحجوزات والمشتريات المعروضة استفسارات، وليست عمليات مؤكدة.</p>:null}
   </section>
   <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
    <Count label="محادثات واردة" value={data?.conversations??"—"} hint="عملاء بدأوا أو تفاعلوا خلال الفترة"/>
    <Count label="رد عليها الموظف الذكي" value={data?.aiConversations??"—"} hint="محادثات لها رد AI؛ مش بالضرورة اتحلت"/>
    <Count label="متابعات بشرية مفتوحة" value={data?.openFollowups??"—"} hint="حالات Smart Follow-up الفعلية"/>
-   <Count label="إشارات للمراجعة" value={data?.pendingSignals??"—"} hint="طلبات محتملة مصنفة تحتاج قرار"/>
+   <Count label="تحتاج رد منك" value={data?.pendingSignals??"—"} hint="إشارات محتاجة تدخل؛ الرد البشري يحدثها تلقائيًا"/>
   </div>
   <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(290px,.85fr)]">
    <section className={card+" p-4 sm:p-5"} aria-label="مركز الطلبات">
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
      <div>
       <h2 className="text-base font-black sm:text-lg">الطلبات اللي تحتاج مراجعة</h2>
-      <p className="mt-1 text-xs text-muted-foreground">طلبات لم تُغلق بعد، بغض النظر عن الفترة المختارة</p>
+      <p className="mt-1 text-xs text-muted-foreground">الطلبات اللي محتاجة رد أو إجراء منك الآن، حتى لو بدأت قبل الفترة المختارة</p>
      </div>
-     <Link href={periodHref(period,!allReviews)} className="text-xs font-bold text-primary hover:underline">{allReviews?"عرض المختصر":"عرض المزيد من الحالات"}</Link>
+     <div className="flex items-center gap-3">
+      {handling>0?<span className="text-[11px] text-muted-foreground">{handling.toLocaleString("ar-EG")} جاري التعامل معها</span>:null}
+      <Link href={periodHref(period,!allReviews)} className="text-xs font-bold text-primary hover:underline">{allReviews?"عرض المختصر":"عرض المزيد من الحالات"}</Link>
+     </div>
     </div>
     {!data?<p className="rounded-xl bg-surface p-4 text-sm text-muted-foreground">تعذر تحميل الحالات المصنفة.</p>:
      data.reviews.length===0?<div className="rounded-xl border border-dashed border-border p-7 text-center">
-      <p className="font-bold">مفيش حالات مراجعة مصنفة دلوقتي</p>
-      <p className="mt-2 text-xs leading-6 text-muted-foreground">مش معناها إن كل المحادثات اتحلت. راجع معدل تغطية التحليل فوق.</p>
+      <p className="font-bold">مفيش طلبات محتاجة رد جديد دلوقتي</p>
+      <p className="mt-2 text-xs leading-6 text-muted-foreground">الطلبات اللي اترد عليها انتقلت للمتابعة الجارية، وده مش معناه إن الشكوى اتحلت. راجع معدل تغطية التحليل فوق.</p>
      </div>:
      <div className="divide-y divide-border/65">
       {data.reviews.map((item,i)=><article key={item.kind+item.conversationId+item.intent+i} className="flex min-w-0 gap-3 py-4">
