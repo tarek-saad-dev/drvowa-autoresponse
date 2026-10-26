@@ -97,7 +97,8 @@ export async function getPulseSnapshot(input:{
   evidence:x.Reason||"متابعة مفتوحة",priority:x.Phase==="NEEDS_ATTENTION"?"URGENT":"NORMAL",
   actionType:"REVIEW",name:x.Name||"عميل",at:x.At.toISOString(),kind:"ESCALATION",
  }));
- const openIds=new Set(follow.map(x=>x.conversationId));
+ // An open Smart Follow-up owns this conversation even when a human is handling it.
+ const openIds=new Set(followups.recordset.map(x=>x.ConversationID));
  const inferred:PulseReview[]=signals.recordset.filter(x=>!openIds.has(x.ConversationID)).map(x=>({
   conversationId:x.ConversationID,intent:x.Intent,label:PULSE_INTENT_LABELS[x.Intent as PulseIntent]||x.Intent,
   evidence:x.Evidence,priority:x.Priority==="URGENT"?"URGENT":"NORMAL",
