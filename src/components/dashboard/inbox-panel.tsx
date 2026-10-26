@@ -40,6 +40,7 @@ export type ConversationRow = {
   aiMode: ConversationAiMode;
   aiPauseReason: string | null;
   hasOpenEscalation?: boolean;
+  followUpPhase?: string | null;
   aiReplyHealth: AiReplyHealth | null;
   unread: boolean;
 };
@@ -239,11 +240,18 @@ const FAILURES: Partial<Record<AiReplyHealthReason, string>> = {
 function conversationStatus(c: ConversationRow): {
   label: string; detail: string; color: string; dot: string; attention: boolean;
 } {
-  if (c.hasOpenEscalation) return {
-    label: "متابعة مفتوحة", detail: "العميل محتاج متابعة؛ افتح المحادثة لمراجعة السبب",
-    color: "text-amber-700 dark:text-amber-300",
-    dot: "bg-amber-500", attention: true,
-  };
+  if (c.hasOpenEscalation) return c.followUpPhase === "IN_PROGRESS"
+    ? {
+      label: "جاري التعامل", detail: "المسؤول بدأ المتابعة",
+      color: "text-sky-700 dark:text-sky-300",
+      dot: "bg-sky-500", attention: false,
+    }
+    : {
+      label: c.followUpPhase === "WAITING_CUSTOMER" ? "بانتظار العميل" : "تحتاج متابعة",
+      detail: "العميل محتاج رد بشري أو إجراء من الفريق",
+      color: "text-amber-700 dark:text-amber-300",
+      dot: "bg-amber-500", attention: c.followUpPhase !== "WAITING_CUSTOMER",
+    };
   if (c.aiMode === "SAFETY_PAUSED") return {
     label: "محتاج مراجعة", detail: "مراجعة أمان قبل تشغيل الرد",
     color: "text-rose-600 dark:text-rose-300",
@@ -294,6 +302,7 @@ export function serializeConversations(rows: Array<{
   aiMode?: ConversationAiMode | null;
   aiPauseReason?: string | null;
   hasOpenEscalation?: boolean;
+  followUpPhase?: string | null;
   aiReplyHealth?: AiReplyHealth | null;
   unread?: boolean;
 }>): ConversationRow[] {
@@ -311,6 +320,7 @@ export function serializeConversations(rows: Array<{
     aiMode: c.aiMode ?? "AUTO",
     aiPauseReason: c.aiPauseReason ?? null,
     hasOpenEscalation: Boolean(c.hasOpenEscalation),
+    followUpPhase: c.followUpPhase ?? null,
     aiReplyHealth: c.aiReplyHealth ?? null,
     unread: Boolean(c.unread),
   }));
@@ -385,7 +395,12 @@ export function InboxPanel({
   const [hasOlder, setHasOlder] = useState(false);
   const [olderCursor, setOlderCursor] = useState<MessageCursor | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [escalation, setEscalation] = useState<{ id: string; status: "OPEN" | "ACKNOWLEDGED"; reason: string; notificationStatus: string; notificationError?: string | null } | null>(null);
+  const [escalation, setEscalation] = useState<{
+    id: string; status: "OPEN" | "ACKNOWLEDGED"; phase: "NEEDS_ATTENTION" | "IN_PROGRESS" | "WAITING_CUSTOMER";
+    reason: string; reasonCode: string; notificationStatus: string; notificationError?: string | null;
+    lastHumanReplyAtUtc?: string | null;
+  } | null>(null);
+  const [followUpEvents, setFollowUpEvents] = useState<Array<{type: string; at: string}>>([]);
   const [escalating, setEscalating] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
@@ -649,6 +664,7 @@ export function InboxPanel({
     setMobileThread(true);
     setDetailsOpen(false);
     setEscalation(null);
+    setFollowUpEvents([]);
     setNotice(null);
     setTrackedReply(null);
     setError(null);
@@ -664,8 +680,11 @@ export function InboxPanel({
       const res = await fetch("/api/inbox/conversations/" + encodeURIComponent(id) + "/escalation",
         { credentials: "same-origin", cache: "no-store" });
       if (!res.ok) return;
-      const data = await res.json() as { escalation?: typeof escalation };
-      if (selectedIdRef.current === id) setEscalation(data.escalation ?? null);
+      const data = await res.json() as { escalation?: typeof escalation; events?: Array<{type: string; at: string}> };
+      if (selectedIdRef.current === id) {
+        setEscalation(data.escalation ?? null);
+        setFollowUpEvents(data.events ?? []);
+      }
     } catch { /* Noncritical: chat still works. */ }
   }, []);
 
@@ -712,7 +731,7 @@ export function InboxPanel({
             : "اتفتحت حالة تدخل بشري، لكن إشعارات المالك مش مفعلة أو الرقم مش مؤكد."
           : "المحادثة لها بالفعل حالة تدخل بشري مفتوحة؛ مش هيتبعت تنبيه مكرر.");
         setConversations(prev => prev.map(row => row.conversationId === id
-          ? { ...row, hasOpenEscalation: true, aiMode: "HUMAN_PAUSED", aiPauseReason: "ESCALATION" } : row));
+          ? { ...row, hasOpenEscalation: true, followUpPhase: "NEEDS_ATTENTION", aiMode: "HUMAN_PAUSED", aiPauseReason: "ESCALATION" } : row));
         setSelectedSnapshot(prev => prev?.conversationId === id
           ? { ...prev, hasOpenEscalation: true, aiMode: "HUMAN_PAUSED", aiPauseReason: "ESCALATION" } : prev);
         if (data.created) setCounts(prev => ({ ...prev, followUp: (prev.followUp ?? 0) + 1 }));
@@ -725,6 +744,7 @@ export function InboxPanel({
   const updateEscalation = useCallback(async (status: "ACKNOWLEDGED" | "RESOLVED") => {
     const id = selectedIdRef.current;
     if (!id) return;
+    if (status === "RESOLVED" && !window.confirm("هل اتأكدت إن مشكلة العميل اتحلت فعلًا؟\nالإغلاق اليدوي بيوقف المتابعة، ومش هيعتبر مجرد الرد على العميل دليل على الحل.")) return;
     setEscalating(true);
     try {
       const res = await fetch("/api/inbox/conversations/" + encodeURIComponent(id) + "/escalation", {
@@ -736,11 +756,12 @@ export function InboxPanel({
       if (!res.ok) throw new Error(mapUserFacingError(data, "تعذر تحديث التصعيد"));
       if (selectedIdRef.current === id) {
         setEscalation(data.escalation ?? null);
+        void fetchEscalation(id);
         if (status === "RESOLVED") {
           setConversations(prev => prev.map(row => row.conversationId === id
-            ? { ...row, hasOpenEscalation: false } : row));
+            ? { ...row, hasOpenEscalation: false, followUpPhase: null } : row));
           setSelectedSnapshot(prev => prev?.conversationId === id
-            ? { ...prev, hasOpenEscalation: false } : prev);
+            ? { ...prev, hasOpenEscalation: false, followUpPhase: null } : prev);
           // The follow-up filter must immediately stop listing a resolved case.
           if (filter === "FOLLOW_UP") void loadFirstPage();
           setCounts(prev => ({ ...prev, followUp: Math.max(0, (prev.followUp ?? 0) - 1) }));
@@ -751,7 +772,7 @@ export function InboxPanel({
       }
     } catch (err) { setError(err instanceof Error ? err.message : "تعذر تحديث التصعيد"); }
     finally { setEscalating(false); }
-  }, [filter, loadFirstPage]);
+  }, [filter, loadFirstPage, fetchEscalation]);
 
   const loadOlder = useCallback(async () => {
     const id = selectedIdRef.current;
@@ -1234,14 +1255,14 @@ export function InboxPanel({
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
-                {selected.aiMode !== "AUTO" ? (
+                {selected.aiMode !== "AUTO" && !escalation ? (
                   <button
                     type="button" onClick={() => void resumeAi()} disabled={resuming}
                     className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-primary px-3 text-[11px] font-bold text-primary-foreground transition hover:bg-primary-hover disabled:opacity-50 sm:px-4"
                   >
                     <Glyph name="spark" size={16} /><span className="hidden sm:inline">{resuming ? "جارٍ التشغيل" : "رجّع البوت"}</span><span className="sm:hidden">AI</span>
                   </button>
-                ) : <div className="hidden items-center gap-1.5 rounded-full bg-success-soft px-3 py-2 text-[10px] font-bold text-success sm:flex"><Glyph name="bot" size={15} />AI بيتابع</div>}
+                ) : !escalation ? <div className="hidden items-center gap-1.5 rounded-full bg-success-soft px-3 py-2 text-[10px] font-bold text-success sm:flex"><Glyph name="bot" size={15} />AI بيتابع</div> : null}
                 {!escalation ? (
                   <button type="button" onClick={() => void escalateConversation()} disabled={escalating}
                     className="rounded-xl border border-amber-300 px-2 py-2 text-[11px] font-bold text-amber-800 hover:bg-amber-50 disabled:opacity-50 dark:text-amber-300"
@@ -1252,24 +1273,69 @@ export function InboxPanel({
             </header>
 
             {escalation && (
-              <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-100">
-                <strong>تدخل بشري: {escalation.status === "OPEN" ? "مفتوح" : "قيد المتابعة"}</strong>
-                <span className="min-w-0 flex-1 truncate">{escalation.reason}</span>
-                <span className="text-[10px]" title={escalation.notificationError ?? undefined}>إشعار المالك: {escalation.notificationStatus === "SENT" ? "تم الإرسال" : escalation.notificationStatus === "PENDING" ? "منتظر الإرسال" : escalation.notificationStatus === "SENDING" ? "جارٍ الإرسال" : escalation.notificationStatus === "CANCELLED" ? "لم يُرسل" : escalation.notificationStatus === "UNKNOWN" ? "النتيجة غير مؤكدة" : "فشل الإرسال"}</span>
-                {escalation.status === "OPEN" ? (
-                  <button type="button" disabled={escalating} className="rounded-lg border border-amber-400 px-2 py-1 font-bold"
-                    onClick={() => void updateEscalation("ACKNOWLEDGED")}>استلمت الحالة</button>
-                ) : null}
-                <button type="button" disabled={escalating} className="rounded-lg bg-amber-700 px-2 py-1 font-bold text-white"
-                  onClick={() => void updateEscalation("RESOLVED")}>تم الحل</button>
-              </div>
+              <details className="group shrink-0 border-b border-border bg-card" aria-label="متابعة العميل">
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-xs [&::-webkit-details-marker]:hidden sm:px-5">
+                  <span className={"h-2 w-2 shrink-0 rounded-full " +
+                    (escalation.phase === "NEEDS_ATTENTION" ? "bg-amber-500" : "bg-sky-500")} />
+                  <strong className="text-foreground">متابعة العميل</strong>
+                  <span className="truncate text-muted-foreground">
+                    {escalation.phase === "IN_PROGRESS" ? "جاري التعامل — بدأ رد بشري بالفعل"
+                      : escalation.phase === "WAITING_CUSTOMER" ? "بانتظار رد العميل"
+                      : "محتاج متابعة بشرية"}
+                  </span>
+                  <span className="ms-auto shrink-0 text-[10px] font-bold text-primary">التفاصيل</span>
+                  <Glyph name="chevron" size={14} className="shrink-0 text-muted-foreground transition-transform group-open:-rotate-90" />
+                </summary>
+                <div className="space-y-3 border-t border-border bg-surface/40 px-4 py-3 text-xs sm:px-5">
+                  <p className="font-bold text-foreground">سبب المتابعة</p>
+                  <p className="whitespace-pre-wrap break-words leading-6 text-muted-foreground">
+                    {escalation.reasonCode === "CUSTOMER_REQUEST"
+                      ? "العميل طلب التواصل مع مسؤول."
+                      : escalation.reason?.trim() || "محادثة محتاجة متابعة من الفريق."}
+                  </p>
+                  <p className="leading-6 text-muted-foreground">
+                    {escalation.lastHumanReplyAtUtc
+                      ? "اتسجل رد بشري؛ الحالة هتتحدث تلقائيًا حسب رد العميل. الرد مش معناه إن المشكلة اتحلت."
+                      : "لسه مفيش رد بشري مؤكد للحالة. هنكتفي برسالة استلام واحدة بدل الاعتذارات المتكررة."}
+                  </p>
+                  {followUpEvents.length > 0 ? (
+                    <details className="rounded-lg border border-border bg-card p-2.5">
+                      <summary className="cursor-pointer font-bold">سجل المتابعة ({followUpEvents.length})</summary>
+                      <ul className="mt-2 space-y-2 text-muted-foreground">
+                        {followUpEvents.map((event, index) => (
+                          <li key={event.at + index} className="flex items-center justify-between gap-2">
+                            <span>{event.type === "HUMAN_REPLIED" ? "المسؤول رد" :
+                              event.type === "CUSTOMER_REPLIED" ? "العميل رد — محتاج متابعة" :
+                              event.type === "CUSTOMER_CONFIRMED_RESOLVED" ? "العميل أكد الحل" :
+                              event.type === "MANUALLY_ACKNOWLEDGED" ? "تم استلام المتابعة" :
+                              event.type === "MANUALLY_RESOLVED" ? "إغلاق يدوي" : "تحديث حالة المتابعة"}</span>
+                            <time className="shrink-0" dir="ltr">{new Date(event.at).toLocaleString("ar-EG")}</time>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ) : null}
+                  <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3">
+                    {escalation.status === "OPEN" ? (
+                      <button type="button" disabled={escalating} onClick={() => void updateEscalation("ACKNOWLEDGED")}
+                        className="font-bold text-primary underline-offset-2 hover:underline disabled:opacity-50">
+                        استلام المتابعة يدويًا
+                      </button>
+                    ) : null}
+                    <button type="button" disabled={escalating} onClick={() => void updateEscalation("RESOLVED")}
+                      className="font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50">
+                      إغلاق يدوي بعد التأكد من الحل
+                    </button>
+                  </div>
+                </div>
+              </details>
             )}
             {(error || notice || status.attention) && (
               <div className="z-10 shrink-0 border-b border-border bg-card/90 px-4 py-2 text-xs">
                 {error && <p role="alert" className="font-bold text-red-600">{error}</p>}
                 {notice && <p role="status" className="font-bold text-primary">{notice}</p>}
-                {!error && !notice && status.attention && <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300"><Glyph name="alert" size={15} />{status.detail}{selected.aiMode === "AUTO" ? " — تقدر ترد بنفسك من تحت." : ""}</div>}
-                {selected.aiMode === "AUTO" && (status.attention || Boolean(notice)) && (
+                {!error && !notice && status.attention && !escalation && <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300"><Glyph name="alert" size={15} />{status.detail}{selected.aiMode === "AUTO" ? " — تقدر ترد بنفسك من تحت." : ""}</div>}
+                {selected.aiMode === "AUTO" && !escalation && (status.attention || Boolean(notice)) && (
                   <button type="button" onClick={() => void checkLastAiDelivery()} disabled={checkingAi}
                     className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border border-primary/25 px-2.5 py-1.5 font-bold text-primary hover:bg-primary/10 disabled:opacity-60"
                   ><Glyph name="refresh" size={14} />{checkingAi ? "جاري فحص الرد..." : "تحقق من آخر محاولة رد"}</button>

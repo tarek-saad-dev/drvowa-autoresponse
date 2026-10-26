@@ -25,6 +25,9 @@ export type EscalationRow = {
   CreatedAtUtc: Date;
   AcknowledgedAtUtc: Date | null;
   ResolvedAtUtc: Date | null;
+  FollowUpPhase: string;
+  LastHumanReplyAtUtc: Date | null;
+  LastCustomerReplyAtUtc: Date | null;
 };
 type SettingRow = {
   OwnerPhone: string | null;
@@ -291,11 +294,24 @@ export async function countOpenEscalations(businessId: string): Promise<number> 
   return Number(result.recordset[0]?.OpenCount ?? 0);
 }
 
+/** Actionable subset of unresolved cases, not all work already in progress. */
+export async function countFollowUpsNeedingAttention(businessId: string): Promise<number> {
+  const result = await query<{ AttentionCount: number }>(
+    `SELECT COUNT(1) AS AttentionCount
+       FROM dbo.TblHumanEscalation e
+      WHERE e.BusinessID = @businessId AND ${OPEN_ESCALATION_SQL}
+        AND e.FollowUpPhase = N'NEEDS_ATTENTION'`,
+    businessParam(businessId),
+  );
+  return Number(result.recordset[0]?.AttentionCount ?? 0);
+}
+
 export async function getEscalation(businessId: string, conversationId: string) {
   const result = await query<EscalationRow>(
     `SELECT TOP 1 EscalationID, BusinessID, ConversationID, ChannelConnectionID, ReasonCode, ReasonText,
       Status, NotificationStatus, NotificationLastErrorCode, NotificationSentAtUtc,
-      CreatedAtUtc, AcknowledgedAtUtc, ResolvedAtUtc
+      CreatedAtUtc, AcknowledgedAtUtc, ResolvedAtUtc,
+      FollowUpPhase, LastHumanReplyAtUtc, LastCustomerReplyAtUtc
       FROM dbo.TblHumanEscalation
       WHERE BusinessID = @businessId AND ConversationID = @conversationId AND ResolvedAtUtc IS NULL
       ORDER BY CreatedAtUtc DESC`, conversationParams(businessId, conversationId),
@@ -310,6 +326,10 @@ export async function getEscalation(businessId: string, conversationId: string) 
     notificationError: row.NotificationLastErrorCode,
     createdAtUtc: row.CreatedAtUtc.toISOString(),
     acknowledgedAtUtc: row.AcknowledgedAtUtc?.toISOString() ?? null,
+    phase: row.FollowUpPhase === "IN_PROGRESS" || row.FollowUpPhase === "WAITING_CUSTOMER"
+      ? row.FollowUpPhase : "NEEDS_ATTENTION",
+    lastHumanReplyAtUtc: row.LastHumanReplyAtUtc?.toISOString() ?? null,
+    lastCustomerReplyAtUtc: row.LastCustomerReplyAtUtc?.toISOString() ?? null,
   } : null;
 }
 
@@ -357,7 +377,10 @@ export async function createEscalation(params: {
               SET NotificationStatus = N'PENDING',
                   NotificationLastErrorCode = NULL,
                   NotificationNotBeforeUtc = SYSUTCDATETIME(),
-                  CustomerHoldNextAtUtc = COALESCE(CustomerHoldNextAtUtc, SYSUTCDATETIME()),
+                  CustomerHoldNextAtUtc = CASE
+                    WHEN CustomerHoldStep = 0 AND LastHumanReplyAtUtc IS NULL
+                      THEN COALESCE(CustomerHoldNextAtUtc, SYSUTCDATETIME())
+                    ELSE NULL END,
                   UpdatedAtUtc = SYSUTCDATETIME()
             WHERE EscalationID = @id AND BusinessID = @businessId
               AND ResolvedAtUtc IS NULL AND NotificationStatus = N'CANCELLED'`,
@@ -369,6 +392,7 @@ export async function createEscalation(params: {
       }
       return;
     }
+    const escalationId = randomUUID();
     try {
       await trx.execute(
         `INSERT INTO dbo.TblHumanEscalation (
@@ -379,11 +403,18 @@ export async function createEscalation(params: {
            @reasonCode, @reason, @notificationStatus,
            0, SYSUTCDATETIME())`,
         [...conversationParams(params.businessId, params.conversationId),
-          { name: "id", type: sql.UniqueIdentifier, value: randomUUID() },
+          { name: "id", type: sql.UniqueIdentifier, value: escalationId },
           { name: "channelConnectionId", type: sql.UniqueIdentifier, value: conversation.channelConnectionId },
           { name: "reasonCode", type: sql.NVarChar(48), value: params.reasonCode.slice(0, 48) },
           { name: "reason", type: sql.NVarChar(300), value: params.reason.slice(0, 300) },
           { name: "notificationStatus", type: sql.NVarChar(20), value: notifyEligible ? "PENDING" : "CANCELLED" }],
+      );
+      await trx.execute(
+        `INSERT INTO dbo.TblFollowUpEvent
+           (BusinessID, EscalationID, ConversationID, EventKey, EventType, EventAtUtc)
+         VALUES (@businessId,@escalationId,@conversationId,N'CREATED',N'CASE_OPENED',SYSUTCDATETIME())`,
+        [...conversationParams(params.businessId, params.conversationId),
+         { name: "escalationId", type: sql.UniqueIdentifier, value: escalationId }],
       );
       created = true;
     } catch (error) {
@@ -401,22 +432,42 @@ export async function updateEscalationStatus(params: {
   businessId: string; conversationId: string; userId: string; status: "ACKNOWLEDGED" | "RESOLVED";
 }) {
   await requireEscalationAdmin(params.businessId, params.userId);
-  await query(
-    `UPDATE dbo.TblHumanEscalation
-     SET Status = @status,
-         AcknowledgedAtUtc = COALESCE(AcknowledgedAtUtc, SYSUTCDATETIME()),
-         AcknowledgedByUserID = COALESCE(AcknowledgedByUserID, @userId),
-         ResolvedAtUtc = CASE WHEN @status = N'RESOLVED' THEN SYSUTCDATETIME() ELSE NULL END,
-         NotificationStatus = CASE WHEN @status = N'RESOLVED' AND NotificationStatus = N'PENDING'
-           THEN N'CANCELLED' ELSE NotificationStatus END,
-         CustomerHoldNextAtUtc = CASE WHEN @status = N'RESOLVED' THEN NULL ELSE CustomerHoldNextAtUtc END,
-         CustomerHoldClaimedAtUtc = CASE WHEN @status = N'RESOLVED' THEN NULL ELSE CustomerHoldClaimedAtUtc END,
-         UpdatedAtUtc = SYSUTCDATETIME()
-     WHERE BusinessID = @businessId AND ConversationID = @conversationId
-       AND ResolvedAtUtc IS NULL`,
-    [...conversationParams(params.businessId, params.conversationId),
-      { name: "status", type: sql.NVarChar(20), value: params.status },
-      { name: "userId", type: sql.UniqueIdentifier, value: params.userId }],
-  );
+  await withTransaction(async (trx) => {
+    const updated = await trx.query<{ EscalationID: string }>(
+      `UPDATE e
+       SET Status = @status,
+           AcknowledgedAtUtc = COALESCE(e.AcknowledgedAtUtc, SYSUTCDATETIME()),
+           AcknowledgedByUserID = COALESCE(e.AcknowledgedByUserID, @userId),
+           ResolvedAtUtc = CASE WHEN @status = N'RESOLVED' THEN SYSUTCDATETIME() ELSE NULL END,
+           FollowUpPhase = CASE WHEN @status = N'RESOLVED' THEN N'RESOLVED' ELSE e.FollowUpPhase END,
+           ResolutionSource = CASE WHEN @status = N'RESOLVED' THEN N'MANUAL_CONFIRMED' ELSE e.ResolutionSource END,
+           NotificationStatus = CASE WHEN @status = N'RESOLVED' AND e.NotificationStatus = N'PENDING'
+             THEN N'CANCELLED' ELSE e.NotificationStatus END,
+           CustomerHoldNextAtUtc = NULL,
+           CustomerHoldClaimedAtUtc = CASE WHEN @status = N'RESOLVED' THEN NULL ELSE e.CustomerHoldClaimedAtUtc END,
+           UpdatedAtUtc = SYSUTCDATETIME()
+       OUTPUT INSERTED.EscalationID
+       FROM dbo.TblHumanEscalation e WITH (UPDLOCK)
+       WHERE e.BusinessID = @businessId AND e.ConversationID = @conversationId
+         AND e.ResolvedAtUtc IS NULL
+         AND e.Status IN (N'OPEN', N'ACKNOWLEDGED')`,
+      [...conversationParams(params.businessId, params.conversationId),
+        { name: "status", type: sql.NVarChar(20), value: params.status },
+        { name: "userId", type: sql.UniqueIdentifier, value: params.userId }],
+    );
+    const row = updated.recordset[0];
+    if (row) {
+      const type = params.status === "RESOLVED" ? "MANUALLY_RESOLVED" : "MANUALLY_ACKNOWLEDGED";
+      await trx.execute(
+        `INSERT INTO dbo.TblFollowUpEvent
+          (BusinessID,EscalationID,ConversationID,EventKey,EventType,EventAtUtc)
+         VALUES (@businessId,@escalationId,@conversationId,@eventKey,@eventType,SYSUTCDATETIME())`,
+        [...conversationParams(params.businessId, params.conversationId),
+          { name: "escalationId", type: sql.UniqueIdentifier, value: row.EscalationID },
+          { name: "eventKey", type: sql.NVarChar(160), value: "OPERATOR:" + randomUUID() },
+          { name: "eventType", type: sql.NVarChar(40), value: type }],
+      );
+    }
+  });
   return getEscalation(params.businessId, params.conversationId);
 }

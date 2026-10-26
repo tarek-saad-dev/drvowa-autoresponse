@@ -5,7 +5,8 @@ import {
 } from "@/lib/tenancy/errors";
 import { maybeScheduleAiReplyAfterInbound } from "@/modules/ai/schedule";
 import { pauseConversationAi } from "@/modules/ai/conversation-state-repository";
-import { maybeSendCustomerHoldAbsorbOnInbound } from "@/modules/escalations/customer-hold";
+import { hadRecentlyResolvedFollowUp, recordCustomerFollowUpReply } from "@/modules/escalations/followup-service";
+import { explicitlyReportedRecurrence } from "@/modules/escalations/followup-policy";
 import { countOpenEscalations, createEscalation, isEscalationOwnerPhone, requestsHumanAgent } from "@/modules/escalations/service";
 import type { ConversationListItem, Message } from "@/types/domain";
 
@@ -202,7 +203,7 @@ export async function ingestWhatsAppInbound(
     };
   });
   if (outcome.outcome === "accepted" && !ownerMessage) {
-    let createdEscalation = false;
+
     if (wantsHuman) {
       // Explicit request already paused the AI transactionally. Notification
       // creation is isolated so a transient alert issue never loses inbound.
@@ -213,27 +214,52 @@ export async function ingestWhatsAppInbound(
           reasonCode: "CUSTOMER_REQUEST",
           reason: "العميل طلب التحدث مع موظف بشري أو مسؤول.",
         });
-        createdEscalation = created.created;
+        void created;
       } catch (error) {
         console.warn("[inbound] escalation_enqueue_failed", {
           reason: error instanceof Error ? error.name : "UNKNOWN",
         });
       }
     }
-    // While waiting for a human: every customer message gets an immediate "حاضر"
-    // absorb reply (first human-request uses the hold-ack queue instead).
-    if (!createdEscalation) {
+    // Reopen a previous confirmed case only when the same customer explicitly
+    // says the SAME issue has returned; never reopen from a generic new question.
+    if (!wantsHuman && explicitlyReportedRecurrence(normalized.textContent)) {
       try {
-        await maybeSendCustomerHoldAbsorbOnInbound({
+        if (await hadRecentlyResolvedFollowUp({
           businessId,
           conversationId: outcome.conversationId,
-          customerText: normalized.textContent,
-        });
+          atUtc: receivedAtUtc,
+        })) {
+          await createEscalation({
+            businessId,
+            conversationId: outcome.conversationId,
+            reasonCode: "ISSUE_RECURRED",
+            reason: "العميل أكد إن نفس المشكلة رجعت بعد إغلاق متابعة سابقة.",
+            pauseAi: true,
+          });
+        }
       } catch (error) {
-        console.warn("[inbound] customer_hold_absorb_failed", {
+        console.warn("[inbound] followup_reopen_failed", {
           reason: error instanceof Error ? error.name : "UNKNOWN",
         });
       }
+    }
+
+    // Persist customer progress. This never sends templated apologies.
+    // Only an explicit confirmation AFTER a human reply can close a case.
+    try {
+      await withTransaction(trx => recordCustomerFollowUpReply({
+        businessId,
+        conversationId: outcome.conversationId,
+        messageId: outcome.messageId,
+        text: normalized.textContent,
+        receivedAtUtc,
+      }, trx));
+    } catch (error) {
+      // A follow-up projection failure must not lose the customer's message.
+      console.warn("[inbound] followup_transition_failed", {
+        reason: error instanceof Error ? error.name : "UNKNOWN",
+      });
     }
   }
   return outcome;

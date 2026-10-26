@@ -29,16 +29,15 @@ type HoldJob = {
   CreatedAtUtc: Date;
 };
 
-const MAX_HOLD_STEPS = 4; // 1 ack + 3 delay apologies
-const FOLLOW_UP_DELAY_SECONDS = [0, 300, 600, 900] as const;
+// Send at most the original handoff acknowledgment. Repeated delay apologies
+// make a customer believe a human is acting when no human may be available.
+const MAX_HOLD_STEPS = 1;
+const FOLLOW_UP_DELAY_SECONDS = [0] as const;
 const ABSORB_DEBOUNCE_MS = 45_000;
 const ABSORB_FOLLOWUP_DELAY_SECONDS = 300;
 
 const HOLD_TEMPLATES = [
-  "حاضر يا فندم، تمام. هحوّلك دلوقتي لأحد المسؤولين، وهيراجع طلبك ويرد عليك في أقرب وقت. شكرًا لصبرك.",
-  "بنعتذر لحضرتك على التأخير يا فندم. المسؤول لسه بيراجع طلبك، وهيتواصل معاك في أقرب فرصة.",
-  "لسه مع حضرتك، ومقدرين انتظارك. المسؤول هيكمّل معاك في أقرب وقت، ومتأسفين على التأخير.",
-  "بنعتذر تاني على التأخير. فريقنا لسه بيتابع حالتك، وهيتم الرد عليك في أقرب وقت ممكن.",
+  "وصلنا طلبك وبلغنا الفريق المسؤول. هيتابع الحالة معاك في أقرب فرصة.",
 ] as const;
 
 const ABSORB_TEMPLATES = {

@@ -112,6 +112,7 @@ export default async function InboxPage({ searchParams }: {
         aiMode: c.aiMode ?? "AUTO",
         aiPauseReason: c.aiPauseReason,
         hasOpenEscalation: c.hasOpenEscalation,
+        followUpPhase: c.followUpPhase,
         aiReplyHealth: c.aiReplyHealth,
         unread: c.unread,
       }))}
