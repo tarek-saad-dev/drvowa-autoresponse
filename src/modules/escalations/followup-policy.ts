@@ -24,7 +24,7 @@ export function explicitlyConfirmedResolved(text: string | null | undefined): bo
 export function explicitlyReportedRecurrence(text: string | null | undefined): boolean {
   if (!text || text.length > 220) return false;
   const value = text.toLowerCase().replace(/[أإآ]/g, "ا")
-    .replace(/ى/g, "ي").replace(/[\u064b-\u065f\u0670\u0640]/g, "").trim();
+    .replace(/ى/g, "ي").replace(/ة/g, "ه").replace(/[\u064b-\u065f\u0670\u0640]/g, "").trim();
   return /(?:نفس\s+المشكله\s+(?:رجعت|موجوده|لسه)|المشكله\s+رجعت\s+تاني|لسه\s+نفس\s+المشكله|same\s+(?:issue|problem)\s+(?:again|returned))/iu.test(value);
 }
 
