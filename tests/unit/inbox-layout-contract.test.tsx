@@ -51,6 +51,36 @@ describe("inbox viewport and UX layout contract", () => {
     expect(html).not.toContain("fixed inset-0");
   });
 
+  it("lists an open escalation in the follow-up filter even when the bot is in AUTO mode", () => {
+    const conversation: ConversationRow = {
+      conversationId: "22222222-2222-2222-2222-222222222222",
+      contactExternalKey: "201012345678@s.whatsapp.net",
+      contactDisplayName: "عميل محتاج متابعة",
+      contactPhoneNormalized: "201012345678",
+      lastMessagePreview: "محتاج أكلم المدير",
+      lastMessageDirection: "INBOUND",
+      lastMessageAtUtc: "2026-10-26T02:00:00Z",
+      status: "OPEN",
+      aiMode: "AUTO",
+      aiPauseReason: null,
+      hasOpenEscalation: true,
+      aiReplyHealth: null,
+      unread: false,
+    };
+    const html = renderToStaticMarkup(createElement(InboxPanel, {
+      initialConversations: [conversation],
+      initialCounts: { total: 1761, unread: 67, followUp: 1 },
+      initialFilter: "FOLLOW_UP",
+      initialHasMore: false,
+      initialCursor: null,
+    }));
+    expect(html).toContain("عميل محتاج متابعة");
+    expect(html).toContain("متابعة مفتوحة");
+    expect(html).toContain("تحتاج متابعة");
+    expect(html).toContain("محتاج أكلم المدير");
+    expect(html).not.toContain("مفيش محادثات في الفلتر ده");
+  });
+
   it("uses DRVO brand tokens and logo instead of a separate green inbox theme", () => {
     const conversation: ConversationRow = {
       conversationId: "22222222-2222-2222-2222-222222222222",
