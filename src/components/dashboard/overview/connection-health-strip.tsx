@@ -136,6 +136,11 @@ export function ConnectionHealthStrip({
     ? { href: "/dashboard/whatsapp", label: connection.actionLabel ?? "راجع واتساب" }
     : status.action;
 
+  // The overview is for exceptions, not a large always-on status report.
+  // Healthy and unverified states stay in the quiet operational summary below;
+  // only actionable confirmed faults deserve a prominent banner.
+  if (!needsAttention) return null;
+
   return (
     <section
       aria-label="حالة تشغيل النظام"
