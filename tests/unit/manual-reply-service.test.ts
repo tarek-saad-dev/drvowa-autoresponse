@@ -4,7 +4,10 @@ import { NotFoundError } from "@/lib/tenancy/errors";
 import { PLAN_ERROR_CODES, PlanEntitlementError } from "@/modules/billing/errors";
 
 vi.mock("@/lib/db", () => ({
-  withTransaction: async (fn: (trx: unknown) => Promise<unknown>) => fn({}),
+  withTransaction: async (fn: (trx: unknown) => Promise<unknown>) => fn({
+    query: async () => ({ recordset: [] }),
+    execute: async () => ({ rowsAffected: [0] }),
+  }),
   query: vi.fn(),
   sql: {},
 }));
