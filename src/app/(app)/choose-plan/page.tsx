@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { OnboardingLogoutButton } from "@/components/onboarding/onboarding-logout-button";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import { listBusinessesForUser } from "@/modules/businesses/service";
 import { isPlatformAdminUser } from "@/modules/platform-admin/service";
@@ -25,6 +26,9 @@ export default async function ChoosePlanPage() {
   return (
     <main dir="rtl" className="min-h-screen bg-background px-4 py-12 text-foreground sm:px-8">
       <div className="mx-auto max-w-6xl">
+        <div className="mb-5 flex justify-end">
+          <OnboardingLogoutButton />
+        </div>
         <div className="mx-auto mb-10 max-w-2xl text-center">
           <span className="text-sm font-bold text-primary">الخطوة ٢ من ٣ — اختيار الباقة</span>
           <h1 className="mt-3 text-3xl font-black sm:text-4xl">اختار الخطة المناسبة لشغلك</h1>
