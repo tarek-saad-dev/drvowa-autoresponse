@@ -5,7 +5,8 @@ import {
 } from "@/lib/tenancy/errors";
 import { maybeScheduleAiReplyAfterInbound } from "@/modules/ai/schedule";
 import { pauseConversationAi } from "@/modules/ai/conversation-state-repository";
-import { recordCustomerFollowUpReply } from "@/modules/escalations/followup-service";
+import { hadRecentlyResolvedFollowUp, recordCustomerFollowUpReply } from "@/modules/escalations/followup-service";
+import { explicitlyReportedRecurrence } from "@/modules/escalations/followup-policy";
 import { countOpenEscalations, createEscalation, isEscalationOwnerPhone, requestsHumanAgent } from "@/modules/escalations/service";
 import type { ConversationListItem, Message } from "@/types/domain";
 
@@ -220,6 +221,30 @@ export async function ingestWhatsAppInbound(
         });
       }
     }
+    // Reopen a previous confirmed case only when the same customer explicitly
+    // says the SAME issue has returned; never reopen from a generic new question.
+    if (!wantsHuman && explicitlyReportedRecurrence(normalized.textContent)) {
+      try {
+        if (await hadRecentlyResolvedFollowUp({
+          businessId,
+          conversationId: outcome.conversationId,
+          atUtc: receivedAtUtc,
+        })) {
+          await createEscalation({
+            businessId,
+            conversationId: outcome.conversationId,
+            reasonCode: "ISSUE_RECURRED",
+            reason: "العميل أكد إن نفس المشكلة رجعت بعد إغلاق متابعة سابقة.",
+            pauseAi: true,
+          });
+        }
+      } catch (error) {
+        console.warn("[inbound] followup_reopen_failed", {
+          reason: error instanceof Error ? error.name : "UNKNOWN",
+        });
+      }
+    }
+
     // Persist customer progress. This never sends templated apologies.
     // Only an explicit confirmation AFTER a human reply can close a case.
     try {
