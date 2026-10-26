@@ -41,6 +41,7 @@ export type ConversationRow = {
   aiPauseReason: string | null;
   hasOpenEscalation?: boolean;
   followUpPhase?: string | null;
+  awaitingHumanReply?: boolean;
   aiReplyHealth: AiReplyHealth | null;
   unread: boolean;
 };
@@ -240,6 +241,11 @@ const FAILURES: Partial<Record<AiReplyHealthReason, string>> = {
 function conversationStatus(c: ConversationRow): {
   label: string; detail: string; color: string; dot: string; attention: boolean;
 } {
+  if (c.aiMode==="HUMAN_PAUSED" && c.awaitingHumanReply) return {
+    label:"ينتظر رد الفريق",detail:"وصلت رسالة من العميل بعد آخر رد بشري",
+    color:"text-amber-700 dark:text-amber-300",
+    dot:"bg-amber-500",attention:true,
+  };
   if (c.hasOpenEscalation) return c.followUpPhase === "IN_PROGRESS"
     ? {
       label: "جاري التعامل", detail: "المسؤول بدأ المتابعة",
@@ -258,9 +264,9 @@ function conversationStatus(c: ConversationRow): {
     dot: "bg-rose-500", attention: true,
   };
   if (c.aiMode === "HUMAN_PAUSED") return {
-    label: "مع الفريق", detail: "الموظف البشري مسؤول عن الرد",
-    color: "text-amber-700 dark:text-amber-300",
-    dot: "bg-amber-500", attention: true,
+    label: "مع الفريق", detail: "الفريق مسؤول عن المحادثة؛ مفيش رد جديد منتظر",
+    color: "text-sky-700 dark:text-sky-300",
+    dot: "bg-sky-500", attention: false,
   };
   const health = c.aiReplyHealth;
   if (health?.state === "DISABLED" || health?.state === "FAILED") return {
@@ -303,6 +309,7 @@ export function serializeConversations(rows: Array<{
   aiPauseReason?: string | null;
   hasOpenEscalation?: boolean;
   followUpPhase?: string | null;
+  awaitingHumanReply?: boolean;
   aiReplyHealth?: AiReplyHealth | null;
   unread?: boolean;
 }>): ConversationRow[] {
@@ -321,6 +328,7 @@ export function serializeConversations(rows: Array<{
     aiPauseReason: c.aiPauseReason ?? null,
     hasOpenEscalation: Boolean(c.hasOpenEscalation),
     followUpPhase: c.followUpPhase ?? null,
+    awaitingHumanReply: Boolean(c.awaitingHumanReply),
     aiReplyHealth: c.aiReplyHealth ?? null,
     unread: Boolean(c.unread),
   }));
