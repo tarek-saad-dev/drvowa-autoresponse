@@ -3,6 +3,7 @@ import { z } from "zod";
 import { withTransaction } from "@/lib/db";
 import { NotFoundError } from "@/lib/tenancy/errors";
 import { parseOptionalUtc } from "@/modules/messaging/content";
+import { recordHumanFollowUpReply } from "@/modules/escalations/followup-service";
 import * as messagingRepo from "@/modules/messaging/repository";
 import { canonicalizeWhatsAppContactIdentity } from "@/modules/messaging/whatsapp-identity";
 
@@ -241,6 +242,14 @@ export async function ingestWhatsAppOutboundObserved(
         trx,
       );
       pausedNow = nextAiState.mode === "HUMAN_PAUSED";
+      // Only accepted HUMAN_MANUAL events update the follow-up. Replayed
+      // observations are rejected above and timestamp guards prevent stale handovers.
+      await recordHumanFollowUpReply({
+        businessId,
+        conversationId,
+        providerMessageId: dto.providerMessageId,
+        repliedAtUtc: occurredAtUtc,
+      }, trx);
       // Ignore stale/out-of-order WhatsApp echoes after a newer AI resumption,
       // and never override SAFETY_PAUSED with HUMAN_TAKEOVER.
       if (pausedNow) {
