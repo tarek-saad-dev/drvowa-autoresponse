@@ -72,6 +72,19 @@ describe("inbox server-side pagination", () => {
     expect(mocks.query.mock.calls[2][0]).toContain("ai.Mode IS NULL");
   });
 
+  it("uses the exact open escalation predicate for follow-ups, even when AI mode is AUTO or chat is archived", async () => {
+    await listConversationsForBusiness({ businessId, filter: "FOLLOW_UP" });
+    const [sqlText, args] = mocks.query.mock.calls[0] as [string, Array<{name: string; value: unknown}>];
+    expect(sqlText).toContain("FROM dbo.TblHumanEscalation e");
+    expect(sqlText).toContain("e.BusinessID = c.BusinessID AND e.ConversationID = c.ConversationID");
+    expect(sqlText).toContain("e.ResolvedAtUtc IS NULL");
+    expect(sqlText).toContain("e.Status IN (N'OPEN', N'ACKNOWLEDGED')");
+    expect(sqlText).not.toContain("AND ai.Mode IN");
+    expect(sqlText).not.toContain("AND c.IsArchived=0");
+    expect(sqlText).toContain("AS HasOpenEscalation");
+    expect(args).toEqual(expect.arrayContaining([expect.objectContaining({ name: "businessId", value: businessId })]));
+  });
+
   it("returns real totals and unread counts from the conversation table", async () => {
     mocks.query.mockResolvedValueOnce({ recordset: [{ TotalCount: 824, UnreadCount: 19 }] });
     expect(await countConversationsForBusiness({ businessId }))
