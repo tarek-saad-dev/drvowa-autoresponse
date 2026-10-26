@@ -17,7 +17,7 @@ describe("HumanInterventionBanner", () => {
       createElement(HumanInterventionBanner, { count: 2 }),
     );
     expect(html).toContain("في 2 عملاء محتاجين متابعتك");
-    expect(html).toContain("/dashboard/inbox?filter=HUMAN");
+    expect(html).toContain("/dashboard/inbox?filter=FOLLOW_UP");
     expect(html).toContain("راجع المحادثات");
   });
 });
