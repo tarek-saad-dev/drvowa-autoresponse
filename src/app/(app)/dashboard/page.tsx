@@ -122,7 +122,7 @@ export default async function DashboardOverviewPage({ searchParams }: { searchPa
     <ConnectionHealthStrip initialUiState={health.whatsappLiveState} initialInboundHealth={health.inboundHealth} initialInboundIssue={health.inboundIssue} status={status} />
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
       <Metric label="محادثات اليوم" value={dailyActivity?.conversationsToday ?? null} hint="محادثات نشطة اليوم" glyph="▤" />
-      <Metric label="تحتاج متابعتك" value={openEscalations} hint="حالات تصعيد مفتوحة الآن" glyph="!" attention href={openEscalations !== null && openEscalations > 0 ? "/dashboard/inbox?filter=HUMAN" : undefined} />
+      <Metric label="تحتاج متابعتك" value={openEscalations} hint="حالات تصعيد مفتوحة الآن" glyph="!" attention href={openEscalations !== null && openEscalations > 0 ? "/dashboard/inbox?filter=FOLLOW_UP" : undefined} />
       <Metric label="غير مقروءة" value={inboxCounts.unread} hint="من كل المحادثات الحالية" glyph="◉" />
       <Metric label="تحويلات للفريق" value={dailyActivity?.interventionsToday ?? null} hint="إجمالي تحويلات اليوم" glyph="↗" />
     </div>
