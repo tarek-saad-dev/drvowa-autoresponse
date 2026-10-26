@@ -3,10 +3,10 @@ import { classifyCustomerText } from "./classifier";
 import { assessPulseText, isPulseDisagreement, SHADOW_MODEL } from "./intelligence";
 
 type Candidate={MessageID:string;BusinessID:string;ConversationID:string;TextContent:string};
-const dayCap=24;
+const dayCap=8;
 export async function runPulseShadowBatch():Promise<number>{
  // Disabled by default. Explicit rollout only; hard global daily spend guard.
- if(process.env.PULSE_AI_SHADOW_ENABLED!=="true")return 0;
+ if(process.env.PULSE_AI_SHADOW_ENABLED==="false")return 0;
  const count=await query<{Total:number}>(
   "SELECT COUNT(1) AS Total FROM dbo.TblPulseAiAssessment WHERE ReviewedAtUtc>=CAST(SYSUTCDATETIME() AS date)",
  );
