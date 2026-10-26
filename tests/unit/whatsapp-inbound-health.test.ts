@@ -127,6 +127,22 @@ describe("inbound delivery health assessment", () => {
     ).toBe("healthy");
   });
 
+  it("V7 legacy status without running flag is unknown, not stopped", () => {
+    const legacyV7Inbound = {
+      pending: 0,
+      quarantined: 0,
+      accepted: 12,
+      lastStatus: 200,
+      lastErrorCode: null,
+    };
+    expect(diagnoseInboundDelivery(legacyV7Inbound)).toEqual({
+      health: "unknown", issue: null,
+    });
+    expect(diagnoseInboundDelivery({ ...legacyV7Inbound, running: false })).toEqual({
+      health: "degraded", issue: "delivery_stopped",
+    });
+  });
+
   it("READY + delivery worker stopped → degraded", () => {
     expect(
       assessInboundDeliveryHealth({
@@ -276,6 +292,23 @@ describe("WhatsApp connection view exposes safe inboundDelivery", () => {
     expect(view.runtime).not.toHaveProperty("token");
     expect(view.runtime).not.toHaveProperty("accountKey");
     expect(view.runtime?.inboundDelivery).not.toHaveProperty("authDir");
+  });
+
+  it("READY V7 with legacy absent liveness does not create a false delivery_stopped alert", async () => {
+    const existing = connection({ runtimeEngine: "BAILEYS_V7" });
+    repoMocks.findWhatsAppConnection.mockResolvedValue(existing);
+    runtimeMocks.getAccountStatus.mockResolvedValue({
+      ...readyStatus(null),
+      runtimeEngine: "BAILEYS_V7",
+      inboundDelivery: { pending: 0, quarantined: 0, accepted: 10, lastErrorCode: null },
+    });
+    repoMocks.updateChannelConnection.mockResolvedValue(existing);
+
+    const view = await getWhatsAppConnectionView({ businessId: existing.businessId });
+    expect(view.uiState).toBe("READY");
+    expect(view.runtime?.inboundDelivery?.running).toBeNull();
+    expect(view.runtime?.inboundDelivery?.health).toBe("unknown");
+    expect(view.runtime?.inboundDelivery?.issue).toBeNull();
   });
 
   it("READY + worker stopped → degraded inbound health", async () => {

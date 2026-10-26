@@ -17,8 +17,8 @@ import { getDashboardDailyActivity, getInboxConversationCounts, listInboxConvers
 
 const panel = "min-w-0 rounded-[24px] border border-border bg-card shadow-[0_14px_42px_-34px_rgba(5,43,58,.46)]";
 
-function Metric({ label, value, hint, glyph, attention = false }: {
-  label: string; value: number | null; hint: string; glyph: string; attention?: boolean;
+function Metric({ label, value, hint, glyph, attention = false, href }: {
+  label: string; value: number | null; hint: string; glyph: string; attention?: boolean; href?: string;
 }) {
   return <section className={`${panel} flex min-h-[144px] flex-col justify-between p-4 sm:p-5`}>
     <div className="flex items-start justify-between gap-2">
@@ -30,6 +30,7 @@ function Metric({ label, value, hint, glyph, attention = false }: {
         {value === null ? "—" : value.toLocaleString("en-US")}
       </p>
       <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>
+      {href ? <Link href={href} className="mt-2 inline-flex text-xs font-bold text-primary hover:underline">عرض الحالات ←</Link> : null}
     </div>
   </section>;
 }
@@ -119,17 +120,9 @@ export default async function DashboardOverviewPage({ searchParams }: { searchPa
       <span className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold text-muted-foreground">ملخص اليوم</span>
     </header>
     <ConnectionHealthStrip initialUiState={health.whatsappLiveState} initialInboundHealth={health.inboundHealth} initialInboundIssue={health.inboundIssue} status={status} />
-    {openEscalations !== null && openEscalations > 0 && <Link href="/dashboard/inbox?filter=HUMAN" className="group flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-warning/25 bg-warning-soft/35 px-4 py-3 transition hover:border-warning/50 sm:px-5">
-      <div className="flex items-center gap-3">
-        <span aria-hidden className="grid h-9 w-9 place-items-center rounded-xl bg-warning/10 font-black text-warning">!</span>
-        <div><p className="text-sm font-black">{openEscalations === 1 ? "في عميل محتاج متابعتك" : `${openEscalations} عملاء محتاجين متابعتك`}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">في حالات مفتوحة محتاجة تدخل الفريق.</p></div>
-      </div>
-      <span className="text-xs font-black text-warning group-hover:underline">راجع المحادثات ←</span>
-    </Link>}
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
       <Metric label="محادثات اليوم" value={dailyActivity?.conversationsToday ?? null} hint="محادثات نشطة اليوم" glyph="▤" />
-      <Metric label="تحتاج متابعتك" value={openEscalations} hint="حالات تصعيد مفتوحة الآن" glyph="!" attention />
+      <Metric label="تحتاج متابعتك" value={openEscalations} hint="حالات تصعيد مفتوحة الآن" glyph="!" attention href={openEscalations !== null && openEscalations > 0 ? "/dashboard/inbox?filter=HUMAN" : undefined} />
       <Metric label="غير مقروءة" value={inboxCounts.unread} hint="من كل المحادثات الحالية" glyph="◉" />
       <Metric label="تحويلات للفريق" value={dailyActivity?.interventionsToday ?? null} hint="إجمالي تحويلات اليوم" glyph="↗" />
     </div>
@@ -144,7 +137,7 @@ export default async function DashboardOverviewPage({ searchParams }: { searchPa
             <p className="mt-1 text-xs text-muted-foreground">{activeAgent?.roleTitle ?? "مساعد العملاء"}</p></div>
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
-          <span className={`rounded-full px-3 py-1.5 text-[11px] font-black ${status.kind === "working" ? "bg-success-soft text-success" : "bg-warning-soft text-warning"}`}>
+          <span className={`rounded-full px-3 py-1.5 text-[11px] font-black ${status.kind === "working" ? "bg-success-soft text-success" : status.kind === "checking" ? "bg-surface text-muted-foreground" : "bg-warning-soft text-warning"}`}>
             {status.kind === "working" ? "● نشط عند آخر فحص" : status.kind === "checking" ? "◌ جاري الفحص" : status.headline}
           </span>
           <span className="rounded-full bg-surface px-3 py-1.5 text-[11px] font-bold text-muted-foreground">{activeKnowledge.toLocaleString("en-US")} معلومة نشطة</span>
@@ -166,7 +159,7 @@ export default async function DashboardOverviewPage({ searchParams }: { searchPa
             <span className="text-xs text-muted-foreground">واتساب</span><span className={`text-xs font-black ${health.whatsappLiveState === "READY" ? "text-success" : "text-warning"}`}>{health.whatsappLiveState === "READY" ? "متصل عند آخر فحص" : "غير جاهز عند آخر فحص"}</span>
           </div>
           <div className="flex items-center justify-between gap-2 border-b border-border pb-4">
-            <span className="text-xs text-muted-foreground">الرد الآلي</span><span className={`text-xs font-black ${status.kind === "working" ? "text-success" : "text-warning"}`}>{status.kind === "working" ? "جاهز عند آخر فحص" : status.kind === "checking" ? "جاري التحقق" : status.headline}</span>
+            <span className="text-xs text-muted-foreground">الرد الآلي</span><span className={`text-xs font-black ${status.kind === "working" ? "text-success" : status.kind === "checking" ? "text-muted-foreground" : "text-warning"}`}>{status.kind === "working" ? "جاهز عند آخر فحص" : status.kind === "checking" ? "جاري التحقق" : status.headline}</span>
           </div>
           <div className="flex items-center justify-between gap-2"><span className="text-xs text-muted-foreground">غير مقروءة</span>
             <span dir="ltr" className="font-mono text-sm font-semibold tabular-nums">{inboxCounts.unread.toLocaleString("en-US")}</span></div>

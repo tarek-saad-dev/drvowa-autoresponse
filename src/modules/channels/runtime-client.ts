@@ -5,14 +5,16 @@
 
 /** Safe inbound delivery counters from the managed WhatsApp runtime (no tokens/paths). */
 export type RuntimeInboundDelivery = {
-  running: boolean;
-  pending: number;
-  delivered: number;
-  failed: number;
-  quarantined: number;
-  inFlight: boolean;
-  lastDeliveryAt: string | null;
-  lastErrorCode: string | null;
+  /** V6 reports this flag; older V7 snapshots omit it (unknown, not stopped). */
+  running?: boolean;
+  /** V6 and V7 expose different delivery counters. Treat absent metrics as unknown. */
+  pending?: number;
+  delivered?: number;
+  failed?: number;
+  quarantined?: number;
+  inFlight?: boolean;
+  lastDeliveryAt?: string | null;
+  lastErrorCode?: string | null;
 };
 
 /** Safe Baileys capture counters (no phone/accountKey/body). */
