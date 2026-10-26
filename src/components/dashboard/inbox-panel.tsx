@@ -293,6 +293,7 @@ export function serializeConversations(rows: Array<{
   status: string;
   aiMode?: ConversationAiMode | null;
   aiPauseReason?: string | null;
+  hasOpenEscalation?: boolean;
   aiReplyHealth?: AiReplyHealth | null;
   unread?: boolean;
 }>): ConversationRow[] {
@@ -309,6 +310,7 @@ export function serializeConversations(rows: Array<{
     isPinned: Boolean(c.isPinned),
     aiMode: c.aiMode ?? "AUTO",
     aiPauseReason: c.aiPauseReason ?? null,
+    hasOpenEscalation: Boolean(c.hasOpenEscalation),
     aiReplyHealth: c.aiReplyHealth ?? null,
     unread: Boolean(c.unread),
   }));
@@ -710,9 +712,10 @@ export function InboxPanel({
             : "اتفتحت حالة تدخل بشري، لكن إشعارات المالك مش مفعلة أو الرقم مش مؤكد."
           : "المحادثة لها بالفعل حالة تدخل بشري مفتوحة؛ مش هيتبعت تنبيه مكرر.");
         setConversations(prev => prev.map(row => row.conversationId === id
-          ? { ...row, aiMode: "HUMAN_PAUSED", aiPauseReason: "ESCALATION" } : row));
+          ? { ...row, hasOpenEscalation: true, aiMode: "HUMAN_PAUSED", aiPauseReason: "ESCALATION" } : row));
         setSelectedSnapshot(prev => prev?.conversationId === id
-          ? { ...prev, aiMode: "HUMAN_PAUSED", aiPauseReason: "ESCALATION" } : prev);
+          ? { ...prev, hasOpenEscalation: true, aiMode: "HUMAN_PAUSED", aiPauseReason: "ESCALATION" } : prev);
+        if (data.created) setCounts(prev => ({ ...prev, followUp: (prev.followUp ?? 0) + 1 }));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تصعيد المحادثة");
@@ -736,6 +739,10 @@ export function InboxPanel({
         if (status === "RESOLVED") {
           setConversations(prev => prev.map(row => row.conversationId === id
             ? { ...row, hasOpenEscalation: false } : row));
+          setSelectedSnapshot(prev => prev?.conversationId === id
+            ? { ...prev, hasOpenEscalation: false } : prev);
+          // The follow-up filter must immediately stop listing a resolved case.
+          if (filter === "FOLLOW_UP") void loadFirstPage();
           setCounts(prev => ({ ...prev, followUp: Math.max(0, (prev.followUp ?? 0) - 1) }));
         }
         setNotice(status === "RESOLVED"
@@ -744,7 +751,7 @@ export function InboxPanel({
       }
     } catch (err) { setError(err instanceof Error ? err.message : "تعذر تحديث التصعيد"); }
     finally { setEscalating(false); }
-  }, []);
+  }, [filter, loadFirstPage]);
 
   const loadOlder = useCallback(async () => {
     const id = selectedIdRef.current;
