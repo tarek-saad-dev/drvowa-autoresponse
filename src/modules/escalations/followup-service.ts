@@ -34,7 +34,7 @@ export async function recordHumanFollowUpReply(params: Scope & {
   repliedAtUtc: Date;
 }, trx: TransactionClient): Promise<boolean> {
   const rows = await trx.query<EventRow>(
-    `UPDATE e WITH (UPDLOCK)
+    `UPDATE e
         SET Status = N'ACKNOWLEDGED',
             FollowUpPhase = N'IN_PROGRESS',
             AcknowledgedAtUtc = COALESCE(e.AcknowledgedAtUtc, @at),
@@ -43,7 +43,7 @@ export async function recordHumanFollowUpReply(params: Scope & {
             CustomerHoldClaimedAtUtc = NULL,
             UpdatedAtUtc = SYSUTCDATETIME()
         OUTPUT INSERTED.EscalationID, INSERTED.ConversationID
-        FROM dbo.TblHumanEscalation e
+        FROM dbo.TblHumanEscalation e WITH (UPDLOCK)
         WHERE e.BusinessID = @businessId AND e.ConversationID = @conversationId
           AND e.ResolvedAtUtc IS NULL AND e.Status IN (N'OPEN', N'ACKNOWLEDGED')
           AND @at >= e.CreatedAtUtc
@@ -67,7 +67,7 @@ export async function recordCustomerFollowUpReply(params: Scope & {
   const explicit = explicitlyConfirmedResolved(params.text);
   if (explicit) {
     const result = await trx.query<EventRow>(
-      `UPDATE e WITH (UPDLOCK)
+      `UPDATE e
          SET Status = N'RESOLVED',
              FollowUpPhase = N'RESOLVED',
              ResolvedAtUtc = @at,
@@ -80,7 +80,7 @@ export async function recordCustomerFollowUpReply(params: Scope & {
                THEN N'CANCELLED' ELSE e.NotificationStatus END,
              UpdatedAtUtc = SYSUTCDATETIME()
         OUTPUT INSERTED.EscalationID, INSERTED.ConversationID
-        FROM dbo.TblHumanEscalation e
+        FROM dbo.TblHumanEscalation e WITH (UPDLOCK)
         WHERE e.BusinessID = @businessId AND e.ConversationID = @conversationId
           AND e.ResolvedAtUtc IS NULL AND e.Status IN (N'OPEN', N'ACKNOWLEDGED')
           AND e.LastHumanReplyAtUtc IS NOT NULL
@@ -111,12 +111,12 @@ export async function recordCustomerFollowUpReply(params: Scope & {
   // After an actual human response, a new customer question puts the issue
   // back in the human's queue. Never replace a newer event with a late replay.
   const result = await trx.query<EventRow>(
-    `UPDATE e WITH (UPDLOCK)
+    `UPDATE e
        SET FollowUpPhase = N'NEEDS_ATTENTION',
            LastCustomerReplyAtUtc = @at,
            UpdatedAtUtc = SYSUTCDATETIME()
        OUTPUT INSERTED.EscalationID, INSERTED.ConversationID
-       FROM dbo.TblHumanEscalation e
+       FROM dbo.TblHumanEscalation e WITH (UPDLOCK)
       WHERE e.BusinessID = @businessId AND e.ConversationID = @conversationId
         AND e.ResolvedAtUtc IS NULL AND e.Status IN (N'OPEN', N'ACKNOWLEDGED')
         AND e.LastHumanReplyAtUtc IS NOT NULL AND @at > e.LastHumanReplyAtUtc
