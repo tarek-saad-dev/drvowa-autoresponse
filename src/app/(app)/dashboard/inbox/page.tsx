@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getConversationForBusiness, getContactForBusiness } from "@/modules/messaging/repository";
 import { getInboxConversationAiState } from "@/modules/ai/inbox-ai-service";
 import { InboxPanel } from "@/components/dashboard/inbox-panel";
+import { canonicalInboxConversationId } from "@/lib/inbox/deep-link";
 import { getMembership } from "@/modules/businesses/repository";
 import { resolveActiveBusiness, setActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
@@ -70,9 +71,8 @@ export default async function InboxPage({ searchParams }: {
     ? requestedId : null;
   // UUIDs are case-insensitive in SQL Server but not in JavaScript. Always
   // choose the canonical conversation ID returned from the tenant-scoped DB.
-  const alreadyLoaded = requestedDeepLinkId
-    ? conversations.find(c => c.conversationId.toLowerCase() === requestedDeepLinkId.toLowerCase())
-    : null;
+  const alreadyLoadedId = canonicalInboxConversationId(conversations, requestedDeepLinkId);
+  const alreadyLoaded = conversations.find(c => c.conversationId === alreadyLoadedId) ?? null;
   let deepLinkId = alreadyLoaded?.conversationId ?? null;
   if (requestedDeepLinkId && !alreadyLoaded) {
     const conversation = await getConversationForBusiness({ businessId, conversationId: requestedDeepLinkId });
@@ -107,6 +107,7 @@ export default async function InboxPage({ searchParams }: {
       key={initialFilter + ":" + (deepLinkId ?? "list")}
       canResumeAll={canResumeAll}
       initialSelectedId={deepLinkId}
+      requestedConversationUnavailable={Boolean(requested.conversationId) && !deepLinkId}
       initialFilter={initialFilter}
       initialConversations={conversations.map((c) => ({
         conversationId: c.conversationId,
