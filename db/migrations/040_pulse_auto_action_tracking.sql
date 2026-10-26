@@ -45,6 +45,26 @@ UPDATE p
  WHERE p.ActionType IS NOT NULL AND p.ReviewStatus=N'OPEN'
    AND p.ActionState=N'NEEDS_REPLY' AND h.LastHumanAtUtc IS NOT NULL;
 GO
+-- Include human replies sent from WhatsApp mobile / desktop (not just DRVO).
+-- Those replies are recorded as trusted outbound observations, even where the
+-- corresponding Whatsapp message has not been mirrored into TblMessage.
+UPDATE p
+ SET ActionState=N'IN_PROGRESS',
+     LastHumanReplyAtUtc=o.LastHumanAtUtc,
+     ActionSource=N'HUMAN_WHATSAPP_BACKFILL',
+     ActionUpdatedAtUtc=SYSUTCDATETIME()
+ FROM dbo.TblPulseSignal p
+ CROSS APPLY (
+   SELECT MAX(COALESCE(x.OccurredAtUtc,x.CreatedAtUtc)) AS LastHumanAtUtc
+   FROM dbo.TblWhatsappOutboundObservation x
+   WHERE x.BusinessID=p.BusinessID AND x.ConversationID=p.ConversationID
+     AND x.Origin=N'HUMAN_MANUAL'
+     AND COALESCE(x.OccurredAtUtc,x.CreatedAtUtc)>p.MessageAtUtc
+ ) o
+ WHERE p.ActionType IS NOT NULL AND p.ReviewStatus=N'OPEN'
+   AND o.LastHumanAtUtc IS NOT NULL
+   AND (p.LastHumanReplyAtUtc IS NULL OR o.LastHumanAtUtc>p.LastHumanReplyAtUtc);
+GO
 -- Correct ONLY demonstrably misleading legacy rule-v1 matches.
 -- Educational chargeback/glossary text is not a refund request, and
 -- "I do NOT need a manager" must not be classified as a manager request.
