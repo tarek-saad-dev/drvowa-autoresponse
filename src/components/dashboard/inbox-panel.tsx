@@ -40,6 +40,7 @@ export type ConversationRow = {
   aiMode: ConversationAiMode;
   aiPauseReason: string | null;
   hasOpenEscalation?: boolean;
+  followUpPhase?: string | null;
   aiReplyHealth: AiReplyHealth | null;
   unread: boolean;
 };
@@ -239,11 +240,18 @@ const FAILURES: Partial<Record<AiReplyHealthReason, string>> = {
 function conversationStatus(c: ConversationRow): {
   label: string; detail: string; color: string; dot: string; attention: boolean;
 } {
-  if (c.hasOpenEscalation) return {
-    label: "متابعة مفتوحة", detail: "العميل محتاج متابعة؛ افتح المحادثة لمراجعة السبب",
-    color: "text-amber-700 dark:text-amber-300",
-    dot: "bg-amber-500", attention: true,
-  };
+  if (c.hasOpenEscalation) return c.followUpPhase === "IN_PROGRESS"
+    ? {
+      label: "جاري التعامل", detail: "المسؤول بدأ المتابعة",
+      color: "text-sky-700 dark:text-sky-300",
+      dot: "bg-sky-500", attention: false,
+    }
+    : {
+      label: c.followUpPhase === "WAITING_CUSTOMER" ? "بانتظار العميل" : "تحتاج متابعة",
+      detail: "العميل محتاج رد بشري أو إجراء من الفريق",
+      color: "text-amber-700 dark:text-amber-300",
+      dot: "bg-amber-500", attention: c.followUpPhase !== "WAITING_CUSTOMER",
+    };
   if (c.aiMode === "SAFETY_PAUSED") return {
     label: "محتاج مراجعة", detail: "مراجعة أمان قبل تشغيل الرد",
     color: "text-rose-600 dark:text-rose-300",
@@ -294,6 +302,7 @@ export function serializeConversations(rows: Array<{
   aiMode?: ConversationAiMode | null;
   aiPauseReason?: string | null;
   hasOpenEscalation?: boolean;
+  followUpPhase?: string | null;
   aiReplyHealth?: AiReplyHealth | null;
   unread?: boolean;
 }>): ConversationRow[] {
@@ -311,6 +320,7 @@ export function serializeConversations(rows: Array<{
     aiMode: c.aiMode ?? "AUTO",
     aiPauseReason: c.aiPauseReason ?? null,
     hasOpenEscalation: Boolean(c.hasOpenEscalation),
+    followUpPhase: c.followUpPhase ?? null,
     aiReplyHealth: c.aiReplyHealth ?? null,
     unread: Boolean(c.unread),
   }));
@@ -721,7 +731,7 @@ export function InboxPanel({
             : "اتفتحت حالة تدخل بشري، لكن إشعارات المالك مش مفعلة أو الرقم مش مؤكد."
           : "المحادثة لها بالفعل حالة تدخل بشري مفتوحة؛ مش هيتبعت تنبيه مكرر.");
         setConversations(prev => prev.map(row => row.conversationId === id
-          ? { ...row, hasOpenEscalation: true, aiMode: "HUMAN_PAUSED", aiPauseReason: "ESCALATION" } : row));
+          ? { ...row, hasOpenEscalation: true, followUpPhase: "NEEDS_ATTENTION", aiMode: "HUMAN_PAUSED", aiPauseReason: "ESCALATION" } : row));
         setSelectedSnapshot(prev => prev?.conversationId === id
           ? { ...prev, hasOpenEscalation: true, aiMode: "HUMAN_PAUSED", aiPauseReason: "ESCALATION" } : prev);
         if (data.created) setCounts(prev => ({ ...prev, followUp: (prev.followUp ?? 0) + 1 }));
@@ -749,9 +759,9 @@ export function InboxPanel({
         void fetchEscalation(id);
         if (status === "RESOLVED") {
           setConversations(prev => prev.map(row => row.conversationId === id
-            ? { ...row, hasOpenEscalation: false } : row));
+            ? { ...row, hasOpenEscalation: false, followUpPhase: null } : row));
           setSelectedSnapshot(prev => prev?.conversationId === id
-            ? { ...prev, hasOpenEscalation: false } : prev);
+            ? { ...prev, hasOpenEscalation: false, followUpPhase: null } : prev);
           // The follow-up filter must immediately stop listing a resolved case.
           if (filter === "FOLLOW_UP") void loadFirstPage();
           setCounts(prev => ({ ...prev, followUp: Math.max(0, (prev.followUp ?? 0) - 1) }));
