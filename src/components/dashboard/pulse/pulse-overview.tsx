@@ -13,7 +13,7 @@ function Count({label,value,hint}:{label:string;value:number|string;hint:string}
 }
 function periodHref(period:"today"|"yesterday"|"month",all=false){return "/dashboard?period="+period+(all?"&view=reviews":"");}
 export function PulseOverview({data,businessName,businessId,allReviews=false}:{data:PulseSnapshot|null;businessName:string;businessId:string;allReviews?:boolean}) {
- const period=data?.period||"today",monthly=period==="month",yesterday=period==="yesterday";
+ const period=data?.period||"month",monthly=period==="month",yesterday=period==="yesterday";
  const ready=Boolean(data),pending=data?Math.max(0,data.eligible-data.analyzed):0;
  const actionable=(data?.needsAttentionFollowups??0)+(data?.pendingSignals??0);
  const handling=(data?.handlingFollowups??0)+(data?.handlingSignals??0);
