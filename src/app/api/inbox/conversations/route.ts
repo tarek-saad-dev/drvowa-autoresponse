@@ -18,7 +18,7 @@ export async function GET(request: Request) {
       : 60;
     const search = (url.searchParams.get("search") ?? "").trim().slice(0, 96);
     const filterRaw = url.searchParams.get("filter") ?? "ALL";
-    if (!["ALL", "UNREAD", "HUMAN", "AUTO", "ARCHIVED", "PINNED"].includes(filterRaw)) {
+    if (!["ALL", "UNREAD", "HUMAN", "FOLLOW_UP", "AUTO", "ARCHIVED", "PINNED"].includes(filterRaw)) {
       return jsonError("Invalid conversation filter", 400);
     }
     const filter = filterRaw as ConversationFilter;
