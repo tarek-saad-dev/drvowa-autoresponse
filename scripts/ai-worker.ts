@@ -16,6 +16,7 @@ import { deliverNextCustomerHoldMessage } from "../src/modules/escalations/custo
 import { createAiWorkerRunner } from "../src/modules/ai/worker-runner";
 import { resumeDueHumanConversations } from "../src/modules/ai/bulk-resume-service";
 import { runReliabilityAudit } from "../src/modules/reliability/service";
+import { scanPulseBatch } from "../src/modules/pulse/scanner";
 import {
   resolveHeartbeatMs,
   resolveLeaseSeconds,
@@ -149,6 +150,21 @@ async function main(): Promise<void> {
   };
   const auditTimer = setInterval(() => void auditTick(), 60_000);
   void auditTick();
+  // Passive, cost-free analytics worker; bounded batches and no outgoing messages.
+  let stoppingPulse = false;
+  let pulseBusy = false;
+  const pulseTick = async () => {
+    if (stoppingPulse || pulseBusy || process.env.PULSE_SCANNER_ENABLED === "false") return;
+    pulseBusy = true;
+    try {
+      const scanned = await scanPulseBatch(160);
+      if (scanned > 0) console.info("[pulse] messages_scanned", { scanned });
+    } catch (error) {
+      console.warn("[pulse] scan_unavailable", { reason: error instanceof Error ? error.name : "UNKNOWN" });
+    } finally { pulseBusy = false; }
+  };
+  const pulseTimer = setInterval(() => void pulseTick(), 30_000);
+  void pulseTick();
   const shutdown = () => {
     stoppingNotifications = true;
     clearInterval(notificationTimer);
@@ -158,6 +174,8 @@ async function main(): Promise<void> {
     clearInterval(dailyResumeTimer);
     stoppingAudit = true;
     clearInterval(auditTimer);
+    stoppingPulse = true;
+    clearInterval(pulseTimer);
     runner.requestShutdown();
   };
   process.once("SIGINT", shutdown);
@@ -172,6 +190,8 @@ async function main(): Promise<void> {
   clearInterval(dailyResumeTimer);
   stoppingAudit = true;
   clearInterval(auditTimer);
+  stoppingPulse = true;
+  clearInterval(pulseTimer);
   if (result.reason === "deadline_exceeded") {
     process.exitCode = 1;
     // Force exit so OS stops heartbeats; jobs recover via lease expiry.
