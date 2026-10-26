@@ -55,7 +55,8 @@ export type InboundDeliveryIssue =
   | "decrypt_failures";
 
 export type InboundDeliveryView = {
-  running: boolean;
+  /** null means the runtime did not report worker liveness. */
+  running: boolean | null;
   pending: number;
   quarantined: number;
   lastDeliveryAt: string | null;
@@ -271,7 +272,9 @@ export function diagnoseInboundDelivery(
   now: Date = new Date(),
 ): { health: InboundReceiveHealth; issue: InboundDeliveryIssue | null } {
   if (!inbound) return { health: "unknown", issue: null };
-  if (!inbound.running) return { health: "degraded", issue: "delivery_stopped" };
+  // Older V7 workers omit "running" entirely. Never interpret a missing
+  // diagnostic as an explicitly stopped delivery worker.
+  if (inbound.running === false) return { health: "degraded", issue: "delivery_stopped" };
   const code = inbound.lastErrorCode?.trim() || null;
   if (code && INBOUND_CONFIG_ERROR_CODES.has(code)) {
     const issue: InboundDeliveryIssue =
@@ -294,6 +297,7 @@ export function diagnoseInboundDelivery(
       return { health: "degraded", issue: "decrypt_failures" };
     }
   }
+  if (inbound.running !== true) return { health: "unknown", issue: null };
   return { health: "healthy", issue: null };
 }
 
@@ -339,7 +343,7 @@ function sanitizeInboundDeliveryView(
       }
     : null;
   return {
-    running: Boolean(inbound.running),
+    running: typeof inbound.running === "boolean" ? inbound.running : null,
     pending: Number(inbound.pending) || 0,
     quarantined: Number(inbound.quarantined) || 0,
     lastDeliveryAt: inbound.lastDeliveryAt ?? null,
