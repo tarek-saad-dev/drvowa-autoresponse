@@ -361,6 +361,7 @@ export function InboxPanel({
   initialHasMore,
   initialCursor,
   initialSelectedId,
+  requestedConversationUnavailable = false,
   initialFilter = "ALL",
   canResumeAll = false,
 }: {
@@ -370,6 +371,7 @@ export function InboxPanel({
   initialHasMore: boolean;
   initialCursor: ConversationCursor | null;
   initialSelectedId?: string | null;
+  requestedConversationUnavailable?: boolean;
   initialFilter?: InboxFilter;
 }) {
   const [conversations, setConversations] = useState(initialConversations);
@@ -381,9 +383,18 @@ export function InboxPanel({
   const [searchText, setSearchText] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filter, setFilter] = useState<InboxFilter>(initialFilter);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedSnapshot, setSelectedSnapshot] = useState<ConversationRow | null>(null);
-  const [mobileThread, setMobileThread] = useState(false);
+  // A deep-linked conversation must be selected on the very first render.
+  // Otherwise a cancelled mount-time timer can leave a valid URL on an empty pane.
+  const [selectedId, setSelectedId] = useState<string | null>(() =>
+    initialConversations.some(c => c.conversationId === initialSelectedId)
+      ? (initialSelectedId ?? null) : null,
+  );
+  const [selectedSnapshot, setSelectedSnapshot] = useState<ConversationRow | null>(() =>
+    initialConversations.find(c => c.conversationId === initialSelectedId) ?? null,
+  );
+  const [mobileThread, setMobileThread] = useState(() =>
+    initialConversations.some(c => c.conversationId === initialSelectedId),
+  );
   const { setThreadOpen } = useInboxChrome();
   useEffect(() => {
     setThreadOpen(mobileThread);
@@ -440,7 +451,7 @@ export function InboxPanel({
   const [showScrollDown, setShowScrollDown] = useState(false);
 
   const selectedIdRef = useRef<string | null>(null);
-  const initialDeepLinkOpened = useRef(false);
+  const initialDeepLinkOpened = useRef<string | null>(null);
   const mobileThreadRef = useRef(false);
   const readWatermarksRef = useRef<Map<string, string>>(new Map());
   const listRequestRef = useRef(0);
@@ -494,7 +505,14 @@ export function InboxPanel({
       if (requestId !== listRequestRef.current) return;
       const latest = serializeConversations(data.conversations ?? []);
       setConversations(prev => {
-        if (!silent) return latest;
+        if (!silent) {
+          // Preserve the selected deep-link target even when it predates the
+          // most recent page or is archived and absent from the active filter.
+          const wanted = selectedIdRef.current ?? initialSelectedId;
+          const selectedRow = wanted ? prev.find(c => c.conversationId === wanted) : null;
+          return selectedRow && !latest.some(c => c.conversationId === wanted)
+            ? [selectedRow, ...latest] : latest;
+        }
         const byId = new Map<string, ConversationRow>();
         for (const row of prev) byId.set(row.conversationId, row);
         for (const row of latest) byId.set(row.conversationId, row);
@@ -512,7 +530,7 @@ export function InboxPanel({
     } finally {
       if (requestId === listRequestRef.current) setLoadingList(false);
     }
-  }, [filter, debouncedSearch]);
+  }, [filter, debouncedSearch, initialSelectedId]);
 
   const loadNextPage = useCallback(async () => {
     if (!hasMore || !cursor || loadingMore || loadingList || listBusyRef.current) return;
@@ -699,11 +717,14 @@ export function InboxPanel({
   }, [selectedId, fetchEscalation]);
 
   useEffect(() => {
-    if (!initialSelectedId || initialDeepLinkOpened.current) return;
+    if (!initialSelectedId || initialDeepLinkOpened.current === initialSelectedId) return;
     if (!conversations.some(c => c.conversationId === initialSelectedId)) return;
-    initialDeepLinkOpened.current = true;
-    // Defer selection work so the effect only schedules an external update.
+    // Crucially, mark the link as handled AFTER the timer actually executes.
+    // React can cancel a scheduled effect due to a list update or StrictMode;
+    // marking beforehand made the original bug unrecoverable.
     const timer = window.setTimeout(() => {
+      if (initialDeepLinkOpened.current === initialSelectedId) return;
+      initialDeepLinkOpened.current = initialSelectedId;
       selectConversation(initialSelectedId);
     }, 0);
     return () => window.clearTimeout(timer);
@@ -1493,9 +1514,19 @@ export function InboxPanel({
           </>
         ) : (
           <div className="flex h-full flex-col items-center justify-center px-8 text-center">
-            <BrandLogo className="mb-6 h-8" />
-            <h2 className="text-2xl font-extrabold">كل محادثاتك. في مكان واحد.</h2>
-            <p className="mt-3 max-w-sm text-sm leading-7 text-muted-foreground">افتح أي شات من القائمة، والـAI يتابع معاك أو ترد بنفسك في أي وقت.</p>
+            {requestedConversationUnavailable ? (
+              <>
+                <h2 className="text-xl font-extrabold">المحادثة المطلوبة مش متاحة</h2>
+                <p className="mt-3 max-w-sm text-sm leading-7 text-muted-foreground">المحادثة مش موجودة في النشاط الحالي أو اتنقلت. تقدر تفتح محادثة تانية من القائمة أو ترجع للمراجعات.</p>
+                <Link href="/dashboard" className="mt-4 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">العودة للمراجعات</Link>
+              </>
+            ) : (
+              <>
+                <BrandLogo className="mb-6 h-8" />
+                <h2 className="text-2xl font-extrabold">كل محادثاتك. في مكان واحد.</h2>
+                <p className="mt-3 max-w-sm text-sm leading-7 text-muted-foreground">افتح أي شات من القائمة، والـAI يتابع معاك أو ترد بنفسك في أي وقت.</p>
+              </>
+            )}
           </div>
         )}
       </main>

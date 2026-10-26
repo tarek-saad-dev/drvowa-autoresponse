@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getConversationForBusiness, getContactForBusiness } from "@/modules/messaging/repository";
 import { getInboxConversationAiState } from "@/modules/ai/inbox-ai-service";
 import { InboxPanel } from "@/components/dashboard/inbox-panel";
+import { canonicalInboxConversationId } from "@/lib/inbox/deep-link";
 import { getMembership } from "@/modules/businesses/repository";
 import { resolveActiveBusiness, setActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
@@ -66,28 +67,36 @@ export default async function InboxPage({ searchParams }: {
 
   const conversations = batch.slice(0, INITIAL_PAGE_SIZE);
   const requestedId = requested.conversationId;
-  const deepLinkId = requestedId && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(requestedId)
+  const requestedDeepLinkId = requestedId && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(requestedId)
     ? requestedId : null;
-  if (deepLinkId && !conversations.some(c => c.conversationId === deepLinkId)) {
-    const conversation = await getConversationForBusiness({ businessId, conversationId: deepLinkId });
+  // UUIDs are case-insensitive in SQL Server but not in JavaScript. Always
+  // choose the canonical conversation ID returned from the tenant-scoped DB.
+  const alreadyLoadedId = canonicalInboxConversationId(conversations, requestedDeepLinkId);
+  const alreadyLoaded = conversations.find(c => c.conversationId === alreadyLoadedId) ?? null;
+  let deepLinkId = alreadyLoaded?.conversationId ?? null;
+  if (requestedDeepLinkId && !alreadyLoaded) {
+    const conversation = await getConversationForBusiness({ businessId, conversationId: requestedDeepLinkId });
     if (conversation) {
       const [contact, aiState] = await Promise.all([
         getContactForBusiness({ businessId, contactId: conversation.contactId }),
-        getInboxConversationAiState({ businessId, conversationId: deepLinkId }),
+        getInboxConversationAiState({ businessId, conversationId: conversation.conversationId }),
       ]);
-      if (contact) conversations.unshift({
-        ...conversation,
-        contactExternalKey: contact.externalContactKey,
-        contactDisplayName: contact.displayName,
-        contactPhoneNormalized: contact.phoneNormalized,
-        lastMessagePreview: null,
-        lastMessageDirection: null,
-        aiMode: aiState.mode,
-        aiPauseReason: aiState.pauseReason,
-        hasOpenEscalation: false,
-        aiReplyHealth: null,
-        unread: false,
-      });
+      if (contact) {
+        deepLinkId = conversation.conversationId;
+        conversations.unshift({
+          ...conversation,
+          contactExternalKey: contact.externalContactKey,
+          contactDisplayName: contact.displayName,
+          contactPhoneNormalized: contact.phoneNormalized,
+          lastMessagePreview: null,
+          lastMessageDirection: null,
+          aiMode: aiState.mode,
+          aiPauseReason: aiState.pauseReason,
+          hasOpenEscalation: false,
+          aiReplyHealth: null,
+          unread: false,
+        });
+      }
     }
   }
   const last = conversations.at(-1);
@@ -95,8 +104,10 @@ export default async function InboxPage({ searchParams }: {
 
   return (
     <InboxPanel
+      key={initialFilter + ":" + (deepLinkId ?? "list")}
       canResumeAll={canResumeAll}
       initialSelectedId={deepLinkId}
+      requestedConversationUnavailable={Boolean(requested.conversationId) && !deepLinkId}
       initialFilter={initialFilter}
       initialConversations={conversations.map((c) => ({
         conversationId: c.conversationId,

@@ -12,7 +12,7 @@ function Count({label,value,hint}:{label:string;value:number|string;hint:string}
  </div>;
 }
 function periodHref(period:"today"|"month",all=false){return "/dashboard?period="+period+(all?"&view=reviews":"");}
-export function PulseOverview({data,businessName,allReviews=false}:{data:PulseSnapshot|null;businessName:string;allReviews?:boolean}) {
+export function PulseOverview({data,businessName,businessId,allReviews=false}:{data:PulseSnapshot|null;businessName:string;businessId:string;allReviews?:boolean}) {
  const period=data?.period||"today",monthly=period==="month";
  const ready=Boolean(data),pending=data?Math.max(0,data.eligible-data.analyzed):0;
  const actionable=(data?.openFollowups??0)+(data?.pendingSignals??0);
@@ -72,7 +72,7 @@ export function PulseOverview({data,businessName,allReviews=false}:{data:PulseSn
         </div>
         <p className="mt-1 line-clamp-2 break-words text-xs leading-6 text-muted-foreground" dir="auto">{item.evidence}</p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
-         <Link href={"/dashboard/inbox?conversationId="+encodeURIComponent(item.conversationId)} className="text-xs font-black text-primary hover:underline">افتح المحادثة ←</Link>
+         <Link href={"/dashboard/inbox?businessId="+encodeURIComponent(businessId)+"&conversationId="+encodeURIComponent(item.conversationId)} className="text-xs font-black text-primary hover:underline">افتح المحادثة ←</Link>
          {item.kind==="SIGNAL"?<ReviewButton conversationId={item.conversationId} intent={item.intent as PulseIntent}/>:<span className="text-[11px] text-muted-foreground">إدارة المتابعة من الشات</span>}
         </div>
        </div>
