@@ -24,7 +24,7 @@ export default async function DashboardOverviewPage({searchParams}:{
  searchParams:Promise<{period?:string;view?:string}>;
 }) {
  const params=await searchParams;
- const period:PulsePeriod=params.period==="month"?"month":params.period==="yesterday"?"yesterday":"today";
+ const period:PulsePeriod=params.period==="today"?"today":params.period==="yesterday"?"yesterday":"month";
  const allReviews=params.view==="reviews";
  const user=await requireAuthenticatedUser();
  const businessId=await resolveActiveBusiness(user.userId,user.activeBusinessId);
