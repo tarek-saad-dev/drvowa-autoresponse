@@ -75,7 +75,7 @@ describe("inbox viewport and UX layout contract", () => {
       initialCursor: null,
     }));
     expect(html).toContain("عميل محتاج متابعة");
-    expect(html).toContain("متابعة مفتوحة");
+    expect(html).toContain("تحتاج متابعة");
     expect(html).toContain("تحتاج متابعة");
     expect(html).toContain("محتاج أكلم المدير");
     expect(html).not.toContain("مفيش محادثات في الفلتر ده");
