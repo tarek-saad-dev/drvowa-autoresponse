@@ -17,8 +17,8 @@ import { getDashboardDailyActivity, getInboxConversationCounts, listInboxConvers
 
 const panel = "min-w-0 rounded-[24px] border border-border bg-card shadow-[0_14px_42px_-34px_rgba(5,43,58,.46)]";
 
-function Metric({ label, value, hint, glyph, attention = false }: {
-  label: string; value: number | null; hint: string; glyph: string; attention?: boolean;
+function Metric({ label, value, hint, glyph, attention = false, href }: {
+  label: string; value: number | null; hint: string; glyph: string; attention?: boolean; href?: string;
 }) {
   return <section className={`${panel} flex min-h-[144px] flex-col justify-between p-4 sm:p-5`}>
     <div className="flex items-start justify-between gap-2">
@@ -30,6 +30,7 @@ function Metric({ label, value, hint, glyph, attention = false }: {
         {value === null ? "—" : value.toLocaleString("en-US")}
       </p>
       <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>
+      {href ? <Link href={href} className="mt-2 inline-flex text-xs font-bold text-primary hover:underline">عرض الحالات ←</Link> : null}
     </div>
   </section>;
 }
@@ -119,17 +120,9 @@ export default async function DashboardOverviewPage({ searchParams }: { searchPa
       <span className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold text-muted-foreground">ملخص اليوم</span>
     </header>
     <ConnectionHealthStrip initialUiState={health.whatsappLiveState} initialInboundHealth={health.inboundHealth} initialInboundIssue={health.inboundIssue} status={status} />
-    {openEscalations !== null && openEscalations > 0 && <Link href="/dashboard/inbox?filter=HUMAN" className="group flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-warning/25 bg-warning-soft/35 px-4 py-3 transition hover:border-warning/50 sm:px-5">
-      <div className="flex items-center gap-3">
-        <span aria-hidden className="grid h-9 w-9 place-items-center rounded-xl bg-warning/10 font-black text-warning">!</span>
-        <div><p className="text-sm font-black">{openEscalations === 1 ? "في عميل محتاج متابعتك" : `${openEscalations} عملاء محتاجين متابعتك`}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">في حالات مفتوحة محتاجة تدخل الفريق.</p></div>
-      </div>
-      <span className="text-xs font-black text-warning group-hover:underline">راجع المحادثات ←</span>
-    </Link>}
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
       <Metric label="محادثات اليوم" value={dailyActivity?.conversationsToday ?? null} hint="محادثات نشطة اليوم" glyph="▤" />
-      <Metric label="تحتاج متابعتك" value={openEscalations} hint="حالات تصعيد مفتوحة الآن" glyph="!" attention />
+      <Metric label="تحتاج متابعتك" value={openEscalations} hint="حالات تصعيد مفتوحة الآن" glyph="!" attention href={openEscalations !== null && openEscalations > 0 ? "/dashboard/inbox?filter=HUMAN" : undefined} />
       <Metric label="غير مقروءة" value={inboxCounts.unread} hint="من كل المحادثات الحالية" glyph="◉" />
       <Metric label="تحويلات للفريق" value={dailyActivity?.interventionsToday ?? null} hint="إجمالي تحويلات اليوم" glyph="↗" />
     </div>
