@@ -211,6 +211,7 @@ export type ConversationListItem = Conversation & {
   aiPauseReason: string | null;
   /** Open follow-up cases are independent of AI mode and archive state. */
   hasOpenEscalation?: boolean;
+  followUpPhase?: string | null;
   unread: boolean;
   /** Null when nothing is awaiting an AI reply (or AI isn't responsible). */
   aiReplyHealth: AiReplyHealth | null;
