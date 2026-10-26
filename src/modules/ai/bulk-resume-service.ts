@@ -1,4 +1,5 @@
 import { query, sql } from "@/lib/db";
+import { HUMAN_OWNERSHIP_QUIET_MINUTES } from "./human-ownership-policy";
 
 /**
  * Hand back HUMAN_PAUSED conversations to the bot for FUTURE incoming messages.
@@ -108,25 +109,41 @@ export async function resumePreviousDayConversations(now = new Date()): Promise<
  * Predicate + UPDATE are atomic; repeating the sweep cannot duplicate a return.
  */
 export async function resumeDueHumanConversations(now = new Date()): Promise<number> {
-  const res = await query(
+  const result = await query(
     `UPDATE s
-     SET Mode = N'AUTO', PausedAtUtc = NULL, PauseReason = NULL,
-         LastHumanReplyAtUtc = NULL, ResumedAtUtc = @now, UpdatedAtUtc = @now
+     SET Mode=N'AUTO', PausedAtUtc=NULL, PauseReason=NULL,
+         LastHumanReplyAtUtc=NULL, ResumedAtUtc=@now, UpdatedAtUtc=@now
      OUTPUT deleted.BusinessID, deleted.ConversationID,
             deleted.LastHumanReplyAtUtc, inserted.ResumedAtUtc
        INTO dbo.TblReliabilityHandoffReturn
             (BusinessID, ConversationID, LastHumanReplyAtUtc, ResumedAtUtc)
      FROM dbo.TblConversationAiState s WITH (UPDLOCK)
-     WHERE s.Mode = N'HUMAN_PAUSED'
-       AND s.PauseReason = N'HUMAN_TAKEOVER'
+     INNER JOIN dbo.TblConversation c WITH (UPDLOCK,HOLDLOCK)
+       ON c.BusinessID=s.BusinessID AND c.ConversationID=s.ConversationID
+     WHERE s.Mode=N'HUMAN_PAUSED'
+       AND s.PauseReason=N'HUMAN_TAKEOVER'
        AND s.LastHumanReplyAtUtc IS NOT NULL
-       AND s.LastHumanReplyAtUtc <= DATEADD(minute, -30, @now)
+       -- Count quiet time from the last real human response.
+       AND s.LastHumanReplyAtUtc<=DATEADD(minute,-@quietMinutes,@now)
+       -- No outstanding inbound message after the last human reply.
+       AND (c.LastInboundAtUtc IS NULL OR c.LastInboundAtUtc<=s.LastHumanReplyAtUtc)
+       -- Extend the quiet window if any other message activity occurred.
+       AND (c.LastMessageAtUtc IS NULL OR c.LastMessageAtUtc<=DATEADD(minute,-@quietMinutes,@now))
        AND NOT EXISTS (
          SELECT 1 FROM dbo.TblHumanEscalation e
-         WHERE e.BusinessID = s.BusinessID AND e.ConversationID = s.ConversationID
-           AND e.ResolvedAtUtc IS NULL
+         WHERE e.BusinessID=s.BusinessID AND e.ConversationID=s.ConversationID
+           AND e.ResolvedAtUtc IS NULL AND e.Status IN(N'OPEN',N'ACKNOWLEDGED')
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM dbo.TblPulseSignal p
+         WHERE p.BusinessID=s.BusinessID AND p.ConversationID=s.ConversationID
+           AND p.ActionType IS NOT NULL AND p.ReviewStatus=N'OPEN'
+           AND p.ActionState=N'NEEDS_REPLY'
        )`,
-    [{ name: "now", type: sql.DateTime2, value: now }],
+    [
+      {name:"now",type:sql.DateTime2,value:now},
+      {name:"quietMinutes",type:sql.Int,value:HUMAN_OWNERSHIP_QUIET_MINUTES},
+    ],
   );
-  return res.rowsAffected.reduce((sum, n) => sum + n, 0);
+  return result.rowsAffected.reduce((sum,n)=>sum+n,0);
 }

@@ -107,6 +107,9 @@ type ConversationListRow = ConversationRow & {
   LastInboundJobNotBeforeUtc: Date | null;
   HasOpenEscalation: boolean | number | null;
   FollowUpPhase: string | null;
+  AiLastHumanReplyAtUtc: Date | null;
+  EscalationLastHumanReplyAtUtc: Date | null;
+  AiPausedAtUtc: Date | null;
 };
 
 function mapChannel(row: ChannelRow): ChannelConnection {
@@ -1211,6 +1214,13 @@ export async function listConversationsForBusiness(params: {
         ) AS LastMessageDirection,
         ai.Mode AS AiMode,
         ai.PauseReason AS AiPauseReason,
+        ai.LastHumanReplyAtUtc AS AiLastHumanReplyAtUtc,
+        ai.PausedAtUtc AS AiPausedAtUtc,
+        (SELECT MAX(e.LastHumanReplyAtUtc)
+         FROM dbo.TblHumanEscalation e
+         WHERE e.BusinessID=c.BusinessID AND e.ConversationID=c.ConversationID
+           AND e.ResolvedAtUtc IS NULL
+           AND e.Status IN(N'OPEN',N'ACKNOWLEDGED')) AS EscalationLastHumanReplyAtUtc,
         CASE WHEN EXISTS (SELECT 1 FROM dbo.TblHumanEscalation e
           WHERE e.BusinessID = c.BusinessID AND e.ConversationID = c.ConversationID
             AND ${OPEN_ESCALATION_SQL})
@@ -1283,6 +1293,11 @@ export async function listConversationsForBusiness(params: {
   const now = new Date();
   return result.recordset.map((row) => {
     const aiMode = (row.AiMode as ConversationListItem["aiMode"]) || "AUTO";
+    const latestHuman = Math.max(
+      row.AiLastHumanReplyAtUtc?.getTime() ?? 0,
+      row.EscalationLastHumanReplyAtUtc?.getTime() ?? 0,
+      row.AiPausedAtUtc?.getTime() ?? 0,
+    );
     return {
       ...mapConversation(row),
       contactExternalKey: row.ContactExternalKey,
@@ -1296,6 +1311,8 @@ export async function listConversationsForBusiness(params: {
       aiPauseReason: row.AiPauseReason,
       hasOpenEscalation: Boolean(row.HasOpenEscalation),
       followUpPhase: row.FollowUpPhase,
+      awaitingHumanReply: aiMode==="HUMAN_PAUSED"
+        && Boolean(row.LastInboundAtUtc && row.LastInboundAtUtc.getTime()>latestHuman),
       unread: Boolean(
         row.LastInboundAtUtc
         && (!row.LastReadAtUtc || row.LastInboundAtUtc > row.LastReadAtUtc)

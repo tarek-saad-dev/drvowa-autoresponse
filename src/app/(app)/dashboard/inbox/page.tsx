@@ -124,6 +124,7 @@ export default async function InboxPage({ searchParams }: {
         aiPauseReason: c.aiPauseReason,
         hasOpenEscalation: c.hasOpenEscalation,
         followUpPhase: c.followUpPhase,
+        awaitingHumanReply: c.awaitingHumanReply,
         aiReplyHealth: c.aiReplyHealth,
         unread: c.unread,
       }))}

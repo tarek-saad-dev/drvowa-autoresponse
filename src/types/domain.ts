@@ -212,6 +212,8 @@ export type ConversationListItem = Conversation & {
   /** Open follow-up cases are independent of AI mode and archive state. */
   hasOpenEscalation?: boolean;
   followUpPhase?: string | null;
+  /** Customer sent an inbound after the last human reply while HUMAN_PAUSED. */
+  awaitingHumanReply?: boolean;
   unread: boolean;
   /** Null when nothing is awaiting an AI reply (or AI isn't responsible). */
   aiReplyHealth: AiReplyHealth | null;

@@ -46,7 +46,7 @@ export function PulseOverview({data,businessName,businessId,allReviews=false}:{d
   <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
    <Count label="محادثات واردة" value={data?.conversations??"—"} hint="عملاء بدأوا أو تفاعلوا خلال الفترة"/>
    <Count label="رد عليها الموظف الذكي" value={data?.aiConversations??"—"} hint="محادثات لها رد AI؛ مش بالضرورة اتحلت"/>
-   <Count label="متابعات بشرية مفتوحة" value={data?.openFollowups??"—"} hint="حالات Smart Follow-up الفعلية"/>
+   <Count label="تصعيدات مفتوحة" value={data?.openFollowups??"—"} hint="حالات Smart Follow-up؛ المحادثات مع الفريق أسفلها"/>
    <Count label="تحتاج رد منك" value={data?.pendingSignals??"—"} hint="إشارات محتاجة تدخل؛ الرد البشري يحدثها تلقائيًا"/>
   </div>
   <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(290px,.85fr)]">

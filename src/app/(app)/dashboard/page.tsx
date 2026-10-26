@@ -4,6 +4,8 @@ import { ConnectionHealthStrip } from "@/components/dashboard/overview/connectio
 import { RecentConversations, type OverviewConversation } from "@/components/dashboard/overview/recent-conversations";
 import { PulseOverview } from "@/components/dashboard/pulse/pulse-overview";
 import { PulseAutoRefresh } from "@/components/dashboard/pulse/auto-refresh";
+import { LiveOwnership } from "@/components/dashboard/pulse/live-ownership";
+import { getHumanOwnershipSnapshot } from "@/modules/ai/human-ownership";
 import { isMissingObjectError } from "@/lib/db";
 import { deriveReceptionistStatus } from "@/lib/dashboard/receptionist-status";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
@@ -31,6 +33,9 @@ export default async function DashboardOverviewPage({searchParams}:{
   getBusinessById({businessId}),listAgents({businessId}),listItems({businessId}),
   getWhatsAppAiSetting({businessId}),listInboxConversations({businessId,limit:5}),
  ]);
+ let ownership:Awaited<ReturnType<typeof getHumanOwnershipSnapshot>>|null=null;
+ try { ownership=await getHumanOwnershipSnapshot(businessId); }
+ catch(error) { console.error("[ownership] overview_unavailable",{reason:error instanceof Error?error.name:"UNKNOWN"}); }
  let pulse:Awaited<ReturnType<typeof getPulseSnapshot>>|null=null;
  try{
   pulse=await getPulseSnapshot({businessId,timezone:business.timezone,period,maxReviews:allReviews?100:12});
@@ -56,6 +61,7 @@ export default async function DashboardOverviewPage({searchParams}:{
    initialInboundHealth={health.inboundHealth} initialInboundIssue={health.inboundIssue} status={status}/>
   <PulseAutoRefresh/>
   <PulseOverview data={pulse} businessName={business.name} businessId={businessId} allReviews={allReviews}/>
+  <LiveOwnership initial={ownership} businessId={businessId}/>
   <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(290px,.8fr)]" aria-label="تفاصيل إضافية">
    <RecentConversations conversations={recent} whatsappConnected={health.whatsappLiveState==="READY"}/>
    <div className={panel+" flex flex-col"}>
