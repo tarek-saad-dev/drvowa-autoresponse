@@ -106,6 +106,7 @@ type ConversationListRow = ConversationRow & {
   LastInboundJobErrorCode: string | null;
   LastInboundJobNotBeforeUtc: Date | null;
   HasOpenEscalation: boolean | number | null;
+  FollowUpPhase: string | null;
 };
 
 function mapChannel(row: ChannelRow): ChannelConnection {
@@ -1214,6 +1215,11 @@ export async function listConversationsForBusiness(params: {
           WHERE e.BusinessID = c.BusinessID AND e.ConversationID = c.ConversationID
             AND ${OPEN_ESCALATION_SQL})
           THEN 1 ELSE 0 END AS HasOpenEscalation,
+         (SELECT TOP 1 e.FollowUpPhase
+           FROM dbo.TblHumanEscalation e
+           WHERE e.BusinessID = c.BusinessID AND e.ConversationID = c.ConversationID
+             AND ${OPEN_ESCALATION_SQL}
+           ORDER BY e.CreatedAtUtc DESC) AS FollowUpPhase,
         s.AutoReplyEnabled,
         s.EnabledAtUtc AS AiEnabledAtUtc,
         li.ReceivedAtUtc AS LastInboundReceivedAtUtc,
@@ -1289,6 +1295,7 @@ export async function listConversationsForBusiness(params: {
       aiMode,
       aiPauseReason: row.AiPauseReason,
       hasOpenEscalation: Boolean(row.HasOpenEscalation),
+      followUpPhase: row.FollowUpPhase,
       unread: Boolean(
         row.LastInboundAtUtc
         && (!row.LastReadAtUtc || row.LastInboundAtUtc > row.LastReadAtUtc)
