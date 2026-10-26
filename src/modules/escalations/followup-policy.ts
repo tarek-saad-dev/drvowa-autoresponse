@@ -1,0 +1,25 @@
+/** A customer must explicitly confirm resolution; "تمام" and thanks alone are
+ * not sufficient and can never close a complaint. Keep this deterministic,
+ * conservative and negation-aware. Never let AI guess a successful resolution.
+ */
+export function explicitlyConfirmedResolved(text: string | null | undefined): boolean {
+  if (!text || text.length > 900) return false;
+  const normalized = text.toLowerCase()
+    .replace(/[\u064b-\u065f\u0670\u0640]/g, "")
+    .replace(/[أإآ]/g, "ا").replace(/ى/g, "ي")
+    .replace(/[.,!؟?؛:،\-_]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!normalized) return false;
+  // Do not interpret negations, complaints or hypothetical statements as success.
+  if (/(?:مش|ما|لم|لسه|بعده|مازالت|مازال|not|isn't|isnt|still|never|اذا|لو)\s+(?:اتحل|اتحلت|انحل|انحلت|تحل|حلت|حلينا|resolved|fixed)/iu.test(normalized)) return false;
+  if (/(?:لسه|مازال|مازالت|لم|مش|ما|not|still)\s+(?:في|عندي|المشكله|المشكلة|issue|problem)/iu.test(normalized)) return false;
+  if (/(?:متحلتش|ما اتحلتش|مش محلول|not resolved|not fixed|unresolved|مفيش حل|مفيش فايده|لسه موجوده|لسه موجودة)/iu.test(normalized)) return false;
+  return /(?:المشكله|المشكلة|مشكلتي|الموضوع)\s+(?:اتحلت|انحلت|اتحل|اتحلّت)|(?:تم|اتم)\s+حل\s+(?:المشكله|المشكلة|مشكلتي|الموضوع)|(?:خلاص\s+)?اتحلت\s+(?:المشكله|المشكلة|مشكلتي)|(?:my\s+)?(?:issue|problem)\s+(?:is\s+)?(?:resolved|fixed)|(?:it's|it is)\s+(?:resolved|fixed)\s+now/iu.test(normalized);
+}
+export type FollowUpPhase = "NEEDS_ATTENTION" | "IN_PROGRESS" | "WAITING_CUSTOMER";
+export function followUpPhaseLabel(phase: FollowUpPhase): string {
+  switch (phase) {
+    case "IN_PROGRESS": return "جاري التعامل";
+    case "WAITING_CUSTOMER": return "بانتظار العميل";
+    default: return "تحتاج متابعة";
+  }
+}
