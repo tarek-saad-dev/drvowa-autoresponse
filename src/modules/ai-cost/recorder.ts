@@ -80,6 +80,8 @@ export async function recordAiProviderCall(input: {
   httpStatus?: number | null;
 }): Promise<void> {
   if (process.env.AI_COST_TRACKING_ENABLED === "false") return;
+  // Unit tests mock Gemini without a DB; opt in explicitly for recorder integration tests.
+  if (process.env.NODE_ENV === "test" && process.env.AI_COST_TEST_WRITE !== "1") return;
   const usage = input.provider === "VOICE_STT"
     ? estimateGeminiUsage("", null)
     : estimateGeminiUsage(input.model, input.response?.usageMetadata);
