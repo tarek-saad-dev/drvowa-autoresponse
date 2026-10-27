@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const navigation = [
   { href: "/admin", label: "نظرة عامة", exact: true },
   { href: "/admin/financials", label: "المالية والتقارير" },
+  { href: "/admin/ai-cost", label: "تكلفة AI" },
   { href: "/admin/subscriptions", label: "العملاء والاشتراكات" },
   { href: "/admin/payments", label: "المدفوعات" },
   { href: "/admin/refunds", label: "الاستردادات" },

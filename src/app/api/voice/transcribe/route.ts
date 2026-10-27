@@ -1,4 +1,5 @@
 import { requireApiUser } from "@/lib/api/auth-context";
+import { recordAiProviderCall } from "@/modules/ai-cost/recorder";
 import { handleApiError, jsonOk } from "@/lib/api/http";
 import { RATE_LIMITS, assertRateLimit } from "@/lib/security/rate-limit";
 import { ValidationError } from "@/lib/tenancy/errors";
@@ -42,6 +43,7 @@ export async function POST(request: Request) {
     upstreamBody.append("model", model);
     upstreamBody.append("language", "ar");
 
+    const started = Date.now();
     const upstream = await fetch(
       `${baseUrl.replace(/\/$/, "")}/v1/audio/transcriptions`,
       {
@@ -52,7 +54,11 @@ export async function POST(request: Request) {
         body: upstreamBody,
         cache: "no-store",
       },
-    );
+    ).catch(async (error) => {
+      await recordAiProviderCall({ provider: "VOICE_STT", purpose: "VOICE_TRANSCRIBE", model, startedAtMs: started, error });
+      throw error;
+    });
+    await recordAiProviderCall({ provider: "VOICE_STT", purpose: "VOICE_TRANSCRIBE", model, startedAtMs: started, httpStatus: upstream.status });
 
     const data = (await upstream.json().catch(() => ({}))) as {
       text?: string;

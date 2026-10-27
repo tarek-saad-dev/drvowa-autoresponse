@@ -23,7 +23,7 @@ export async function runPulseShadowBatch():Promise<number>{
  ].join(" "),[{name:"limit",type:sql.Int,value:remaining}]);
  let processed=0;
  for(const msg of result.recordset){
-  const verdict=await assessPulseText(msg.TextContent);
+  const verdict=await assessPulseText(msg.TextContent,{businessId:msg.BusinessID});
   const baseline=classifyCustomerText(msg.TextContent)[0]?.intent??null;
   const disagreement=isPulseDisagreement(baseline,verdict);
   // Save metrics only. Deliberately never mutates actionable signal rows.

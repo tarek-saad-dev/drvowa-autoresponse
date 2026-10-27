@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { recordAiProviderCall } from "@/modules/ai-cost/recorder";
 import { z } from "zod";
 import { normalizePulseText, type PulseIntent } from "./classifier";
 
@@ -27,7 +28,7 @@ export function validatePulseAssessment(value:unknown,text:string):PulseAssessme
 }
 /** Opt-in shadow-only inference. Never writes to real review queues or messages. */
 export async function assessPulseText(text:string,options?:{
- apiKey?:string; model?:string;timeoutMs?:number;
+ apiKey?:string; model?:string;timeoutMs?:number; businessId?:string;
 }):Promise<PulseAssessment|null>{
  const apiKey=options?.apiKey||process.env.GEMINI_API_KEY;
  if(!apiKey)return null;
@@ -36,6 +37,8 @@ export async function assessPulseText(text:string,options?:{
  const client=new GoogleGenAI({apiKey});
  const abort=new AbortController();
  const timeout=setTimeout(()=>abort.abort(),Math.min(options?.timeoutMs||6500,10000));
+ const started=Date.now();
+ let providerReturned=false;
  try{
   const response=await client.models.generateContent({
    model:options?.model||SHADOW_MODEL,
@@ -52,9 +55,14 @@ export async function assessPulseText(text:string,options?:{
     abortSignal:abort.signal
    }
   });
+  providerReturned=true;
+  await recordAiProviderCall({purpose:"PULSE_SHADOW",model:options?.model||SHADOW_MODEL,businessId:options?.businessId,startedAtMs:started,response});
   const raw=response.text||"";
   return validatePulseAssessment(JSON.parse(raw),sanitized);
- }catch{return null;}
+ }catch(error){
+  if(!providerReturned)await recordAiProviderCall({purpose:"PULSE_SHADOW",model:options?.model||SHADOW_MODEL,businessId:options?.businessId,startedAtMs:started,error});
+  return null;
+ }
  finally{clearTimeout(timeout);}
 }
 export function isPulseDisagreement(ruleIntent:PulseIntent|null,assessment:PulseAssessment|null):boolean|null{

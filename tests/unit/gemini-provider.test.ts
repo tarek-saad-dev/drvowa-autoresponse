@@ -151,6 +151,17 @@ describe("Phase 3B Part 1.2 Gemini provider (@google/genai)", () => {
     });
   });
 
+  it("maps Google 402 to a stable billing error without leaking details", async () => {
+    genaiMocks.generateContent.mockRejectedValue(
+      Object.assign(new Error("sensitive billing response"), { status: 402 }),
+    );
+    const provider = createGeminiProvider({ apiKey: "test-key" });
+    await expect(provider.generateReply(SAMPLE_REQUEST)).rejects.toMatchObject({
+      code: "GEMINI_PAYMENT_REQUIRED",
+      message: "Gemini billing requires attention",
+    });
+  });
+
   it("9. provider error => GEMINI_FAILED", async () => {
     genaiMocks.generateContent.mockRejectedValue(
       new Error("upstream boom with key=should-not-leak"),

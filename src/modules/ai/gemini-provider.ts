@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { providerHttpStatus, recordAiProviderCall } from "@/modules/ai-cost/recorder";
 
 import {
   buildSystemPrompt,
@@ -69,6 +70,7 @@ export function createGeminiProvider(options?: {
         abortController.abort();
       }, timeoutMs);
 
+      let providerReturned = false;
       try {
         const response = await client.models.generateContent({
           model,
@@ -77,6 +79,11 @@ export function createGeminiProvider(options?: {
             systemInstruction,
             abortSignal: abortController.signal,
           },
+        });
+        providerReturned = true;
+        await recordAiProviderCall({
+          purpose: request.conversationId === "onboarding-preview" ? "ONBOARDING_PREVIEW" : "WHATSAPP_REPLY",
+          model, businessId: request.businessId, startedAtMs: started, response,
         });
         const raw = extractResponseText(response);
         const text = sanitizeReplyText(raw);
@@ -89,7 +96,17 @@ export function createGeminiProvider(options?: {
           latencyMs: Date.now() - started,
         };
       } catch (error) {
+        if (!providerReturned) await recordAiProviderCall({
+          purpose: request.conversationId === "onboarding-preview" ? "ONBOARDING_PREVIEW" : "WHATSAPP_REPLY",
+          model, businessId: request.businessId, startedAtMs: started, error,
+        });
         if (error instanceof AiProviderError) throw error;
+        if (providerHttpStatus(error) === 402) {
+          throw new AiProviderError("Gemini billing requires attention", "GEMINI_PAYMENT_REQUIRED");
+        }
+        if (providerHttpStatus(error) === 429) {
+          throw new AiProviderError("Gemini quota exceeded", "GEMINI_RATE_LIMITED");
+        }
         if (abortController.signal.aborted || isAbortError(error)) {
           throw new AiProviderError("Gemini timed out", "GEMINI_TIMEOUT");
         }

@@ -501,7 +501,7 @@ export async function analyzeKnowledgeIngest(params: {
 
   const provider =
     params.provider
-    ?? createGeminiKnowledgeProvider();
+    ?? createGeminiKnowledgeProvider({ businessId: params.businessId });
 
   const started = Date.now();
   let sessionId: string | null = null;
