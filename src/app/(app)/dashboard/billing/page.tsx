@@ -1,3 +1,4 @@
+import { isPricingV1PaymentEnabled, quotePricingV1 } from "@/modules/pricing/payment-quote";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -229,6 +230,7 @@ export default async function BillingPage() {
                 }
               : null}
             initialPendingReview={pendingReview}
+            v1Quotes={isPricingV1PaymentEnabled() ? Object.fromEntries(["STARTER", "PRO", "BUSINESS"].map((code) => [code, { monthly: quotePricingV1(code, "MONTHLY").amount, annual: quotePricingV1(code, "ANNUAL").amount }])) : null}
             plans={availablePlans.map((item) => ({
               code: item.code,
               displayName: item.displayName,
