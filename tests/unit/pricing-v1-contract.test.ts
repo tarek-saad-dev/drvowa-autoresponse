@@ -24,7 +24,7 @@ describe("draft pricing v1 contract (not live)", () => {
     expect(isPricingV1AddonAllowed("seat_1", "PRO")).toBe(true);
     expect(isPricingV1AddonAllowed("replies_1000", "BUSINESS")).toBe(true);
     expect(isPricingV1AddonAllowed("does_not_exist", "PRO")).toBe(false);
-    expect(PRICING_V1_ADDONS.some(a => a.code === "multiple_whatsapp_numbers")).toBe(false);
+    expect(PRICING_V1_ADDONS.some(a => String(a.code) === "multiple_whatsapp_numbers")).toBe(false);
   });
   it("free replies do not reset and balance cannot become negative", () => {
     expect(getPricingV1Plan("FREE")?.quotaPeriod).toBe("lifetime");
