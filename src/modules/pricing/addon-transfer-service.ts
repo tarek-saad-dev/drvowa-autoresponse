@@ -44,3 +44,53 @@ export async function createAddonTransferDraft(input: {
   return id;
  });
 }
+
+
+/** Staging-only customer transfer declaration; not evidence that funds arrived. */
+export async function submitAddonTransfer(input: {
+ businessId:string; orderId:string; payerName:string; transferReference:string;
+}) {
+ if (process.env.NODE_ENV === "production" || process.env.DRVO_PRICING_V1_ADDON_DRAFTS !== "true")
+   throw new Error("ADDON_CHECKOUT_DISABLED");
+ const payer=input.payerName.trim(), reference=input.transferReference.trim();
+ if (!payer || payer.length>160 || !reference || reference.length>160) throw new Error("INVALID_TRANSFER_DETAILS");
+ return withTransaction(async trx => {
+  const row=await trx.query<{Status:string}>(
+   "SELECT Status FROM dbo.TblPricingAddonOrder WITH (UPDLOCK,HOLDLOCK) WHERE OrderID=@id AND BusinessID=@b",
+   [{name:"id",type:sql.UniqueIdentifier,value:input.orderId},{name:"b",type:sql.UniqueIdentifier,value:input.businessId}]);
+  if (!row.recordset[0]) throw new Error("ORDER_NOT_FOUND");
+  if (row.recordset[0].Status === "PENDING") return "PENDING" as const;
+  if (row.recordset[0].Status !== "DRAFT") throw new Error("ORDER_NOT_EDITABLE");
+  await trx.query(
+   `UPDATE dbo.TblPricingAddonOrder SET Status=N'PENDING',PayerName=@payer,
+   TransferReference=@reference,SubmittedAtUtc=SYSUTCDATETIME()
+   WHERE OrderID=@id AND BusinessID=@b AND Status=N'DRAFT'`,
+   [{name:"id",type:sql.UniqueIdentifier,value:input.orderId},{name:"b",type:sql.UniqueIdentifier,value:input.businessId},
+    {name:"payer",type:sql.NVarChar(160),value:payer},{name:"reference",type:sql.NVarChar(160),value:reference}]);
+  return "PENDING" as const;
+ });
+}
+
+/** Internal reviewer action. Authorisation and genuine transfer verification REQUIRED at caller. */
+export async function reviewAddonTransfer(input:{
+ orderId:string; reviewerUserId:string; decision:"APPROVED"|"REJECTED";
+}) {
+ if (process.env.NODE_ENV === "production" || process.env.DRVO_PRICING_V1_ADDON_DRAFTS !== "true")
+   throw new Error("ADDON_REVIEW_DISABLED");
+ return withTransaction(async trx => {
+  const row=await trx.query<{Status:string}>(
+   "SELECT Status FROM dbo.TblPricingAddonOrder WITH (UPDLOCK,HOLDLOCK) WHERE OrderID=@id",
+   [{name:"id",type:sql.UniqueIdentifier,value:input.orderId}]);
+  if (!row.recordset[0]) throw new Error("ORDER_NOT_FOUND");
+  if (row.recordset[0].Status === input.decision) return input.decision;
+  if (row.recordset[0].Status !== "PENDING") throw new Error("ORDER_NOT_PENDING");
+  await trx.query(
+   `UPDATE dbo.TblPricingAddonOrder SET Status=@decision,ReviewedByUserID=@reviewer,
+    ReviewedAtUtc=SYSUTCDATETIME() WHERE OrderID=@id AND Status=N'PENDING'`,
+   [{name:"id",type:sql.UniqueIdentifier,value:input.orderId},
+    {name:"decision",type:sql.NVarChar(20),value:input.decision},
+    {name:"reviewer",type:sql.UniqueIdentifier,value:input.reviewerUserId}]);
+  // This records approval ONLY; no subscription or quota is mutated.
+  return input.decision;
+ });
+}
