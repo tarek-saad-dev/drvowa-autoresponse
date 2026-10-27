@@ -23,7 +23,19 @@ export async function GET() {
      WHERE Status=N'PENDING'
      ORDER BY SubmittedAtUtc ASC`,
   );
-  return jsonOk({items:result.recordset});
+  const reconciliation = await query<{ApprovedCount:number;ApprovedAmountEgp:number}>(
+    `SELECT COUNT(*) AS ApprovedCount,
+      COALESCE(SUM(AmountEgp),0) AS ApprovedAmountEgp
+     FROM dbo.TblPricingAddonOrder
+     WHERE Status=N'APPROVED'`
+  );
+  // These are approved add-on orders, not captured payments or issued receipts.
+  // Do NOT include them in revenue totals until financial document/outbox settlement is implemented.
+  return jsonOk({items:result.recordset,unsettledApprovals:{
+    count:reconciliation.recordset[0]?.ApprovedCount??0,
+    amountEgp:reconciliation.recordset[0]?.ApprovedAmountEgp??0,
+    financialStatus:"NOT_RECONCILED"
+  }});
  } catch(error){return handleApiError(error);}
 }
 export async function POST(request:Request) {

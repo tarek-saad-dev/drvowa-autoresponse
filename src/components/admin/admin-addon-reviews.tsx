@@ -5,11 +5,14 @@ export function AdminAddonReviews() {
  const [items,setItems]=useState<Item[]>([]);
  const [loading,setLoading]=useState(false);
  const [error,setError]=useState("");
+ const [unsettled,setUnsettled]=useState<{count:number;amountEgp:number}|null>(null);
  async function load(){
   setLoading(true);setError("");
   try{const r=await fetch("/api/admin/addons",{cache:"no-store"});
    if(!r.ok)throw new Error("تعذر تحميل الطلبات");
-   setItems((await r.json()).items??[]);
+   const data=await r.json();
+   setItems(data.items??[]);
+   setUnsettled(data.unsettledApprovals??null);
   }catch(e){setError(e instanceof Error?e.message:"حدث خطأ");}
   finally{setLoading(false);}
  }
@@ -27,6 +30,10 @@ export function AdminAddonReviews() {
  return <section className="space-y-4 rounded-xl border border-border bg-card p-5">
   <div><h2 className="font-bold">مراجعة إضافات الاستخدام</h2><p className="text-sm text-muted-foreground">راجع التحويل خارج النظام قبل الموافقة. الموافقة تمنح رصيد الردود فورًا. لا يتم حاليًا إنشاء فاتورة أو تسجيل تسوية مالية للإضافة؛ راجع التحويل بنفسك قبل الاعتماد.</p></div>
   <button className="rounded-lg border border-border px-4 py-2 text-sm" type="button" disabled={loading} onClick={()=>void load()}>تحميل الطلبات المعلقة</button>
+  {unsettled && unsettled.count>0 ? <p role="status" className="rounded-lg border border-border p-3 text-sm">
+    {unsettled.count} طلب إضافة معتمد بقيمة {unsettled.amountEgp} ج — لم تتم مطابقتها مع التحويلات أو إصدار فواتيرها ماليًا.
+    لا تعتبر هذه الأرقام إيرادات محصلة.
+  </p>:null}
   {error?<p role="alert" className="text-sm text-destructive">{error}</p>:null}
   {items.length===0?<p className="text-sm text-muted-foreground">لا توجد طلبات محملة.</p>:null}
   <div className="space-y-3">{items.map(x=><article className="space-y-2 rounded-lg border border-border p-3" key={x.OrderID}>
