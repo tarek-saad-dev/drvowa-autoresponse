@@ -33,6 +33,6 @@ export async function POST(request:Request) {
   const status=await reviewAddonTransfer({
    orderId:data.orderId,reviewerUserId:admin.userId,decision:data.decision
   });
-  return jsonOk({status,orderId:data.orderId,entitlementsGranted:false});
+  return jsonOk({status,orderId:data.orderId,entitlementsGranted:status==="APPROVED"});
  } catch(error){return handleApiError(error);}
 }
