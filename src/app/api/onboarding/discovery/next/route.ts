@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { recordAiProviderCall } from "@/modules/ai-cost/recorder";
 import { z } from "zod";
 
 import { requireApiUser } from "@/lib/api/auth-context";
@@ -135,10 +136,15 @@ fulfillment, policies, promotions, exceptions, human_escalation, faq.
 }
 `.trim();
 
-    const response = await client.models.generateContent({
-      model,
-      contents: prompt,
-    });
+    const started = Date.now();
+    let response;
+    try {
+      response = await client.models.generateContent({ model, contents: prompt });
+    } catch (error) {
+      await recordAiProviderCall({ purpose: "ONBOARDING_DISCOVERY", model, startedAtMs: started, error });
+      throw error;
+    }
+    await recordAiProviderCall({ purpose: "ONBOARDING_DISCOVERY", model, startedAtMs: started, response });
 
     const raw = response.text || "";
 

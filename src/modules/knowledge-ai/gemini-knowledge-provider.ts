@@ -1,4 +1,5 @@
 import { FinishReason, GoogleGenAI, type Schema } from "@google/genai";
+import { recordAiProviderCall } from "@/modules/ai-cost/recorder";
 
 import { structuredLog } from "@/lib/observability/logger";
 import { AiProviderError, resolveGeminiModel } from "@/modules/ai/gemini-provider";
@@ -249,6 +250,7 @@ function logProviderEvent(
 
 async function generateStructuredJson(params: {
   client: GoogleGenAI;
+  businessId?: string;
   model: string;
   system: string;
   user: string;
@@ -260,6 +262,7 @@ async function generateStructuredJson(params: {
   const started = Date.now();
   const abortController = new AbortController();
   const timer = setTimeout(() => abortController.abort(), params.timeoutMs);
+  let providerReturned = false;
   try {
     const response = await params.client.models.generateContent({
       model: params.model,
@@ -274,6 +277,12 @@ async function generateStructuredJson(params: {
       },
     });
 
+    providerReturned = true;
+    await recordAiProviderCall({
+      purpose: params.phase === "extraction" ? "KNOWLEDGE_EXTRACT" : "KNOWLEDGE_DEDUP",
+      model: params.model, businessId: params.businessId,
+      startedAtMs: started, response,
+    });
     const finishReason =
       (response?.candidates?.[0]?.finishReason as string | undefined) ?? null;
     const blockReason = response?.promptFeedback?.blockReason;
@@ -293,6 +302,11 @@ async function generateStructuredJson(params: {
     }
     return { raw, latencyMs: Date.now() - started, finishReason };
   } catch (error) {
+    if (!providerReturned) await recordAiProviderCall({
+      purpose: params.phase === "extraction" ? "KNOWLEDGE_EXTRACT" : "KNOWLEDGE_DEDUP",
+      model: params.model, businessId: params.businessId,
+      startedAtMs: started, error,
+    });
     if (error instanceof AiProviderError) throw error;
     throw classifyThrownError(error, abortController.signal.aborted);
   } finally {
@@ -355,6 +369,7 @@ async function withProviderRetries<T>(params: {
 }
 
 export function createGeminiKnowledgeProvider(options?: {
+  businessId?: string;
   apiKey?: string;
   model?: string;
   timeoutMs?: number;
@@ -391,6 +406,7 @@ export function createGeminiKnowledgeProvider(options?: {
         run: async () => {
           const { raw, latencyMs, finishReason } = await generateStructuredJson({
             client,
+            businessId: options?.businessId,
             model,
             system: EXTRACT_SYSTEM,
             user,
@@ -448,6 +464,7 @@ export function createGeminiKnowledgeProvider(options?: {
         run: async () => {
           const { raw, latencyMs, finishReason } = await generateStructuredJson({
             client,
+            businessId: options?.businessId,
             model,
             system: DEDUP_SYSTEM,
             user,

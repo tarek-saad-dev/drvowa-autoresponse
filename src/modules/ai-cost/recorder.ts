@@ -83,7 +83,8 @@ export async function recordAiProviderCall(input: {
   const usage = input.provider === "VOICE_STT"
     ? estimateGeminiUsage("", null)
     : estimateGeminiUsage(input.model, input.response?.usageMetadata);
-  const status = input.error === undefined && !input.httpStatus ? "SUCCESS" : "PROVIDER_ERROR";
+  const status = input.error === undefined && (input.httpStatus === undefined || input.httpStatus === null || input.httpStatus < 400)
+    ? "SUCCESS" : "PROVIDER_ERROR";
   const latencyMs = Math.max(0, Math.min(2147483647, Date.now() - input.startedAtMs));
   try {
     await query(`
