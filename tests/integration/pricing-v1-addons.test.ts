@@ -101,6 +101,28 @@ describe.runIf(configured && isolated)("pricing V1 add-on SQL lifecycle", () => 
   const deliveredAllocation=await query<{State:string}>(`SELECT State FROM dbo.TblPricingAddonReplyAllocation WHERE BusinessID=@b AND ReservationKey=@key`,
    [{name:"b",type:sql.UniqueIdentifier,value:businessId},{name:"key",type:sql.NVarChar(200),value:deliveredKey}]);
   expect(deliveredAllocation.recordset[0].State).toBe("ACTIVE");
+  // Two approved lots: earliest expiry must be selected first.
+  const secondOrder=await createAddonTransferDraft({
+   businessId,userId,addonCode:"replies_250",idempotencyKey:`second-${randomUUID()}`
+  });
+  await submitAddonTransfer({businessId,orderId:secondOrder,payerName:"Sender",transferReference:"SECOND-TEST"});
+  await reviewAddonTransfer({orderId:secondOrder,reviewerUserId:userId,decision:"APPROVED"});
+  await query(`UPDATE dbo.TblPricingAddonEntitlement
+    SET ExpiresAtUtc=DATEADD(DAY,1,SYSUTCDATETIME()) WHERE OrderID=@id`,
+   [{name:"id",type:sql.UniqueIdentifier,value:secondOrder}]);
+  const nearestKey=`nearest-${randomUUID()}`;
+  await reserveQuota({businessId,eventType:USAGE_EVENT_AI_REPLY,reservationKey:nearestKey});
+  const chosen=await query<{OrderID:string}>(`SELECT e.OrderID
+    FROM dbo.TblPricingAddonReplyAllocation a
+    JOIN dbo.TblPricingAddonEntitlement e ON e.EntitlementID=a.EntitlementID
+    WHERE a.BusinessID=@b AND a.ReservationKey=@key`,
+   [{name:"b",type:sql.UniqueIdentifier,value:businessId},
+    {name:"key",type:sql.NVarChar(200),value:nearestKey}]);
+  expect(chosen.recordset[0].OrderID.toLowerCase()).toBe(secondOrder.toLowerCase());
+  await releaseQuotaReservation({businessId,eventType:USAGE_EVENT_AI_REPLY,reservationKey:nearestKey});
+  // Expired earlier lot is ignored, while later unexpired credit remains.
+  await query(`UPDATE dbo.TblPricingAddonEntitlement SET ExpiresAtUtc=DATEADD(SECOND,-1,SYSUTCDATETIME())
+   WHERE OrderID=@id`,[{name:"id",type:sql.UniqueIdentifier,value:secondOrder}]);
   await query(`UPDATE dbo.TblPricingAddonEntitlement SET ExpiresAtUtc=DATEADD(SECOND,-1,SYSUTCDATETIME())
    WHERE OrderID=@id`,[{name:"id",type:sql.UniqueIdentifier,value:orderId}]);
   expect((await getReplyAddonBalance(businessId)).availableReplies).toBe(0);
