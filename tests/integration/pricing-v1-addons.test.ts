@@ -64,6 +64,19 @@ describe.runIf(configured && isolated)("pricing V1 add-on SQL lifecycle", () => 
     WHERE BusinessID=@b AND ReservationKey=@k`,
    [{name:"b",type:sql.UniqueIdentifier,value:businessId},{name:"k",type:sql.NVarChar(200),value:reservationKey}]);
   expect(allocation.recordset[0].State).toBe("RELEASED");
+  // Concurrent requests must allocate one unit per unique reservation key.
+  const concurrentKeys=Array.from({length:8},()=>`parallel-${randomUUID()}`);
+  const concurrent=await Promise.all(concurrentKeys.map(reservationKey=>
+    reserveQuota({businessId,eventType:USAGE_EVENT_AI_REPLY,reservationKey})));
+  expect(new Set(concurrent.map(item=>item.reservationId)).size).toBe(8);
+  expect((await getReplyAddonBalance(businessId)).availableReplies).toBe(242);
+  const deduped=await Promise.all(concurrentKeys.map(reservationKey=>
+    reserveQuota({businessId,eventType:USAGE_EVENT_AI_REPLY,reservationKey})));
+  expect(deduped.every(item=>item.idempotent)).toBe(true);
+  expect((await getReplyAddonBalance(businessId)).availableReplies).toBe(242);
+  await Promise.all(concurrentKeys.map(reservationKey=>
+    releaseQuotaReservation({businessId,eventType:USAGE_EVENT_AI_REPLY,reservationKey})));
+  expect((await getReplyAddonBalance(businessId)).availableReplies).toBe(250);
   await query(`UPDATE dbo.TblPricingAddonEntitlement SET ExpiresAtUtc=DATEADD(SECOND,-1,SYSUTCDATETIME())
    WHERE OrderID=@id`,[{name:"id",type:sql.UniqueIdentifier,value:orderId}]);
   expect((await getReplyAddonBalance(businessId)).availableReplies).toBe(0);
