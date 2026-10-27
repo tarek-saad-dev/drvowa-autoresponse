@@ -14,7 +14,7 @@ export function AdminAddonReviews() {
   finally{setLoading(false);}
  }
  async function review(item:Item,decision:"APPROVED"|"REJECTED"){
-  if(!window.confirm(decision==="APPROVED"?"هل راجعت التحويل فعليًا؟ الموافقة لا تمنح الإضافة بعد.":"رفض طلب الإضافة؟"))return;
+  if(!window.confirm(decision==="APPROVED"?"هل راجعت التحويل فعليًا؟ الموافقة تمنح رصيد الردود فورًا، لكنها لا تنشئ فاتورة أو تسوية مالية. تأكد من وصول التحويل أولًا.":"رفض طلب الإضافة؟"))return;
   setLoading(true);setError("");
   try{const r=await fetch("/api/admin/addons",{method:"POST",
    headers:{"Content-Type":"application/json"},
@@ -25,7 +25,7 @@ export function AdminAddonReviews() {
   finally{setLoading(false);}
  }
  return <section className="space-y-4 rounded-xl border border-border bg-card p-5">
-  <div><h2 className="font-bold">مراجعة إضافات الاستخدام</h2><p className="text-sm text-muted-foreground">راجع التحويل خارج النظام قبل الموافقة. اعتماد الطلب لا يمنح الرصيد تلقائيًا حتى اكتمال الربط.</p></div>
+  <div><h2 className="font-bold">مراجعة إضافات الاستخدام</h2><p className="text-sm text-muted-foreground">راجع التحويل خارج النظام قبل الموافقة. الموافقة تمنح رصيد الردود فورًا. لا يتم حاليًا إنشاء فاتورة أو تسجيل تسوية مالية للإضافة؛ راجع التحويل بنفسك قبل الاعتماد.</p></div>
   <button className="rounded-lg border border-border px-4 py-2 text-sm" type="button" disabled={loading} onClick={()=>void load()}>تحميل الطلبات المعلقة</button>
   {error?<p role="alert" className="text-sm text-destructive">{error}</p>:null}
   {items.length===0?<p className="text-sm text-muted-foreground">لا توجد طلبات محملة.</p>:null}
