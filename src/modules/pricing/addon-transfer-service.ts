@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { normalizeUuid } from "@/lib/ids/uuid";
 import { sql, withTransaction } from "@/lib/db";
 import { getCurrentSubscription, getPlanById } from "@/modules/billing/entitlements";
 import { quotePricingV1Addon } from "./addon-quotes";
@@ -23,7 +24,7 @@ export async function createAddonTransferDraft(input: {
     {name:"k",type:sql.NVarChar(160),value:key}]);
   if (existing.recordset[0]) {
    if (existing.recordset[0].AddonCode !== input.addonCode) throw new Error("DUPLICATE_KEY_CONFLICT");
-   return existing.recordset[0].OrderID;
+   return normalizeUuid(existing.recordset[0].OrderID);
   }
   const subscription = await getCurrentSubscription(input.businessId,trx);
   const plan = subscription ? await getPlanById(subscription.planId,trx) : null;
