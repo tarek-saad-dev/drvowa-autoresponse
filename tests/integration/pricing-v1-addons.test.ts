@@ -4,7 +4,7 @@ import { closePool, getDbConfig, query, sql } from "@/lib/db";
 import { signup } from "@/modules/auth/service";
 import { completeOnboarding } from "@/modules/onboarding/service";
 import { submitManualPaymentRequest, approveManualPayment } from "@/modules/billing/manual-payment-service";
-import { reserveQuota, releaseQuotaReservation, getEntitlementSnapshot } from "@/modules/billing/entitlements";
+import { reserveQuota, releaseQuotaReservation, consumeQuotaReservation, getEntitlementSnapshot } from "@/modules/billing/entitlements";
 import { USAGE_EVENT_AI_REPLY } from "@/modules/billing/period";
 import { getReplyAddonBalance } from "@/modules/pricing/addon-balance";
 import { createAddonTransferDraft, submitAddonTransfer, reviewAddonTransfer } from "@/modules/pricing/addon-transfer-service";
@@ -31,6 +31,16 @@ describe.runIf(configured && isolated)("pricing V1 add-on SQL lifecycle", () => 
   const businessId=onboard.business.businessId;
   const payment=await submitManualPaymentRequest({businessId,userId,planCode:"PRO",payerName:"Addon test payer"});
   await approveManualPayment({paymentRequestId:payment.paymentRequestId,reviewerUserId:userId});
+  // A rejected transfer cannot grant credits or be approved later.
+  const rejectedId=await createAddonTransferDraft({
+   businessId,userId,addonCode:"replies_250",idempotencyKey:`reject-${randomUUID()}`
+  });
+  await submitAddonTransfer({businessId,orderId:rejectedId,payerName:"Sender",transferReference:"REJECT-TEST"});
+  expect(await reviewAddonTransfer({orderId:rejectedId,reviewerUserId:userId,decision:"REJECTED"})).toBe("REJECTED");
+  await expect(reviewAddonTransfer({orderId:rejectedId,reviewerUserId:userId,decision:"APPROVED"})).rejects.toThrow("ORDER_NOT_PENDING");
+  const rejectedGrants=await query<{Total:number}>(`SELECT COUNT(*) AS Total FROM dbo.TblPricingAddonEntitlement WHERE OrderID=@id`,
+   [{name:"id",type:sql.UniqueIdentifier,value:rejectedId}]);
+  expect(rejectedGrants.recordset[0].Total).toBe(0);
   const key=`addon-${randomUUID()}`;
   const orderId=await createAddonTransferDraft({businessId,userId,addonCode:"replies_250",idempotencyKey:key});
   expect(await createAddonTransferDraft({businessId,userId,addonCode:"replies_250",idempotencyKey:key})).toBe(orderId);
@@ -77,6 +87,16 @@ describe.runIf(configured && isolated)("pricing V1 add-on SQL lifecycle", () => 
   await Promise.all(concurrentKeys.map(reservationKey=>
     releaseQuotaReservation({businessId,eventType:USAGE_EVENT_AI_REPLY,reservationKey})));
   expect((await getReplyAddonBalance(businessId)).availableReplies).toBe(250);
+  // A delivered reply remains consumed even if the release endpoint is retried.
+  const deliveredKey=`delivered-${randomUUID()}`;
+  await reserveQuota({businessId,eventType:USAGE_EVENT_AI_REPLY,reservationKey:deliveredKey});
+  await consumeQuotaReservation({businessId,eventType:USAGE_EVENT_AI_REPLY,reservationKey:deliveredKey});
+  await consumeQuotaReservation({businessId,eventType:USAGE_EVENT_AI_REPLY,reservationKey:deliveredKey});
+  await releaseQuotaReservation({businessId,eventType:USAGE_EVENT_AI_REPLY,reservationKey:deliveredKey});
+  expect((await getReplyAddonBalance(businessId)).availableReplies).toBe(249);
+  const deliveredAllocation=await query<{State:string}>(`SELECT State FROM dbo.TblPricingAddonReplyAllocation WHERE BusinessID=@b AND ReservationKey=@key`,
+   [{name:"b",type:sql.UniqueIdentifier,value:businessId},{name:"key",type:sql.NVarChar(200),value:deliveredKey}]);
+  expect(deliveredAllocation.recordset[0].State).toBe("ACTIVE");
   await query(`UPDATE dbo.TblPricingAddonEntitlement SET ExpiresAtUtc=DATEADD(SECOND,-1,SYSUTCDATETIME())
    WHERE OrderID=@id`,[{name:"id",type:sql.UniqueIdentifier,value:orderId}]);
   expect((await getReplyAddonBalance(businessId)).availableReplies).toBe(0);
