@@ -31,6 +31,10 @@ describe.runIf(configured && isolated)("pricing V1 add-on SQL lifecycle", () => 
   const businessId=onboard.business.businessId;
   const payment=await submitManualPaymentRequest({businessId,userId,planCode:"PRO",payerName:"Addon test payer"});
   await approveManualPayment({paymentRequestId:payment.paymentRequestId,reviewerUserId:userId});
+  // A category without an active fulfilment path must never become payable.
+  await expect(createAddonTransferDraft({
+    businessId,userId,addonCode:"voice_60",idempotencyKey:`unready-${randomUUID()}`
+  })).rejects.toThrow("ADDON_FULFILMENT_NOT_READY");
   // A rejected transfer cannot grant credits or be approved later.
   const rejectedId=await createAddonTransferDraft({
    businessId,userId,addonCode:"replies_250",idempotencyKey:`reject-${randomUUID()}`
