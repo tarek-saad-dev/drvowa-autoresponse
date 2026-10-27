@@ -1,3 +1,4 @@
+import { AddonPurchasesClient } from "@/components/dashboard/addon-purchases-client";
 import { getV1FreeTrialUsage } from "@/modules/pricing/free-trial-usage";
 import { isPricingV1PaymentEnabled, quotePricingV1 } from "@/modules/pricing/payment-quote";
 import Link from "next/link";
@@ -273,7 +274,9 @@ export default async function BillingPage() {
           <UsageMeter title="ردود الموظف الذكي" used={overview.aiUsed} limit={plan?.monthlyAiReplies} />
           <UsageMeter title="رسائل واتساب الصادرة" used={overview.whatsappOutboundUsed} limit={plan?.monthlyWhatsAppOutbound} />
         </div>
-        <details className="group rounded-2xl border border-border bg-card">
+        {process.env.NODE_ENV !== "production" && process.env.DRVO_PRICING_V1_ADDON_DRAFTS === "true" ? <AddonPurchasesClient /> : null}
+
+      <details className="group rounded-2xl border border-border bg-card">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 [&::-webkit-details-marker]:hidden">
             <span className="text-sm font-bold">باقي حدود الباقة</span>
             <span aria-hidden="true" className="text-muted-foreground transition-transform group-open:rotate-90">‹</span>
