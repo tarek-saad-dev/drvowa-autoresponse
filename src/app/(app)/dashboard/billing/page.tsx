@@ -1,3 +1,4 @@
+import { getReplyAddonBalance } from "@/modules/pricing/addon-balance";
 import { AddonPurchasesClient } from "@/components/dashboard/addon-purchases-client";
 import { getV1FreeTrialUsage } from "@/modules/pricing/free-trial-usage";
 import { isPricingV1PaymentEnabled, quotePricingV1 } from "@/modules/pricing/payment-quote";
@@ -105,6 +106,7 @@ export default async function BillingPage() {
     listUsageEvents({ businessId, limit: 12 }),
   ]);
 
+  const addonBalance = await getReplyAddonBalance(businessId);
   const plan = overview.plan;
   const freeTrial = plan?.code === "FREE" ? await getV1FreeTrialUsage(businessId) : null;
   const sub = overview.subscription;
@@ -165,6 +167,16 @@ export default async function BillingPage() {
         </p>
       </header>
 
+      {addonBalance.activeLots > 0 ? (
+        <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+          <h2 className="text-base font-bold">رصيد الردود الإضافية</h2>
+          <p className="mt-2 text-2xl font-black tabular-nums">{formatNumber(addonBalance.availableReplies)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            الرصيد المسجل وغير المنتهي · أقرب انتهاء: {formatDate(addonBalance.nearestExpiryUtc)}
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">الاستهلاك التلقائي من الإضافات لم يُفعّل بعد.</p>
+        </section>
+      ) : null}
       {freeTrial ? (
         <section className="rounded-2xl border border-border bg-card p-4 sm:p-5" aria-label="التجربة المجانية">
           <h2 className="text-base font-bold">تجربتك المجانية</h2>
