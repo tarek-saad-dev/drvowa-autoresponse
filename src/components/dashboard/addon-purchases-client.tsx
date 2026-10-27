@@ -6,8 +6,6 @@ const choices=[
  {code:"replies_250",label:"250 رد إضافي",price:99},
  {code:"replies_1000",label:"1,000 رد إضافي",price:249},
  {code:"replies_3000",label:"3,000 رد إضافي",price:599},
- {code:"voice_60",label:"60 دقيقة صوت",price:79},
- {code:"voice_200",label:"200 دقيقة صوت",price:199},
 ];
 export function AddonPurchasesClient() {
  const [orders,setOrders]=useState<Order[]>([]);

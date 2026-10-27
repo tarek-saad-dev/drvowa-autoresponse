@@ -29,6 +29,11 @@ export async function createAddonTransferDraft(input: {
   const subscription = await getCurrentSubscription(input.businessId,trx);
   const plan = subscription ? await getPlanById(subscription.planId,trx) : null;
   if (!subscription || subscription.status !== "ACTIVE" || !plan) throw new Error("PAID_PLAN_REQUIRED");
+  // Only AI reply lots have a wired consumption path in V1.
+  // Seats, voice minutes and services must not accept payment until fulfilment exists.
+  if (!["replies_250", "replies_1000", "replies_3000"].includes(input.addonCode)) {
+   throw new Error("ADDON_FULFILMENT_NOT_READY");
+  }
   const quote = quotePricingV1Addon(input.addonCode,plan.code);
   const id = randomUUID();
   await trx.query(
