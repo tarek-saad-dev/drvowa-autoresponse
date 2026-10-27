@@ -1,5 +1,5 @@
 import { DEFAULT_BOOTSTRAP_PLAN_CODE } from "@/constants/billing";
-import { isUniqueViolationError } from "@/lib/db";
+import { isUniqueViolationError, sql, withTransaction } from "@/lib/db";
 import { NotFoundError } from "@/lib/tenancy/errors";
 import type { Plan, Subscription } from "@/types/domain";
 
@@ -51,10 +51,30 @@ export async function ensureDefaultSubscription(params: {
   }
 
   try {
-    return await repo.insertSubscription({
-      businessId: params.businessId,
-      planId: freePlan.planId,
-      status: "ACTIVE",
+    if (process.env.DRVO_PRICING_V1_FREE_TRIAL !== "true") {
+      return await repo.insertSubscription({
+        businessId: params.businessId, planId: freePlan.planId, status: "ACTIVE",
+      });
+    }
+    return await withTransaction(async (trx) => {
+      await trx.query(
+        "SELECT BusinessID FROM TblBusiness WITH (UPDLOCK, HOLDLOCK) WHERE BusinessID = @businessId",
+        [{ name: "businessId", type: sql.UniqueIdentifier, value: params.businessId }],
+      );
+      const current = await getCurrentSubscription(params.businessId, trx);
+      if (current) return current;
+      // Never enroll a previously subscribed business as a new trial.
+      const prior = await getLatestSubscription(params.businessId, trx);
+      const created = await repo.insertSubscription({
+        businessId: params.businessId, planId: freePlan.planId, status: "ACTIVE",
+      }, trx);
+      if (!prior) {
+        await trx.query(
+          "EXEC dbo.PricingV1StartFreeTrial @BusinessID",
+          [{ name: "BusinessID", type: sql.UniqueIdentifier, value: params.businessId }],
+        );
+      }
+      return created;
     });
   } catch (error) {
     if (isUniqueViolationError(error)) {

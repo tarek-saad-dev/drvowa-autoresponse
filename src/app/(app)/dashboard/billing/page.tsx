@@ -1,3 +1,4 @@
+import { getV1FreeTrialUsage } from "@/modules/pricing/free-trial-usage";
 import { isPricingV1PaymentEnabled, quotePricingV1 } from "@/modules/pricing/payment-quote";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -104,6 +105,7 @@ export default async function BillingPage() {
   ]);
 
   const plan = overview.plan;
+  const freeTrial = plan?.code === "FREE" ? await getV1FreeTrialUsage(businessId) : null;
   const sub = overview.subscription;
   const latest = paymentStatus.pending ?? paymentStatus.open ??
     (paymentStatus.latest?.status === "REJECTED" ? paymentStatus.latest : null);
@@ -161,6 +163,20 @@ export default async function BillingPage() {
           باقتك، استهلاكك، ومدفوعاتك في مكان واحد.
         </p>
       </header>
+
+      {freeTrial ? (
+        <section className="rounded-2xl border border-border bg-card p-4 sm:p-5" aria-label="التجربة المجانية">
+          <h2 className="text-base font-bold">تجربتك المجانية</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {freeTrial.expired || freeTrial.remaining === 0
+              ? "انتهت ردود التجربة المجانية. اشترك لتفعيل ردود AI."
+              : `متبقي ${formatNumber(freeTrial.remaining)} من 30 رد ذكي إجمالًا`}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            تاريخ انتهاء الردود: {formatDate(freeTrial.expiresAtUtc)} · الرصيد لا يتجدد شهريًا
+          </p>
+        </section>
+      ) : null}
 
       {needsAttention ? (
         <div role="alert" className="rounded-xl border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-warning">
