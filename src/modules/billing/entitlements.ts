@@ -528,6 +528,37 @@ export async function reserveQuota(params: {
       // RELEASED → re-reserve below (same key, new commitment)
     }
 
+    // V1 pilot: FREE lifetime ceiling on the EXISTING reservation ledger.
+    // No secondary billing/credit charge path. Old tenants remain unaffected.
+    if (params.eventType === USAGE_EVENT_AI_REPLY && plan!.code === "FREE"
+        && process.env.DRVO_PRICING_V1_FREE_TRIAL === "true") {
+      const trial = await trx.query<{ FirstActivatedAtUtc: Date }>(
+        `SELECT FirstActivatedAtUtc FROM dbo.TblPricingFreeTrial WITH (UPDLOCK, HOLDLOCK)
+         WHERE BusinessID = @businessId`,
+        [{ name: "businessId", type: sql.UniqueIdentifier, value: params.businessId }],
+      );
+      const activated = trial.recordset[0]?.FirstActivatedAtUtc;
+      // Only explicitly enrolled tenants use V1; missing row means legacy FREE.
+      if (activated) {
+        const lifetime = await trx.query<{ Used: number }>(
+          `SELECT COALESCE(SUM(CAST(Quantity AS BIGINT)), 0) AS Used
+           FROM dbo.TblUsageReservation
+           WHERE BusinessID = @businessId AND EventType = @eventType
+             AND State IN (N'RESERVED', N'CONSUMED', N'UNCERTAIN')`,
+          [
+            { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+            { name: "eventType", type: sql.NVarChar(64), value: params.eventType },
+          ],
+        );
+        const startedAt = new Date(activated);
+        const expiry = startedAt.getTime() + 7 * 86_400_000;
+        if (!Number.isFinite(expiry) || Date.now() >= expiry
+            || Number(lifetime.recordset[0]?.Used ?? 0) + quantity > 30) {
+          quotaErrorFor(params.eventType);
+        }
+      }
+    }
+
     // Ensure counter row exists then lock it.
     await trx.execute(
       `IF NOT EXISTS (
