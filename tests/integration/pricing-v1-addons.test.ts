@@ -4,7 +4,7 @@ import { closePool, getDbConfig, query, sql } from "@/lib/db";
 import { signup } from "@/modules/auth/service";
 import { completeOnboarding } from "@/modules/onboarding/service";
 import { submitManualPaymentRequest, approveManualPayment } from "@/modules/billing/manual-payment-service";
-import { reserveQuota, releaseQuotaReservation, consumeQuotaReservation } from "@/modules/billing/entitlements";
+import { reserveQuota, releaseQuotaReservation, getEntitlementSnapshot } from "@/modules/billing/entitlements";
 import { USAGE_EVENT_AI_REPLY } from "@/modules/billing/period";
 import { getReplyAddonBalance } from "@/modules/pricing/addon-balance";
 import { createAddonTransferDraft, submitAddonTransfer, reviewAddonTransfer } from "@/modules/pricing/addon-transfer-service";
@@ -41,16 +41,17 @@ describe.runIf(configured && isolated)("pricing V1 add-on SQL lifecycle", () => 
    [{name:"id",type:sql.UniqueIdentifier,value:orderId}]);
   expect(granted.recordset[0].Total).toBe(1);
   expect((await getReplyAddonBalance(businessId)).availableReplies).toBe(250);
-  // Force monthly base quota to limit on this isolated business only.
-  const period=await query<{PeriodStartUtc:Date}>(`SELECT TOP (1) PeriodStartUtc FROM TblUsagePeriodCounter
-    WHERE BusinessID=@b AND EventType=@event ORDER BY PeriodStartUtc DESC`,
-   [{name:"b",type:sql.UniqueIdentifier,value:businessId},{name:"event",type:sql.NVarChar(64),value:USAGE_EVENT_AI_REPLY}]);
+  // The existing billing plan table can differ from the draft V1 catalog.
+  const active = await getEntitlementSnapshot(businessId);
+  const baseLimit = active.plan?.monthlyAiReplies;
+  expect(baseLimit).toBeGreaterThan(0);
   const reservationKey=`addon-res-${randomUUID()}`;
-  // Create the counter row using the ordinary reservation workflow.
   await reserveQuota({businessId,eventType:USAGE_EVENT_AI_REPLY,reservationKey:`seed-${randomUUID()}`});
-  await query(`UPDATE dbo.TblUsagePeriodCounter SET Quantity=2500
-   WHERE BusinessID=@b AND EventType=@event`,
-   [{name:"b",type:sql.UniqueIdentifier,value:businessId},{name:"event",type:sql.NVarChar(64),value:USAGE_EVENT_AI_REPLY}]);
+  await query(`UPDATE dbo.TblUsagePeriodCounter SET Quantity=@limit
+    WHERE BusinessID=@b AND EventType=@event`,
+   [{name:"limit",type:sql.Int,value:baseLimit},
+    {name:"b",type:sql.UniqueIdentifier,value:businessId},
+    {name:"event",type:sql.NVarChar(64),value:USAGE_EVENT_AI_REPLY}]);
   const first=await reserveQuota({businessId,eventType:USAGE_EVENT_AI_REPLY,reservationKey});
   const repeated=await reserveQuota({businessId,eventType:USAGE_EVENT_AI_REPLY,reservationKey});
   expect(repeated.reservationId).toBe(first.reservationId);
