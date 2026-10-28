@@ -24,14 +24,19 @@ function checkFiles(): Map<string, string> {
   const files = readdirSync(dir)
     .filter((file) => /^\d{3}_.+\.sql$/i.test(file))
     .sort((a, b) => a.localeCompare(b, "en"));
-  if (files.length !== lastVersion) {
-    throw new Error(`Expected ${lastVersion} migrations, found ${files.length}`);
+  if (files.length < lastVersion) {
+    throw new Error(`Expected at least ${lastVersion} migrations, found ${files.length}`);
   }
   const names = new Map<string, string>();
   files.forEach((file, index) => {
-    const version = String(index + 1).padStart(3, "0");
-    if (!file.startsWith(`${version}_`)) {
-      throw new Error(`Migration gap, duplicate, or disorder at ${version}: ${file}`);
+    const version = file.slice(0, 3);
+    const historical = String(index + 1).padStart(3, "0");
+    if (index < lastVersion && version !== historical) {
+      throw new Error(`Historical migration gap or disorder at ${historical}: ${file}`);
+    }
+    if (names.has(version)) throw new Error(`Duplicate migration version ${version}`);
+    if (index >= lastVersion && Number(version) <= lastVersion) {
+      throw new Error(`Invalid extension migration version ${version}`);
     }
     if (!readFileSync(resolve(dir, file), "utf8").trim()) {
       throw new Error(`Empty migration: ${file}`);

@@ -528,6 +528,37 @@ export async function reserveQuota(params: {
       // RELEASED → re-reserve below (same key, new commitment)
     }
 
+    // V1 pilot: FREE lifetime ceiling on the EXISTING reservation ledger.
+    // No secondary billing/credit charge path. Old tenants remain unaffected.
+    if (params.eventType === USAGE_EVENT_AI_REPLY && plan!.code === "FREE"
+        && process.env.DRVO_PRICING_V1_FREE_TRIAL === "true") {
+      const trial = await trx.query<{ FirstActivatedAtUtc: Date }>(
+        `SELECT FirstActivatedAtUtc FROM dbo.TblPricingFreeTrial WITH (UPDLOCK, HOLDLOCK)
+         WHERE BusinessID = @businessId`,
+        [{ name: "businessId", type: sql.UniqueIdentifier, value: params.businessId }],
+      );
+      const activated = trial.recordset[0]?.FirstActivatedAtUtc;
+      // Only explicitly enrolled tenants use V1; missing row means legacy FREE.
+      if (activated) {
+        const lifetime = await trx.query<{ Used: number }>(
+          `SELECT COALESCE(SUM(CAST(Quantity AS BIGINT)), 0) AS Used
+           FROM dbo.TblUsageReservation
+           WHERE BusinessID = @businessId AND EventType = @eventType
+             AND State IN (N'RESERVED', N'CONSUMED', N'UNCERTAIN')`,
+          [
+            { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+            { name: "eventType", type: sql.NVarChar(64), value: params.eventType },
+          ],
+        );
+        const startedAt = new Date(activated);
+        const expiry = startedAt.getTime() + 7 * 86_400_000;
+        if (!Number.isFinite(expiry) || Date.now() >= expiry
+            || Number(lifetime.recordset[0]?.Used ?? 0) + quantity > 30) {
+          quotaErrorFor(params.eventType);
+        }
+      }
+    }
+
     // Ensure counter row exists then lock it.
     await trx.execute(
       `IF NOT EXISTS (
@@ -586,7 +617,43 @@ export async function reserveQuota(params: {
     );
     const currentQty = Number(counter.recordset[0]?.Quantity ?? 0);
     if (limit != null && currentQty + quantity > limit) {
-      quotaErrorFor(params.eventType);
+      // Draft V1: overflow is funded by a single unexpired add-on lot.
+      // The original reservation key is unique and checked above.
+      const addonEnabled = process.env.NODE_ENV !== "production"
+        && process.env.DRVO_PRICING_V1_ADDON_CONSUMPTION === "true";
+      if (!addonEnabled || params.eventType !== USAGE_EVENT_AI_REPLY || quantity !== 1) {
+        quotaErrorFor(params.eventType);
+      }
+      const lot = await trx.query<{ EntitlementID: string }>(
+        `SELECT TOP (1) EntitlementID FROM dbo.TblPricingAddonEntitlement WITH (UPDLOCK, HOLDLOCK)
+         WHERE BusinessID=@businessId AND Unit=N'ai_reply'
+           AND RemainingQuantity>0 AND ExpiresAtUtc>SYSUTCDATETIME()
+         ORDER BY ExpiresAtUtc ASC, EntitlementID ASC`,
+        [{ name:"businessId", type:sql.UniqueIdentifier, value:params.businessId }],
+      );
+      const lotId = lot.recordset[0]?.EntitlementID;
+      if (!lotId) quotaErrorFor(params.eventType);
+      await trx.execute(
+        `UPDATE dbo.TblPricingAddonEntitlement SET RemainingQuantity=RemainingQuantity-1
+         WHERE EntitlementID=@lot AND RemainingQuantity>0 AND ExpiresAtUtc>SYSUTCDATETIME()`,
+        [{ name:"lot", type:sql.UniqueIdentifier, value:lotId }],
+      );
+      await trx.execute(
+        `IF EXISTS (SELECT 1 FROM dbo.TblPricingAddonReplyAllocation WITH (UPDLOCK,HOLDLOCK)
+          WHERE BusinessID=@businessId AND ReservationKey=@key AND State=N'RELEASED')
+          UPDATE dbo.TblPricingAddonReplyAllocation
+          SET EntitlementID=@lot, Quantity=1, State=N'ACTIVE'
+          WHERE BusinessID=@businessId AND ReservationKey=@key AND State=N'RELEASED'
+         ELSE
+          INSERT dbo.TblPricingAddonReplyAllocation
+          (BusinessID,ReservationKey,EntitlementID,Quantity,State)
+          VALUES(@businessId,@key,@lot,1,N'ACTIVE')`,
+        [
+          { name:"businessId", type:sql.UniqueIdentifier, value:params.businessId },
+          { name:"key", type:sql.NVarChar(200), value:params.reservationKey },
+          { name:"lot", type:sql.UniqueIdentifier, value:lotId },
+        ],
+      );
     }
 
     await trx.execute(
@@ -833,6 +900,39 @@ export async function releaseQuotaReservation(params: {
         },
       ],
     );
+
+    // Restore only a released add-on allocation. Same tenant and same reservation key.
+    if (process.env.NODE_ENV !== "production"
+        && process.env.DRVO_PRICING_V1_ADDON_CONSUMPTION === "true") {
+      const allocation = await trx.query<{EntitlementID:string;Quantity:number;State:string}>(
+        `SELECT EntitlementID,Quantity,State
+         FROM dbo.TblPricingAddonReplyAllocation WITH (UPDLOCK,HOLDLOCK)
+         WHERE BusinessID=@businessId AND ReservationKey=@key`,
+        [
+          { name:"businessId", type:sql.UniqueIdentifier,value:params.businessId },
+          { name:"key", type:sql.NVarChar(200),value:params.reservationKey },
+        ],
+      );
+      const a=allocation.recordset[0];
+      if (a?.State === "ACTIVE") {
+        await trx.execute(
+          `UPDATE dbo.TblPricingAddonReplyAllocation SET State=N'RELEASED'
+           WHERE BusinessID=@businessId AND ReservationKey=@key AND State=N'ACTIVE'`,
+          [
+            {name:"businessId",type:sql.UniqueIdentifier,value:params.businessId},
+            {name:"key",type:sql.NVarChar(200),value:params.reservationKey},
+          ],
+        );
+        await trx.execute(
+          `UPDATE dbo.TblPricingAddonEntitlement
+           SET RemainingQuantity=RemainingQuantity+@qty WHERE EntitlementID=@lot`,
+          [
+            {name:"qty",type:sql.Int,value:a.Quantity},
+            {name:"lot",type:sql.UniqueIdentifier,value:a.EntitlementID},
+          ],
+        );
+      }
+    }
 
     await trx.execute(
       `UPDATE TblUsagePeriodCounter

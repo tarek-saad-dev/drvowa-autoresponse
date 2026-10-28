@@ -7,6 +7,8 @@ on:
       - "src/modules/billing/**"
       - "db/migrations/**"
       - "tests/integration/manual-instapay-billing.test.ts"
+      - "tests/integration/pricing-v1-addons.test.ts"
+      - "src/modules/pricing/**"
       - "tests/integration/saas-financial-outbox.test.ts"
       - "tests/integration/saas-financial-reconciliation.test.ts"
       - "tests/refund-policy.test.ts"
@@ -76,6 +78,8 @@ jobs:
         run: npx vitest run tests/refund-policy.test.ts
       - name: Exercise payment, receipt, annual, grace, downgrade and refund transactions
         run: npx vitest run tests/integration/manual-instapay-billing.test.ts
+      - name: Exercise pricing V1 add-on lifecycle and reservation recovery
+        run: npx vitest run tests/integration/pricing-v1-addons.test.ts
       - name: Exercise transactional financial payment and refund outbox
         run: npx vitest run tests/integration/saas-financial-outbox.test.ts
       - name: Exercise durable financial reconciliation evidence
