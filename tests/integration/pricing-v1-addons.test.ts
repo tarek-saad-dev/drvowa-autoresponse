@@ -51,6 +51,13 @@ describe.runIf(configured && isolated)("pricing V1 add-on SQL lifecycle", () => 
   expect(await submitAddonTransfer({businessId,orderId,payerName:"Sender",transferReference:"INSTA-TEST"})).toBe("PENDING");
   expect(await reviewAddonTransfer({orderId,reviewerUserId:userId,decision:"APPROVED"})).toBe("APPROVED");
   expect(await reviewAddonTransfer({orderId,reviewerUserId:userId,decision:"APPROVED"})).toBe("APPROVED");
+  // Granting add-on credit must not fabricate a settled subscription payment or receipt.
+  const addonOrder=await query<{Status:string;AmountEgp:number;ReviewedAtUtc:Date|null}>(
+   `SELECT Status,AmountEgp,ReviewedAtUtc FROM dbo.TblPricingAddonOrder WHERE OrderID=@id`,
+   [{name:"id",type:sql.UniqueIdentifier,value:orderId}]);
+  expect(addonOrder.recordset[0].Status).toBe("APPROVED");
+  expect(Number(addonOrder.recordset[0].AmountEgp)).toBe(99);
+  expect(addonOrder.recordset[0].ReviewedAtUtc).not.toBeNull();
   const granted=await query<{Total:number}>(`SELECT COUNT(*) AS Total FROM dbo.TblPricingAddonEntitlement WHERE OrderID=@id`,
    [{name:"id",type:sql.UniqueIdentifier,value:orderId}]);
   expect(granted.recordset[0].Total).toBe(1);
