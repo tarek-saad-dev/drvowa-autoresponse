@@ -1,4 +1,6 @@
 import { getReplyAddonBalance } from "@/modules/pricing/addon-balance";
+import { cookies } from "next/headers";
+import { getPublicPromo } from "@/modules/pricing/public-promo";
 import { AddonPurchasesClient } from "@/components/dashboard/addon-purchases-client";
 import { getV1FreeTrialUsage } from "@/modules/pricing/free-trial-usage";
 import { isPricingV1PaymentEnabled, quotePricingV1 } from "@/modules/pricing/payment-quote";
@@ -97,6 +99,11 @@ export default async function BillingPage() {
   );
   if (!businessId) redirect("/onboarding");
 
+  const promoCookies=await cookies();
+  const claimedCode=promoCookies.get("drvo_promo_code")?.value??null;
+  const savedPromo=claimedCode?await getPublicPromo(claimedCode):null;
+  const claimedInterval=promoCookies.get("drvo_promo_interval")?.value;
+  const claimedPlan=promoCookies.get("drvo_promo_plan")?.value;
   const manualEnabled = isManualInstaPayEnabled();
   const [overview, availablePlans, paymentStatus, scheduled, events] = await Promise.all([
     getBillingOverview({ businessId }),
@@ -245,6 +252,10 @@ export default async function BillingPage() {
         ) : null}
         <div className="mt-5 border-t border-border pt-4">
           <BillingPlansClient
+            initialDiscountCode={savedPromo?.code??null}
+            initialBillingInterval={claimedInterval==="ANNUAL"?"ANNUAL":"MONTHLY"}
+            promoPlanCode={savedPromo&&["STARTER","PRO","BUSINESS"].includes(claimedPlan??"")
+              ?claimedPlan:null}
             enabled={manualEnabled}
             currentPlanCode={plan?.code ?? null}
             instructions={manualEnabled ? getInstaPayDisplayConfig() : null}
@@ -253,6 +264,9 @@ export default async function BillingPage() {
                   paymentRequestId: paymentStatus.open.paymentRequestId,
                   paymentReference: paymentStatus.open.paymentReference,
                   amount: paymentStatus.open.amount,
+                  originalAmount:paymentStatus.open.subtotalMinor!=null?paymentStatus.open.subtotalMinor/100:paymentStatus.open.amount,
+                  discountAmount:(paymentStatus.open.discountMinor??0)/100,
+                  discountCode:paymentStatus.open.discountCode??null,
                   currencyCode: paymentStatus.open.currencyCode,
                   planDisplayName: paymentStatus.open.requestedPlanDisplayName,
                   planCode: paymentStatus.open.requestedPlanCode,

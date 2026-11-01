@@ -58,6 +58,7 @@ export function PricingCards({
   replyAddons = [],
 }: PricingCardsProps) {
   const [interval, setInterval] = useState<"MONTHLY" | "ANNUAL">("MONTHLY");
+  const [mobilePlan, setMobilePlan] = useState<string>("PRO");
   const published = plans
     .filter(isPublishedPlan)
     .sort((a, b) => publicCodes.indexOf(a.code as (typeof publicCodes)[number]) -
@@ -112,13 +113,23 @@ export function PricingCards({
             )}
           </div>
 
+          <div className={s.mobilePlanTabs} role="group" aria-label="اختار باقة لعرض تفاصيلها">
+            {paid.map((plan) => (
+              <button key={plan.code} type="button" aria-pressed={mobilePlan === plan.code}
+                onClick={() => setMobilePlan(plan.code)}
+                className={mobilePlan === plan.code ? s.mobilePlanTabActive : ""}>
+                {plan.displayName}
+              </button>
+            ))}
+          </div>
           <div className={s.pricingGrid}>
             {paid.map((plan) => {
               const annualAmount = annualPrices?.[plan.code];
               const amount = annually && annualAmount != null ? annualAmount : Number(plan.monthlyPriceAmount);
               const saving = annualAmount == null ? 0 : Number(plan.monthlyPriceAmount) * 12 - annualAmount;
               return (
-                <article className={s.plan + (plan.code === "PRO" ? " " + s.featured : "")} key={plan.code}>
+                <article className={s.plan + (plan.code === "PRO" ? " " + s.featured : "")}
+                  data-mobile-active={mobilePlan === plan.code} key={plan.code}>
                   <div className={s.planTopline}>
                     <span className={s.eyebrow}>{plan.code}</span>
                     {plan.code === "PRO" && <span className={s.recommendedPill}>مناسب للنمو</span>}
@@ -180,7 +191,30 @@ export function PricingCards({
             <h3>قارن الباقات براحتك</h3>
             <p>الحدود الفعلية لكل باقة، من غير مزايا مخفية أو وعود مش مفعّلة.</p>
           </div>
-          <span className={s.compareHint}>اسحب الجدول للمقارنة على الموبايل</span>
+          <span className={s.compareHint}>مقارنة بسيطة لكل باقة على الموبايل</span>
+        </div>
+        <div className={s.mobileComparison} aria-label="مقارنة حدود الباقة على الموبايل">
+          <div className={s.mobileComparePicker} role="group" aria-label="الباقة المعروضة للمقارنة">
+            {published.map((plan) => (
+              <button type="button" key={plan.code}
+                aria-pressed={mobilePlan === plan.code}
+                onClick={() => setMobilePlan(plan.code)}
+                className={mobilePlan === plan.code ? s.mobilePlanTabActive : ""}>
+                {plan.displayName}
+              </button>
+            ))}
+          </div>
+          {published.filter((plan) => plan.code === mobilePlan || (mobilePlan === "PRO" && !published.some(p => p.code === "PRO") && plan.code === published[0]?.code)).map(plan => (
+            <dl key={plan.code} className={s.mobileCompareRows}>
+              <div><dt>سعر {annually ? "السنة" : "الشهر"}</dt>
+                <dd>{money(annually && plan.code !== "FREE" && annualPrices?.[plan.code] != null
+                  ? annualPrices[plan.code] : Number(plan.monthlyPriceAmount))} ج</dd></div>
+              {comparison.map(item => (
+                <div key={item.label}><dt>{item.label}</dt><dd>{item.value(plan)}</dd></div>
+              ))}
+              {trial && plan.code === "FREE" && <div><dt>مدة التجربة</dt><dd>7 أيام من التفعيل</dd></div>}
+            </dl>
+          ))}
         </div>
         <div className={s.compareScroll} tabIndex={0} role="region" aria-label="جدول مقارنة الأسعار وحدود الاستخدام">
           <table className={s.comparisonTable}>

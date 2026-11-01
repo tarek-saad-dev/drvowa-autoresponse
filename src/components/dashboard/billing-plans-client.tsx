@@ -47,6 +47,9 @@ type Props = {
   initialOpenIntent?: IntentState | null;
   initialPendingReview?: boolean;
   v1Quotes?: Record<string, { monthly: number; annual: number }> | null;
+  initialDiscountCode?: string | null;
+  initialBillingInterval?: "MONTHLY"|"ANNUAL";
+  promoPlanCode?: string | null;
 };
 
 function formatLimit(value: number | null | undefined): string {
@@ -68,9 +71,12 @@ export function BillingPlansClient({
   initialOpenIntent = null,
   initialPendingReview = false,
   v1Quotes = null,
+  initialDiscountCode = null,
+  initialBillingInterval = "MONTHLY",
+  promoPlanCode = null,
 }: Props) {
   const router = useRouter();
-  const [billingInterval, setBillingInterval] = useState<"MONTHLY" | "ANNUAL">("MONTHLY");
+  const [billingInterval, setBillingInterval] = useState<"MONTHLY" | "ANNUAL">(initialBillingInterval);
   const [selectedCode, setSelectedCode] = useState<string | null>(
     initialOpenIntent?.planCode ?? null,
   );
@@ -79,7 +85,7 @@ export function BillingPlansClient({
   );
   const [intent, setIntent] = useState<IntentState | null>(initialOpenIntent);
   const [payerName, setPayerName] = useState("");
-  const [discountCode, setDiscountCode] = useState("");
+  const [discountCode, setDiscountCode] = useState(initialDiscountCode??"");
   const [transferReference, setTransferReference] = useState("");
   const [customerNote, setCustomerNote] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -391,6 +397,13 @@ export function BillingPlansClient({
       {error ? (
         <p className="text-sm text-destructive" role="alert">
           {error}
+        </p>
+      ) : null}
+      {initialDiscountCode ? (
+        <p className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm" role="status">
+          عرضك الخاص محفوظ بالكود <strong dir="ltr" className="font-mono">{initialDiscountCode}</strong>.
+          {promoPlanCode ? " الباقة المختارة من رابط الدعوة: "+promoPlanCode+"." : ""}
+          {" "}السعر النهائي بالخصم هيظهر قبل تعليمات التحويل.
         </p>
       ) : null}
       <div className="max-w-sm space-y-1">

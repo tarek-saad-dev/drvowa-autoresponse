@@ -1942,3 +1942,32 @@
   .comparisonFootnote { padding: 14px 18px; }
   .addonStrip { align-items: flex-start; flex-direction: column; padding: 18px; }
 }
+
+/* Mobile pricing: one visible offer and one comparison column; no sideways table. */
+.mobilePlanTabs,.mobileComparison{display:none}
+@media (max-width:700px){
+ .pricingStack,.pricingGrid,.pricingToolbar,.comparisonShell,.freePlanRow{min-width:0;max-width:100%}
+ .mobilePlanTabs,.mobileComparePicker{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;padding:5px;border:1px solid #294652;background:#0a1a23;border-radius:14px}
+ .mobilePlanTabs button,.mobileComparePicker button{min-width:0;border:0;border-radius:10px;background:transparent;color:#adcad5;padding:12px 6px;font-size:12px;font-weight:700;cursor:pointer}
+ .mobilePlanTabs .mobilePlanTabActive,.mobileComparePicker .mobilePlanTabActive{background:#225363;color:#f4fdff;box-shadow:inset 0 0 0 1px #4cc1da55}
+ .pricingGrid .plan[data-mobile-active="false"]{display:none}
+ .pricingGrid .plan[data-mobile-active="true"]{display:flex;min-width:0;width:100%;box-shadow:0 12px 40px #0003}
+ .pricingGrid .price{flex-wrap:wrap;overflow-wrap:anywhere}
+ .pricingGrid .price strong{font-size:clamp(34px,9vw,46px)}
+ .freePlanRow{gap:14px;padding:20px}
+ .freePlanRow>a{justify-self:stretch;text-align:center}
+ .freePlanMeta{overflow-wrap:anywhere}
+ .comparisonHeading{padding:21px 18px 13px}
+ .compareScroll{display:none}
+ .mobileComparison{display:block;padding:0 14px 14px}
+ .mobileComparePicker{grid-template-columns:repeat(4,minmax(0,1fr));margin:8px 0 13px}
+ .mobileComparePicker button{font-size:11px;padding:10px 2px}
+ .mobileCompareRows{display:grid;gap:0;margin:0;background:#0d212a;border:1px solid #1e3947;border-radius:13px;overflow:hidden}
+ .mobileCompareRows>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 12px;border-bottom:1px solid #203a46;min-width:0}
+ .mobileCompareRows>div:last-child{border-bottom:0}
+ .mobileCompareRows dt{font-size:12px;color:#a2c0ca;min-width:0}
+ .mobileCompareRows dd{margin:0;text-align:left;font-size:12px;font-weight:700;color:#e7f8fd;white-space:normal}
+ .compareHint{display:none}
+ .addonChips{width:100%}
+ .addonChips span{flex:1 1 auto;text-align:center}
+}
