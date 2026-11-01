@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 
-type Order = { OrderID:string; AddonCode:string; Quantity:number; AmountEgp:number; Status:string; PaymentReference:string|null };
+type Order = { OrderID:string; AddonCode:string; Quantity:number; AmountEgp:number; Status:string; PaymentReference:string|null;InvoiceNumber:number|null;ReceiptNumber:number|null };
 const choices=[
  {code:"replies_250",label:"250 رد إضافي",price:99},
  {code:"replies_1000",label:"1,000 رد إضافي",price:249},
@@ -53,6 +53,6 @@ export function AddonPurchasesClient() {
   </form>:null}
   {error?<p role="alert" className="text-sm text-destructive">{error}</p>:null}
   <button type="button" className="text-sm font-bold text-primary underline" disabled={loading} onClick={()=>run(async()=>{const r=await call();setOrders(r.orders||[]);})}>تحديث حالة طلباتي</button>
-  {orders.length?<ul className="space-y-2">{orders.map(o=><li className="rounded-lg border border-border p-3 text-sm" key={o.OrderID}>{o.AddonCode} · {o.AmountEgp} ج · {o.Status}</li>)}</ul>:null}
+  {orders.length?<ul className="space-y-2">{orders.map(o=><li className="rounded-lg border border-border p-3 text-sm" key={o.OrderID}>{o.AddonCode} · {o.AmountEgp} ج · {o.Status}{o.InvoiceNumber?` · فاتورة #${o.InvoiceNumber}`:""}{o.ReceiptNumber?` · إيصال #${o.ReceiptNumber}`:""}</li>)}</ul>:null}
  </section>;
 }

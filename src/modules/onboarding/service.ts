@@ -1,4 +1,5 @@
 import { KNOWLEDGE_CATEGORIES } from "@/constants/knowledge";
+import { query, sql } from "@/lib/db";
 import { setSessionActiveBusiness } from "@/modules/auth/session";
 import { writeAuditEvent } from "@/modules/audit/service";
 import { createAgent, listAgents } from "@/modules/agents/service";
@@ -85,6 +86,13 @@ export async function completeOnboarding(
   const subscription = await ensureDefaultSubscription({
     businessId: business.businessId,
   });
+
+  // One-time free-trial identity starts at initial business onboarding.
+  // The SQL procedure is idempotent and never resets the first activation.
+  if (process.env.DRVO_PRICING_V1_FREE_TRIAL === "true") {
+    await query("EXEC dbo.PricingV1StartFreeTrial @BusinessID=@businessId",
+      [{ name: "businessId", type: sql.UniqueIdentifier, value: business.businessId }]);
+  }
 
   let location: Location | null = null;
   if (input.location?.name?.trim()) {

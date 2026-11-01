@@ -12,7 +12,7 @@ const schema = z.discriminatedUnion("action", [
 ]);
 
 function checkEnabled() {
- if (process.env.NODE_ENV === "production" || process.env.DRVO_PRICING_V1_ADDON_DRAFTS !== "true") {
+ if (process.env.DRVO_PRICING_V1_ADDON_DRAFTS !== "true") {
   throw new ForbiddenError("شراء الإضافات غير متاح حاليًا");
  }
 }
@@ -25,9 +25,13 @@ export async function GET() {
   checkEnabled();
   const {user,businessId} = await requireApiBusiness();
   await ownerOrAdmin(user.userId,businessId);
-  const result = await query<{OrderID:string;AddonCode:string;Quantity:number;AmountEgp:number;Status:string;PaymentReference:string|null}>(
-   `SELECT TOP 25 OrderID,AddonCode,Quantity,AmountEgp,Status,PaymentReference
-    FROM dbo.TblPricingAddonOrder WHERE BusinessID=@b ORDER BY CreatedAtUtc DESC`,
+  const result = await query<{OrderID:string;AddonCode:string;Quantity:number;AmountEgp:number;Status:string;PaymentReference:string|null;InvoiceNumber:number|null;ReceiptNumber:number|null}>(
+   `SELECT TOP 25 o.OrderID,o.AddonCode,o.Quantity,o.AmountEgp,o.Status,o.PaymentReference,
+      i.InvoiceNumber,r.ReceiptNumber
+    FROM dbo.TblPricingAddonOrder o
+    LEFT JOIN dbo.TblPricingAddonInvoice i ON i.OrderID=o.OrderID
+    LEFT JOIN dbo.TblPricingAddonReceipt r ON r.InvoiceID=i.InvoiceID
+    WHERE o.BusinessID=@b ORDER BY o.CreatedAtUtc DESC`,
    [{name:"b",type:sql.UniqueIdentifier,value:businessId}],
   );
   return jsonOk({ orders: result.recordset });

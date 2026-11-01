@@ -286,7 +286,7 @@ export default async function BillingPage() {
           <UsageMeter title="ردود الموظف الذكي" used={overview.aiUsed} limit={plan?.monthlyAiReplies} />
           <UsageMeter title="رسائل واتساب الصادرة" used={overview.whatsappOutboundUsed} limit={plan?.monthlyWhatsAppOutbound} />
         </div>
-        {process.env.NODE_ENV !== "production" && process.env.DRVO_PRICING_V1_ADDON_DRAFTS === "true" ? <AddonPurchasesClient /> : null}
+        {process.env.DRVO_PRICING_V1_ADDON_DRAFTS === "true" ? <AddonPurchasesClient /> : null}
 
       <details className="group rounded-2xl border border-border bg-card">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 [&::-webkit-details-marker]:hidden">

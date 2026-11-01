@@ -35,6 +35,5 @@ export function quotePricingV1(planCode: string, billingInterval: PricingBilling
  */
 export function isPricingV1PaymentEnabled(): boolean {
   return process.env.DRVO_PRICING_V1_PAYMENTS === "true"
-    && process.env.NODE_ENV !== "production"
     && PRICING_V1_STATUS === "draft";
 }
