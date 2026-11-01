@@ -13,7 +13,7 @@ describe("draft pricing v1 contract (not live)", () => {
   });
   it("has agreed monthly, annual and reply limits", () => {
     expect(PRICING_V1_PLANS.map(p => [p.monthlyEgp, p.annualEgp, p.aiReplies]))
-      .toEqual([[0, 0, 30], [299, 2990, 750], [599, 5990, 2500], [1199, 11990, 6000]]);
+      .toEqual([[0, 0, 30], [1490, 14900, 1000], [3490, 34900, 3000], [8490, 84900, 8000]]);
     for (const p of PRICING_V1_PLANS.filter(p => p.code !== "FREE")) {
       expect(pricingV1AnnualSavings(p.monthlyEgp, p.annualEgp)).toBeGreaterThan(0);
     }
@@ -30,7 +30,7 @@ describe("draft pricing v1 contract (not live)", () => {
     expect(getPricingV1Plan("FREE")?.quotaPeriod).toBe("lifetime");
     expect(getPricingV1AiReplyBalance("FREE", 29)).toBe(1);
     expect(getPricingV1AiReplyBalance("FREE", 31)).toBe(0);
-    expect(getPricingV1AiReplyBalance("PRO", 2400, 250)).toBe(350);
+    expect(getPricingV1AiReplyBalance("PRO", 2400, 250)).toBe(850);
     expect(() => getPricingV1AiReplyBalance("PRO", -1)).toThrow();
   });
   it("free trial expires exactly seven 24-hour periods after activation", () => {

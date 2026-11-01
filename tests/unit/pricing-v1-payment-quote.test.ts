@@ -3,14 +3,14 @@ import { quotePricingV1, isPricingV1PaymentEnabled } from "@/modules/pricing/pay
 
 describe("pricing v1 server-side payment quote", () => {
   it("quotes agreed monthly amounts", () => {
-    expect(quotePricingV1("STARTER", "MONTHLY").amount).toBe(299);
-    expect(quotePricingV1("PRO", "MONTHLY").amount).toBe(599);
-    expect(quotePricingV1("BUSINESS", "MONTHLY").amount).toBe(1199);
+    expect(quotePricingV1("STARTER", "MONTHLY").amount).toBe(1490);
+    expect(quotePricingV1("PRO", "MONTHLY").amount).toBe(3490);
+    expect(quotePricingV1("BUSINESS", "MONTHLY").amount).toBe(8490);
   });
   it("quotes explicit annual discounted amounts, not 12 times the monthly rate", () => {
-    expect(quotePricingV1("STARTER", "ANNUAL").amount).toBe(2990);
-    expect(quotePricingV1("PRO", "ANNUAL").amount).toBe(5990);
-    expect(quotePricingV1("BUSINESS", "ANNUAL").amount).toBe(11990);
+    expect(quotePricingV1("STARTER", "ANNUAL").amount).toBe(14900);
+    expect(quotePricingV1("PRO", "ANNUAL").amount).toBe(34900);
+    expect(quotePricingV1("BUSINESS", "ANNUAL").amount).toBe(84900);
   });
   it("rejects free and invalid plans", () => {
     expect(() => quotePricingV1("FREE", "MONTHLY")).toThrow();

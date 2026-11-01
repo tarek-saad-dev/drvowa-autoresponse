@@ -1,4 +1,5 @@
 import { isPricingV1PaymentEnabled, quotePricingV1 } from "@/modules/pricing/payment-quote";
+import { normalizeDiscountCode, quoteDiscount } from "@/modules/pricing/discount-codes";
 import { assertNoScheduledChange, isDowngrade, schedulePaidDowngrade } from "./scheduled-changes";
 import { ensurePaymentInvoice, settlePaymentInvoice, voidPaymentInvoice } from "./documents";
 import { isPaidPlanCode } from "@/constants/billing";
@@ -82,10 +83,12 @@ export async function createManualPaymentIntent(params: {
   userId: string;
   planCode: string;
   billingInterval?: "MONTHLY" | "ANNUAL";
+  discountCode?: string | null;
 }): Promise<ManualPaymentRequest> {
   assertManualBillingEnabled();
 
   const billingInterval = params.billingInterval ?? "MONTHLY";
+  const discountCode = params.discountCode?.trim() ? normalizeDiscountCode(params.discountCode) : null;
   const code = params.planCode.trim().toUpperCase();
   if (!isPaidPlanCode(code)) {
     throw new ValidationError("لا يمكن طلب دفع لخطة غير مدفوعة");
@@ -109,7 +112,7 @@ export async function createManualPaymentIntent(params: {
         "لديك طلب دفع قيد المراجعة بالفعل. انتظر النتيجة قبل إرسال طلب جديد.",
       );
     }
-    if (existingOpen.requestedPlanId === plan.planId && (existingOpen.billingInterval ?? "MONTHLY") === billingInterval) {
+    if (existingOpen.requestedPlanId === plan.planId && (existingOpen.billingInterval ?? "MONTHLY") === billingInterval && (existingOpen.discountCode ?? null) === discountCode) {
       return existingOpen;
     }
     // Different plan while AWAITING_TRANSFER — cancel then create new.
@@ -145,7 +148,7 @@ export async function createManualPaymentIntent(params: {
               "لديك طلب دفع قيد المراجعة بالفعل. انتظر النتيجة قبل إرسال طلب جديد.",
             );
           }
-          if (raced.requestedPlanId === plan.planId && (raced.billingInterval ?? "MONTHLY") === billingInterval) {
+          if (raced.requestedPlanId === plan.planId && (raced.billingInterval ?? "MONTHLY") === billingInterval && (raced.discountCode ?? null) === discountCode) {
             return raced;
           }
           throw new ConflictError(
@@ -153,6 +156,11 @@ export async function createManualPaymentIntent(params: {
           );
         }
 
+        const discounted = discountCode ? await quoteDiscount({
+          code: discountCode, planCode: code, billingInterval,
+          subtotalMinor: Math.round(paymentAmount * 100),
+          businessId: params.businessId,
+        }, trx) : null;
         const created = await paymentRepo.insertAwaitingTransfer(
           {
             businessId: params.businessId,
@@ -161,7 +169,10 @@ export async function createManualPaymentIntent(params: {
             requestedPlanDisplayName: plan.displayName,
             paymentMethod: "INSTAPAY",
             currencyCode: plan.currencyCode ?? "EGP",
-            amount: paymentAmount,
+            amount: discounted ? discounted.amountMinor / 100 : paymentAmount,
+            discountCode: discounted?.code ?? null,
+            subtotalMinor: discounted?.subtotalMinor ?? null,
+            discountMinor: discounted?.discountMinor ?? null,
             pricingCatalogVersion: v1Quote?.catalogVersion ?? null,
             billingInterval,
             paymentReference,

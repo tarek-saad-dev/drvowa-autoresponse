@@ -9,6 +9,7 @@ const navigation = [
   { href: "/admin/ai-cost", label: "تكلفة AI" },
   { href: "/admin/subscriptions", label: "العملاء والاشتراكات" },
   { href: "/admin/payments", label: "المدفوعات" },
+  { href: "/admin/discount-codes", label: "أكواد الخصم" },
   { href: "/admin/refunds", label: "الاستردادات" },
   { href: "/admin/whatsapp", label: "واتساب" },
 ];

@@ -31,6 +31,9 @@ type IntentState = {
   paymentRequestId: string;
   paymentReference: string;
   amount: number;
+  originalAmount?: number;
+  discountAmount?: number;
+  discountCode?: string | null;
   currencyCode: string;
   planDisplayName: string;
   planCode: string;
@@ -76,6 +79,7 @@ export function BillingPlansClient({
   );
   const [intent, setIntent] = useState<IntentState | null>(initialOpenIntent);
   const [payerName, setPayerName] = useState("");
+  const [discountCode, setDiscountCode] = useState("");
   const [transferReference, setTransferReference] = useState("");
   const [customerNote, setCustomerNote] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -121,7 +125,7 @@ export function BillingPlansClient({
           Accept: "application/json",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ planCode, billingInterval }),
+        body: JSON.stringify({ planCode, billingInterval, discountCode: discountCode.trim() || null }),
       });
       const data = (await res.json()) as IntentState & {
         error?: string;
@@ -135,6 +139,9 @@ export function BillingPlansClient({
           paymentRequestId: data.paymentRequestId,
           paymentReference: data.paymentReference,
           amount: data.amount,
+          originalAmount: data.originalAmount,
+          discountAmount: data.discountAmount,
+          discountCode: data.discountCode,
           currencyCode: data.currencyCode,
           planDisplayName: data.planDisplayName,
           planCode: data.planCode,
@@ -149,6 +156,9 @@ export function BillingPlansClient({
         paymentRequestId: data.paymentRequestId,
         paymentReference: data.paymentReference,
         amount: data.amount,
+        originalAmount: data.originalAmount,
+        discountAmount: data.discountAmount,
+        discountCode: data.discountCode,
         currencyCode: data.currencyCode,
         planDisplayName: data.planDisplayName,
         planCode: data.planCode,
@@ -235,6 +245,7 @@ export function BillingPlansClient({
             <h2 className="text-lg font-semibold">الدفع عبر InstaPay</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {intent.planDisplayName} — {formatPrice(intent.amount, intent.currencyCode)}
+              {intent.discountCode ? ` (بعد خصم ${intent.discountCode})` : ""}
             </p>
           </div>
           <Button
@@ -250,6 +261,13 @@ export function BillingPlansClient({
         </div>
 
         <Alert variant="info" title="حوّل المبلغ التالي عبر InstaPay">
+          {intent.discountAmount && intent.discountAmount > 0 ? (
+            <p className="mt-2 rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+              السعر الأصلي: {formatPrice(intent.originalAmount, intent.currencyCode)}
+              {" · "}خصم {intent.discountCode}: -{formatPrice(intent.discountAmount, intent.currencyCode)}
+              {" · "}<strong>المطلوب تحويله: {formatPrice(intent.amount, intent.currencyCode)}</strong>
+            </p>
+          ) : null}
           <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-muted-foreground">الباقة</dt>
@@ -375,6 +393,13 @@ export function BillingPlansClient({
           {error}
         </p>
       ) : null}
+      <div className="max-w-sm space-y-1">
+        <label htmlFor="billing-discount-code" className="text-sm font-semibold">كود خصم (اختياري)</label>
+        <Input id="billing-discount-code" autoComplete="off" value={discountCode}
+          onChange={(event) => setDiscountCode(event.target.value.toUpperCase().slice(0,32))}
+          placeholder="مثال: DRVO20" disabled={creating} dir="ltr" />
+        <p className="text-xs text-muted-foreground">هيتم التحقق من الكود وحساب الخصم قبل عرض مبلغ التحويل.</p>
+      </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {plans.map((plan) => {
           const isCurrent = plan.code === currentPlanCode;

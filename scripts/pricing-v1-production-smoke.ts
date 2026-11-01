@@ -23,22 +23,22 @@ async function main() {
   for (const key of requiredFlags) {
     if (process.env[key] !== "true") throw new Error(`Pricing V1 flag not enabled: ${key}`);
   }
-  if (!isPricingV1PaymentEnabled() || quotePricingV1("STARTER", "ANNUAL").amount !== 2990) {
+  if (!isPricingV1PaymentEnabled() || quotePricingV1("STARTER", "ANNUAL").amount !== 14900) {
     throw new Error("Pricing V1 payment quote is not active");
   }
   const versions = await query<{Version:string}>(
-    "SELECT Version FROM dbo.TblSchemaMigration WHERE Version IN (N'098',N'099')"
+    "SELECT Version FROM dbo.TblSchemaMigration WHERE Version IN (N'098',N'099',N'100',N'101')"
   );
-  if (versions.recordset.length !== 2) throw new Error("Required pricing migrations 098 and 099 missing");
+  if (versions.recordset.length !== 4) throw new Error("Required pricing migrations 098–101 missing");
 
   const plans = await query<PlanRow>(`SELECT Code,MonthlyPriceAmount,MonthlyAiReplies,
     MaxWhatsAppConnections,MaxAgents,MaxActiveKnowledgeItems FROM dbo.TblPlan
     WHERE Code IN (N'FREE',N'STARTER',N'PRO',N'BUSINESS') AND Status=N'ACTIVE'`);
   const expected: Record<string,number[]> = {
     FREE:[0,30,1,1,50],
-    STARTER:[299,750,1,1,200],
-    PRO:[599,2500,1,3,500],
-    BUSINESS:[1199,6000,1,8,2000],
+    STARTER:[1490,1000,1,1,100],
+    PRO:[3490,3000,1,3,400],
+    BUSINESS:[8490,8000,1,8,1200],
   };
   if (plans.recordset.length !== 4) throw new Error("Pricing V1 active plan count mismatch");
   for (const p of plans.recordset) {
@@ -101,7 +101,7 @@ async function main() {
   }
 
   console.log("[pricing-v1-production-smoke] PASS", {
-    enabled: true, migrations: ["098","099"], activePlans: plans.recordset.length,
+    enabled: true, migrations: ["098","099","100","101"], activePlans: plans.recordset.length,
     addOnOrders: Number(counts.TotalOrders),
     approvedOrders: Number(counts.ApprovedOrders),
     paidLocalReceipts: Number(counts.PaidReceipts),

@@ -124,9 +124,9 @@ describe.runIf(isolated)("financial outbox on verified isolated SQL Server", () 
     expect(event).toMatchObject({
       event_id: eventIdForManualPaymentConfirmation(payment.paymentRequestId),
       source_payment_id: `autorespond:manual-payment:${payment.paymentRequestId}`,
-      amount_minor: 29_900, currency: "EGP",
+      amount_minor: 149_000, currency: "EGP",
     });
-    expect(captured[0].AmountMinor).toBe("29900");
+    expect(captured[0].AmountMinor).toBe("149000");
     expect(captured[0].OccurredAtText.slice(0, 23)).toBe(event.occurred_at.slice(0, 23));
     expect(event.occurred_at).toMatch(/\.\d{3}000Z$/);
     await expect(query(

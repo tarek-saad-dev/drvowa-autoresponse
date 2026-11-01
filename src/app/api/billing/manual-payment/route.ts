@@ -16,6 +16,9 @@ function serializePayment(p: {
   paymentRequestId: string;
   paymentReference: string;
   amount: number;
+  discountCode?: string | null;
+  subtotalMinor?: number | null;
+  discountMinor?: number | null;
   currencyCode: string;
   status: string;
   submittedAtUtc: Date | null;
@@ -29,6 +32,9 @@ function serializePayment(p: {
     paymentRequestId: p.paymentRequestId,
     paymentReference: p.paymentReference,
     amount: p.amount,
+    discountCode: p.discountCode ?? null,
+    originalAmount: p.subtotalMinor != null ? p.subtotalMinor / 100 : p.amount,
+    discountAmount: (p.discountMinor ?? 0) / 100,
     currencyCode: p.currencyCode,
     status: p.status,
     submittedAtUtc: p.submittedAtUtc,
@@ -65,6 +71,7 @@ const createIntentSchema = z.object({
   action: z.literal("create_intent").optional().default("create_intent"),
   planCode: z.string().min(1).max(32),
   billingInterval: z.enum(["MONTHLY", "ANNUAL"]).default("MONTHLY"),
+  discountCode: z.string().trim().max(32).optional().nullable(),
 });
 
 const confirmSchema = z.object({
@@ -103,6 +110,7 @@ export async function POST(request: Request) {
       userId: user.userId,
       planCode: body.planCode,
       billingInterval: body.billingInterval,
+      discountCode: body.discountCode,
     });
     return jsonOk(serializePayment(created), { status: 201 });
   } catch (error) {

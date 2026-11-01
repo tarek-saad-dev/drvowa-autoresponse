@@ -400,6 +400,9 @@ export type ManualPaymentMethod = "INSTAPAY";
 
 export type ManualPaymentRequest = {
   billingInterval?: PlanBillingInterval;
+  discountCode?: string | null;
+  subtotalMinor?: number | null;
+  discountMinor?: number | null;
   paymentRequestId: string;
   businessId: string;
   requestedPlanId: string;

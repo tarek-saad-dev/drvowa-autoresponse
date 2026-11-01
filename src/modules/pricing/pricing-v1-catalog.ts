@@ -7,9 +7,9 @@ export const PRICING_V1_STATUS = "draft" as const;
 export const PRICING_V1_CURRENCY = "EGP" as const;
 export const PRICING_V1_PLANS = [
   { code: "FREE", nameAr: "مجاني", monthlyEgp: 0, annualEgp: 0, aiReplies: 30, quotaPeriod: "lifetime", trialDays: 7, seats: 1, knowledgeItems: 50, whatsappNumbers: 1 },
-  { code: "STARTER", nameAr: "بداية", monthlyEgp: 299, annualEgp: 2990, aiReplies: 750, quotaPeriod: "month", trialDays: null, seats: 1, knowledgeItems: 200, whatsappNumbers: 1 },
-  { code: "PRO", nameAr: "نمو", monthlyEgp: 599, annualEgp: 5990, aiReplies: 2500, quotaPeriod: "month", trialDays: null, seats: 3, knowledgeItems: 500, whatsappNumbers: 1 },
-  { code: "BUSINESS", nameAr: "أعمال", monthlyEgp: 1199, annualEgp: 11990, aiReplies: 6000, quotaPeriod: "month", trialDays: null, seats: 8, knowledgeItems: 2000, whatsappNumbers: 1 },
+  { code: "STARTER", nameAr: "بداية", monthlyEgp: 1490, annualEgp: 14900, aiReplies: 1000, quotaPeriod: "month", trialDays: null, seats: 1, knowledgeItems: 100, whatsappNumbers: 1 },
+  { code: "PRO", nameAr: "نمو", monthlyEgp: 3490, annualEgp: 34900, aiReplies: 3000, quotaPeriod: "month", trialDays: null, seats: 3, knowledgeItems: 400, whatsappNumbers: 1 },
+  { code: "BUSINESS", nameAr: "أعمال", monthlyEgp: 8490, annualEgp: 84900, aiReplies: 8000, quotaPeriod: "month", trialDays: null, seats: 8, knowledgeItems: 1200, whatsappNumbers: 1 },
 ] as const;
 export const PRICING_V1_ADDONS = [
   { code: "replies_250", type: "one_time", quantity: 250, unit: "ai_reply", priceEgp: 99, validDays: 30 },
