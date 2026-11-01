@@ -77,3 +77,49 @@ describe("public landing pricing", () => {
     expect(html.indexOf("أعمال")).toBeLessThan(html.indexOf("الخطة المجانية"));
   });
 });
+
+
+describe("Pricing V1 public comparison", () => {
+  const live = [
+    plan({ code: "FREE", displayName: "مجاني", monthlyPriceAmount: 0,
+      monthlyAiReplies: 30, maxAgents: 1, maxActiveKnowledgeItems: 50 }),
+    plan({ code: "STARTER", displayName: "بداية", monthlyPriceAmount: 299,
+      monthlyAiReplies: 750, maxAgents: 1, maxActiveKnowledgeItems: 200 }),
+    plan({ code: "PRO", displayName: "نمو", monthlyPriceAmount: 599,
+      monthlyAiReplies: 2500, maxAgents: 3, maxActiveKnowledgeItems: 500 }),
+    plan({ code: "BUSINESS", displayName: "أعمال", monthlyPriceAmount: 1199,
+      monthlyAiReplies: 6000, maxAgents: 8, maxActiveKnowledgeItems: 2000 }),
+  ];
+  it("shows the live Egyptian prices and all four plans, with an accessible comparison", () => {
+    const html = renderToStaticMarkup(createElement(PricingCards, {
+      plans: live,
+      annualPrices: { STARTER: 2990, PRO: 5990, BUSINESS: 11990 },
+      freeTrialEnabled: true,
+      replyAddons: [
+        { quantity: 250, priceEgp: 99, validDays: 30 },
+        { quantity: 1000, priceEgp: 249, validDays: 30 },
+        { quantity: 3000, priceEgp: 599, validDays: 30 },
+      ],
+    }));
+    for (const price of ["299", "599", "1,199"]) expect(html).toContain(price);
+    for (const allowance of ["750", "2,500", "6,000"]) expect(html).toContain(allowance);
+    expect(html).toContain('aria-label="مدة الاشتراك"');
+    expect(html).toContain('aria-label="جدول مقارنة الأسعار وحدود الاستخدام"');
+    expect(html).toContain("وفّر شهرين");
+    expect(html).toContain("2,990 جنيه سنويًا");
+    expect(html).toContain("30 رد مرة واحدة خلال 7 أيام");
+    expect(html).not.toContain("30 رد AI / شهر");
+    expect(html).toContain("99 ج");
+    expect(html).toContain("249 ج");
+    expect(html).toContain("مدة التجربة المجانية");
+  });
+  it("never advertises annual checkout prices when quotes are not enabled", () => {
+    const html = renderToStaticMarkup(createElement(PricingCards, {
+      plans: live, annualPrices: null, freeTrialEnabled: false,
+    }));
+    expect(html).not.toContain('aria-label="مدة الاشتراك"');
+    expect(html).not.toContain("2,990");
+    expect(html).not.toContain("30 رد مرة واحدة خلال 7 أيام");
+    expect(html).not.toContain("99 ج");
+  });
+});

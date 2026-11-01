@@ -1648,3 +1648,297 @@
     transform: none;
   }
 }
+
+
+/* Pricing V1 — compact offers and readable feature comparison */
+.pricingToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.pricingToolbar p {
+  color: #a5bbc6;
+  font-size: 13px;
+}
+.billingSwitch {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 5px;
+  border: 1px solid #2b4a58;
+  border-radius: 14px;
+  background: #0d1b24;
+}
+.billingSwitch button {
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #9db5c2;
+  cursor: pointer;
+  padding: 9px 15px;
+  font: inherit;
+  font-size: 13px;
+  transition: background .2s ease, color .2s ease;
+}
+.billingSwitch button:hover {
+  color: #f1faff;
+}
+.billingSwitch button:focus-visible {
+  outline: 2px solid #76d6f0;
+  outline-offset: 2px;
+}
+.billingSwitch .billingSwitchActive {
+  background: #205466;
+  color: #f4fbfe;
+  box-shadow: 0 2px 12px #0002;
+}
+.savePill {
+  display: inline-block;
+  border: 1px solid #2b8c84;
+  border-radius: 20px;
+  color: #8fe4d5;
+  font-size: 10px;
+  padding: 2px 7px;
+  margin-inline-start: 6px;
+  white-space: nowrap;
+}
+.pricingGrid .plan {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+  padding: 25px 24px 23px;
+  background: linear-gradient(180deg, #0f232d, #0a1921);
+  border-color: #2b4553;
+}
+.pricingGrid .plan.featured {
+  background: linear-gradient(162deg, #123946 0%, #0b222c 55%, #0b1c26 100%);
+  border-color: #39b8d8;
+  box-shadow: inset 0 1px 0 #46c3df33, 0 14px 36px #0a91b315;
+}
+.planTopline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+}
+.planTopline .eyebrow {
+  margin: 0;
+  min-height: 0;
+  color: #91b8c9;
+  letter-spacing: 1.1px;
+}
+.recommendedPill {
+  border-radius: 100px;
+  background: #38b8d722;
+  border: 1px solid #42b8d855;
+  color: #a0e5f6;
+  padding: 4px 11px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.pricingGrid .plan h3 {
+  margin-top: 13px;
+  font-size: 25px;
+}
+.pricingGrid .planDescription {
+  min-height: 43px;
+}
+.pricingGrid .price {
+  margin-block: 20px 5px;
+}
+.pricingGrid .price strong {
+  font-size: clamp(36px, 3vw, 44px);
+  line-height: 1.15;
+  font-weight: 750;
+  letter-spacing: -1.7px;
+}
+.pricingGrid .price > span {
+  white-space: nowrap;
+}
+.planBillingNote {
+  color: #9bb4c0;
+  font-size: 11px;
+  min-height: 34px;
+  margin-bottom: 21px;
+}
+.planBillingNote b {
+  color: #99e8d5;
+  font-weight: 700;
+}
+.pricingGrid .plan > a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 46px;
+  border-radius: 12px;
+  margin-bottom: 2px;
+}
+.pricingGrid .planLimits {
+  border-top: 1px solid #284653;
+  padding-top: 21px;
+  margin-top: 22px;
+  gap: 12px;
+}
+.pricingGrid .planLimits li {
+  font-size: 12px;
+}
+.freePlanRow {
+  background: #0c151a;
+  border-color: #23333c;
+}
+.comparisonShell {
+  min-width: 0;
+  margin-top: 25px;
+  border: 1px solid #274653;
+  border-radius: 20px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #0d2029, #0b1920);
+}
+.comparisonHeading {
+  padding: 25px 29px 22px;
+  display: flex;
+  gap: 24px;
+  align-items: flex-end;
+  justify-content: space-between;
+  border-bottom: 1px solid #203d4b;
+}
+.comparisonHeading .eyebrow {
+  font-size: 10px;
+  margin-bottom: 5px;
+}
+.comparisonHeading h3 {
+  font-size: 23px;
+  margin: 0;
+}
+.comparisonHeading p {
+  font-size: 12px;
+  color: #a4bac6;
+  margin-top: 3px;
+}
+.compareHint {
+  font-size: 11px;
+  color: #7695a4;
+  display: none;
+}
+.compareScroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #365e70 #0b1a22;
+}
+.compareScroll:focus-visible {
+  outline: 2px solid #6de0f2;
+  outline-offset: -2px;
+}
+.comparisonTable {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+  color: #c6d9e2;
+  text-align: center;
+}
+.comparisonTable th,
+.comparisonTable td {
+  padding: 15px 14px;
+  border-bottom: 1px solid #1a3440;
+  min-width: 130px;
+  white-space: nowrap;
+}
+.comparisonTable thead th {
+  padding-block: 20px;
+  color: #eaf7fc;
+  background: #102732;
+  font-size: 14px;
+}
+.comparisonTable thead th span,
+.comparisonTable thead th small {
+  display: block;
+}
+.comparisonTable thead th small {
+  font-size: 10px;
+  font-weight: 500;
+  color: #8bdbe9;
+}
+.comparisonTable th:first-child {
+  text-align: start;
+  min-width: 195px;
+  font-weight: 500;
+  color: #a9c4cf;
+  background: #0d2029;
+}
+.comparisonTable thead th:first-child {
+  background: #102732;
+}
+.comparisonTable tbody tr:last-child th,
+.comparisonTable tbody tr:last-child td {
+  border-bottom: 0;
+}
+.comparisonTable tbody tr:hover td,
+.comparisonTable tbody tr:hover th {
+  background-color: #173643;
+}
+.comparisonTable td strong {
+  color: #f1faff;
+  font-size: 14px;
+  font-weight: 650;
+}
+.comparisonTable .compareFeatured {
+  background-color: #133441;
+  color: #d6f3fa;
+}
+.comparisonFootnote {
+  padding: 14px 29px 18px;
+  border-top: 1px solid #1f3c49;
+  font-size: 11px;
+  line-height: 1.9;
+  color: #91aeba;
+}
+.addonStrip {
+  border: 1px solid #294954;
+  background: linear-gradient(100deg, #0d272c, #0c1c25);
+  border-radius: 17px;
+  padding: 19px 23px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px 26px;
+}
+.addonStrip b { font-size: 14px; color: #e0f4f5; }
+.addonStrip p { font-size: 12px; color: #9bb9be; margin-top: 2px; }
+.addonChips { display: flex; flex-wrap: wrap; gap: 8px; }
+.addonChips span {
+  border: 1px solid #35616a;
+  border-radius: 100px;
+  padding: 7px 11px;
+  color: #b7dde5;
+  font-size: 11px;
+  background: #17333b;
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  .comparisonTable { width: max-content; min-width: 100%; }
+  .compareHint { display: inline; white-space: nowrap; }
+}
+@media (max-width: 640px) {
+  .pricingToolbar { justify-content: center; text-align: center; }
+  .pricingToolbar p { width: 100%; font-size: 12px; }
+  .billingSwitch { width: 100%; max-width: 365px; justify-content: center; }
+  .billingSwitch button { flex: 1; }
+  .pricingGrid .plan { padding: 24px 22px; }
+  .pricingGrid .planDescription { min-height: 0; }
+  .comparisonShell { margin-top: 13px; }
+  .comparisonHeading { display: block; padding: 22px 18px 14px; }
+  .comparisonHeading h3 { font-size: 21px; }
+  .compareHint { display: block; margin-top: 6px; font-size: 10px; }
+  .comparisonTable th, .comparisonTable td { padding: 14px 12px; min-width: 121px; }
+  .comparisonTable th:first-child { min-width: 156px; position: sticky; inset-inline-start: 0; z-index: 1; }
+  .comparisonTable thead th:first-child { z-index: 2; }
+  .comparisonFootnote { padding: 14px 18px; }
+  .addonStrip { align-items: flex-start; flex-direction: column; padding: 18px; }
+}
