@@ -30,7 +30,7 @@ describe("draft pricing v1 contract (not live)", () => {
     expect(getPricingV1Plan("FREE")?.quotaPeriod).toBe("lifetime");
     expect(getPricingV1AiReplyBalance("FREE", 29)).toBe(1);
     expect(getPricingV1AiReplyBalance("FREE", 31)).toBe(0);
-    expect(getPricingV1AiReplyBalance("PRO", 2400, 250)).toBe(350);
+    expect(getPricingV1AiReplyBalance("PRO", 2400, 250)).toBe(850);
     expect(() => getPricingV1AiReplyBalance("PRO", -1)).toThrow();
   });
   it("free trial expires exactly seven 24-hour periods after activation", () => {

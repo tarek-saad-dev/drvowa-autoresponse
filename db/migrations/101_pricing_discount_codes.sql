@@ -27,6 +27,11 @@ BEGIN
    DiscountCode NVARCHAR(32) NULL REFERENCES dbo.TblPricingDiscountCode(Code),
    SubtotalMinor BIGINT NULL,
    DiscountMinor BIGINT NULL;
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name=N'CK_ManualPayment_DiscountSnapshot'
+ AND parent_object_id=OBJECT_ID(N'dbo.TblManualPaymentRequest'))
+BEGIN
  ALTER TABLE dbo.TblManualPaymentRequest ADD
    CONSTRAINT CK_ManualPayment_DiscountSnapshot CHECK (
      (DiscountCode IS NULL AND SubtotalMinor IS NULL AND DiscountMinor IS NULL)
@@ -34,6 +39,11 @@ BEGIN
        DiscountMinor>0 AND DiscountMinor<SubtotalMinor AND
        CONVERT(BIGINT,ROUND(Amount * 100,0)) = SubtotalMinor - DiscountMinor)
    );
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name=N'IX_ManualPayment_DiscountCode_Status'
+ AND object_id=OBJECT_ID(N'dbo.TblManualPaymentRequest'))
+BEGIN
  CREATE INDEX IX_ManualPayment_DiscountCode_Status
    ON dbo.TblManualPaymentRequest(DiscountCode, Status)
    WHERE DiscountCode IS NOT NULL;
