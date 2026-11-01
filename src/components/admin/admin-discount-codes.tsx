@@ -25,7 +25,18 @@ export function AdminDiscountCodes(){
     if(!response.ok) throw new Error(result.error ?? "تعذر تحميل الأكواد");
     setItems(result.codes??[]);
   },[]);
-  useEffect(()=>{void reload().catch(e=>setError(e instanceof Error?e.message:"تعذر التحميل"));},[reload]);
+  useEffect(()=>{
+    let active=true;
+    void fetch("/api/admin/discount-codes",{cache:"no-store"})
+      .then(async response=>{
+        const result=await response.json();
+        if(!response.ok)throw new Error(result.error??"تعذر تحميل الأكواد");
+        return result;
+      })
+      .then(result=>{if(active)setItems(result.codes??[]);})
+      .catch(error=>{if(active)setError(error instanceof Error?error.message:"تعذر التحميل");});
+    return ()=>{active=false;};
+  },[]);
   async function call(body:Record<string,unknown>){
     setBusy(true);setError("");setNotice("");
     try{
