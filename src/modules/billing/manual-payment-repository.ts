@@ -198,6 +198,7 @@ export async function insertAwaitingTransfer(
     currencyCode: string;
     amount: number;
     billingInterval?: "MONTHLY" | "ANNUAL";
+    pricingCatalogVersion?: string | null;
     paymentReference: string;
     createdByUserId: string;
   },
@@ -210,11 +211,11 @@ export async function insertAwaitingTransfer(
     `INSERT INTO TblManualPaymentRequest (
       PaymentRequestID, BusinessID, RequestedPlanID, RequestedPlanCode, RequestedPlanDisplayName,
       PaymentMethod, CurrencyCode, Amount, PaymentReference, Status, BillingInterval,
-      CreatedByUserID, CreatedAtUtc, UpdatedAtUtc
+      CreatedByUserID, CreatedAtUtc, UpdatedAtUtc, PricingCatalogVersion
     ) VALUES (
       @paymentRequestId, @businessId, @requestedPlanId, @requestedPlanCode, @requestedPlanDisplayName,
       @paymentMethod, @currencyCode, @amount, @paymentReference, N'AWAITING_TRANSFER', @billingInterval,
-      @createdByUserId, @createdAtUtc, @updatedAtUtc
+      @createdByUserId, @createdAtUtc, @updatedAtUtc, @pricingCatalogVersion
     )`,
     [
       {
@@ -254,6 +255,7 @@ export async function insertAwaitingTransfer(
       },
       { name: "amount", type: sql.Decimal(12, 2), value: params.amount },
       { name: "billingInterval", type: sql.NVarChar(16), value: params.billingInterval ?? "MONTHLY" },
+      { name: "pricingCatalogVersion", type: sql.NVarChar(48), value: params.pricingCatalogVersion ?? null },
       {
         name: "paymentReference",
         type: sql.NVarChar(64),

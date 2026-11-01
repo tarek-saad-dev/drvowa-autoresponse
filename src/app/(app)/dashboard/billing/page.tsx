@@ -1,3 +1,7 @@
+import { getReplyAddonBalance } from "@/modules/pricing/addon-balance";
+import { AddonPurchasesClient } from "@/components/dashboard/addon-purchases-client";
+import { getV1FreeTrialUsage } from "@/modules/pricing/free-trial-usage";
+import { isPricingV1PaymentEnabled, quotePricingV1 } from "@/modules/pricing/payment-quote";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -102,7 +106,9 @@ export default async function BillingPage() {
     listUsageEvents({ businessId, limit: 12 }),
   ]);
 
+  const addonBalance = await getReplyAddonBalance(businessId);
   const plan = overview.plan;
+  const freeTrial = plan?.code === "FREE" ? await getV1FreeTrialUsage(businessId) : null;
   const sub = overview.subscription;
   const latest = paymentStatus.pending ?? paymentStatus.open ??
     (paymentStatus.latest?.status === "REJECTED" ? paymentStatus.latest : null);
@@ -160,6 +166,30 @@ export default async function BillingPage() {
           باقتك، استهلاكك، ومدفوعاتك في مكان واحد.
         </p>
       </header>
+
+      {addonBalance.activeLots > 0 ? (
+        <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+          <h2 className="text-base font-bold">رصيد الردود الإضافية</h2>
+          <p className="mt-2 text-2xl font-black tabular-nums">{formatNumber(addonBalance.availableReplies)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            الرصيد المسجل وغير المنتهي · أقرب انتهاء: {formatDate(addonBalance.nearestExpiryUtc)}
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">الاستهلاك التلقائي من الإضافات لم يُفعّل بعد.</p>
+        </section>
+      ) : null}
+      {freeTrial ? (
+        <section className="rounded-2xl border border-border bg-card p-4 sm:p-5" aria-label="التجربة المجانية">
+          <h2 className="text-base font-bold">تجربتك المجانية</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {freeTrial.expired || freeTrial.remaining === 0
+              ? "انتهت ردود التجربة المجانية. اشترك لتفعيل ردود AI."
+              : `متبقي ${formatNumber(freeTrial.remaining)} من 30 رد ذكي إجمالًا`}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            تاريخ انتهاء الردود: {formatDate(freeTrial.expiresAtUtc)} · الرصيد لا يتجدد شهريًا
+          </p>
+        </section>
+      ) : null}
 
       {needsAttention ? (
         <div role="alert" className="rounded-xl border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-warning">
@@ -229,6 +259,7 @@ export default async function BillingPage() {
                 }
               : null}
             initialPendingReview={pendingReview}
+            v1Quotes={isPricingV1PaymentEnabled() ? Object.fromEntries(["STARTER", "PRO", "BUSINESS"].map((code) => [code, { monthly: quotePricingV1(code, "MONTHLY").amount, annual: quotePricingV1(code, "ANNUAL").amount }])) : null}
             plans={availablePlans.map((item) => ({
               code: item.code,
               displayName: item.displayName,
@@ -255,7 +286,9 @@ export default async function BillingPage() {
           <UsageMeter title="ردود الموظف الذكي" used={overview.aiUsed} limit={plan?.monthlyAiReplies} />
           <UsageMeter title="رسائل واتساب الصادرة" used={overview.whatsappOutboundUsed} limit={plan?.monthlyWhatsAppOutbound} />
         </div>
-        <details className="group rounded-2xl border border-border bg-card">
+        {process.env.NODE_ENV !== "production" && process.env.DRVO_PRICING_V1_ADDON_DRAFTS === "true" ? <AddonPurchasesClient /> : null}
+
+      <details className="group rounded-2xl border border-border bg-card">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 [&::-webkit-details-marker]:hidden">
             <span className="text-sm font-bold">باقي حدود الباقة</span>
             <span aria-hidden="true" className="text-muted-foreground transition-transform group-open:rotate-90">‹</span>

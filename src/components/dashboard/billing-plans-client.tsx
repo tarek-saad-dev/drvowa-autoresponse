@@ -43,6 +43,7 @@ type Props = {
   enabled: boolean;
   initialOpenIntent?: IntentState | null;
   initialPendingReview?: boolean;
+  v1Quotes?: Record<string, { monthly: number; annual: number }> | null;
 };
 
 function formatLimit(value: number | null | undefined): string {
@@ -63,6 +64,7 @@ export function BillingPlansClient({
   enabled,
   initialOpenIntent = null,
   initialPendingReview = false,
+  v1Quotes = null,
 }: Props) {
   const router = useRouter();
   const [billingInterval, setBillingInterval] = useState<"MONTHLY" | "ANNUAL">("MONTHLY");
@@ -364,7 +366,7 @@ export function BillingPlansClient({
       <h2 className="text-lg font-semibold">الباقات المتاحة</h2>
       <label className="flex items-center gap-3">دورة الاشتراك
         <select aria-label="دورة الاشتراك" className="rounded border border-border bg-card p-2 text-foreground" value={billingInterval} onChange={e => setBillingInterval(e.target.value as "MONTHLY" | "ANNUAL")} disabled={creating}>
-          <option value="MONTHLY">شهري</option><option value="ANNUAL">سنوي — سعر 12 شهر</option>
+          <option value="MONTHLY">شهري</option><option value="ANNUAL">سنوي — دفعة واحدة</option>
         </select>
       </label>
       <p className="text-sm leading-7 text-muted-foreground">لو اخترت باقة أعلى، يبدأ الاشتراك الجديد بعد اعتماد الدفع. ولو اخترت باقة أقل، يستمر اشتراكك الحالي حتى نهاية فترته، وبعدها يبدأ التغيير. اختيار باقة وحده لا يخصم أي مبلغ.</p>
@@ -396,7 +398,7 @@ export function BillingPlansClient({
                 ) : null}
               </div>
               <p className="mt-2 text-2xl font-bold tracking-tight">
-                {formatPrice(plan.monthlyPriceAmount == null ? null : plan.monthlyPriceAmount * (billingInterval === "ANNUAL" ? 12 : 1), plan.currencyCode)}
+                {formatPrice(plan.monthlyPriceAmount == null ? null : (v1Quotes?.[plan.code] ? (billingInterval === "ANNUAL" ? v1Quotes[plan.code].annual : v1Quotes[plan.code].monthly) : plan.monthlyPriceAmount * (billingInterval === "ANNUAL" ? 12 : 1)), plan.currencyCode)}
                 {(plan.monthlyPriceAmount ?? 0) > 0 ? (billingInterval === "ANNUAL" ? " / سنة" : " / شهر") : ""}
               </p>
               <ul className="mt-4 flex-1 space-y-1.5 text-sm text-muted-foreground">

@@ -1,3 +1,4 @@
+import { isPricingV1PaymentEnabled, quotePricingV1 } from "@/modules/pricing/payment-quote";
 import { assertNoScheduledChange, isDowngrade, schedulePaidDowngrade } from "./scheduled-changes";
 import { ensurePaymentInvoice, settlePaymentInvoice, voidPaymentInvoice } from "./documents";
 import { isPaidPlanCode } from "@/constants/billing";
@@ -98,6 +99,9 @@ export async function createManualPaymentIntent(params: {
     throw new ValidationError("سعر الخطة غير مُعدّ");
   }
 
+  const v1Quote = isPricingV1PaymentEnabled() ? quotePricingV1(code, billingInterval) : null;
+  const paymentAmount = v1Quote?.amount ?? Number((plan.monthlyPriceAmount * (billingInterval === "ANNUAL" ? 12 : 1)).toFixed(2));
+
   const existingOpen = await paymentRepo.findOpenByBusinessId(params.businessId);
   if (existingOpen) {
     if (existingOpen.status === "PENDING") {
@@ -157,7 +161,8 @@ export async function createManualPaymentIntent(params: {
             requestedPlanDisplayName: plan.displayName,
             paymentMethod: "INSTAPAY",
             currencyCode: plan.currencyCode ?? "EGP",
-            amount: Number((plan.monthlyPriceAmount! * (billingInterval === "ANNUAL" ? 12 : 1)).toFixed(2)),
+            amount: paymentAmount,
+            pricingCatalogVersion: v1Quote?.catalogVersion ?? null,
             billingInterval,
             paymentReference,
             createdByUserId: params.userId,
