@@ -8,8 +8,7 @@ export type ReplyAddonBalance = {
 
 /** Read-only derived balance; expired lots excluded, no user supplied amounts. */
 export async function getReplyAddonBalance(businessId: string): Promise<ReplyAddonBalance> {
-  if (process.env.NODE_ENV === "production" ||
-      process.env.DRVO_PRICING_V1_ADDON_DRAFTS !== "true") {
+  if (process.env.DRVO_PRICING_V1_ADDON_DRAFTS !== "true") {
     return { availableReplies: 0, nearestExpiryUtc: null, activeLots: 0 };
   }
   const result = await query<{

@@ -45,9 +45,19 @@ describe.runIf(configured && isolated)("pricing V1 add-on SQL lifecycle", () => 
   const rejectedGrants=await query<{Total:number}>(`SELECT COUNT(*) AS Total FROM dbo.TblPricingAddonEntitlement WHERE OrderID=@id`,
    [{name:"id",type:sql.UniqueIdentifier,value:rejectedId}]);
   expect(rejectedGrants.recordset[0].Total).toBe(0);
+  const rejectedInvoice=await query<{Status:string}>(`SELECT Status FROM dbo.TblPricingAddonInvoice WHERE OrderID=@id`,
+   [{name:"id",type:sql.UniqueIdentifier,value:rejectedId}]);
+  expect(rejectedInvoice.recordset[0].Status).toBe("VOID");
+
   const key=`addon-${randomUUID()}`;
   const orderId=await createAddonTransferDraft({businessId,userId,addonCode:"replies_250",idempotencyKey:key});
   expect(await createAddonTransferDraft({businessId,userId,addonCode:"replies_250",idempotencyKey:key})).toBe(orderId);
+  const createdInvoice=await query<{Status:string;AmountMinor:number}>(
+   `SELECT Status,AmountMinor FROM dbo.TblPricingAddonInvoice WHERE OrderID=@id`,
+   [{name:"id",type:sql.UniqueIdentifier,value:orderId}]);
+  expect(createdInvoice.recordset[0].Status).toBe("OPEN");
+  expect(Number(createdInvoice.recordset[0].AmountMinor)).toBe(9900);
+
   expect(await submitAddonTransfer({businessId,orderId,payerName:"Sender",transferReference:"INSTA-TEST"})).toBe("PENDING");
   expect(await reviewAddonTransfer({orderId,reviewerUserId:userId,decision:"APPROVED"})).toBe("APPROVED");
   expect(await reviewAddonTransfer({orderId,reviewerUserId:userId,decision:"APPROVED"})).toBe("APPROVED");
@@ -58,6 +68,17 @@ describe.runIf(configured && isolated)("pricing V1 add-on SQL lifecycle", () => 
   expect(addonOrder.recordset[0].Status).toBe("APPROVED");
   expect(Number(addonOrder.recordset[0].AmountEgp)).toBe(99);
   expect(addonOrder.recordset[0].ReviewedAtUtc).not.toBeNull();
+  // Receipt and credit grant are committed once, in the same approval transaction.
+  const accounting=await query<{InvoiceStatus:string;ReceiptCount:number;ReceiptAmount:number}>(
+   `SELECT i.Status AS InvoiceStatus,COUNT(r.ReceiptID) AS ReceiptCount,
+     COALESCE(SUM(r.AmountMinor),0) AS ReceiptAmount
+    FROM dbo.TblPricingAddonInvoice i
+    LEFT JOIN dbo.TblPricingAddonReceipt r ON r.InvoiceID=i.InvoiceID
+    WHERE i.OrderID=@id GROUP BY i.Status`,
+   [{name:"id",type:sql.UniqueIdentifier,value:orderId}]);
+  expect(accounting.recordset[0].InvoiceStatus).toBe("PAID");
+  expect(accounting.recordset[0].ReceiptCount).toBe(1);
+  expect(Number(accounting.recordset[0].ReceiptAmount)).toBe(9900);
   const granted=await query<{Total:number}>(`SELECT COUNT(*) AS Total FROM dbo.TblPricingAddonEntitlement WHERE OrderID=@id`,
    [{name:"id",type:sql.UniqueIdentifier,value:orderId}]);
   expect(granted.recordset[0].Total).toBe(1);

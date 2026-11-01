@@ -17,7 +17,7 @@ export function AdminAddonReviews() {
   finally{setLoading(false);}
  }
  async function review(item:Item,decision:"APPROVED"|"REJECTED"){
-  if(!window.confirm(decision==="APPROVED"?"هل راجعت التحويل فعليًا؟ الموافقة تمنح رصيد الردود فورًا، لكنها لا تنشئ فاتورة أو تسوية مالية. تأكد من وصول التحويل أولًا.":"رفض طلب الإضافة؟"))return;
+  if(!window.confirm(decision==="APPROVED"?"هل راجعت التحويل فعليًا؟ الموافقة تمنح رصيد الردود وتصدر فاتورة وإيصالًا داخليًا. تأكد من وصول التحويل أولًا.":"رفض طلب الإضافة؟"))return;
   setLoading(true);setError("");
   try{const r=await fetch("/api/admin/addons",{method:"POST",
    headers:{"Content-Type":"application/json"},
@@ -28,10 +28,10 @@ export function AdminAddonReviews() {
   finally{setLoading(false);}
  }
  return <section className="space-y-4 rounded-xl border border-border bg-card p-5">
-  <div><h2 className="font-bold">مراجعة إضافات الاستخدام</h2><p className="text-sm text-muted-foreground">راجع التحويل خارج النظام قبل الموافقة. الموافقة تمنح رصيد الردود فورًا. لا يتم حاليًا إنشاء فاتورة أو تسجيل تسوية مالية للإضافة؛ راجع التحويل بنفسك قبل الاعتماد.</p></div>
+  <div><h2 className="font-bold">مراجعة إضافات الاستخدام</h2><p className="text-sm text-muted-foreground">راجع التحويل خارج النظام قبل الموافقة. الموافقة تنشئ فاتورة وإيصالًا داخليًا وتمنح الرصيد فورًا. الربط المالي الخارجي مع Hub منفصل؛ راجع التحويل قبل الاعتماد.</p></div>
   <button className="rounded-lg border border-border px-4 py-2 text-sm" type="button" disabled={loading} onClick={()=>void load()}>تحميل الطلبات المعلقة</button>
   {unsettled && unsettled.count>0 ? <p role="status" className="rounded-lg border border-border p-3 text-sm">
-    {unsettled.count} طلب إضافة معتمد بقيمة {unsettled.amountEgp} ج — لم تتم مطابقتها مع التحويلات أو إصدار فواتيرها ماليًا.
+    {unsettled.count} طلب إضافة معتمد بقيمة {unsettled.amountEgp} ج — لها إيصالات داخلية، لكن لم تكتمل مطابقتها مع سجل التحويلات في Hub.
     لا تعتبر هذه الأرقام إيرادات محصلة.
   </p>:null}
   {error?<p role="alert" className="text-sm text-destructive">{error}</p>:null}

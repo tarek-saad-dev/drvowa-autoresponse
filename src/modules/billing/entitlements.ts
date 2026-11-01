@@ -619,8 +619,7 @@ export async function reserveQuota(params: {
     if (limit != null && currentQty + quantity > limit) {
       // Draft V1: overflow is funded by a single unexpired add-on lot.
       // The original reservation key is unique and checked above.
-      const addonEnabled = process.env.NODE_ENV !== "production"
-        && process.env.DRVO_PRICING_V1_ADDON_CONSUMPTION === "true";
+      const addonEnabled = process.env.DRVO_PRICING_V1_ADDON_CONSUMPTION === "true";
       if (!addonEnabled || params.eventType !== USAGE_EVENT_AI_REPLY || quantity !== 1) {
         quotaErrorFor(params.eventType);
       }
@@ -902,8 +901,7 @@ export async function releaseQuotaReservation(params: {
     );
 
     // Restore only a released add-on allocation. Same tenant and same reservation key.
-    if (process.env.NODE_ENV !== "production"
-        && process.env.DRVO_PRICING_V1_ADDON_CONSUMPTION === "true") {
+    if (process.env.DRVO_PRICING_V1_ADDON_CONSUMPTION === "true") {
       const allocation = await trx.query<{EntitlementID:string;Quantity:number;State:string}>(
         `SELECT EntitlementID,Quantity,State
          FROM dbo.TblPricingAddonReplyAllocation WITH (UPDLOCK,HOLDLOCK)

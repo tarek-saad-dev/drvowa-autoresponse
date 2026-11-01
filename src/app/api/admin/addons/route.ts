@@ -6,7 +6,7 @@ import { reviewAddonTransfer } from "@/modules/pricing/addon-transfer-service";
 import { ForbiddenError } from "@/lib/tenancy/errors";
 
 function guard() {
- if (process.env.NODE_ENV === "production" || process.env.DRVO_PRICING_V1_ADDON_DRAFTS !== "true")
+ if (process.env.DRVO_PRICING_V1_ADDON_DRAFTS !== "true")
   throw new ForbiddenError("مراجعة الإضافات غير مفعلة");
 }
 const reviewSchema=z.object({
@@ -29,12 +29,11 @@ export async function GET() {
      FROM dbo.TblPricingAddonOrder
      WHERE Status=N'APPROVED'`
   );
-  // These are approved add-on orders, not captured payments or issued receipts.
-  // Do NOT include them in revenue totals until financial document/outbox settlement is implemented.
+  // Local invoice/receipt is committed atomically. Hub reconciliation is separate.
   return jsonOk({items:result.recordset,unsettledApprovals:{
     count:reconciliation.recordset[0]?.ApprovedCount??0,
     amountEgp:reconciliation.recordset[0]?.ApprovedAmountEgp??0,
-    financialStatus:"NOT_RECONCILED"
+    financialStatus:"LOCAL_RECEIPT_ONLY"
   }});
  } catch(error){return handleApiError(error);}
 }
@@ -45,6 +44,6 @@ export async function POST(request:Request) {
   const status=await reviewAddonTransfer({
    orderId:data.orderId,reviewerUserId:admin.userId,decision:data.decision
   });
-  return jsonOk({status,orderId:data.orderId,entitlementsGranted:status==="APPROVED",financialSettlementRecorded:false});
+  return jsonOk({status,orderId:data.orderId,entitlementsGranted:status==="APPROVED",localReceiptIssued:status==="APPROVED",hubReconciled:false});
  } catch(error){return handleApiError(error);}
 }

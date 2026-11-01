@@ -5,12 +5,11 @@ import { getCurrentSubscription, getPlanById } from "@/modules/billing/entitleme
 import { quotePricingV1Addon } from "./addon-quotes";
 import { getPricingV1Addon } from "./pricing-v1-catalog";
 
-/** Internal staging endpoint only; payment verification is not implemented. */
+/** Manual verified-transfer order. Requires enabled pricing flag. */
 export async function createAddonTransferDraft(input: {
  businessId: string; userId: string; addonCode: string; idempotencyKey: string;
 }) {
- if (process.env.NODE_ENV === "production" ||
-     process.env.DRVO_PRICING_V1_ADDON_DRAFTS !== "true") throw new Error("ADDON_CHECKOUT_DISABLED");
+ if (process.env.DRVO_PRICING_V1_ADDON_DRAFTS !== "true") throw new Error("ADDON_CHECKOUT_DISABLED");
  const key = input.idempotencyKey.trim();
  if (!key || key.length > 160) throw new Error("INVALID_IDEMPOTENCY_KEY");
  return withTransaction(async trx => {
@@ -48,16 +47,25 @@ export async function createAddonTransferDraft(input: {
     {name:"version",type:sql.NVarChar(48),value:quote.catalogVersion},
     {name:"key",type:sql.NVarChar(160),value:key},
     {name:"reference",type:sql.NVarChar(64),value:"ADD-"+id}]);
+  await trx.query(
+   `INSERT dbo.TblPricingAddonInvoice
+    (InvoiceID,OrderID,BusinessID,AmountMinor,CurrencyCode,Status)
+    VALUES(@invoiceId,@orderId,@businessId,@amountMinor,N'EGP',N'OPEN')`,
+   [{name:"invoiceId",type:sql.UniqueIdentifier,value:randomUUID()},
+    {name:"orderId",type:sql.UniqueIdentifier,value:id},
+    {name:"businessId",type:sql.UniqueIdentifier,value:input.businessId},
+    {name:"amountMinor",type:sql.BigInt,value:quote.priceEgp*100}]
+  );
   return id;
  });
 }
 
 
-/** Staging-only customer transfer declaration; not evidence that funds arrived. */
+/** Customer transfer declaration; not evidence that funds arrived. */
 export async function submitAddonTransfer(input: {
  businessId:string; orderId:string; payerName:string; transferReference:string;
 }) {
- if (process.env.NODE_ENV === "production" || process.env.DRVO_PRICING_V1_ADDON_DRAFTS !== "true")
+ if (process.env.DRVO_PRICING_V1_ADDON_DRAFTS !== "true")
    throw new Error("ADDON_CHECKOUT_DISABLED");
  const payer=input.payerName.trim(), reference=input.transferReference.trim();
  if (!payer || payer.length>160 || !reference || reference.length>160) throw new Error("INVALID_TRANSFER_DETAILS");
@@ -82,7 +90,7 @@ export async function submitAddonTransfer(input: {
 export async function reviewAddonTransfer(input:{
  orderId:string; reviewerUserId:string; decision:"APPROVED"|"REJECTED";
 }) {
- if (process.env.NODE_ENV === "production" || process.env.DRVO_PRICING_V1_ADDON_DRAFTS !== "true")
+ if (process.env.DRVO_PRICING_V1_ADDON_DRAFTS !== "true")
    throw new Error("ADDON_REVIEW_DISABLED");
  return withTransaction(async trx => {
   const row=await trx.query<{Status:string;BusinessID:string;AddonCode:string;Quantity:number;AmountEgp:number}>(
@@ -117,6 +125,31 @@ export async function reviewAddonTransfer(input:{
        {name:"expires",type:sql.DateTime2(3),value:expires}
       ]
     );
+  }
+  // Every transfer decision and its accounting document commit in the same transaction.
+  const financial = await trx.query<{InvoiceID:string;AmountMinor:number;Status:string}>(
+    `SELECT InvoiceID,AmountMinor,Status FROM dbo.TblPricingAddonInvoice WITH (UPDLOCK,HOLDLOCK)
+      WHERE OrderID=@id`,
+    [{name:"id",type:sql.UniqueIdentifier,value:input.orderId}]
+  );
+  const invoice=financial.recordset[0];
+  if(!invoice || invoice.Status!=="OPEN" ||
+     Number(invoice.AmountMinor)!==Math.round(Number(row.recordset[0].AmountEgp)*100))
+    throw new Error("ADDON_INVOICE_NOT_OPEN_OR_MISMATCH");
+  if(input.decision==="APPROVED"){
+    await trx.execute(`UPDATE dbo.TblPricingAddonInvoice SET Status=N'PAID',
+      SettledAtUtc=SYSUTCDATETIME() WHERE InvoiceID=@invoiceId AND Status=N'OPEN'`,
+      [{name:"invoiceId",type:sql.UniqueIdentifier,value:invoice.InvoiceID}]);
+    await trx.query(`INSERT dbo.TblPricingAddonReceipt
+      (ReceiptID,InvoiceID,AmountMinor,CurrencyCode)
+      VALUES(@receiptId,@invoiceId,@amount,N'EGP')`,
+      [{name:"receiptId",type:sql.UniqueIdentifier,value:randomUUID()},
+       {name:"invoiceId",type:sql.UniqueIdentifier,value:invoice.InvoiceID},
+       {name:"amount",type:sql.BigInt,value:Number(invoice.AmountMinor)}]);
+  } else {
+    await trx.execute(`UPDATE dbo.TblPricingAddonInvoice SET Status=N'VOID'
+      WHERE InvoiceID=@invoiceId AND Status=N'OPEN'`,
+      [{name:"invoiceId",type:sql.UniqueIdentifier,value:invoice.InvoiceID}]);
   }
   await trx.query(
    `UPDATE dbo.TblPricingAddonOrder SET Status=@decision,ReviewedByUserID=@reviewer,
