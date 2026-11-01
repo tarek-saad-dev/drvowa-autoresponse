@@ -461,7 +461,7 @@ describe.runIf(dbEnvOk && isolated)("manual instapay billing lifecycle", () => {
 
     const snap = await getEntitlementSnapshot(ctx.businessId);
     expect(snap.plan?.code).toBe("STARTER");
-    expect(snap.plan?.monthlyAiReplies).toBe(750);
+    expect(snap.plan?.monthlyAiReplies).toBe(1000);
 
     const currents = await query<{ Cnt: number }>(
       `SELECT COUNT(1) AS Cnt FROM TblSubscription
