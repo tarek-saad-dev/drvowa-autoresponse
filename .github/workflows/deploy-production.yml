@@ -100,6 +100,9 @@ jobs:
             echo "==> Applying database migrations"
             npm run db:migrate
 
+            echo "==> Verifying Pricing V1 production plans, real invoices, receipts and balances (read-only)"
+            node --env-file-if-exists=.env.production.local --import tsx scripts/pricing-v1-production-smoke.ts
+
             echo "==> Validating admin financial reports against the production database (read-only)"
             npx tsx scripts/admin-financial-smoke.ts
 
