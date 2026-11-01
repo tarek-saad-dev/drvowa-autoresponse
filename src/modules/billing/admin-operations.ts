@@ -72,6 +72,7 @@ export async function performBillingAdminAction(params: {
       await ensurePaymentInvoice(payment, trx);
       await settlePaymentInvoice(payment, trx);
     } else if (params.action === "discount") {
+      if (payment.discountCode) throw new ConflictError("لا يمكن الجمع بين كود خصم وخصم إداري على نفس الطلب");
       if (payment.status !== "AWAITING_TRANSFER") throw new ConflictError("الخصم متاح قبل تأكيد التحويل فقط");
       await ensurePaymentInvoice(payment, trx);
       const invoice = (await trx.query<{ SubtotalMinor: number; Status: string }>(`SELECT SubtotalMinor, Status FROM TblBillingInvoice WITH (UPDLOCK, HOLDLOCK) WHERE PaymentRequestID = @payment`, key)).recordset[0];

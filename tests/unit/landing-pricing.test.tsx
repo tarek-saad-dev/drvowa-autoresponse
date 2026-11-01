@@ -83,17 +83,17 @@ describe("Pricing V1 public comparison", () => {
   const live = [
     plan({ code: "FREE", displayName: "مجاني", monthlyPriceAmount: 0,
       monthlyAiReplies: 30, maxAgents: 1, maxActiveKnowledgeItems: 50 }),
-    plan({ code: "STARTER", displayName: "بداية", monthlyPriceAmount: 299,
-      monthlyAiReplies: 750, maxAgents: 1, maxActiveKnowledgeItems: 200 }),
-    plan({ code: "PRO", displayName: "نمو", monthlyPriceAmount: 599,
-      monthlyAiReplies: 2500, maxAgents: 3, maxActiveKnowledgeItems: 500 }),
-    plan({ code: "BUSINESS", displayName: "أعمال", monthlyPriceAmount: 1199,
-      monthlyAiReplies: 6000, maxAgents: 8, maxActiveKnowledgeItems: 2000 }),
+    plan({ code: "STARTER", displayName: "بداية", monthlyPriceAmount: 1490,
+      monthlyAiReplies: 1000, maxAgents: 1, maxActiveKnowledgeItems: 100 }),
+    plan({ code: "PRO", displayName: "نمو", monthlyPriceAmount: 3490,
+      monthlyAiReplies: 3000, maxAgents: 3, maxActiveKnowledgeItems: 400 }),
+    plan({ code: "BUSINESS", displayName: "أعمال", monthlyPriceAmount: 8490,
+      monthlyAiReplies: 8000, maxAgents: 8, maxActiveKnowledgeItems: 1200 }),
   ];
   it("shows the live Egyptian prices and all four plans, with an accessible comparison", () => {
     const html = renderToStaticMarkup(createElement(PricingCards, {
       plans: live,
-      annualPrices: { STARTER: 2990, PRO: 5990, BUSINESS: 11990 },
+      annualPrices: { STARTER: 14900, PRO: 34900, BUSINESS: 84900 },
       freeTrialEnabled: true,
       replyAddons: [
         { quantity: 250, priceEgp: 99, validDays: 30 },
@@ -101,12 +101,12 @@ describe("Pricing V1 public comparison", () => {
         { quantity: 3000, priceEgp: 599, validDays: 30 },
       ],
     }));
-    for (const price of ["299", "599", "1,199"]) expect(html).toContain(price);
-    for (const allowance of ["750", "2,500", "6,000"]) expect(html).toContain(allowance);
+    for (const price of ["1,490", "3,490", "8,490"]) expect(html).toContain(price);
+    for (const allowance of ["1,000", "3,000", "8,000"]) expect(html).toContain(allowance);
     expect(html).toContain('aria-label="مدة الاشتراك"');
     expect(html).toContain('aria-label="جدول مقارنة الأسعار وحدود الاستخدام"');
     expect(html).toContain("وفّر شهرين");
-    expect(html).toContain("2,990 جنيه سنويًا");
+    expect(html).toContain("14,900 جنيه سنويًا");
     expect(html).toContain("30 رد مرة واحدة خلال 7 أيام");
     expect(html).not.toContain("30 رد AI / شهر");
     expect(html).toContain("99 ج");
@@ -118,7 +118,7 @@ describe("Pricing V1 public comparison", () => {
       plans: live, annualPrices: null, freeTrialEnabled: false,
     }));
     expect(html).not.toContain('aria-label="مدة الاشتراك"');
-    expect(html).not.toContain("2,990");
+    expect(html).not.toContain("14,900");
     expect(html).not.toContain("30 رد مرة واحدة خلال 7 أيام");
     expect(html).not.toContain("99 ج");
   });

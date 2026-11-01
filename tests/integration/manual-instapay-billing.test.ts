@@ -113,12 +113,62 @@ describe.runIf(dbEnvOk && isolated)("manual instapay billing lifecycle", () => {
     await closePool().catch(() => undefined);
   });
 
+  it("coupon: snapshots discount, holds capacity, releases canceled intent, settles exactly one receipt", async () => {
+    process.env.MANUAL_INSTAPAY_ENABLED="1";
+    const admin=await makeAdmin();
+    const code="PROMO"+randomUUID().slice(0,8).toUpperCase();
+    const first=await onboardUser(`coupon1_${randomUUID().slice(0,8)}@example.com`);
+    const second=await onboardUser(`coupon2_${randomUUID().slice(0,8)}@example.com`);
+    await query(`INSERT dbo.TblPricingDiscountCode
+      (Code,Kind,Value,MaxRedemptions,PlanCode,BillingInterval,CreatedByUserID)
+      VALUES(@code,N'PERCENT',20,1,N'STARTER',N'MONTHLY',@admin)`,[
+      {name:"code",type:sql.NVarChar(32),value:code},
+      {name:"admin",type:sql.UniqueIdentifier,value:admin},
+    ]);
+    const intent=await createManualPaymentIntent({...first,planCode:"STARTER",discountCode:code.toLowerCase()});
+    expect(intent.amount).toBe(1192);
+    expect(intent.discountCode).toBe(code);
+    expect(intent.subtotalMinor).toBe(149000);
+    expect(intent.discountMinor).toBe(29800);
+    const invoice=(await listBillingDocuments(first.businessId))[0];
+    expect(invoice.Status).toBe("OPEN");
+    expect(Number(invoice.SubtotalMinor)).toBe(149000);
+    expect(Number(invoice.DiscountMinor)).toBe(29800);
+    expect(Number(invoice.TotalMinor)).toBe(119200);
+    expect((await createManualPaymentIntent({...first,planCode:"STARTER",discountCode:code})).paymentRequestId)
+      .toBe(intent.paymentRequestId);
+    await expect(createManualPaymentIntent({...second,planCode:"STARTER",discountCode:code}))
+      .rejects.toThrow("انتهى عدد");
+    await expect(createManualPaymentIntent({...second,planCode:"PRO",discountCode:code}))
+      .rejects.toThrow("غير صالح للباقة");
+    const cancelled=await createManualPaymentIntent({...first,planCode:"STARTER"});
+    expect(cancelled.paymentRequestId).not.toBe(intent.paymentRequestId);
+    expect((await listBillingDocuments(first.businessId)).find(d=>d.InvoiceID===invoice.InvoiceID)?.Status).toBe("VOID");
+    const newIntent=await createManualPaymentIntent({...second,planCode:"STARTER",discountCode:code});
+    expect(newIntent.amount).toBe(1192);
+    await confirmManualPaymentTransfer({...second,paymentRequestId:newIntent.paymentRequestId,payerName:"Discount Tester"});
+    const outcomes=await Promise.all([1,2].map(()=>approveManualPayment({
+      paymentRequestId:newIntent.paymentRequestId,reviewerUserId:admin,
+    })));
+    expect(outcomes.filter(x=>!x.alreadyApproved)).toHaveLength(1);
+    const documents=await listBillingDocuments(second.businessId);
+    expect(documents).toHaveLength(1);
+    expect(documents[0].Status).toBe("PAID");
+    expect(documents[0].ReceiptNumber).not.toBeNull();
+    expect(Number(documents[0].TotalMinor)).toBe(119200);
+    const count=await query<{Used:number}>(`SELECT COUNT(*) AS Used FROM dbo.TblManualPaymentRequest
+      WHERE DiscountCode=@code AND Status=N'APPROVED'`,[
+      {name:"code",type:sql.NVarChar(32),value:code},
+    ]);
+    expect(count.recordset[0].Used).toBe(1);
+  });
+
   it("V2: invoices precede payment; annual approval issues exactly one receipt", async () => {
     process.env.MANUAL_INSTAPAY_ENABLED = "1";
     const ctx = await onboardUser(`v2_year_${randomUUID().slice(0, 8)}@example.com`);
     const admin = await makeAdmin();
     const intent = await createManualPaymentIntent({ ...ctx, planCode: "STARTER", billingInterval: "ANNUAL" });
-    expect(intent.amount).toBe(299 * 12);
+    expect(intent.amount).toBe(1490 * 12);
     const before = await listBillingDocuments(ctx.businessId);
     expect(before).toHaveLength(1);
     expect(before[0].Status).toBe("OPEN");
@@ -132,7 +182,7 @@ describe.runIf(dbEnvOk && isolated)("manual instapay billing lifecycle", () => {
     expect(after).toHaveLength(1);
     expect(after[0].Status).toBe("PAID");
     expect(after[0].ReceiptNumber).not.toBeNull();
-    expect(Number(after[0].TotalMinor)).toBe(299 * 12 * 100);
+    expect(Number(after[0].TotalMinor)).toBe(1490 * 12 * 100);
   });
 
   it("V2: full discount settles as waived and never issues a cash receipt", async () => {
@@ -289,15 +339,15 @@ describe.runIf(dbEnvOk && isolated)("manual instapay billing lifecycle", () => {
     expect(free?.displayName).toBe("مجاني");
     expect(free?.monthlyPriceAmount).toBe(0);
     expect(starter?.displayName).toBe("بداية");
-    expect(starter?.monthlyPriceAmount).toBe(299);
-    expect(starter?.maxActiveKnowledgeItems).toBe(200);
-    expect(starter?.monthlyAiReplies).toBe(750);
+    expect(starter?.monthlyPriceAmount).toBe(1490);
+    expect(starter?.maxActiveKnowledgeItems).toBe(100);
+    expect(starter?.monthlyAiReplies).toBe(1000);
     expect(pro?.displayName).toBe("احترافي");
-    expect(pro?.monthlyPriceAmount).toBe(599);
+    expect(pro?.monthlyPriceAmount).toBe(3490);
     expect(pro?.maxWhatsAppConnections).toBe(1);
     expect(business?.displayName).toBe("أعمال");
-    expect(business?.monthlyPriceAmount).toBe(1199);
-    expect(business?.monthlyAiReplies).toBe(6000);
+    expect(business?.monthlyPriceAmount).toBe(8490);
+    expect(business?.monthlyAiReplies).toBe(8000);
     expect(business?.maxAgents).toBe(8);
   });
 
@@ -324,7 +374,7 @@ describe.runIf(dbEnvOk && isolated)("manual instapay billing lifecycle", () => {
     });
     expect(intent.status).toBe("AWAITING_TRANSFER");
     expect(intent.paymentReference).toMatch(/^DRV-[A-Z2-9]{6}$/);
-    expect(intent.amount).toBe(299);
+    expect(intent.amount).toBe(1490);
     expect(intent.requestedPlanCode).toBe("STARTER");
     expect(intent.payerName).toBeNull();
 
@@ -373,7 +423,7 @@ describe.runIf(dbEnvOk && isolated)("manual instapay billing lifecycle", () => {
     });
     expect(first.status).toBe("PENDING");
     expect(first.paymentReference).toBe(intent.paymentReference);
-    expect(first.amount).toBe(299);
+    expect(first.amount).toBe(1490);
 
     const again = await confirmManualPaymentTransfer({
       businessId: ctx.businessId,
@@ -421,7 +471,7 @@ describe.runIf(dbEnvOk && isolated)("manual instapay billing lifecycle", () => {
     expect(Number(currents.recordset[0]?.Cnt)).toBe(1);
   });
 
-  it("PRICE SNAPSHOT: approve at locked 599 after live price becomes 1199", async () => {
+  it("PRICE SNAPSHOT: approve at locked 3490 after live price becomes 8490", async () => {
     process.env.MANUAL_INSTAPAY_ENABLED = "1";
     const ctx = await onboardUser(`mb_snap_${randomUUID().slice(0, 8)}@example.com`);
     const pro = await getPlanByCode("PRO");
@@ -432,7 +482,7 @@ describe.runIf(dbEnvOk && isolated)("manual instapay billing lifecycle", () => {
       userId: ctx.userId,
       planCode: "PRO",
     });
-    expect(intent.amount).toBe(599);
+    expect(intent.amount).toBe(3490);
 
     await confirmManualPaymentTransfer({
       businessId: ctx.businessId,
@@ -442,7 +492,7 @@ describe.runIf(dbEnvOk && isolated)("manual instapay billing lifecycle", () => {
     });
 
     await query(
-      `UPDATE TblPlan SET MonthlyPriceAmount = 1199, UpdatedAtUtc = SYSUTCDATETIME()
+      `UPDATE TblPlan SET MonthlyPriceAmount = 8490, UpdatedAtUtc = SYSUTCDATETIME()
        WHERE PlanID = @planId`,
       [
         {
@@ -461,13 +511,13 @@ describe.runIf(dbEnvOk && isolated)("manual instapay billing lifecycle", () => {
       });
       expect(approved.alreadyApproved).toBe(false);
       expect(approved.priceChangedWarning).toBe(true);
-      expect(approved.payment.amount).toBe(599);
+      expect(approved.payment.amount).toBe(3490);
 
       const snap = await getEntitlementSnapshot(ctx.businessId);
       expect(snap.plan?.code).toBe("PRO");
     } finally {
       await query(
-        `UPDATE TblPlan SET MonthlyPriceAmount = 599, UpdatedAtUtc = SYSUTCDATETIME()
+        `UPDATE TblPlan SET MonthlyPriceAmount = 3490, UpdatedAtUtc = SYSUTCDATETIME()
          WHERE PlanID = @planId`,
         [
           {

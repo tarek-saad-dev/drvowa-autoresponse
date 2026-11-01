@@ -13,7 +13,7 @@ describe("draft pricing v1 contract (not live)", () => {
   });
   it("has agreed monthly, annual and reply limits", () => {
     expect(PRICING_V1_PLANS.map(p => [p.monthlyEgp, p.annualEgp, p.aiReplies]))
-      .toEqual([[0, 0, 30], [299, 2990, 750], [599, 5990, 2500], [1199, 11990, 6000]]);
+      .toEqual([[0, 0, 30], [1490, 14900, 1000], [3490, 34900, 3000], [8490, 84900, 8000]]);
     for (const p of PRICING_V1_PLANS.filter(p => p.code !== "FREE")) {
       expect(pricingV1AnnualSavings(p.monthlyEgp, p.annualEgp)).toBeGreaterThan(0);
     }

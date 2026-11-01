@@ -15,6 +15,9 @@ import type {
 
 type PaymentRow = {
   BillingInterval: "MONTHLY" | "ANNUAL";
+  DiscountCode: string | null;
+  SubtotalMinor: number | null;
+  DiscountMinor: number | null;
   PaymentRequestID: string;
   BusinessID: string;
   RequestedPlanID: string;
@@ -46,6 +49,9 @@ function db(trx?: TransactionClient) {
 function mapPayment(row: PaymentRow): ManualPaymentRequest {
   return {
     billingInterval: row.BillingInterval,
+    discountCode: row.DiscountCode,
+    subtotalMinor: row.SubtotalMinor == null ? null : Number(row.SubtotalMinor),
+    discountMinor: row.DiscountMinor == null ? null : Number(row.DiscountMinor),
     paymentRequestId: normalizeUuid(row.PaymentRequestID),
     businessId: normalizeUuid(row.BusinessID),
     requestedPlanId: normalizeUuid(row.RequestedPlanID),
@@ -72,7 +78,7 @@ function mapPayment(row: PaymentRow): ManualPaymentRequest {
 }
 
 const PAYMENT_SELECT = `
-  BillingInterval, PaymentRequestID, BusinessID, RequestedPlanID, RequestedPlanCode, RequestedPlanDisplayName,
+  BillingInterval, DiscountCode, SubtotalMinor, DiscountMinor, PaymentRequestID, BusinessID, RequestedPlanID, RequestedPlanCode, RequestedPlanDisplayName,
   PaymentMethod, CurrencyCode, Amount, PaymentReference, PayerName, TransferReference,
   CustomerNote, Status, CreatedByUserID, SubmittedByUserID, SubmittedAtUtc,
   ReviewedByUserID, ReviewedAtUtc, ReviewNote, ApprovedSubscriptionID,
@@ -199,6 +205,9 @@ export async function insertAwaitingTransfer(
     amount: number;
     billingInterval?: "MONTHLY" | "ANNUAL";
     pricingCatalogVersion?: string | null;
+    discountCode?: string | null;
+    subtotalMinor?: number | null;
+    discountMinor?: number | null;
     paymentReference: string;
     createdByUserId: string;
   },
@@ -211,11 +220,13 @@ export async function insertAwaitingTransfer(
     `INSERT INTO TblManualPaymentRequest (
       PaymentRequestID, BusinessID, RequestedPlanID, RequestedPlanCode, RequestedPlanDisplayName,
       PaymentMethod, CurrencyCode, Amount, PaymentReference, Status, BillingInterval,
-      CreatedByUserID, CreatedAtUtc, UpdatedAtUtc, PricingCatalogVersion
+      CreatedByUserID, CreatedAtUtc, UpdatedAtUtc, PricingCatalogVersion,
+      DiscountCode, SubtotalMinor, DiscountMinor
     ) VALUES (
       @paymentRequestId, @businessId, @requestedPlanId, @requestedPlanCode, @requestedPlanDisplayName,
       @paymentMethod, @currencyCode, @amount, @paymentReference, N'AWAITING_TRANSFER', @billingInterval,
-      @createdByUserId, @createdAtUtc, @updatedAtUtc, @pricingCatalogVersion
+      @createdByUserId, @createdAtUtc, @updatedAtUtc, @pricingCatalogVersion,
+      @discountCode, @subtotalMinor, @discountMinor
     )`,
     [
       {
@@ -256,6 +267,9 @@ export async function insertAwaitingTransfer(
       { name: "amount", type: sql.Decimal(12, 2), value: params.amount },
       { name: "billingInterval", type: sql.NVarChar(16), value: params.billingInterval ?? "MONTHLY" },
       { name: "pricingCatalogVersion", type: sql.NVarChar(48), value: params.pricingCatalogVersion ?? null },
+      { name: "discountCode", type: sql.NVarChar(32), value: params.discountCode ?? null },
+      { name: "subtotalMinor", type: sql.BigInt, value: params.subtotalMinor ?? null },
+      { name: "discountMinor", type: sql.BigInt, value: params.discountMinor ?? null },
       {
         name: "paymentReference",
         type: sql.NVarChar(64),
@@ -281,6 +295,9 @@ export async function insertAwaitingTransfer(
     currencyCode: params.currencyCode,
     amount: params.amount,
     billingInterval: params.billingInterval ?? "MONTHLY",
+    discountCode: params.discountCode ?? null,
+    subtotalMinor: params.subtotalMinor ?? null,
+    discountMinor: params.discountMinor ?? null,
     paymentReference: params.paymentReference,
     payerName: null,
     transferReference: null,

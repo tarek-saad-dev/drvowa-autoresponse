@@ -15,12 +15,21 @@ export type BillingDocument = {
 /** Caller holds the payment-request lock, or has just inserted that request. */
 export async function ensurePaymentInvoice(payment: ManualPaymentRequest, trx: TransactionClient): Promise<void> {
   const totalMinor = (payment.amount === 0 ? 0 : decimal12_2ToMinorUnits(payment.amount.toFixed(2)));
+  // The payment intent owns the immutable coupon snapshot. This read is done
+  // inside the same transaction as the invoice, preserving exact audit totals.
+  const snapshot = await trx.query<{DiscountCode:string|null;SubtotalMinor:number|null;DiscountMinor:number|null}>(
+    "SELECT DiscountCode,SubtotalMinor,DiscountMinor FROM TblManualPaymentRequest WHERE PaymentRequestID=@id",
+    [{name:"id",type:sql.UniqueIdentifier,value:payment.paymentRequestId}]);
+  const discount = snapshot.recordset[0];
+  const subtotalMinor = discount?.DiscountCode ? Number(discount.SubtotalMinor) : totalMinor;
+  const discountMinor = discount?.DiscountCode ? Number(discount.DiscountMinor) : 0;
+  if(subtotalMinor-discountMinor!==totalMinor) throw new ConflictError("تفاصيل خصم الفاتورة لا تطابق طلب الدفع");
   await trx.query(`IF NOT EXISTS (
       SELECT 1 FROM TblBillingInvoice WITH (UPDLOCK, HOLDLOCK) WHERE PaymentRequestID = @paymentId
     ) INSERT INTO TblBillingInvoice
       (InvoiceID, BusinessID, PaymentRequestID, PlanCode, PlanDisplayName, CurrencyCode,
-       SubtotalMinor, DiscountMinor, TotalMinor, Status, BillingInterval)
-    VALUES (@id, @businessId, @paymentId, @planCode, @planName, @currency, @amount, 0, @amount, N'OPEN', @interval)`, [
+       SubtotalMinor, DiscountMinor, DiscountReason, TotalMinor, Status, BillingInterval)
+    VALUES (@id, @businessId, @paymentId, @planCode, @planName, @currency, @subtotal, @discount, @discountReason, @amount, N'OPEN', @interval)`, [
     { name: "id", type: sql.UniqueIdentifier, value: randomUUID() },
     { name: "businessId", type: sql.UniqueIdentifier, value: payment.businessId },
     { name: "paymentId", type: sql.UniqueIdentifier, value: payment.paymentRequestId },
@@ -28,6 +37,9 @@ export async function ensurePaymentInvoice(payment: ManualPaymentRequest, trx: T
     { name: "planName", type: sql.NVarChar(120), value: payment.requestedPlanDisplayName },
     { name: "currency", type: sql.NVarChar(3), value: payment.currencyCode },
     { name: "amount", type: sql.BigInt, value: totalMinor },
+    { name: "subtotal", type: sql.BigInt, value: subtotalMinor },
+    { name: "discount", type: sql.BigInt, value: discountMinor },
+    { name: "discountReason", type: sql.NVarChar(1000), value: discount?.DiscountCode ? "كود خصم: "+discount.DiscountCode : null },
     { name: "interval", type: sql.NVarChar(16), value: payment.billingInterval ?? "MONTHLY" },
   ]);
 }
