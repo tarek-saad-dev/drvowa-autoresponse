@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { getPublicPromo,previewPromoPrice } from "@/modules/pricing/public-promo";
 import { redirect } from "next/navigation";
 import { OnboardingLogoutButton } from "@/components/onboarding/onboarding-logout-button";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
@@ -22,6 +24,8 @@ export default async function ChoosePlanPage() {
   if (admin) redirect("/admin");
   if (businesses.length) redirect("/dashboard/billing");
 
+  const promoCode=(await cookies()).get("drvo_promo_code")?.value;
+  const promo=promoCode?await getPublicPromo(promoCode):null;
   const paid = plans.filter((plan) => plan.status === "ACTIVE" && plan.code !== "FREE" && plan.monthlyPriceAmount != null && plan.monthlyPriceAmount > 0);
   return (
     <main dir="rtl" className="min-h-screen bg-background px-4 py-12 text-foreground sm:px-8">
@@ -34,6 +38,15 @@ export default async function ChoosePlanPage() {
           <h1 className="mt-3 text-3xl font-black sm:text-4xl">اختار الخطة المناسبة لشغلك</h1>
           <p className="mt-3 text-muted-foreground">تقدر تختار باقة مدفوعة أو تبدأ مجانًا. مش هيتخصم منك أي مبلغ إلا بعد إتمام الدفع واعتماده.</p>
         </div>
+        {promo ? <div role="status" className="mx-auto mb-6 max-w-2xl rounded-2xl border border-primary/30 bg-primary/5 p-4 text-center text-sm">
+          <b>عرضك الخاص محفوظ 🎟</b>
+          <p className="mt-1 text-muted-foreground">
+            كود <strong dir="ltr" className="font-mono">{promo.code}</strong>
+            {" · "}{promo.kind==="PERCENT"?promo.value+"%":promo.value+" جنيه"} خصم على أول اشتراك مدفوع
+            {promo.billingInterval==="ANNUAL"?" سنوي":promo.billingInterval==="MONTHLY"?" شهري":""}.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">هنحسب المبلغ بعد الخصم وقت تجهيز طلب الدفع، وبعد ما تجهّز نشاطك.</p>
+        </div> : null}
         {paid.length ? (
           <div className="grid gap-5 md:grid-cols-3">
             {paid.map((plan) => (
@@ -42,6 +55,12 @@ export default async function ChoosePlanPage() {
                 <h2 className="text-xl font-black">{plan.displayName}</h2>
                 <p className="mt-4 text-3xl font-black" dir="ltr">{new Intl.NumberFormat("en-EG").format(plan.monthlyPriceAmount!)} {plan.currencyCode ?? "EGP"}</p>
                 <p className="mt-1 text-sm text-muted-foreground">شهريًا · الدفع بعد تجهيز النشاط</p>
+                {promo && promo.billingInterval!=="ANNUAL" && (!promo.planCode||promo.planCode===plan.code)
+                 ? (()=>{const preview=previewPromoPrice({kind:promo.kind,value:promo.value,baseEgp:Number(plan.monthlyPriceAmount)});
+                   return preview ? <p className="mt-2 text-sm font-bold text-primary">
+                     بعد كود الخصم: {new Intl.NumberFormat("en-EG",{maximumFractionDigits:2}).format(preview.discountedEgp)} جنيه / شهر
+                   </p> : null;
+                 })() : null}
                 <ul className="my-7 flex-1 space-y-3 text-sm">
                   {benefits.map((benefit) => <li key={benefit}>✓ {benefit}</li>)}
                   <li>✓ {plan.monthlyAiReplies?.toLocaleString("en-US") ?? "غير محدد"} رد ذكاء اصطناعي شهريًا</li>

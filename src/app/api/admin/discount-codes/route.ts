@@ -8,6 +8,7 @@ import { ConflictError, ValidationError } from "@/lib/tenancy/errors";
 const create = z.object({
   action: z.literal("create"),
   code: z.string().min(3).max(32),
+  partnerDisplayName: z.string().trim().max(80).optional().nullable(),
   kind: z.enum(["PERCENT","FIXED"]),
   value: z.number().positive().max(100000),
   maxRedemptions: z.number().int().positive().max(100000).nullable(),
@@ -26,7 +27,7 @@ const schema = z.discriminatedUnion("action",[create,toggle]);
 export async function GET() {
   try {
     await requirePlatformAdmin();
-    const { recordset }=await query(`SELECT TOP (200) c.Code,c.Kind,c.Value,c.MaxRedemptions,
+    const { recordset }=await query(`SELECT TOP (200) c.Code,c.PartnerDisplayName,c.Kind,c.Value,c.MaxRedemptions,
       c.StartsAtUtc,c.ExpiresAtUtc,c.PlanCode,c.BillingInterval,c.IsActive,c.CreatedAtUtc,
       (SELECT COUNT(*) FROM dbo.TblManualPaymentRequest p
         WHERE p.DiscountCode=c.Code AND p.Status IN (N'AWAITING_TRANSFER',N'PENDING',N'APPROVED')) AS Reserved,
@@ -63,9 +64,10 @@ export async function POST(request:Request) {
       [{name:"code",type:sql.NVarChar(32),value:code}]);
     if(exists.recordset.length) throw new ConflictError("كود الخصم موجود بالفعل");
     await query(`INSERT dbo.TblPricingDiscountCode
-      (Code,Kind,Value,MaxRedemptions,StartsAtUtc,ExpiresAtUtc,PlanCode,BillingInterval,CreatedByUserID)
-      VALUES(@code,@kind,@value,@max,@start,@end,@plan,@interval,@user)`,[
+      (Code,PartnerDisplayName,Kind,Value,MaxRedemptions,StartsAtUtc,ExpiresAtUtc,PlanCode,BillingInterval,CreatedByUserID)
+      VALUES(@code,@partner,@kind,@value,@max,@start,@end,@plan,@interval,@user)`,[
       {name:"code",type:sql.NVarChar(32),value:code},
+      {name:"partner",type:sql.NVarChar(80),value:body.partnerDisplayName?.trim()||null},
       {name:"kind",type:sql.NVarChar(10),value:body.kind},
       {name:"value",type:sql.Decimal(12,2),value:body.value},
       {name:"max",type:sql.Int,value:body.maxRedemptions},

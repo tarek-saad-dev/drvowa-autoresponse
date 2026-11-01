@@ -2,15 +2,15 @@
 import { useCallback, useEffect, useState } from "react";
 
 type DiscountRow = {
-  Code:string;Kind:"PERCENT"|"FIXED";Value:number;MaxRedemptions:number|null;
+  Code:string;PartnerDisplayName:string|null;Kind:"PERCENT"|"FIXED";Value:number;MaxRedemptions:number|null;
   PlanCode:string|null;BillingInterval:string|null;ExpiresAtUtc:string|null;
   IsActive:boolean;Reserved:number;Redeemed:number;
 };
 type FormData = {
-  code:string;kind:"PERCENT"|"FIXED";value:string;maxRedemptions:string;
+  code:string;partnerDisplayName:string;kind:"PERCENT"|"FIXED";value:string;maxRedemptions:string;
   planCode:string;billingInterval:string;expiresAt:string;
 };
-const initial:FormData={code:"",kind:"PERCENT",value:"20",maxRedemptions:"25",
+const initial:FormData={code:"",partnerDisplayName:"",kind:"PERCENT",value:"70",maxRedemptions:"25",
   planCode:"",billingInterval:"",expiresAt:""};
 
 export function AdminDiscountCodes(){
@@ -53,7 +53,7 @@ export function AdminDiscountCodes(){
   return <div className="grid gap-5 xl:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
     <form className="space-y-4 rounded-2xl border border-border bg-card p-5"
       onSubmit={e=>{e.preventDefault();void call({
-        action:"create",code:form.code.toUpperCase().trim(),kind:form.kind,
+        action:"create",code:form.code.toUpperCase().trim(),partnerDisplayName:form.partnerDisplayName.trim()||null,kind:form.kind,
         value:Number(form.value),
         maxRedemptions:form.maxRedemptions?Number(form.maxRedemptions):null,
         planCode:form.planCode||null,billingInterval:form.billingInterval||null,
@@ -66,6 +66,12 @@ export function AdminDiscountCodes(){
           dir="ltr" required minLength={3} maxLength={32} pattern="[A-Za-z0-9_-]{3,32}"
           value={form.code} placeholder="DRVO20" onChange={e=>setForm({...form,code:e.target.value.toUpperCase()})}/>
       </label>
+      <label className="block text-sm font-semibold">اسم المؤثر أو صاحب الرابط (اختياري)
+        <input className="mt-1 w-full rounded-lg border border-border bg-background p-2"
+          maxLength={80} value={form.partnerDisplayName} placeholder="مثال: عرض خاص مع أحمد"
+          onChange={e=>setForm({...form,partnerDisplayName:e.target.value})}/>
+      </label>
+      <p className="text-xs text-muted-foreground">هيظهر الاسم في صفحة العرض الخاصة بالكود.</p>
       <div className="grid grid-cols-2 gap-3">
         <label className="block text-sm">نوع الخصم
           <select className="mt-1 w-full rounded-lg border border-border bg-background p-2"
@@ -123,6 +129,7 @@ export function AdminDiscountCodes(){
         {items.map(item=><article key={item.Code} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border p-4">
           <div className="min-w-0">
             <b dir="ltr" className="block font-mono">{item.Code}</b>
+            {item.PartnerDisplayName?<p className="text-xs text-primary">{item.PartnerDisplayName}</p>:null}
             <p className="text-sm">{item.Kind==="PERCENT"?item.Value+"%":item.Value+" ج"} خصم
               {" · "}{item.PlanCode??"كل الباقات"}{" · "}{item.BillingInterval==="ANNUAL"?"سنوي":item.BillingInterval==="MONTHLY"?"شهري":"شهري وسنوي"}
             </p>
@@ -131,6 +138,18 @@ export function AdminDiscountCodes(){
               {item.MaxRedemptions?" من "+item.MaxRedemptions:""}
               {item.ExpiresAtUtc?" · ينتهي "+new Date(item.ExpiresAtUtc).toLocaleDateString("ar-EG"):""}
             </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <a href={`/promo/${encodeURIComponent(item.Code)}`} target="_blank" rel="noopener noreferrer"
+              className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-bold text-primary">
+              معاينة صفحة العرض
+            </a>
+            <button type="button" className="rounded-lg border border-border px-3 py-2 text-sm font-semibold"
+              onClick={()=>void navigator.clipboard.writeText(
+                `https://drvoautorespond.com/promo/${encodeURIComponent(item.Code)}`
+              ).then(()=>setNotice("تم نسخ الرابط الخاص بالكود")).catch(()=>setError("تعذر نسخ الرابط"))}>
+              نسخ رابط المؤثر
+            </button>
           </div>
           <button type="button" disabled={busy}
             className="rounded-lg border border-border px-3 py-2 text-sm font-semibold disabled:opacity-50"
