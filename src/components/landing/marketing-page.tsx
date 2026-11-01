@@ -346,7 +346,6 @@ export function MarketingPage() {
               <span>وكبّر مع احتياجك.</span>
             </h2>
             <p>قارن السعر وحدود الاستخدام، واختار الباقة المناسبة لنشاطك.</p>
-            <span className={s.billingLabel}>اشتراك شهري</span>
           </div>
           <Suspense
             fallback={
@@ -358,8 +357,8 @@ export function MarketingPage() {
             <LandingPricing />
           </Suspense>
           <p className={s.pricingFootnote}>
-            الأسعار وحدود الاستخدام من كتالوج الباقات الحالي. راجع تفاصيل الباقة
-            داخل حسابك قبل الاشتراك.
+            الأسعار وحدود الاستخدام من الباقات المفعّلة حاليًا. الاشتراك السنوي يُدفع مقدمًا،
+            وبيتجدد حد الردود شهريًا. راجع التفاصيل داخل حسابك قبل الدفع.
           </p>
         </section>
         <section id="faq" className={`${s.container} ${s.faqSection}`}>
