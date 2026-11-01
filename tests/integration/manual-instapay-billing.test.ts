@@ -683,7 +683,7 @@ describe.runIf(dbEnvOk && isolated)("manual instapay billing lifecycle", () => {
     const current = await getCurrentSubscription(ctx.businessId);
     const free = await getPlanByCode("FREE");
     expect(current?.planId).toBe(free?.planId);
-    expect(free?.monthlyAiReplies).toBe(500);
+    expect(free?.monthlyAiReplies).toBe(30);
 
     await expect(
       withResourceLimitGate({
