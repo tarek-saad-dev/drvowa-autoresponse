@@ -290,13 +290,26 @@ async function finishCompletedRuns(): Promise<void> {
 async function markExpiredUnknown() {
   // A crashed worker may have sent before losing its provider acknowledgement.
   // Stale IN_FLIGHT becomes UNKNOWN and is NEVER automatically retried.
-  await query(
+  const rows=await query<{RunID:string;BusinessID:string;PhoneNormalized:string}>(
     `UPDATE TOP(100) dbo.TblWhatsAppCampaignRunItem
       SET Status=N'UNKNOWN',CompletedAtUtc=SYSUTCDATETIME(),
           ErrorCode=N'STALE_IN_FLIGHT_NO_RETRY'
+     OUTPUT inserted.RunID,inserted.BusinessID,inserted.PhoneNormalized
      WHERE Status=N'IN_FLIGHT'
        AND ClaimedAtUtc<DATEADD(MINUTE,-5,SYSUTCDATETIME())`,
   );
+  for(const row of rows.recordset??[]) {
+    try {
+      await markQuotaReservationUncertain({
+        businessId:row.BusinessID,eventType:USAGE_EVENT_WHATSAPP_OUTBOUND,
+        reservationKey:"campaign:"+row.RunID+":"+row.PhoneNormalized,
+      });
+    } catch(error) {
+      console.warn("[campaign-worker] stale_quota_fencing_failed",{
+        code:error instanceof Error?error.name:"UNKNOWN",
+      });
+    }
+  }
 }
 function classifyReply(result: RuntimeSendResult): DeliveryResult {
   if (result.success && (result.status==="sent" || result.status==="duplicate")
