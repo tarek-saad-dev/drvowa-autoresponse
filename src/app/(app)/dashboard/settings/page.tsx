@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { BusinessSettingsForm } from "@/components/dashboard/business-settings-form";
 import { SettingsAccountSection } from "@/components/dashboard/settings-account-section";
 import { SettingsWhatsAppConnection } from "@/components/dashboard/settings-whatsapp-connection";
+import { SettingsWhatsAppLabels } from "@/components/dashboard/settings-whatsapp-labels";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import { getBusinessById } from "@/modules/businesses/service";
@@ -45,6 +46,7 @@ export default async function SettingsPage({
       ) : (
         <>
           <SettingsWhatsAppConnection openInitially={params.whatsapp === "1"} />
+          <SettingsWhatsAppLabels />
           {business ? <BusinessSettingsForm key={business.businessId} business={business} /> : null}
           <div className="flex flex-wrap gap-x-5 gap-y-2 border-t border-border pt-4 text-xs font-bold text-muted-foreground">
             <Link href="/dashboard/billing" className="hover:text-primary">الاشتراك والاستخدام ←</Link>
