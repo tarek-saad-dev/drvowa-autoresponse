@@ -216,7 +216,7 @@ export function LabelCampaignChat() {
                 ) : null}
                 {previewId === draft.draftId ? <LabelCampaignAudiencePreview draftId={draft.draftId} /> : null}
                 {draft.status === "COPY_APPROVED" && editId !== draft.draftId
-                  ? <LabelCampaignPreflight draftId={draft.draftId} />
+                  ? <LabelCampaignPreflight draftId={draft.draftId} messageText={draft.messageText} />
                   : null}
               </article>
             ))}
