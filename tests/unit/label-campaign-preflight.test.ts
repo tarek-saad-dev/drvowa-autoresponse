@@ -75,6 +75,9 @@ describe("durable campaign preflight", () => {
     expect(result.blockedUnverifiedPermission).toBe(2);
     expect(result.sendEnabled).toBe(false);
     expect(mock.query.mock.calls[4][0]).toContain("ROW_NUMBER()");
+    expect(mock.query.mock.calls[4][0]).toContain("END AS Reason");
+    expect(mock.query.mock.calls[4][0]).toContain("N\'BLOCKED\', Reason");
+    expect(mock.query.mock.calls[4][0]).not.toContain("N\'BLOCKED\', CASE WHEN stopped.PhoneNormalized");
     expect(mock.query.mock.calls[4][0]).toContain("N'BLOCKED'");
   });
 });
