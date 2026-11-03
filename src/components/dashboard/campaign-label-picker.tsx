@@ -126,7 +126,7 @@ export function CampaignLabelPicker({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button type="button" onClick={() => void refresh()} disabled={loading}
+          <button type="button" aria-label="تحديث القوائم" onClick={() => void refresh()} disabled={loading}
             className="text-xs font-bold text-muted-foreground hover:text-foreground disabled:opacity-50">
             {loading ? "بنحدّث…" : "تحديث"}
           </button>
