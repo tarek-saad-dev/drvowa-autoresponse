@@ -6,6 +6,7 @@ import Link from "next/link";
 type MirroredLabel = {
   channelConnectionId: string;
   id: string;
+  source?: "DRVO" | "WHATSAPP";
   name: string | null;
   color: number | null;
   deleted: boolean;
@@ -92,7 +93,7 @@ export function SettingsWhatsAppLabels() {
                       {label.name || "قائمة غير معروفة الاسم"}
                     </p>
                     <p className="text-[11px] text-muted-foreground">
-                      {label.name ? "مزامنة جزئية" : "الاسم لم يصل من واتساب"}
+                      {label.source === "DRVO" ? "قائمة DRVO داخلية، مش على تطبيق واتساب" : label.name ? "مزامنة واتساب جزئية" : "الاسم لم يصل من واتساب"}
                     </p>
                   </div>
                   <p className="shrink-0 text-xs font-semibold text-muted-foreground">
