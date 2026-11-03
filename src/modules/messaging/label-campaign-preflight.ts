@@ -20,6 +20,7 @@ type CountsRow = {
   Observed: number;
   UniquePhones: number;
   Invalid: number | null;
+  StoppedPhones: number | null;
 };
 type PlanRow = {
   PreflightID: string;
@@ -30,6 +31,7 @@ type PlanRow = {
   UniqueValidPhones: number;
   InvalidPhones: number;
   DuplicatePhones: number;
+  StoppedPhones: number;
   CreatedAtUtc: Date;
   CurrentDraftCopy: string;
   CurrentDraftStatus: string;
@@ -43,6 +45,7 @@ export type CampaignPreflightSummary = {
   uniqueValidPhones: number;
   invalidPhones: number;
   duplicatePhones: number;
+  optedOutPhones: number;
   blockedUnverifiedPermission: number;
   verifiedSendable: 0;
   isCurrentCopy: boolean;
@@ -70,7 +73,8 @@ function mapPlan(row: PlanRow, idempotent: boolean): CampaignPreflightSummary {
     uniqueValidPhones: Number(row.UniqueValidPhones),
     invalidPhones: Number(row.InvalidPhones),
     duplicatePhones: Number(row.DuplicatePhones),
-    blockedUnverifiedPermission: Number(row.UniqueValidPhones),
+    optedOutPhones: Number(row.StoppedPhones ?? 0),
+    blockedUnverifiedPermission: Number(row.UniqueValidPhones) - Number(row.StoppedPhones ?? 0),
     verifiedSendable: 0,
     isCurrentCopy: row.CurrentDraftStatus === "COPY_APPROVED"
       && Buffer.compare(Buffer.from(row.CopyHash), fingerprint(row.CurrentDraftCopy)) === 0,
@@ -83,7 +87,7 @@ function mapPlan(row: PlanRow, idempotent: boolean): CampaignPreflightSummary {
 
 const planSelect = `
  SELECT p.PreflightID, p.CampaignDraftID, p.CopyHash, p.Status,
-        p.ObservedMemberships, p.UniqueValidPhones, p.InvalidPhones, p.DuplicatePhones,
+        p.ObservedMemberships, p.UniqueValidPhones, p.InvalidPhones, p.DuplicatePhones, p.StoppedPhones,
         p.CreatedAtUtc,
         d.MessageText AS CurrentDraftCopy, d.Status AS CurrentDraftStatus
  FROM dbo.TblWhatsAppCampaignPreflight p
@@ -156,6 +160,10 @@ export async function createLabelCampaignPreflight(params: {
         ON c.BusinessID=cl.BusinessID
           AND c.ChannelConnectionID=cl.ChannelConnectionID
           AND c.ContactID=cl.ContactID
+      LEFT JOIN dbo.TblWhatsAppCampaignOptOut stopped
+        ON stopped.BusinessID=c.BusinessID
+          AND stopped.ChannelConnectionID=c.ChannelConnectionID
+          AND stopped.PhoneNormalized=c.PhoneNormalized
       WHERE cl.BusinessID=@businessId
         AND cl.ChannelConnectionID=@channelConnectionId
         AND cl.ProviderLabelID=@labelId
@@ -169,13 +177,19 @@ export async function createLabelCampaignPreflight(params: {
     const counts = await trx.query<CountsRow>(
       `SELECT COUNT_BIG(1) AS Observed,
               COUNT(DISTINCT CASE WHEN ${validPhone} THEN c.PhoneNormalized END) AS UniquePhones,
-              SUM(CASE WHEN ${validPhone} THEN 0 ELSE 1 END) AS Invalid
+              SUM(CASE WHEN ${validPhone} THEN 0 ELSE 1 END) AS Invalid,
+              COUNT(DISTINCT CASE WHEN ${validPhone} AND stopped.PhoneNormalized IS NOT NULL
+                THEN c.PhoneNormalized END) AS StoppedPhones
        ${fromLabel}`,
       labelInputs,
     );
     const observed = Number(counts.recordset[0]?.Observed ?? 0);
     const unique = Number(counts.recordset[0]?.UniquePhones ?? 0);
     const invalid = Number(counts.recordset[0]?.Invalid ?? 0);
+    const stoppedPhones = Number(counts.recordset[0]?.StoppedPhones ?? 0);
+    if (stoppedPhones < 0 || stoppedPhones > unique) {
+      throw new ConflictError("حالة طلبات إيقاف العروض غير متطابقة مع الجمهور.");
+    }
     if (unique > MAX_PREFLIGHT_UNIQUE_PHONES) {
       throw new ValidationError(
         `القائمة فيها أكتر من ${MAX_PREFLIGHT_UNIQUE_PHONES} رقم. لتجنب إرسال كبير بالخطأ، قسّم الجمهور.`,
@@ -189,10 +203,10 @@ export async function createLabelCampaignPreflight(params: {
       `INSERT INTO dbo.TblWhatsAppCampaignPreflight
         (PreflightID, BusinessID, CampaignDraftID, ChannelConnectionID,
          LabelID, CopyHash, RequestedByUserID, Status,
-         ObservedMemberships, UniqueValidPhones, InvalidPhones, DuplicatePhones)
+         ObservedMemberships, UniqueValidPhones, InvalidPhones, DuplicatePhones, StoppedPhones)
        VALUES (@preflightId, @businessId, @draftId, @channelConnectionId,
          @labelId, @copyHash, @userId, N'REVIEW_ONLY',
-         @observed, @unique, @invalid, @duplicate)`,
+         @observed, @unique, @invalid, @duplicate, @stopped)`,
       [
         ...base, ...labelInputs.filter(x => x.name !== "businessId"),
         { name: "preflightId", type: sql.UniqueIdentifier, value: preflightId },
@@ -202,6 +216,7 @@ export async function createLabelCampaignPreflight(params: {
         { name: "unique", type: sql.Int, value: unique },
         { name: "invalid", type: sql.Int, value: invalid },
         { name: "duplicate", type: sql.Int, value: duplicate },
+        { name: "stopped", type: sql.Int, value: stoppedPhones },
       ],
     );
 
@@ -219,7 +234,8 @@ export async function createLabelCampaignPreflight(params: {
         INSERT INTO dbo.TblWhatsAppCampaignPreflightRecipient
           (BusinessID, PreflightID, ContactID, PhoneNormalized, Status, Reason)
         SELECT @businessId, @preflightId, ContactID, PhoneNormalized,
-               N'BLOCKED', N'UNVERIFIED_PERMISSION'
+               N'BLOCKED', CASE WHEN stopped.PhoneNormalized IS NULL
+                THEN N'UNVERIFIED_PERMISSION' ELSE N'CUSTOMER_OPTOUT' END
         FROM DistinctPhones WHERE RowRank=1`,
         [...labelInputs,
           { name: "preflightId", type: sql.UniqueIdentifier, value: preflightId }],
@@ -241,7 +257,7 @@ export async function listLabelCampaignPreflights(params: {
   const results = await query<PlanRow>(
     `SELECT TOP(10) p.PreflightID, p.CampaignDraftID, p.CopyHash, p.Status,
               p.ObservedMemberships, p.UniqueValidPhones, p.InvalidPhones,
-              p.DuplicatePhones, p.CreatedAtUtc,
+              p.DuplicatePhones, p.StoppedPhones, p.CreatedAtUtc,
               d.MessageText AS CurrentDraftCopy, d.Status AS CurrentDraftStatus
        FROM dbo.TblWhatsAppCampaignPreflight p
        INNER JOIN dbo.TblWhatsAppLabelCampaignDraft d

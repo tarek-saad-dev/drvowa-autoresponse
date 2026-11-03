@@ -9,6 +9,7 @@ type Preflight = {
   uniqueValidPhones: number;
   invalidPhones: number;
   duplicatePhones: number;
+  optedOutPhones: number;
   blockedUnverifiedPermission: number;
   verifiedSendable: 0;
   status: "REVIEW_ONLY";
@@ -92,6 +93,9 @@ export function LabelCampaignPreflight({ draftId }: { draftId: string }) {
             {" "}{plan.uniqueValidPhones.toLocaleString("ar-EG")} رقم مختلف،
             {" "}{plan.duplicatePhones.toLocaleString("ar-EG")} مكرر،
             {" "}{plan.invalidPhones.toLocaleString("ar-EG")} غير صالح
+            {plan.optedOutPhones > 0
+              ? ` • ${plan.optedOutPhones.toLocaleString("ar-EG")} أوقفوا العروض`
+              : ""}
           </p>
           <p className="text-xs leading-6 text-muted-foreground">
             اتسجّلت الأرقام بدون تكرار في خطة مراجعة غير قابلة للإرسال،
