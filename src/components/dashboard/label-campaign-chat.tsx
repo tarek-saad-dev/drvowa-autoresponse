@@ -344,7 +344,7 @@ export function LabelCampaignChat() {
             <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
               <h3 className="mb-3 text-sm font-black">جاهزية الإرسال</h3>
               <LabelCampaignPreflight
-                openByDefault draftId={activeDraft.draftId}
+                key={activeDraft.draftId} openByDefault draftId={activeDraft.draftId}
                 messageText={activeDraft.messageText} />
             </div>
           ) : null}
