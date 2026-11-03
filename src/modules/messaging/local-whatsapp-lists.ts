@@ -223,3 +223,74 @@ export async function deleteDrvoList(params: { businessId: string; listId: strin
   );
   if (!affected.rowsAffected.some(n => n > 0)) throw new NotFoundError("القائمة مش موجودة.");
 }
+
+
+/** Read-only, owner-facing one-number diagnostic. Never grants permission
+ * or schedules a WhatsApp send. Native WhatsApp labels are not mutated. */
+export async function checkDrvoListTestRecipient(params: {
+  businessId: string;
+  listId: string;
+  phone: string;
+}): Promise<{
+  inList: boolean;
+  hasPermission: boolean;
+  optedOut: boolean;
+  eligibleForReview: boolean;
+  businessName: string;
+  optInText: string;
+}> {
+  if (!isDrvoListId(params.listId)) {
+    throw new ValidationError("اختار قائمة DRVO لاختبار رقم واحد.");
+  }
+  const phone = normalizeCampaignPhone(params.phone);
+  if (!phone) throw new ValidationError("اكتب رقم موبايل صحيح، بمفتاح الدولة أو بصيغة مصرية.");
+  const result = await query<{
+    BusinessName: string;
+    InList: boolean;
+    HasPermission: boolean;
+    OptedOut: boolean;
+  }>(
+    `SELECT TOP (1) b.Name AS BusinessName,
+      CAST(CASE WHEN EXISTS (
+        SELECT 1 FROM dbo.TblWhatsAppContactLabel cl
+        JOIN dbo.TblContact c ON c.ContactID=cl.ContactID
+          AND c.BusinessID=cl.BusinessID AND c.ChannelConnectionID=cl.ChannelConnectionID
+        WHERE cl.BusinessID=l.BusinessID
+          AND cl.ChannelConnectionID=l.ChannelConnectionID
+          AND cl.ProviderLabelID=l.ProviderLabelID AND cl.IsActive=1
+          AND c.PhoneNormalized=@phone
+      ) THEN 1 ELSE 0 END AS BIT) AS InList,
+      CAST(CASE WHEN EXISTS (
+        SELECT 1 FROM dbo.TblWhatsAppCampaignPermission perm
+        WHERE perm.BusinessID=l.BusinessID AND perm.ChannelConnectionID=l.ChannelConnectionID
+          AND perm.PhoneNormalized=@phone AND perm.Source=N'EXPLICIT_INBOUND'
+      ) THEN 1 ELSE 0 END AS BIT) AS HasPermission,
+      CAST(CASE WHEN EXISTS (
+        SELECT 1 FROM dbo.TblWhatsAppCampaignOptOut stopped
+        WHERE stopped.BusinessID=l.BusinessID AND stopped.ChannelConnectionID=l.ChannelConnectionID
+          AND stopped.PhoneNormalized=@phone
+      ) THEN 1 ELSE 0 END AS BIT) AS OptedOut
+    FROM dbo.TblWhatsAppLabel l
+    JOIN dbo.TblChannelConnection ch
+      ON ch.BusinessID=l.BusinessID AND ch.ChannelConnectionID=l.ChannelConnectionID
+      AND ch.Channel=N'WHATSAPP' AND ch.IsActive=1 AND ch.Status=N'ACTIVE'
+    JOIN dbo.TblBusiness b ON b.BusinessID=l.BusinessID AND b.Status=N'ACTIVE'
+    WHERE l.BusinessID=@businessId AND l.ProviderLabelID=@listId
+      AND l.ProviderLabelID LIKE N'drvo:%' AND l.IsDeleted=0`,
+    [
+      ...scope(params.businessId, params.listId),
+      { name: "phone", type: sql.NVarChar(32), value: phone },
+    ],
+  );
+  const row = result.recordset[0];
+  if (!row) throw new NotFoundError("قائمة DRVO مش موجودة أو رقم واتساب مش نشط.");
+  const inList = Boolean(row.InList);
+  const hasPermission = Boolean(row.HasPermission);
+  const optedOut = Boolean(row.OptedOut);
+  return {
+    inList, hasPermission, optedOut,
+    eligibleForReview: inList && hasPermission && !optedOut,
+    businessName: row.BusinessName,
+    optInText: `أوافق على استقبال عروض ${row.BusinessName} على واتساب`,
+  };
+}
