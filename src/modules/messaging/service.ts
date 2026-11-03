@@ -20,6 +20,8 @@ import * as repo from "./repository";
 import { canonicalizeWhatsAppContactIdentity } from "./whatsapp-identity";
 import { classifyBlockedWhatsAppSource } from "./whatsapp-source-guard";
 import { isCampaignOptOutRequest, recordCampaignOptOut } from "./campaign-optout";
+import { isExplicitCampaignOptIn, recordExplicitCampaignOptIn } from "./campaign-permission";
+import { sql } from "@/lib/db";
 
 export type IngestOutcome =
   | {
@@ -156,6 +158,27 @@ export async function ingestWhatsAppInbound(
         businessId, channelConnectionId, phoneNormalized,
         providerMessageId: dto.providerMessageId,
       }, trx);
+    }
+
+    // An exact, business-named inbound sentence is the only automatic
+    // marketing opt-in; unrelated customer conversations are never inferred.
+    const optInCandidate = !ownerMessage && normalized.contentType === "TEXT"
+      && /^(?:أوافق على استقبال عروض |اشترك في عروض |i agree to receive whatsapp offers from )/iu
+        .test(normalized.textContent?.trim() || "");
+    if (optInCandidate) {
+      const business = await trx.query<{ Name: string }>(
+        "SELECT Name FROM dbo.TblBusiness WHERE BusinessID=@businessId AND Status=N'ACTIVE'",
+        [{ name: "businessId", type: sql.UniqueIdentifier, value: businessId }],
+      );
+      if (business.recordset[0] && isExplicitCampaignOptIn(
+        normalized.textContent, business.recordset[0].Name,
+      )) {
+        await recordExplicitCampaignOptIn({
+          businessId, channelConnectionId, phoneNormalized,
+          providerMessageId: dto.providerMessageId,
+          evidenceText: normalized.textContent!,
+        }, trx);
+      }
     }
 
     await repo.touchConversationInbound(
