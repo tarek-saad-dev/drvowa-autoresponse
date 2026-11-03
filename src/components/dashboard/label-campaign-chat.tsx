@@ -5,7 +5,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { LabelCampaignAudiencePreview } from "@/components/dashboard/label-campaign-audience-preview";
 import { LabelCampaignPreflight } from "@/components/dashboard/label-campaign-preflight";
-import { CampaignLabelPicker } from "@/components/dashboard/campaign-label-picker";
+import { CampaignLabelPicker, type MirroredWhatsAppLabel } from "@/components/dashboard/campaign-label-picker";
 import { Button } from "@/components/ui/button";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
 
@@ -35,7 +35,7 @@ const NEW_GREETING =
 export function LabelCampaignChat() {
   const [turns, setTurns] = useState<ChatTurn[]>([{ role: "agent", text: NEW_GREETING }]);
   const [input, setInput] = useState("");
-  const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
+  const [selectedLabel, setSelectedLabel] = useState<MirroredWhatsAppLabel | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const [drafts, setDrafts] = useState<CampaignDraft[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,16 +73,20 @@ export function LabelCampaignChat() {
     event.preventDefault();
     const text = input.trim();
     if (busy || (selectedLabel ? text.length < 4 : text.length < 12)) return;
-    const command = selectedLabel ? `ابعت للناس اللي في ${selectedLabel} إن ${text}` : text;
+    const payload = selectedLabel ? {
+      channelConnectionId: selectedLabel.channelConnectionId,
+      labelId: selectedLabel.id,
+      messageText: text,
+    } : { text };
     setBusy(true);
     setError(null);
     setInput("");
-    setTurns(previous => [...previous, { role: "owner", text: selectedLabel ? `إلى ${selectedLabel}: ${text}` : text }]);
+    setTurns(previous => [...previous, { role: "owner", text: selectedLabel ? `إلى ${selectedLabel.name}: ${text}` : text }]);
     try {
       const res = await fetch("/api/whatsapp/label-campaigns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: command }),
+        body: JSON.stringify(payload),
       });
       const data = (await res.json().catch(() => ({}))) as ApiPayload;
       if (!res.ok || !Array.isArray(data.drafts)) {
@@ -152,8 +156,8 @@ export function LabelCampaignChat() {
       </header>
 
       <div className="shrink-0 px-3 pt-3 sm:px-4">
-        <CampaignLabelPicker onPick={name => {
-          setSelectedLabel(name);
+        <CampaignLabelPicker onPick={label => {
+          setSelectedLabel(label);
           composerRef.current?.focus();
         }} />
       </div>
@@ -244,14 +248,14 @@ export function LabelCampaignChat() {
       <form onSubmit={event => void submit(event)} className="shrink-0 border-t border-border p-3">
         {selectedLabel ? (
           <div className="mb-2 flex items-center gap-2 text-xs">
-            <span className="rounded-full bg-primary/10 px-3 py-1.5 font-bold text-primary">إلى قائمة: {selectedLabel}</span>
+            <span className="rounded-full bg-primary/10 px-3 py-1.5 font-bold text-primary">إلى قائمة: {selectedLabel.name}</span>
             <button type="button" onClick={() => setSelectedLabel(null)}
               className="font-semibold text-muted-foreground underline">تغيير القائمة</button>
           </div>
         ) : null}
         <div className="flex items-end gap-2">
           <textarea ref={composerRef} aria-label={selectedLabel ? "اكتب رسالة القائمة" : "اكتب طلب الحملة"}
-            value={input} maxLength={4000} rows={2}
+            value={input} maxLength={selectedLabel ? 3000 : 4000} rows={2}
             placeholder={selectedLabel ? "اكتب الرسالة اللي عايز تبعتها لعملاء القائمة…" : "أو اكتب طلب زي: ابعت للناس اللي في VIP إن فيه عرض جديد…"}
             onChange={event => setInput(event.target.value)}
             className="min-h-[62px] flex-1 resize-none rounded-xl border border-border bg-surface px-3 py-2 text-sm leading-6 outline-none focus:border-primary" />
