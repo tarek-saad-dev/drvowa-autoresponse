@@ -70,8 +70,8 @@ const candidateQuery = `
      JOIN dbo.TblWhatsAppCampaignRun oldRun ON oldRun.RunID=previous.RunID
      WHERE oldRun.BusinessID=pr.BusinessID AND oldRun.ChannelConnectionID=@channelConnectionId
        AND previous.PhoneNormalized=pr.PhoneNormalized
-       AND previous.Status=N'SENT'
-       AND previous.CompletedAtUtc>DATEADD(HOUR,-24,SYSUTCDATETIME()))
+       AND previous.Status IN (N'SENT',N'UNKNOWN',N'IN_FLIGHT')
+       AND COALESCE(previous.CompletedAtUtc,previous.ClaimedAtUtc)>DATEADD(HOUR,-24,SYSUTCDATETIME()))
 `;
 function candidateInputs(meta: Meta, businessId: string): QueryInput[] {
   return [
