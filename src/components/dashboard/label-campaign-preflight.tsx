@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { LabelCampaignLaunch } from "@/components/dashboard/label-campaign-launch";
 
 type Preflight = {
   preflightId: string;
@@ -24,7 +25,7 @@ type Result = {
   sendingEnabled?: boolean;
 };
 
-export function LabelCampaignPreflight({ draftId }: { draftId: string }) {
+export function LabelCampaignPreflight({ draftId, messageText }: { draftId: string; messageText: string }) {
   const [opened, setOpened] = useState(false);
   const [plan, setPlan] = useState<Preflight | null>(null);
   const [busy, setBusy] = useState(false);
@@ -106,6 +107,8 @@ export function LabelCampaignPreflight({ draftId }: { draftId: string }) {
       <p className="text-[11px] text-muted-foreground">
         تجهيز القائمة لا يرسل رسائل، ولا يحوّل العملاء إلى موافقين على العروض.
       </p>
+      {plan?.isCurrentCopy ? <LabelCampaignLaunch
+        draftId={draftId} preflightId={plan.preflightId} messageText={messageText} /> : null}
       {error ? <p role="alert" className="text-xs text-warning">{error}</p> : null}
       <button type="button" onClick={() => setOpened(false)}
         className="text-xs font-semibold text-muted-foreground underline">إغلاق</button>
