@@ -195,3 +195,166 @@ async function claimNext(): Promise<Claimed | null> {
     };
   });
 }
+
+/** Re-check everything immediately before dispatch, including last-second STOP. */
+async function stillAllowed(job: Claimed): Promise<boolean> {
+  const r = await query<{Allowed:number}>(
+    `SELECT CAST(CASE WHEN EXISTS (
+       SELECT 1 FROM dbo.TblWhatsAppCampaignRunItem item
+       JOIN dbo.TblWhatsAppCampaignRun run ON run.RunID=item.RunID
+         AND run.BusinessID=item.BusinessID
+       JOIN dbo.TblChannelConnection ch ON ch.ChannelConnectionID=run.ChannelConnectionID
+         AND ch.BusinessID=run.BusinessID AND ch.IsActive=1
+         AND ch.Status=N'ACTIVE'
+       JOIN dbo.TblWhatsAppLabel label ON label.BusinessID=run.BusinessID
+         AND label.ChannelConnectionID=run.ChannelConnectionID
+         AND label.ProviderLabelID=run.ProviderLabelID AND label.IsDeleted=0
+       JOIN dbo.TblWhatsAppContactLabel cl ON cl.BusinessID=item.BusinessID
+         AND cl.ChannelConnectionID=run.ChannelConnectionID
+         AND cl.ProviderLabelID=run.ProviderLabelID
+         AND cl.ContactID=item.ContactID AND cl.IsActive=1
+       JOIN dbo.TblWhatsAppCampaignPermission perm ON perm.BusinessID=item.BusinessID
+         AND perm.ChannelConnectionID=run.ChannelConnectionID
+         AND perm.PhoneNormalized=item.PhoneNormalized AND perm.Source=N'EXPLICIT_INBOUND'
+       JOIN dbo.TblWhatsAppLabelCampaignDraft draft ON draft.BusinessID=run.BusinessID
+         AND draft.CampaignDraftID=run.CampaignDraftID
+         AND draft.Status=N'COPY_APPROVED' AND draft.MessageText=run.MessageText
+       WHERE item.BusinessID=@businessId AND item.RunID=@runId
+         AND item.PhoneNormalized=@phone AND item.Status=N'IN_FLIGHT'
+         AND item.ClaimToken=@token AND run.Status=N'RUNNING'
+         AND NOT EXISTS (SELECT 1 FROM dbo.TblWhatsAppCampaignOptOut stopped
+           WHERE stopped.BusinessID=item.BusinessID
+             AND stopped.ChannelConnectionID=run.ChannelConnectionID
+             AND stopped.PhoneNormalized=item.PhoneNormalized)
+     ) THEN 1 ELSE 0 END AS BIT) AS Allowed`,
+    [
+      b(job.BusinessID),
+      {name:"runId",type:sql.UniqueIdentifier,value:job.RunID},
+      {name:"phone",type:sql.NVarChar(32),value:job.PhoneNormalized},
+      {name:"token",type:sql.UniqueIdentifier,value:job.ClaimToken},
+    ],
+  );
+  return Boolean(r.recordset[0]?.Allowed);
+}
+type DeliveryResult = {
+  status: "SENT"|"FAILED"|"UNKNOWN"|"SKIPPED";
+  messageId?: string | null;
+  errorCode?: string | null;
+};
+async function finish(job: Claimed, result: DeliveryResult) {
+  await query(
+    `UPDATE dbo.TblWhatsAppCampaignRunItem
+       SET Status=@status,CompletedAtUtc=SYSUTCDATETIME(),
+         ProviderMessageID=@messageId,ErrorCode=@errorCode
+     WHERE RunID=@runId AND BusinessID=@businessId
+       AND PhoneNormalized=@phone AND ClaimToken=@token AND Status=N'IN_FLIGHT'`,
+    [
+      b(job.BusinessID),
+      {name:"runId",type:sql.UniqueIdentifier,value:job.RunID},
+      {name:"phone",type:sql.NVarChar(32),value:job.PhoneNormalized},
+      {name:"token",type:sql.UniqueIdentifier,value:job.ClaimToken},
+      {name:"status",type:sql.NVarChar(20),value:result.status},
+      {name:"messageId",type:sql.NVarChar(256),value:result.messageId ?? null},
+      {name:"errorCode",type:sql.NVarChar(64),value:result.errorCode ?? null},
+    ],
+  );
+}
+async function unclaimWhenOffline(job: Claimed) {
+  await query(
+    `UPDATE dbo.TblWhatsAppCampaignRunItem
+     SET Status=N'PENDING',ClaimToken=NULL,ClaimedAtUtc=NULL
+     WHERE RunID=@runId AND BusinessID=@businessId
+       AND PhoneNormalized=@phone AND ClaimToken=@token AND Status=N'IN_FLIGHT'`,
+    [
+      b(job.BusinessID),
+      {name:"runId",type:sql.UniqueIdentifier,value:job.RunID},
+      {name:"phone",type:sql.NVarChar(32),value:job.PhoneNormalized},
+      {name:"token",type:sql.UniqueIdentifier,value:job.ClaimToken},
+    ],
+  );
+}
+async function finishCompletedRuns(): Promise<void> {
+  await query(
+    `UPDATE run SET Status=N'COMPLETED',UpdatedAtUtc=SYSUTCDATETIME()
+     FROM dbo.TblWhatsAppCampaignRun run
+     WHERE run.Status IN (N'QUEUED',N'RUNNING')
+       AND NOT EXISTS (
+         SELECT 1 FROM dbo.TblWhatsAppCampaignRunItem item
+         WHERE item.RunID=run.RunID AND item.Status IN(N'PENDING',N'IN_FLIGHT')
+       )`,
+  );
+}
+async function markExpiredUnknown() {
+  // A crashed worker may have sent before losing its provider acknowledgement.
+  // Stale IN_FLIGHT becomes UNKNOWN and is NEVER automatically retried.
+  await query(
+    `UPDATE TOP(100) dbo.TblWhatsAppCampaignRunItem
+      SET Status=N'UNKNOWN',CompletedAtUtc=SYSUTCDATETIME(),
+          ErrorCode=N'STALE_IN_FLIGHT_NO_RETRY'
+     WHERE Status=N'IN_FLIGHT'
+       AND ClaimedAtUtc<DATEADD(MINUTE,-5,SYSUTCDATETIME())`,
+  );
+}
+function classifyReply(result: RuntimeSendResult): DeliveryResult {
+  if (result.success && (result.status==="sent" || result.status==="duplicate")
+    && result.messageId) return {status:"SENT",messageId:result.messageId};
+  if (result.code==="NOT_READY" || result.code==="LOGGED_OUT"
+    || result.code==="INVALID_PAYLOAD") {
+    return {status:"FAILED",errorCode:result.code};
+  }
+  return {status:"UNKNOWN",errorCode:"PROVIDER_ACK_UNCERTAIN"};
+}
+
+/**
+ * Single-batch tick called by the existing AI worker. One WhatsApp message per
+ * tick, no auto-retry on any ambiguous send outcome, no delivery claim until ack.
+ */
+export async function processNextCampaignDelivery(deps: {
+  getStatus?: typeof import("@/modules/channels/runtime-client").getAccountStatus;
+  send?: typeof sendAccountMessage;
+} = {}): Promise<"DISABLED"|"OUTSIDE_HOURS"|"IDLE"|"OFFLINE"|"SENT"|"FAILED"|"UNKNOWN"|"SKIPPED"> {
+  if (process.env.DRVO_LABEL_CAMPAIGNS_SEND_ENABLED !== "true") return "DISABLED";
+  if (!insideCampaignHours()) return "OUTSIDE_HOURS";
+
+  await markExpiredUnknown();
+  await discardNotAllowed();
+  await finishCompletedRuns();
+  const job = await claimNext();
+  if (!job) return "IDLE";
+  const getStatus = deps.getStatus
+    ?? (await import("@/modules/channels/runtime-client")).getAccountStatus;
+  try {
+    // Checking readiness before send is safe to retry because no send happened.
+    const account = await getStatus(job.AccountKey);
+    if (!account.ready || account.state!=="READY") {
+      await unclaimWhenOffline(job);
+      return "OFFLINE";
+    }
+  } catch {
+    await unclaimWhenOffline(job);
+    return "OFFLINE";
+  }
+  if (!await stillAllowed(job)) {
+    await finish(job,{status:"SKIPPED",errorCode:"RECIPIENT_SUPPRESSED"});
+    await finishCompletedRuns();
+    return "SKIPPED";
+  }
+  let outcome: DeliveryResult;
+  try {
+    const send = deps.send ?? sendAccountMessage;
+    const response = await send({
+      accountKey:job.AccountKey,
+      phone:job.PhoneNormalized,
+      message:job.MessageText,
+      idempotencyKey:`campaign:${job.RunID}:${job.PhoneNormalized}`,
+      timeoutMs:12000,
+    });
+    outcome = classifyReply(response);
+  } catch {
+    // Network timeout after dispatch may still have reached WhatsApp.
+    outcome = {status:"UNKNOWN",errorCode:"SEND_RESULT_UNCERTAIN"};
+  }
+  await finish(job,outcome);
+  await finishCompletedRuns();
+  return outcome.status;
+}
