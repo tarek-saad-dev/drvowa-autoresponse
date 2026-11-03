@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CampaignLocalListManager } from "@/components/dashboard/campaign-local-list-manager";
 
 export type MirroredWhatsAppLabel = {
   channelConnectionId: string;
   id: string;
+  source?: "DRVO" | "WHATSAPP";
   name: string | null;
   color: number | null;
   deleted: boolean;
@@ -53,7 +55,7 @@ export function CampaignLabelChoices({
               <span className="min-w-0">
                 <span className="block truncate text-sm font-bold">{name}</span>
                 <span className="block text-[11px] text-muted-foreground">
-                  {ambiguous ? "الاسم مكرر على أكثر من رقم" : "اضغط لتجهيز رسالة"}
+                  {ambiguous ? "الاسم مكرر على أكثر من رقم" : label.source === "DRVO" ? "قائمة DRVO • اضغط لتجهيز رسالة" : "قائمة واتساب • اضغط لتجهيز رسالة"}
                 </span>
               </span>
             </span>
@@ -68,8 +70,8 @@ export function CampaignLabelChoices({
 }
 
 /**
- * This surfaces only server-mirrored WhatsApp labels.
- * It never creates remote labels, starts a send or claims historical completeness.
+ * This displays both server-mirrored WhatsApp labels and explicitly-created DRVO lists.
+ * Local lists do NOT appear on WhatsApp Business. No selection sends messages.
  */
 export function CampaignLabelPicker({ onPick }: { onPick: (label: MirroredWhatsAppLabel) => void }) {
   const [expanded, setExpanded] = useState(true);
@@ -147,8 +149,8 @@ export function CampaignLabelPicker({ onPick }: { onPick: (label: MirroredWhatsA
             <div className="rounded-xl bg-surface px-3 py-3">
               <p className="text-sm font-bold">لسه مفيش قوائم ظاهرة في DRVO</p>
               <p className="mt-1 text-xs leading-6 text-muted-foreground">
-                اعمل قائمة في WhatsApp Business وضيف لها محادثات عملائك.
-                بعد كده ارجع هنا واضغط تحديث. القوائم القديمة ممكن لسه ما تكونش اتزامنت.
+                تقدر تنشئ قائمة جديدة داخل DRVO وتضيف أرقام عملائك من تحت،
+                أو تستخدم Labels من WhatsApp Business لو ظهرت في المزامنة.
               </p>
             </div>
           ) : null}
@@ -159,9 +161,11 @@ export function CampaignLabelPicker({ onPick }: { onPick: (label: MirroredWhatsA
             </p>
           ) : null}
 
+          <CampaignLocalListManager labels={labels} onChanged={refresh} />
+
           <details className="group rounded-xl border border-border px-3 py-2.5">
             <summary className="cursor-pointer text-xs font-bold text-foreground">
-              إزاي أعمل قائمة جديدة أو أضيف لها عملاء؟
+              إزاي أعمل Label على تطبيق واتساب نفسه؟
             </summary>
             <div className="space-y-2 pt-3 text-xs leading-6 text-muted-foreground">
               <p><strong className="text-foreground">Android:</strong> افتح WhatsApp Business، ومن المحادثات افتح الثلاث نقط ← Labels، واعمل قائمة جديدة.</p>
@@ -176,8 +180,8 @@ export function CampaignLabelPicker({ onPick }: { onPick: (label: MirroredWhatsA
           </details>
 
           <p className="text-[11px] leading-5 text-muted-foreground">
-            بنعرض القوائم والعملاء اللي وصلتنا من مزامنة واتساب؛ العدد ممكن يكون جزئي.
-            تحديث هنا بيعيد قراءة بيانات DRVO، مش مزامنة كاملة من الموبايل.
+            قوائم DRVO بتتحفظ عندنا مباشرة. قوائم واتساب الأصلية بيظهر منها بس اللي وصلنا من المزامنة؛
+            تحديث الصفحة مش بيعمل استرجاع كامل للقوائم القديمة من الموبايل.
           </p>
         </div>
       ) : null}

@@ -15,7 +15,9 @@ describe("WhatsApp campaign label discovery",()=>{
   it("makes list discovery and real WhatsApp Business setup discoverable",()=>{
     const html=renderToStaticMarkup(<CampaignLabelPicker onPick={()=>{}}/>);
     expect(html).toContain("قوائم عملائك على واتساب");
-    expect(html).toContain("إزاي أعمل قائمة جديدة");
+    expect(html).toContain("إزاي أعمل Label على تطبيق واتساب نفسه؟");
+    expect(html).toContain("قوائم تعملها بنفسك في DRVO");
+    expect(html).toContain("+ قائمة جديدة");
     expect(html).toContain("WhatsApp Business");
     expect(html).toContain("تحديث");
   });

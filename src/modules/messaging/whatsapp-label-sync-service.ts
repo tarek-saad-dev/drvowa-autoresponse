@@ -125,6 +125,7 @@ export async function listMirroredWhatsAppLabels(businessId: string) {
   return result.recordset.map(r => ({
     channelConnectionId: r.ChannelConnectionID,
     id: r.ProviderLabelID,
+    source: r.ProviderLabelID.startsWith("drvo:") ? "DRVO" as const : "WHATSAPP" as const,
     name: r.LabelName,
     color: r.Color,
     deleted: Boolean(r.IsDeleted),
