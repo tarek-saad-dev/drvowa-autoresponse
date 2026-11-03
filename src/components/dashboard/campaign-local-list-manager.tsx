@@ -8,6 +8,10 @@ type LocalList = {
   source?: "DRVO" | "WHATSAPP";
 };
 type Member = { phone: string; name: string | null };
+type TestResult = {
+  inList: boolean; hasPermission: boolean; optedOut: boolean;
+  eligibleForReview: boolean; businessName: string; optInText: string;
+};
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { cache: "no-store", ...init });
@@ -36,6 +40,9 @@ export function CampaignLocalListManager({
   const [phones, setPhones] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
   const [busy, setBusy] = useState(false);
+  const [testPhone, setTestPhone] = useState("");
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [testing, setTesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const localLists = labels.filter(label => label.source === "DRVO" && label.name);
@@ -54,6 +61,7 @@ export function CampaignLocalListManager({
       setNewName(""); setCreating(false);
       setSelected(result.list.id);
       setMembers([]);
+      setTestResult(null);
       setNotice("اتعملت القائمة في DRVO. ضيف أرقام العملاء من تحت.");
       await onChanged();
     } catch (err) {
@@ -63,6 +71,7 @@ export function CampaignLocalListManager({
   async function loadMembers(listId: string) {
     if (busy) return;
     setSelected(listId);setError(null);setNotice(null);
+    setTestResult(null);
     setPhones("");
     setBusy(true);
     try {
@@ -84,6 +93,7 @@ export function CampaignLocalListManager({
         method: "POST", ...json({text:phones}),
       });
       setPhones("");
+      setTestResult(null);
       setNotice("اتضاف " + result.added.toLocaleString("ar-EG") + " عميل. إجمالي القائمة: "
         + result.total.toLocaleString("ar-EG") + ".");
       const next = await requestJson<{members: Member[]}>(path);
@@ -100,6 +110,7 @@ export function CampaignLocalListManager({
       const path = "/api/whatsapp/lists/" + encodeURIComponent(selected) + "/members";
       await requestJson(path, {method:"DELETE",...json({phone})});
       setMembers(previous => previous.filter(row => row.phone !== phone));
+      setTestResult(null);
       await onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر إزالة العميل.");
@@ -116,12 +127,27 @@ export function CampaignLocalListManager({
         "/api/whatsapp/lists/" + encodeURIComponent(selected),
         {method:"DELETE"},
       );
-      setSelected(null);setMembers([]);
+      setSelected(null);setMembers([]);setTestResult(null);
       await onChanged();
       setNotice("اتحذفت القائمة من DRVO.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر حذف القائمة.");
     } finally {setBusy(false);}
+  }
+
+  async function checkTestNumber(event: FormEvent) {
+    event.preventDefault();
+    if (!selected || testing || !testPhone.trim()) return;
+    setTesting(true); setError(null); setTestResult(null);
+    try {
+      const result = await requestJson<{ recipient: TestResult }>(
+        "/api/whatsapp/lists/" + encodeURIComponent(selected) + "/test-recipient",
+        { method: "POST", ...json({ phone: testPhone.trim() }) },
+      );
+      setTestResult(result.recipient);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "تعذر التحقق من الرقم.");
+    } finally { setTesting(false); }
   }
 
   return (
@@ -202,6 +228,42 @@ export function CampaignLocalListManager({
               </div>
             </details>
           ) : null}
+          <div className="space-y-2 rounded-xl border border-border bg-card p-3">
+            <p className="text-xs font-black">اختبار إرسال على رقم واحد</p>
+            <p className="text-xs leading-6 text-muted-foreground">
+              ضيف رقم اختبار تملكه أو رقم شخص وافق على الاختبار، وبعدها ابعت رسالة الاشتراك
+              من الرقم ده إلى واتساب النشاط المتصل. مش من نفس رقم واتساب النشاط.
+            </p>
+            <form onSubmit={event => void checkTestNumber(event)} className="flex flex-wrap gap-2">
+              <input aria-label="رقم واتساب التجريبي" value={testPhone}
+                onChange={event => {setTestPhone(event.target.value);setTestResult(null);}}
+                placeholder="01012345678" inputMode="tel" maxLength={32}
+                className="min-h-10 min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-primary"/>
+              <Button type="submit" size="sm" variant="outline"
+                disabled={busy || testing || !testPhone.trim()}>
+                {testing ? "بنتحقق…" : "تحقق من الجاهزية"}
+              </Button>
+            </form>
+            {testResult ? <div role="status" className="space-y-2 text-xs leading-6">
+              <p>{testResult.inList ? "✓ الرقم موجود في القائمة" : "الرقم مش موجود في القائمة؛ ضيفه أولًا."}</p>
+              <p>{testResult.hasPermission && !testResult.optedOut
+                ? "✓ الرقم وافق على عروض واتساب"
+                : testResult.optedOut ? "الرقم طلب وقف العروض؛ مش مؤهل للإرسال."
+                : "لسه مفيش موافقة واتساب صريحة من الرقم."}</p>
+              {!testResult.hasPermission && !testResult.optedOut ? <div className="space-y-1">
+                <p>انسخ النص ده وابعتْه **من رقم الاختبار إلى واتساب النشاط**، وبعدها اضغط تحقق تاني:</p>
+                <p dir="auto" className="rounded-lg bg-surface p-2 select-all">{testResult.optInText}</p>
+                <Button size="sm" variant="outline" type="button"
+                  onClick={() => void navigator.clipboard.writeText(testResult.optInText)}>
+                  نسخ نص الموافقة
+                </Button>
+              </div> : null}
+              {testResult.eligibleForReview ? <p className="font-bold text-primary">
+                الرقم جاهز للمراجعة. اختار القائمة من فوق، جهّز رسالة، اعتمدها، وبعدها أكد الإرسال.
+                الوصول الفعلي بيتحدد بنتيجة واتساب والباقة والاتصال.
+              </p> : null}
+            </div> : null}
+          </div>
           <button type="button" onClick={() => void deleteList()} disabled={busy}
             className="text-xs text-muted-foreground underline">
             حذف القائمة
