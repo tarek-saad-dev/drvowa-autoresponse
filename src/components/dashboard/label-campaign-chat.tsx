@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { Alert } from "@/components/ui/alert";
 import { LabelCampaignAudiencePreview } from "@/components/dashboard/label-campaign-audience-preview";
+import { LabelCampaignPreflight } from "@/components/dashboard/label-campaign-preflight";
 import { Button } from "@/components/ui/button";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
 
@@ -214,6 +215,9 @@ export function LabelCampaignChat() {
                   </div>
                 ) : null}
                 {previewId === draft.draftId ? <LabelCampaignAudiencePreview draftId={draft.draftId} /> : null}
+                {draft.status === "COPY_APPROVED" && editId !== draft.draftId
+                  ? <LabelCampaignPreflight draftId={draft.draftId} />
+                  : null}
               </article>
             ))}
           </div>
