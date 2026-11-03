@@ -141,7 +141,7 @@ export function LabelCampaignChat() {
       <header className="shrink-0 border-b border-border px-4 py-3">
         <h2 className="text-sm font-black">رسائل قوائم واتساب</h2>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          مسودات فقط — بنجهز الرسائل ونراجع جمهور القوائم قبل الإرسال.
+          اكتب الرسالة، راجع المستلمين، وبعد التأكيد الإرسال بيتم تدريجيًا للعملاء المشتركين في العروض فقط.
         </p>
       </header>
 
@@ -216,7 +216,7 @@ export function LabelCampaignChat() {
                 ) : null}
                 {previewId === draft.draftId ? <LabelCampaignAudiencePreview draftId={draft.draftId} /> : null}
                 {draft.status === "COPY_APPROVED" && editId !== draft.draftId
-                  ? <LabelCampaignPreflight draftId={draft.draftId} />
+                  ? <LabelCampaignPreflight draftId={draft.draftId} messageText={draft.messageText} />
                   : null}
               </article>
             ))}
@@ -237,7 +237,7 @@ export function LabelCampaignChat() {
           <Button type="submit" disabled={busy || input.trim().length < 12}>تجهيز</Button>
         </div>
         <p className="mt-2 text-[11px] text-muted-foreground">
-          تقدر تذكر أكتر من قائمة في نفس الرسالة. ده تجهيز للمراجعة فقط، مش إرسال.
+          تقدر تجهز أكتر من قائمة في نفس الطلب. مفيش إرسال إلا بعد اعتماد النص وتأكيد الحملة.
         </p>
       </form>
     </section>

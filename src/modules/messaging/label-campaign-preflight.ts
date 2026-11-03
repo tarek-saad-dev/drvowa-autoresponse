@@ -226,6 +226,8 @@ export async function createLabelCampaignPreflight(params: {
       const inserted = await trx.query(
         `;WITH DistinctPhones AS (
           SELECT c.ContactID, c.PhoneNormalized,
+            CASE WHEN stopped.PhoneNormalized IS NULL
+                 THEN N'UNVERIFIED_PERMISSION' ELSE N'CUSTOMER_OPTOUT' END AS Reason,
             ROW_NUMBER() OVER (
               PARTITION BY c.PhoneNormalized ORDER BY c.ContactID
             ) AS RowRank
@@ -234,8 +236,7 @@ export async function createLabelCampaignPreflight(params: {
         INSERT INTO dbo.TblWhatsAppCampaignPreflightRecipient
           (BusinessID, PreflightID, ContactID, PhoneNormalized, Status, Reason)
         SELECT @businessId, @preflightId, ContactID, PhoneNormalized,
-               N'BLOCKED', CASE WHEN stopped.PhoneNormalized IS NULL
-                THEN N'UNVERIFIED_PERMISSION' ELSE N'CUSTOMER_OPTOUT' END
+               N'BLOCKED', Reason
         FROM DistinctPhones WHERE RowRank=1`,
         [...labelInputs,
           { name: "preflightId", type: sql.UniqueIdentifier, value: preflightId }],

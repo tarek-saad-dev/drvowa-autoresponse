@@ -3,12 +3,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { LabelCampaignChat } from "@/components/dashboard/label-campaign-chat";
 
-describe("label campaigns UI does not dispatch any WhatsApp messages", () => {
-  it("promises a review-only chat, never mass-send controls", () => {
+describe("label campaigns chat only prepares drafts until owner confirms", () => {
+  it("promises an explicit owner confirmation, never auto-sends from chat", () => {
     const html = renderToStaticMarkup(<LabelCampaignChat />);
     expect(html).toContain("محادثة حملات القوائم");
     expect(html).toContain("تجهيز");
-    expect(html).toContain("مسودات فقط");
+    expect(html).toContain("مفيش إرسال إلا بعد اعتماد النص وتأكيد الحملة");
     expect(html).not.toContain("إرسال الحملة");
     expect(html).not.toContain("ابدأ الإرسال");
   });

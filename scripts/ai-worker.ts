@@ -18,6 +18,7 @@ import { resumeDueHumanConversations } from "../src/modules/ai/bulk-resume-servi
 import { runReliabilityAudit } from "../src/modules/reliability/service";
 import { scanPulseBatch } from "../src/modules/pulse/scanner";
 import { runPulseShadowBatch } from "../src/modules/pulse/shadow-worker";
+import { processNextCampaignDelivery } from "../src/modules/messaging/campaign-delivery-worker";
 import {
   resolveHeartbeatMs,
   resolveLeaseSeconds,
@@ -26,7 +27,7 @@ import {
 
 function loadDotEnvIfPresent(): void {
   // Prefer .env.local (dev secrets) then .env — same order as Next.js.
-  for (const name of [".env.local", ".env"]) {
+  for (const name of [".env.production.local", ".env.local", ".env"]) {
     const envPath = resolve(process.cwd(), name);
     if (!existsSync(envPath)) continue;
     const text = readFileSync(envPath, "utf8");
@@ -168,6 +169,27 @@ async function main(): Promise<void> {
   };
   const pulseTimer = setInterval(() => void pulseTick(), 30_000);
   void pulseTick();
+  // Durable, explicit opt-in-only marketing campaigns. One send per tick,
+  // with SQL account throttling, live STOP recheck and ambiguous-result fencing.
+  let stoppingCampaigns = false;
+  let campaignsBusy = false;
+  const campaignTick = async () => {
+    if (stoppingCampaigns || campaignsBusy) return;
+    campaignsBusy = true;
+    try {
+      const outcome = await processNextCampaignDelivery();
+      if (outcome === "SENT" || outcome === "UNKNOWN" || outcome === "FAILED") {
+        console.info("[campaign-worker] attempt_finished", { outcome });
+      }
+    } catch (error) {
+      console.warn("[campaign-worker] tick_failed", {
+        code: error instanceof Error ? error.name : "UNKNOWN",
+      });
+    } finally { campaignsBusy = false; }
+  };
+  const campaignTimer = setInterval(() => void campaignTick(), 10_000);
+  void campaignTick();
+
   const shutdown = () => {
     stoppingNotifications = true;
     clearInterval(notificationTimer);
@@ -179,6 +201,8 @@ async function main(): Promise<void> {
     clearInterval(auditTimer);
     stoppingPulse = true;
     clearInterval(pulseTimer);
+    stoppingCampaigns = true;
+    clearInterval(campaignTimer);
     runner.requestShutdown();
   };
   process.once("SIGINT", shutdown);
@@ -195,6 +219,8 @@ async function main(): Promise<void> {
   clearInterval(auditTimer);
   stoppingPulse = true;
   clearInterval(pulseTimer);
+  stoppingCampaigns = true;
+  clearInterval(campaignTimer);
   if (result.reason === "deadline_exceeded") {
     process.exitCode = 1;
     // Force exit so OS stops heartbeats; jobs recover via lease expiry.
