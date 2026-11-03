@@ -346,6 +346,26 @@ export async function processNextCampaignDelivery(deps: {
     await finishCompletedRuns();
     return "SKIPPED";
   }
+  const quotaKey = "campaign:" + job.RunID + ":" + job.PhoneNormalized;
+  const quotaArgs = { businessId:job.BusinessID,
+    eventType:USAGE_EVENT_WHATSAPP_OUTBOUND, reservationKey:quotaKey };
+  try {
+    await (deps.reserve ?? reserveQuota)(quotaArgs);
+  } catch {
+    // Exhausted or unavailable subscription/quota: pause without transmitting.
+    await query(
+      "UPDATE dbo.TblWhatsAppCampaignRun SET Status=N\'PAUSED\',UpdatedAtUtc=SYSUTCDATETIME() WHERE BusinessID=@businessId AND RunID=@runId AND Status=N\'RUNNING\'",
+      [b(job.BusinessID), {name:"runId",type:sql.UniqueIdentifier,value:job.RunID}],
+    );
+    await unclaimWhenOffline(job);
+    return "OFFLINE";
+  }
+  if (!await stillAllowed(job)) {
+    await finish(job,{status:"SKIPPED",errorCode:"RECIPIENT_SUPPRESSED"});
+    await (deps.release ?? releaseQuotaReservation)(quotaArgs);
+    await finishCompletedRuns();
+    return "SKIPPED";
+  }
   let outcome: DeliveryResult;
   try {
     const send = deps.send ?? sendAccountMessage;
@@ -362,6 +382,22 @@ export async function processNextCampaignDelivery(deps: {
     outcome = {status:"UNKNOWN",errorCode:"SEND_RESULT_UNCERTAIN"};
   }
   await finish(job,outcome);
+  // Reserve is the billing commitment; ambiguous results retain a fenced quota.
+  try {
+    if (outcome.status==="SENT") {
+      await (deps.consume ?? consumeQuotaReservation)({
+        ...quotaArgs, metadata:{kind:"LABEL_CAMPAIGN",runId:job.RunID},
+      });
+    } else if (outcome.status==="UNKNOWN") {
+      await (deps.markUncertain ?? markQuotaReservationUncertain)(quotaArgs);
+    } else {
+      await (deps.release ?? releaseQuotaReservation)(quotaArgs);
+    }
+  } catch(error) {
+    console.warn("[campaign-worker] quota_settlement_failed",{
+      code:error instanceof Error?error.name:"UNKNOWN",
+    });
+  }
   await finishCompletedRuns();
   return outcome.status;
 }
