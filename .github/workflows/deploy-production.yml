@@ -100,6 +100,9 @@ jobs:
             echo "==> Applying database migrations"
             npm run db:migrate
 
+            echo "==> Verifying WhatsApp campaign schema and queue (read-only)"
+            node --env-file-if-exists=.env.production.local --import tsx scripts/campaign-production-smoke.ts
+
             echo "==> Verifying Pricing V1 production plans, real invoices, receipts and balances (read-only)"
             node --env-file-if-exists=.env.production.local --import tsx scripts/pricing-v1-production-smoke.ts
 
