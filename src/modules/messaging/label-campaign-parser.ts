@@ -49,6 +49,17 @@ export function parseLabelCampaignCommand(
   }
 
   occurrences.sort((a, b) => a.start - b.start);
+  // Two WhatsApp accounts may reuse a label name. Never choose one silently.
+  const duplicatedNames = new Set<string>();
+  const seenNames = new Set<string>();
+  for (const candidate of candidates) {
+    const key = candidate.name.toLocaleLowerCase();
+    if (seenNames.has(key)) duplicatedNames.add(key);
+    seenNames.add(key);
+  }
+  if (occurrences.some(o => duplicatedNames.has(o.label.name.toLocaleLowerCase()))) {
+    throw new ValidationError("اسم القائمة موجود على أكتر من رقم واتساب. لازم نحدد الرقم قبل تجهيز الحملة.");
+  }
   if (occurrences.length === 0) {
     throw new ValidationError(
       candidates.length
@@ -74,7 +85,7 @@ export function parseLabelCampaignCommand(
     let message = text.slice(found.end, next?.start ?? text.length);
     if (next) {
       message = message.replace(
-        /(?:[,،؛;]\s*)?(?:و\s*(?:ابعت|ابعث|ارسل|أرسل|رسالة|رساله|للناس|للعملاء|للي|لقائمة|لليست)\b)[^,،؛;\n]*$/iu,
+        /(?:[,،؛;]\s*)?(?:و\s*(?:ابعت|ابعث|ارسل|أرسل|رسالة|رساله|للناس|للعملاء|للي|لقائمة|لليست))[^,،؛;\n]*$/iu,
         "",
       );
     }
