@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { Alert } from "@/components/ui/alert";
+import { LabelCampaignAudiencePreview } from "@/components/dashboard/label-campaign-audience-preview";
 import { Button } from "@/components/ui/button";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
 
@@ -37,6 +38,7 @@ export function LabelCampaignChat() {
   const [busy, setBusy] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(true);
   const logRef = useRef<HTMLDivElement | null>(null);
@@ -195,6 +197,10 @@ export function LabelCampaignChat() {
                 </p>
                 {editId !== draft.draftId ? (
                   <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" disabled={busy}
+                      onClick={() => setPreviewId(previous => previous === draft.draftId ? null : draft.draftId)}>
+                      {previewId === draft.draftId ? "إخفاء الجمهور" : "معاينة الجمهور"}
+                    </Button>
                     {draft.status !== "COPY_APPROVED" ? (
                       <Button size="sm" disabled={busy} onClick={() => void updateDraft(draft, "approve_copy")}>
                         اعتماد الصياغة
@@ -208,6 +214,7 @@ export function LabelCampaignChat() {
                       onClick={() => void updateDraft(draft, "cancel")}>إلغاء المسودة</Button>
                   </div>
                 ) : null}
+                {previewId === draft.draftId ? <LabelCampaignAudiencePreview draftId={draft.draftId} /> : null}
               </article>
             ))}
           </div>
