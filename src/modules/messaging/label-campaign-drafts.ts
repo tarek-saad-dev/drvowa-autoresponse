@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { query, sql, withTransaction } from "@/lib/db";
+import { query, sql, withTransaction, type QueryInput } from "@/lib/db";
 import { getMembership } from "@/modules/businesses/repository";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/tenancy/errors";
 import { listMirroredWhatsAppLabels } from "./whatsapp-label-sync-service";
@@ -161,7 +161,7 @@ export async function updateLabelCampaignDraft(params: {
   }
 
   let statement = "";
-  let values: Array<{ name: string; type: unknown; value: unknown }> = [];
+  let values: QueryInput[] = [];
   if (params.action === "update") {
     statement = `UPDATE dbo.TblWhatsAppLabelCampaignDraft
       SET MessageText=@messageText, Status=N'DRAFT',
