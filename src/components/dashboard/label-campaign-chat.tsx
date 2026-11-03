@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { LabelCampaignAudiencePreview } from "@/components/dashboard/label-campaign-audience-preview";
 import { LabelCampaignPreflight } from "@/components/dashboard/label-campaign-preflight";
+import { CampaignLabelPicker } from "@/components/dashboard/campaign-label-picker";
 import { Button } from "@/components/ui/button";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
 
@@ -29,11 +30,13 @@ type ApiPayload = {
 };
 
 const NEW_GREETING =
-  "قولّي الرسالة ولأنهي قائمة واتساب. هجهزها كمسودة تراجعها، ومفيش أي إرسال تلقائي.";
+  "اختار قائمة العملاء من فوق واكتب رسالتك، أو اكتب طلب كامل بطريقتك. مفيش أي إرسال قبل التأكيد.";
 
 export function LabelCampaignChat() {
   const [turns, setTurns] = useState<ChatTurn[]>([{ role: "agent", text: NEW_GREETING }]);
   const [input, setInput] = useState("");
+  const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const [drafts, setDrafts] = useState<CampaignDraft[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -69,22 +72,24 @@ export function LabelCampaignChat() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = input.trim();
-    if (busy || text.length < 12) return;
+    if (busy || (selectedLabel ? text.length < 4 : text.length < 12)) return;
+    const command = selectedLabel ? `ابعت للناس اللي في ${selectedLabel} إن ${text}` : text;
     setBusy(true);
     setError(null);
     setInput("");
-    setTurns(previous => [...previous, { role: "owner", text }]);
+    setTurns(previous => [...previous, { role: "owner", text: selectedLabel ? `إلى ${selectedLabel}: ${text}` : text }]);
     try {
       const res = await fetch("/api/whatsapp/label-campaigns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text: command }),
       });
       const data = (await res.json().catch(() => ({}))) as ApiPayload;
       if (!res.ok || !Array.isArray(data.drafts)) {
         throw new Error(mapUserFacingError(data, "مش قادر أجهز المسودة. وضّح اسم القائمة ونص الرسالة."));
       }
       setDrafts(previous => [...data.drafts!, ...previous].slice(0, 25));
+      setSelectedLabel(null);
       setTurns(previous => [...previous, {
         role: "agent",
         text: data.drafts!.length === 1
@@ -93,6 +98,7 @@ export function LabelCampaignChat() {
       }]);
     } catch (err) {
       const message = err instanceof Error ? err.message : "تعذر تجهيز المسودة.";
+      setInput(text);
       setTurns(previous => [...previous, { role: "agent", text: message }]);
     } finally {
       if (alive.current) setBusy(false);
@@ -141,9 +147,16 @@ export function LabelCampaignChat() {
       <header className="shrink-0 border-b border-border px-4 py-3">
         <h2 className="text-sm font-black">رسائل قوائم واتساب</h2>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          اكتب الرسالة، راجع المستلمين، وبعد التأكيد الإرسال بيتم تدريجيًا للعملاء المشتركين في العروض فقط.
+          اختار قائمة عملائك، اكتب الرسالة، وراجعها قبل تأكيد الإرسال.
         </p>
       </header>
+
+      <div className="shrink-0 px-3 pt-3 sm:px-4">
+        <CampaignLabelPicker onPick={name => {
+          setSelectedLabel(name);
+          composerRef.current?.focus();
+        }} />
+      </div>
 
       <div ref={logRef} role="log" aria-label="رسائل تجهيز الحملات"
         className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain bg-surface/25 px-3 py-4 sm:px-5">
@@ -229,15 +242,23 @@ export function LabelCampaignChat() {
       </div>
       {error ? <div className="px-3 pt-2"><Alert variant="warning">{error}</Alert></div> : null}
       <form onSubmit={event => void submit(event)} className="shrink-0 border-t border-border p-3">
+        {selectedLabel ? (
+          <div className="mb-2 flex items-center gap-2 text-xs">
+            <span className="rounded-full bg-primary/10 px-3 py-1.5 font-bold text-primary">إلى قائمة: {selectedLabel}</span>
+            <button type="button" onClick={() => setSelectedLabel(null)}
+              className="font-semibold text-muted-foreground underline">تغيير القائمة</button>
+          </div>
+        ) : null}
         <div className="flex items-end gap-2">
-          <textarea aria-label="اكتب طلب الحملة" value={input} maxLength={4000} rows={2}
-            placeholder="ابعت للناس اللي في Coach إن فيه سيشن جديد الجمعة…"
+          <textarea ref={composerRef} aria-label={selectedLabel ? "اكتب رسالة القائمة" : "اكتب طلب الحملة"}
+            value={input} maxLength={4000} rows={2}
+            placeholder={selectedLabel ? "اكتب الرسالة اللي عايز تبعتها لعملاء القائمة…" : "أو اكتب طلب زي: ابعت للناس اللي في VIP إن فيه عرض جديد…"}
             onChange={event => setInput(event.target.value)}
             className="min-h-[62px] flex-1 resize-none rounded-xl border border-border bg-surface px-3 py-2 text-sm leading-6 outline-none focus:border-primary" />
-          <Button type="submit" disabled={busy || input.trim().length < 12}>تجهيز</Button>
+          <Button type="submit" disabled={busy || input.trim().length < (selectedLabel ? 4 : 12)}>تجهيز</Button>
         </div>
         <p className="mt-2 text-[11px] text-muted-foreground">
-          تقدر تجهز أكتر من قائمة في نفس الطلب. مفيش إرسال إلا بعد اعتماد النص وتأكيد الحملة.
+          تقدر تختار قائمة من فوق أو تكتب طلبك بطريقتك. مفيش إرسال إلا بعد مراجعة الرسالة وتأكيد الحملة.
         </p>
       </form>
     </section>
