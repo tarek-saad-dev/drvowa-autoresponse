@@ -98,6 +98,7 @@ export async function ingestWhatsAppLabelEvent(
 }
 
 type LabelListRow = {
+  ChannelConnectionID: string;
   ProviderLabelID: string;
   LabelName: string | null;
   Color: number | null;
@@ -107,7 +108,7 @@ type LabelListRow = {
 
 export async function listMirroredWhatsAppLabels(businessId: string) {
   const result = await query<LabelListRow>(
-    `SELECT l.ProviderLabelID, l.LabelName, l.Color, l.IsDeleted,
+    `SELECT l.ChannelConnectionID, l.ProviderLabelID, l.LabelName, l.Color, l.IsDeleted,
             COUNT(cl.ContactID) AS ContactCount
      FROM dbo.TblWhatsAppLabel l
      INNER JOIN dbo.TblChannelConnection ch
@@ -117,11 +118,12 @@ export async function listMirroredWhatsAppLabels(businessId: string) {
        ON cl.BusinessID=l.BusinessID AND cl.ChannelConnectionID=l.ChannelConnectionID
        AND cl.ProviderLabelID=l.ProviderLabelID AND cl.IsActive=1
      WHERE l.BusinessID=@businessId
-     GROUP BY l.ProviderLabelID, l.LabelName, l.Color, l.IsDeleted
+     GROUP BY l.ChannelConnectionID, l.ProviderLabelID, l.LabelName, l.Color, l.IsDeleted
      ORDER BY l.LabelName, l.ProviderLabelID`,
     [{ name: "businessId", type: sql.UniqueIdentifier, value: businessId }],
   );
   return result.recordset.map(r => ({
+    channelConnectionId: r.ChannelConnectionID,
     id: r.ProviderLabelID,
     name: r.LabelName,
     color: r.Color,
