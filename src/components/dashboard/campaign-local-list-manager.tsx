@@ -43,6 +43,7 @@ export function CampaignLocalListManager({
   const [testPhone, setTestPhone] = useState("");
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [testing, setTesting] = useState(false);
+  const [action, setAction] = useState<"members" | "test">("members");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const localLists = labels.filter(label => label.source === "DRVO" && label.name);
@@ -61,6 +62,7 @@ export function CampaignLocalListManager({
       setNewName(""); setCreating(false);
       setSelected(result.list.id);
       setMembers([]);
+      setAction("members");
       setTestResult(null);
       setNotice("اتعملت القائمة في DRVO. ضيف أرقام العملاء من تحت.");
       await onChanged();
@@ -71,6 +73,7 @@ export function CampaignLocalListManager({
   async function loadMembers(listId: string) {
     if (busy) return;
     setSelected(listId);setError(null);setNotice(null);
+    setAction("members");
     setTestResult(null);
     setPhones("");
     setBusy(true);
@@ -151,13 +154,13 @@ export function CampaignLocalListManager({
   }
 
   return (
-    <div className="space-y-3 rounded-xl border border-border bg-surface/45 p-3"
+    <div className="space-y-5"
       aria-label="إدارة قوائم عملاء DRVO">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-sm font-black">قوائم تعملها بنفسك في DRVO</p>
+          <p className="text-base font-black">قوائم DRVO</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            بديل عملي لو قوائم واتساب القديمة مش ظاهرة عندك.
+            اعمل قائمة مستقلة ونظّم عملاءك بدون انتظار مزامنة واتساب.
           </p>
         </div>
         <Button size="sm" variant="outline" onClick={() => {
@@ -192,89 +195,111 @@ export function CampaignLocalListManager({
         </div>
       ) : null}
       {selectedList ? (
-        <div className="space-y-3 border-t border-border pt-3">
-          <p className="text-xs font-bold">إضافة عملاء إلى {selectedList.name}</p>
-          <form onSubmit={event => void importNumbers(event)} className="space-y-2">
-            <textarea aria-label="أرقام العملاء للقائمة" value={phones}
-              maxLength={3000} rows={3}
-              onChange={event => setPhones(event.target.value)}
-              placeholder={"01012345678\n01112345678\n+201212345678"}
-              className="w-full resize-y rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"/>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[11px] text-muted-foreground">
-                رقم في كل سطر، لحد 50 رقم مرة واحدة. المكرر مش هيتضاف مرتين.
-              </span>
-              <Button size="sm" type="submit" disabled={busy || !phones.trim()}>
-                {busy ? "بنضيف…" : "إضافة العملاء"}
-              </Button>
-            </div>
-          </form>
-          {members.length ? (
-            <details className="rounded-lg border border-border px-3 py-2">
-              <summary className="cursor-pointer text-xs font-bold">
-                عرض العملاء المسجلين ({members.length.toLocaleString("ar-EG")})
-              </summary>
-              <div className="mt-2 max-h-44 space-y-1 overflow-y-auto">
-                {members.map(member => (
-                  <div key={member.phone} className="flex items-center justify-between gap-2 py-1 text-xs">
-                    <span className="truncate">{member.name || member.phone}</span>
-                    <button type="button" onClick={() => void remove(member.phone)}
-                      disabled={busy} aria-label={"إزالة " + member.phone}
-                      className="shrink-0 text-muted-foreground underline hover:text-foreground">
-                      إزالة
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </details>
-          ) : null}
-          <div className="space-y-2 rounded-xl border border-border bg-card p-3">
-            <p className="text-xs font-black">اختبار إرسال على رقم واحد</p>
-            <p className="text-xs leading-6 text-muted-foreground">
-              ضيف رقم اختبار تملكه أو رقم شخص وافق على الاختبار، وبعدها ابعت رسالة الاشتراك
-              من الرقم ده إلى واتساب النشاط المتصل. مش من نفس رقم واتساب النشاط.
-            </p>
-            <form onSubmit={event => void checkTestNumber(event)} className="flex flex-wrap gap-2">
-              <input aria-label="رقم واتساب التجريبي" value={testPhone}
-                onChange={event => {setTestPhone(event.target.value);setTestResult(null);}}
-                placeholder="01012345678" inputMode="tel" maxLength={32}
-                className="min-h-10 min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 text-sm outline-none focus:border-primary"/>
-              <Button type="submit" size="sm" variant="outline"
-                disabled={busy || testing || !testPhone.trim()}>
-                {testing ? "بنتحقق…" : "تحقق من الجاهزية"}
-              </Button>
-            </form>
-            {testResult ? <div role="status" className="space-y-2 text-xs leading-6">
-              <p>{testResult.inList ? "✓ الرقم موجود في القائمة" : "الرقم مش موجود في القائمة؛ ضيفه أولًا."}</p>
-              <p>{testResult.hasPermission && !testResult.optedOut
-                ? "✓ الرقم وافق على عروض واتساب"
-                : testResult.optedOut ? "الرقم طلب وقف العروض؛ مش مؤهل للإرسال."
-                : "لسه مفيش موافقة واتساب صريحة من الرقم."}</p>
-              {!testResult.hasPermission && !testResult.optedOut ? <div className="space-y-1">
-                <p>انسخ النص ده وابعتْه من رقم الاختبار إلى واتساب النشاط، وبعدها اضغط تحقق تاني:</p>
-                <p dir="auto" className="rounded-lg bg-surface p-2 select-all">{testResult.optInText}</p>
-                <Button size="sm" variant="outline" type="button"
-                  onClick={() => void navigator.clipboard.writeText(testResult.optInText)}>
-                  نسخ نص الموافقة
-                </Button>
-              </div> : null}
-              {testResult.eligibleForReview ? <p className="font-bold text-primary">
-                الرقم جاهز للمراجعة. اختار القائمة من فوق، جهّز رسالة، اعتمدها، وبعدها أكد الإرسال.
-                الوصول الفعلي بيتحدد بنتيجة واتساب والباقة والاتصال.
-              </p> : null}
-            </div> : null}
+        <section aria-label={"إدارة " + selectedList.name}
+          className="space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-black">{selectedList.name}</h3>
+            <button type="button" onClick={() => void deleteList()} disabled={busy}
+              className="text-xs text-muted-foreground hover:text-foreground">
+              حذف القائمة
+            </button>
           </div>
-          <button type="button" onClick={() => void deleteList()} disabled={busy}
-            className="text-xs text-muted-foreground underline">
-            حذف القائمة
-          </button>
-        </div>
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface p-1"
+            role="tablist" aria-label="إدارة العملاء والاختبار">
+            <button type="button" role="tab" aria-selected={action === "members"}
+              onClick={() => {setAction("members");setError(null);}}
+              className={"rounded-lg px-3 py-2 text-sm font-bold " +
+                (action === "members" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground")}>
+              إضافة العملاء
+            </button>
+            <button type="button" role="tab" aria-selected={action === "test"}
+              onClick={() => {setAction("test");setError(null);}}
+              className={"rounded-lg px-3 py-2 text-sm font-bold " +
+                (action === "test" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground")}>
+              اختبار رقم واحد
+            </button>
+          </div>
+          {action === "members" ? (
+            <div className="space-y-3" role="tabpanel" aria-label="إضافة العملاء">
+              <p className="text-xs text-muted-foreground">الصق الأرقام، كل رقم في سطر. بحد أقصى 50 رقم في المرة.</p>
+              <form onSubmit={event => void importNumbers(event)} className="space-y-2">
+                <textarea aria-label="أرقام العملاء للقائمة" value={phones}
+                  maxLength={3000} rows={3}
+                  onChange={event => setPhones(event.target.value)}
+                  placeholder={"01012345678\n01112345678\n+201212345678"}
+                  className="w-full resize-y rounded-xl border border-border bg-surface px-3 py-3 text-sm outline-none focus:border-primary"/>
+                <div className="flex justify-end">
+                  <Button size="sm" type="submit" disabled={busy || !phones.trim()}>
+                    {busy ? "بنضيف…" : "إضافة للقائمة"}
+                  </Button>
+                </div>
+              </form>
+              {members.length ? (
+                <details className="rounded-xl border border-border px-3 py-3">
+                  <summary className="cursor-pointer text-xs font-bold">
+                    العملاء الموجودين ({members.length.toLocaleString("ar-EG")})
+                  </summary>
+                  <div className="mt-3 max-h-44 divide-y divide-border overflow-y-auto">
+                    {members.map(member => (
+                      <div key={member.phone} className="flex items-center justify-between gap-2 py-2 text-xs">
+                        <span className="truncate">{member.name || member.phone}</span>
+                        <button type="button" onClick={() => void remove(member.phone)}
+                          disabled={busy} aria-label={"إزالة " + member.phone}
+                          className="shrink-0 text-muted-foreground underline hover:text-foreground">
+                          إزالة
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
+            </div>
+          ) : (
+            <div className="space-y-3" role="tabpanel" aria-label="اختبار إرسال على رقم واحد">
+              <p className="text-xs leading-6 text-muted-foreground">
+                جرّب على رقم مستقل وافق على استقبال العروض. ده فحص جاهزية، مش إرسال مباشر.
+              </p>
+              <form onSubmit={event => void checkTestNumber(event)} className="flex flex-wrap gap-2">
+                <input aria-label="رقم واتساب التجريبي" value={testPhone}
+                  onChange={event => {setTestPhone(event.target.value);setTestResult(null);}}
+                  placeholder="01012345678" inputMode="tel" maxLength={32}
+                  className="min-h-10 min-w-0 flex-1 rounded-xl border border-border bg-surface px-3 text-sm outline-none focus:border-primary"/>
+                <Button type="submit" size="sm" disabled={busy || testing || !testPhone.trim()}>
+                  {testing ? "بنتحقق…" : "تحقق"}
+                </Button>
+              </form>
+              {testResult ? (
+                <div role="status" className="space-y-3 rounded-xl bg-surface p-3 text-xs leading-6">
+                  <p className="font-bold">{testResult.eligibleForReview
+                    ? "الرقم جاهز لمراجعة الحملة"
+                    : "فيه خطوة ناقصة قبل الإرسال"}</p>
+                  <p>{testResult.inList ? "✓ الرقم في القائمة" : "الرقم مش في القائمة. أضفه من تبويب إضافة العملاء."}</p>
+                  <p>{testResult.hasPermission && !testResult.optedOut
+                    ? "✓ موافقته مسجلة"
+                    : testResult.optedOut ? "العميل طلب وقف العروض." : "موافقته على العروض مش مسجلة."}</p>
+                  {!testResult.hasPermission && !testResult.optedOut ? (
+                    <div className="space-y-2 border-t border-border pt-3">
+                      <p>لو الرقم موافق، ابعت النص ده منه لواتساب النشاط، وبعدها اضغط تحقق تاني:</p>
+                      <p dir="auto" className="select-all rounded-lg bg-card p-2">{testResult.optInText}</p>
+                      <Button size="sm" variant="outline" type="button"
+                        onClick={() => void navigator.clipboard.writeText(testResult.optInText)}>
+                        نسخ الرسالة
+                      </Button>
+                    </div>
+                  ) : null}
+                  {testResult.eligibleForReview ? (
+                    <p className="text-primary">ارجع للحملة، اختار القائمة، واعتمد الرسالة ثم أكد بدء الإرسال.</p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </section>
       ) : null}
       {notice ? <p role="status" className="text-xs font-semibold text-foreground">{notice}</p> : null}
       {error ? <p role="alert" className="text-xs text-warning">{error}</p> : null}
       <p className="text-[11px] leading-5 text-muted-foreground">
-        قوائم DRVO داخل السيستم فقط، مش بتتضاف إلى Labels على الموبايل.
-        إضافة رقم مش معناها موافقته على العروض؛ شروط الإرسال بتتراجع منفصلة قبل أي حملة.
+        القوائم دي داخل DRVO فقط ومش بتظهر في تطبيق واتساب. إضافة الأرقام لا تمنح موافقة تلقائية على العروض.
       </p>
     </div>
   );
