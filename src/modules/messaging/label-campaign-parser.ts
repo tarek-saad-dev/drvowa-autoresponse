@@ -39,7 +39,9 @@ export function parseLabelCampaignCommand(
   }> = [];
   for (const label of candidates) {
     const safe = label.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const pattern = new RegExp(`(^|[^\\p{L}\\p{N}_])(${safe})(?=$|[^\\p{L}\\p{N}_])`, "giu");
+    // Arabic prepositions attach directly to Latin label names (e.g. لCoach).
+    // Treat the Arabic ل as a prefix even though it is a Unicode letter.
+    const pattern = new RegExp(`(^|[^\\\\p{L}\\\\p{N}_]|ل)(${safe})(?=$|[^\\\\p{L}\\\\p{N}_])`, "giu");
     for (const match of text.matchAll(pattern)) {
       const start = (match.index ?? 0) + match[1].length;
       const end = start + match[2].length;
