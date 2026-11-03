@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { query, sql, withTransaction, type QueryInput, type TransactionClient } from "@/lib/db";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/tenancy/errors";
 import { getAccountStatus } from "@/modules/channels/runtime-client";
+import { getEntitlementSnapshot } from "@/modules/billing/entitlements";
 
 export const MAX_LAUNCH_RECIPIENTS = 60;
 export function campaignsSendingEnabled(): boolean {
@@ -130,9 +131,14 @@ export async function previewCampaignLaunch(
     ? Number((await query<{Total: number}>(candidateQuery, candidateInputs(meta, params.businessId)))
       .recordset[0]?.Total ?? 0)
     : 0;
+  const entitlement=await getEntitlementSnapshot(params.businessId);
+  const remaining=entitlement.plan?.monthlyWhatsAppOutbound==null
+    ? Number.POSITIVE_INFINITY
+    : Math.max(0,entitlement.plan.monthlyWhatsAppOutbound-entitlement.whatsappOutboundUsed);
+  const hasQuota=entitlement.canAct && remaining>=count;
   return {
-    eligible: count, canLaunch: campaignsSendingEnabled() && currentCopy
-      && count > 0 && count <= MAX_LAUNCH_RECIPIENTS && !existingRun,
+    eligible: count, hasQuota, canLaunch: campaignsSendingEnabled() && currentCopy
+      && hasQuota && count > 0 && count <= MAX_LAUNCH_RECIPIENTS && !existingRun,
     enabled: campaignsSendingEnabled(),
     labelActive: currentCopy,
     alreadyLaunched: Boolean(existingRun),
@@ -165,6 +171,13 @@ export async function launchCampaign(params: {
     throw new ConflictError("الرسالة أو القائمة اتغيرت. راجع الجمهور مرة تانية.");
   }
   // Fail closed on a disconnected or logged-out phone before any queue exists.
+  const entitlement=await getEntitlementSnapshot(params.businessId);
+  const remaining=entitlement.plan?.monthlyWhatsAppOutbound==null
+    ? Number.POSITIVE_INFINITY
+    : Math.max(0,entitlement.plan.monthlyWhatsAppOutbound-entitlement.whatsappOutboundUsed);
+  if(!entitlement.canAct||remaining<params.expectedEligible) {
+    throw new ConflictError("الباقة الحالية لا تسمح بإرسال العدد ده من رسائل واتساب.");
+  }
   const state = await getAccountStatus(meta.AccountKey!);
   if (!state.ready || state.state !== "READY") {
     throw new ConflictError("رقم واتساب مش متصل حاليًا.");
