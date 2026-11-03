@@ -251,7 +251,7 @@ export function CampaignLocalListManager({
                 : testResult.optedOut ? "الرقم طلب وقف العروض؛ مش مؤهل للإرسال."
                 : "لسه مفيش موافقة واتساب صريحة من الرقم."}</p>
               {!testResult.hasPermission && !testResult.optedOut ? <div className="space-y-1">
-                <p>انسخ النص ده وابعتْه **من رقم الاختبار إلى واتساب النشاط**، وبعدها اضغط تحقق تاني:</p>
+                <p>انسخ النص ده وابعتْه من رقم الاختبار إلى واتساب النشاط، وبعدها اضغط تحقق تاني:</p>
                 <p dir="auto" className="rounded-lg bg-surface p-2 select-all">{testResult.optInText}</p>
                 <Button size="sm" variant="outline" type="button"
                   onClick={() => void navigator.clipboard.writeText(testResult.optInText)}>
