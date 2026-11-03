@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 
 const mocks = vi.hoisted(() => ({
-  query: vi.fn(), trxQuery: vi.fn(), getStatus: vi.fn(),
+  query: vi.fn(), trxQuery: vi.fn(), getStatus: vi.fn(), entitlement:vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({
   query: mocks.query,
@@ -16,6 +16,9 @@ vi.mock("@/lib/db", () => ({
 }));
 vi.mock("@/modules/channels/runtime-client", () => ({
   getAccountStatus:mocks.getStatus,
+}));
+vi.mock("@/modules/billing/entitlements", () => ({
+  getEntitlementSnapshot:mocks.entitlement,
 }));
 import {
   campaignsSendingEnabled, launchCampaign, previewCampaignLaunch,
@@ -35,6 +38,8 @@ const details={
 const params={businessId,draftId,preflightId};
 beforeEach(()=>{
   mocks.query.mockReset();mocks.trxQuery.mockReset();mocks.getStatus.mockReset();
+  mocks.entitlement.mockReset();
+  mocks.entitlement.mockResolvedValue({canAct:true,plan:{monthlyWhatsAppOutbound:100},whatsappOutboundUsed:0});
   process.env.DRVO_LABEL_CAMPAIGNS_SEND_ENABLED="true";
 });
 afterEach(()=>{delete process.env.DRVO_LABEL_CAMPAIGNS_SEND_ENABLED;});
