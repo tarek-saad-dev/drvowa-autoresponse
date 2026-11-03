@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { EmployeeStudio } from "@/components/dashboard/employee-studio";
+import { getMembership } from "@/modules/businesses/repository";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import { getWhatsAppAiSetting } from "@/modules/ai";
@@ -17,7 +18,7 @@ export default async function AgentPage({
   const businessId = await resolveActiveBusiness(user.userId, user.activeBusinessId);
   if (!businessId) redirect("/onboarding");
 
-  const [agents, setting, waView, knowledge] = await Promise.all([
+  const [agents, setting, waView, knowledge, membership] = await Promise.all([
     listAgents({ businessId }),
     getWhatsAppAiSetting({ businessId }),
     Promise.race([
@@ -27,6 +28,7 @@ export default async function AgentPage({
       }),
     ]).catch(() => null),
     listItems({ businessId, includeInactive: false }),
+    getMembership({ businessId, userId: user.userId }),
   ]);
 
   const { tab } = await searchParams;
@@ -42,7 +44,8 @@ export default async function AgentPage({
       }
       whatsappState={waView?.uiState ?? "UNKNOWN"}
       knowledgeCount={knowledge.length}
-      initialTab={tab === "knowledge" ? "knowledge" : "personality"}
+      canManageCampaigns={membership?.status === "ACTIVE" && membership.role === "OWNER"}
+      initialTab={tab === "knowledge" ? "knowledge" : tab === "campaigns" && membership?.role === "OWNER" ? "campaigns" : "personality"}
     />
   );
 }
