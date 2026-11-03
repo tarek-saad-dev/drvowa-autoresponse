@@ -9,7 +9,7 @@ type Run = {
   unknown:number; skipped:number; createdAtUtc:string;
 };
 type Preview = {
-  eligible:number; canLaunch:boolean; enabled:boolean; labelActive:boolean;
+  eligible:number; canLaunch:boolean; hasQuota:boolean; enabled:boolean; labelActive:boolean;
   alreadyLaunched:boolean; businessName:string; optInText:string;
   sendRate:string; coverage:"EVENT_DRIVEN_PARTIAL"; run:Run|null;
 };
@@ -113,6 +113,9 @@ export function LabelCampaignLaunch({draftId,preflightId,messageText}:{
         <p dir="auto" className="rounded-lg bg-card p-2 text-xs">{preview.optInText}</p>
         <Button size="sm" variant="outline" onClick={()=>void navigator.clipboard.writeText(preview.optInText)}>نسخ النص</Button>
       </div>:null}
+      {preview.eligible>0&&!preview.hasQuota?<p className="text-xs text-warning">
+        باقتك الحالية مش بتسمح بإرسال العدد ده من رسائل واتساب. راجع الاستخدام أو الباقة.
+      </p>:null}
       {!preview.enabled?<p className="text-xs text-warning">
         محرك إرسال الحملات لسه غير مفعّل على السيرفر.
       </p>:null}
