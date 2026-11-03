@@ -395,6 +395,19 @@ export async function processNextCampaignDelivery(deps: {
     outcome = {status:"UNKNOWN",errorCode:"SEND_RESULT_UNCERTAIN"};
   }
   await finish(job,outcome);
+  // Circuit breaker: a provider failure or uncertain acknowledgement pauses
+  // the rest of this campaign. The ambiguous recipient is never retried
+  // automatically; the owner may inspect and deliberately resume the rest.
+  if (outcome.status==="FAILED" || outcome.status==="UNKNOWN") {
+    await query(
+      `UPDATE dbo.TblWhatsAppCampaignRun
+       SET Status=N'PAUSED',UpdatedAtUtc=SYSUTCDATETIME()
+       WHERE BusinessID=@businessId AND RunID=@runId
+         AND Status IN (N'RUNNING',N'QUEUED')`,
+      [b(job.BusinessID),
+        {name:"runId",type:sql.UniqueIdentifier,value:job.RunID}],
+    );
+  }
   // Reserve is the billing commitment; ambiguous results retain a fenced quota.
   try {
     if (outcome.status==="SENT") {
