@@ -255,8 +255,8 @@ export async function launchCampaign(params: {
            WHERE oldRun.BusinessID=pr.BusinessID
              AND oldRun.ChannelConnectionID=@channelConnectionId
              AND oldItem.PhoneNormalized=pr.PhoneNormalized
-             AND oldItem.Status=N'SENT'
-             AND oldItem.CompletedAtUtc>DATEADD(HOUR,-24,SYSUTCDATETIME()))`,
+             AND oldItem.Status IN (N'SENT',N'UNKNOWN',N'IN_FLIGHT')
+             AND COALESCE(oldItem.CompletedAtUtc,oldItem.ClaimedAtUtc)>DATEADD(HOUR,-24,SYSUTCDATETIME()))`,
       [
         ...c,
         {name:"runId",type:sql.UniqueIdentifier,value:runId},
