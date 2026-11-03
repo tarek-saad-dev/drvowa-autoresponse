@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import Link from "next/link";
 
 type MirroredLabel = {
   channelConnectionId: string;
@@ -106,9 +107,9 @@ export function SettingsWhatsAppLabels() {
               بعض القوائم وصلنا ارتباط عملائها، لكن أسماءها لسه مش متاحة.
             </p>
           ) : null}
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="text-[11px] font-medium text-muted-foreground">
-              للاستعراض فقط — الإرسال الجماعي غير مفعّل
+              عرض القوائم هنا للمتابعة؛ تجهيز الحملات من شاشة الموظف الذكي.
             </span>
             <button type="button" onClick={() => void refresh()}
               disabled={loading}
@@ -116,6 +117,10 @@ export function SettingsWhatsAppLabels() {
               {loading ? "بنحدّث…" : "تحديث"}
             </button>
           </div>
+          <Link href="/dashboard/agent?tab=campaigns"
+            className="inline-flex rounded-lg border border-border px-3 py-2 text-xs font-bold text-primary hover:bg-primary/5">
+            افتح حملات واتساب
+          </Link>
         </div>
       ) : null}
     </section>
