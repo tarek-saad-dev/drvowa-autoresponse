@@ -403,7 +403,7 @@ export function EmployeeStudio({
       </div>
       {canManageCampaigns ? (
         <div role="tabpanel" id="studio-campaigns" aria-label="رسائل قوائم واتساب"
-          hidden={tab !== "campaigns"} className="min-h-0 flex-1 overflow-hidden">
+          hidden={tab !== "campaigns"} className="flex min-h-0 flex-1 flex-col overflow-hidden [&[hidden]]:hidden">
           {tab === "campaigns" ? <LabelCampaignChat /> : null}
         </div>
       ) : null}
