@@ -342,7 +342,7 @@ export function LabelCampaignChat() {
           </div>
           {activeDraft.status === "COPY_APPROVED" && editId !== activeDraft.draftId ? (
             <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
-              <h3 className="mb-3 text-sm font-black">جاهزية الإرسال</h3>
+              <h3 className="mb-3 text-sm font-black">إرسال الحملة</h3>
               <LabelCampaignPreflight
                 key={activeDraft.draftId} openByDefault draftId={activeDraft.draftId}
                 messageText={activeDraft.messageText} />
