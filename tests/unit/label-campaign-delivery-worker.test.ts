@@ -20,27 +20,36 @@ const job={
   PhoneNormalized:"201001234567",ContactID:"cccccccc-cccc-4ccc-8ccc-cccccccccccc",
   AccountKey:"whatsapp-salon",MessageText:"العرض الجديد",
 };
-function setupClaim() {
-  mocks.query.mockResolvedValueOnce({rowsAffected:[0]}) // expire
-    .mockResolvedValueOnce({rowsAffected:[0]}) // skipped
-    .mockResolvedValueOnce({rowsAffected:[0]}) // finish completed
-    .mockResolvedValueOnce({recordset:[{Allowed:1}]}) // authorization recheck
-    .mockResolvedValueOnce({rowsAffected:[1]}) // result
-    .mockResolvedValueOnce({rowsAffected:[0]}); // finish
-  mocks.trxQuery
-    .mockResolvedValueOnce({recordset:[{
-      ChannelConnectionID:"dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-      BusinessID:job.BusinessID,
-    }]})
-    .mockResolvedValueOnce({recordset:[{AttemptCount:0}]})
+const quota={
+  reserve:vi.fn().mockResolvedValue({state:"RESERVED"}),
+  consume:vi.fn().mockResolvedValue(undefined),
+  release:vi.fn().mockResolvedValue(undefined),
+  markUncertain:vi.fn().mockResolvedValue(undefined),
+};
+function setupClaim(allowed=true) {
+  mocks.query.mockResolvedValueOnce({rowsAffected:[0]})
+    .mockResolvedValueOnce({rowsAffected:[0]})
+    .mockResolvedValueOnce({rowsAffected:[0]})
+    .mockResolvedValueOnce({recordset:[{Allowed:allowed?1:0}]});
+  if(allowed) {
+    mocks.query.mockResolvedValueOnce({recordset:[{Allowed:1}]});
+  }
+  mocks.query.mockResolvedValueOnce({rowsAffected:[1]})
+    .mockResolvedValueOnce({rowsAffected:[0]});
+  mocks.trxQuery.mockResolvedValueOnce({recordset:[{
+    ChannelConnectionID:"dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    BusinessID:job.BusinessID,
+  }]}).mockResolvedValueOnce({recordset:[{AttemptCount:0}]})
     .mockResolvedValueOnce({recordset:[job]});
-  mocks.trxExecute.mockResolvedValueOnce(1).mockResolvedValueOnce(1)
-    .mockResolvedValueOnce(1);
+  mocks.trxExecute.mockResolvedValue(1);
 }
+
 beforeEach(()=>{
   vi.useFakeTimers();vi.setSystemTime(new Date("2026-11-03T10:30:00Z"));
   process.env.DRVO_LABEL_CAMPAIGNS_SEND_ENABLED="true";
   mocks.query.mockReset();mocks.trxQuery.mockReset();mocks.trxExecute.mockReset();
+  quota.reserve.mockClear();quota.consume.mockClear();quota.release.mockClear();
+  quota.markUncertain.mockClear();
 });
 afterEach(()=>{
   delete process.env.DRVO_LABEL_CAMPAIGNS_SEND_ENABLED;
@@ -70,7 +79,7 @@ describe("consent-only WhatsApp campaign worker",()=>{
       success:true,status:"sent",messageId:"wamid.1",
     });
     const getStatus=vi.fn().mockResolvedValue({ready:true,state:"READY"});
-    const result=await processNextCampaignDelivery({send,getStatus});
+    const result=await processNextCampaignDelivery({send,getStatus,...quota});
     expect(result).toBe("SENT");
     expect(send).toHaveBeenCalledTimes(1);
     expect(send.mock.calls[0][0]).toMatchObject({
@@ -78,21 +87,14 @@ describe("consent-only WhatsApp campaign worker",()=>{
       idempotencyKey:`campaign:${job.RunID}:${job.PhoneNormalized}`,
     });
     expect(mocks.query.mock.calls[3][0]).toContain("TblWhatsAppCampaignOptOut");
-    expect(mocks.query.mock.calls[4][1].find((x:{name:string})=>x.name==="status").value)
+    expect(mocks.query.mock.calls[5][1].find((x:{name:string})=>x.name==="status").value)
       .toBe("SENT");
   });
   it("does not send if last-second STOP or revoke is detected",async()=>{
-    setupClaim();
-    // Override the immediate last-second live permission check.
-    mocks.query.mockImplementationOnce(async()=>({rowsAffected:[0]}))
-      .mockImplementationOnce(async()=>({rowsAffected:[0]}))
-      .mockImplementationOnce(async()=>({rowsAffected:[0]}))
-      .mockImplementationOnce(async()=>({recordset:[{Allowed:0}]}))
-      .mockImplementationOnce(async()=>({rowsAffected:[1]}))
-      .mockImplementationOnce(async()=>({rowsAffected:[0]}));
+    setupClaim(false);
     const send=vi.fn();
     const getStatus=vi.fn().mockResolvedValue({ready:true,state:"READY"});
-    const result=await processNextCampaignDelivery({send,getStatus});
+    const result=await processNextCampaignDelivery({send,getStatus,...quota});
     expect(result).toBe("SKIPPED");
     expect(send).not.toHaveBeenCalled();
   });
@@ -100,9 +102,9 @@ describe("consent-only WhatsApp campaign worker",()=>{
     setupClaim();
     const send=vi.fn().mockRejectedValue(new Error("network timeout"));
     const getStatus=vi.fn().mockResolvedValue({ready:true,state:"READY"});
-    expect(await processNextCampaignDelivery({send,getStatus})).toBe("UNKNOWN");
+    expect(await processNextCampaignDelivery({send,getStatus,...quota})).toBe("UNKNOWN");
     expect(send).toHaveBeenCalledTimes(1);
-    expect(mocks.query.mock.calls[4][1].find((x:{name:string})=>x.name==="status").value)
+    expect(mocks.query.mock.calls[5][1].find((x:{name:string})=>x.name==="status").value)
       .toBe("UNKNOWN");
   });
 });
