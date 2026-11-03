@@ -4,6 +4,7 @@ import { NotFoundError } from "@/lib/tenancy/errors";
 import { parseOptionalUtc } from "@/modules/messaging/content";
 import { canonicalizeWhatsAppContactIdentity } from "@/modules/messaging/whatsapp-identity";
 import * as messages from "@/modules/messaging/repository";
+import { ingestWhatsAppLabelEvent } from "./whatsapp-label-sync-service";
 
 const contactKey = z.string().trim().min(5).max(256);
 const contactSync = z.object({
@@ -30,14 +31,29 @@ const messageSync = z.object({
   quotedProviderMessageId: z.string().trim().max(256).nullable().optional(),
 }).strict();
 
+const labelSync = z.object({
+  kind: z.literal("label"),
+  labelId: z.string().trim().min(1).max(128),
+  name: z.string().trim().min(1).max(200).nullable().optional(),
+  color: z.number().int().min(0).max(1_000_000).nullable().optional(),
+  deleted: z.boolean().optional(),
+}).strict();
+
+const labelAssociationSync = z.object({
+  kind: z.literal("labelAssociation"),
+  labelId: z.string().trim().min(1).max(128),
+  contactKey,
+  action: z.enum(["add", "remove"]),
+}).strict();
+
 export const whatsappSyncSchema = z.object({
   accountKey: z.string().trim().min(1).max(64),
-  events: z.array(z.discriminatedUnion("kind", [contactSync, messageSync])).min(1).max(25),
+  events: z.array(z.discriminatedUnion("kind", [contactSync, messageSync, labelSync, labelAssociationSync])).min(1).max(25),
 }).strict();
 export type WhatsappSyncInput = z.infer<typeof whatsappSyncSchema>;
 
 export async function ingestWhatsAppSync(input: WhatsappSyncInput): Promise<{
-  chats: number; messages: number; duplicates: number;
+  chats: number; messages: number; duplicates: number; labels: number; associations: number;
 }> {
   // Resolve tenant from a verified runtime accountKey; no BusinessID from callers.
   const channel = await messages.resolveChannelByExternalAccountKey(input.accountKey);
@@ -46,10 +62,13 @@ export async function ingestWhatsAppSync(input: WhatsappSyncInput): Promise<{
     throw new Error("WHATSAPP_CONNECTION_INACTIVE");
   }
 
-  const result = { chats: 0, messages: 0, duplicates: 0 };
+  const result = { chats: 0, messages: 0, duplicates: 0, labels: 0, associations: 0 };
   for (const event of input.events) {
     // Each event is independently idempotent; crash midway is safe to retry.
     const inserted = await withTransaction(async trx => {
+      if (event.kind === "label" || event.kind === "labelAssociation") {
+        return ingestWhatsAppLabelEvent(event, channel, trx);
+      }
       const key = canonicalizeWhatsAppContactIdentity({ externalContactKey: event.contactKey });
       const contact = await messages.upsertContact({
         businessId: channel.businessId,
@@ -136,7 +155,9 @@ export async function ingestWhatsAppSync(input: WhatsappSyncInput): Promise<{
       });
       return insertedMessage.inserted ? "inserted" : "duplicate";
     });
-    if (inserted === "chat") result.chats++;
+    if (inserted === "label") result.labels++;
+    else if (inserted === "association") result.associations++;
+    else if (inserted === "chat") result.chats++;
     else if (inserted === "inserted") result.messages++;
     else result.duplicates++;
   }
