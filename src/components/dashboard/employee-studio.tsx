@@ -214,8 +214,8 @@ export function EmployeeStudio({
     <main className="mx-auto flex h-full min-h-0 w-full max-w-4xl flex-col gap-3 overflow-hidden" dir="rtl">
       <div className="flex shrink-0 flex-wrap items-start justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">الموظف الذكي</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{tab === "campaigns" ? "وصل لعملائك من القوائم الموجودة على واتساب." : "اختار شخصيته وعلّمه كل حاجة عن شغلك."}</p>
+          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">{tab === "campaigns" ? "حملات واتساب" : "الموظف الذكي"}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{tab === "campaigns" ? "جهّز رسالة لعملائك بخطوات واضحة." : "اختار شخصيته وعلّمه كل حاجة عن شغلك."}</p>
         </div>
         {!whatsappReady ? (
           <Link href="/dashboard/whatsapp"
@@ -403,7 +403,7 @@ export function EmployeeStudio({
       </div>
       {canManageCampaigns ? (
         <div role="tabpanel" id="studio-campaigns" aria-label="رسائل قوائم واتساب"
-          hidden={tab !== "campaigns"} className="flex min-h-0 flex-1 flex-col overflow-hidden [&[hidden]]:hidden">
+          hidden={tab !== "campaigns"} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-0.5 [&[hidden]]:hidden">
           {tab === "campaigns" ? <LabelCampaignChat /> : null}
         </div>
       ) : null}

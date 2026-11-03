@@ -25,8 +25,10 @@ type Result = {
   sendingEnabled?: boolean;
 };
 
-export function LabelCampaignPreflight({ draftId, messageText }: { draftId: string; messageText: string }) {
-  const [opened, setOpened] = useState(false);
+export function LabelCampaignPreflight({ draftId, messageText, openByDefault = false }: {
+  draftId: string; messageText: string; openByDefault?: boolean;
+}) {
+  const [opened, setOpened] = useState(openByDefault);
   const [plan, setPlan] = useState<Preflight | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,16 +78,16 @@ export function LabelCampaignPreflight({ draftId, messageText }: { draftId: stri
 
   if (!opened) return (
     <Button size="sm" variant="outline" disabled={busy}
-      onClick={() => setOpened(true)}>فحص الجمهور قبل الإرسال</Button>
+      onClick={() => setOpened(true)}>مراجعة المستلمين</Button>
   );
 
   return (
-    <div className="space-y-2 rounded-xl border border-border bg-surface/55 p-3">
-      <p className="text-xs font-black">خطة مراجعة المستلمين</p>
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">قبل الإرسال بنراجع الأرقام المكررة والموافقات الفعلية.</p>
       {!plan ? (
         <Button size="sm" variant="outline" disabled={busy}
           onClick={() => void prepare()}>
-          {busy ? "جاري التجهيز…" : "حفظ قائمة مستلمين بدون إرسال"}
+          {busy ? "بنراجع الأرقام…" : "فحص جاهزية المستلمين"}
         </Button>
       ) : (
         <>
@@ -98,20 +100,15 @@ export function LabelCampaignPreflight({ draftId, messageText }: { draftId: stri
               ? ` • ${plan.optedOutPhones.toLocaleString("ar-EG")} أوقفوا العروض`
               : ""}
           </p>
-          <p className="text-xs leading-6 text-muted-foreground">
-            اتسجّلت الأرقام بدون تكرار في خطة مراجعة غير قابلة للإرسال،
-            ولسه مزامنة القوائم القديمة مش مؤكدة بالكامل.
-          </p>
+
         </>
       )}
-      <p className="text-[11px] text-muted-foreground">
-        تجهيز القائمة لا يرسل رسائل، ولا يحوّل العملاء إلى موافقين على العروض.
-      </p>
+
       {plan?.isCurrentCopy ? <LabelCampaignLaunch
         draftId={draftId} preflightId={plan.preflightId} messageText={messageText} /> : null}
       {error ? <p role="alert" className="text-xs text-warning">{error}</p> : null}
-      <button type="button" onClick={() => setOpened(false)}
-        className="text-xs font-semibold text-muted-foreground underline">إغلاق</button>
+      {!openByDefault ? <button type="button" onClick={() => setOpened(false)}
+        className="text-xs font-semibold text-muted-foreground underline">إغلاق</button> : null}
     </div>
   );
 }
