@@ -13,7 +13,7 @@ vi.mock("@/lib/db", () => ({
   withTransaction: async (fn: (trx: unknown) => Promise<unknown>) =>
     fn({ query: mock.query, execute: mock.execute }),
   sql: {
-    UniqueIdentifier: "uuid", DateTime2: "date", Bit: "bit", BigInt: "big",
+    UniqueIdentifier: "uuid", DateTime2: "date", Bit: "bit", BigInt: "big", Int: "int",
     NVarChar: (n: number) => "nvarchar:" + n,
   },
 }));
@@ -50,6 +50,28 @@ describe("WhatsApp mirror sync", () => {
     mock.execute.mockResolvedValue(1);
   });
 
+  it("ingests label changes without inserting any messages or opening a conversation", async () => {
+    const result = await ingestWhatsAppSync({ accountKey: "linked-account", events: [
+      { kind: "label", labelId: "3", name: "Coach", color: 4, deleted: false },
+      { kind: "labelAssociation", labelId: "3",
+        contactKey: "201011747438@s.whatsapp.net", action: "add" },
+    ] });
+    expect(result).toMatchObject({ labels: 1, associations: 1, messages: 0 });
+    expect(mock.insertMessage).not.toHaveBeenCalled();
+    expect(mock.upsertConversation).not.toHaveBeenCalled();
+    const statements = mock.execute.mock.calls.map(call => String(call[0])).join("\n");
+    expect(statements).toContain("TblWhatsAppLabel");
+    expect(statements).toContain("TblWhatsAppContactLabel");
+    expect(statements).not.toContain("TblAiReplyJob");
+  });
+
+  it("rejects an unresolved LID as a label campaign recipient", async () => {
+    await expect(ingestWhatsAppSync({ accountKey: "linked-account", events: [
+      { kind: "labelAssociation", labelId: "3", contactKey: "12345@lid", action: "add" },
+    ] })).rejects.toThrow("LABEL_ASSOCIATION_REQUIRES_RESOLVED_PHONE");
+    expect(mock.upsertContact).not.toHaveBeenCalled();
+  });
+
   it("rejects callers trying to supply their own business ID", () => {
     expect(whatsappSyncSchema.safeParse({
       accountKey: "linked-account", events: [message], businessId: id1,
@@ -58,7 +80,7 @@ describe("WhatsApp mirror sync", () => {
 
   it("ingests history without scheduling any AI job or marking historical inbound unread", async () => {
     const result = await ingestWhatsAppSync({ accountKey: "linked-account", events: [message] });
-    expect(result).toEqual({ chats: 0, messages: 1, duplicates: 0 });
+    expect(result).toEqual({ chats: 0, messages: 1, duplicates: 0, labels: 0, associations: 0 });
     expect(mock.resolve).toHaveBeenCalledWith("linked-account");
     expect(mock.insertMessage).toHaveBeenCalledWith(
       expect.objectContaining({ businessId: id1, providerMessageId: message.providerMessageId }),
@@ -73,7 +95,7 @@ describe("WhatsApp mirror sync", () => {
   it("records duplicates without producing a second conversation or message", async () => {
     mock.insertMessage.mockResolvedValue({ inserted: false, message: { messageId: id3 } });
     expect(await ingestWhatsAppSync({ accountKey: "linked-account", events: [message] }))
-      .toEqual({ chats: 0, messages: 0, duplicates: 1 });
+      .toEqual({ chats: 0, messages: 0, duplicates: 1, labels: 0, associations: 0 });
   });
 
   it("preserves a contact from chat history even with zero messages", async () => {
