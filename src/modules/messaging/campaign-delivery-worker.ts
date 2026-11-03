@@ -47,8 +47,8 @@ async function discardNotAllowed(): Promise<number> {
              WHERE oldRun.BusinessID=item.BusinessID
                AND oldRun.ChannelConnectionID=run.ChannelConnectionID
                AND oldItem.PhoneNormalized=item.PhoneNormalized
-               AND oldItem.Status=N'SENT'
-               AND oldItem.CompletedAtUtc>DATEADD(HOUR,-24,SYSUTCDATETIME()))
+               AND oldItem.Status IN (N'SENT',N'UNKNOWN',N'IN_FLIGHT')
+               AND COALESCE(oldItem.CompletedAtUtc,oldItem.ClaimedAtUtc)>DATEADD(HOUR,-24,SYSUTCDATETIME()))
              THEN N'RECENT_CAMPAIGN'
            ELSE N'CHANGED_AUDIENCE' END
      FROM dbo.TblWhatsAppCampaignRunItem item
@@ -79,8 +79,8 @@ async function discardNotAllowed(): Promise<number> {
            WHERE oldRun.BusinessID=item.BusinessID
              AND oldRun.ChannelConnectionID=run.ChannelConnectionID
              AND oldItem.PhoneNormalized=item.PhoneNormalized
-             AND oldItem.Status=N'SENT'
-             AND oldItem.CompletedAtUtc>DATEADD(HOUR,-24,SYSUTCDATETIME()))
+             AND oldItem.Status IN (N'SENT',N'UNKNOWN',N'IN_FLIGHT')
+             AND COALESCE(oldItem.CompletedAtUtc,oldItem.ClaimedAtUtc)>DATEADD(HOUR,-24,SYSUTCDATETIME()))
        )`,
   );
   return r.rowsAffected.reduce((x,y)=>x+y,0);
@@ -156,8 +156,8 @@ async function claimNext(): Promise<Claimed | null> {
            JOIN dbo.TblWhatsAppCampaignRun oldRun ON oldRun.RunID=oldItem.RunID
            WHERE oldRun.BusinessID=item.BusinessID
              AND oldRun.ChannelConnectionID=run.ChannelConnectionID
-             AND oldItem.PhoneNormalized=item.PhoneNormalized AND oldItem.Status=N'SENT'
-             AND oldItem.CompletedAtUtc>DATEADD(HOUR,-24,SYSUTCDATETIME()))
+             AND oldItem.PhoneNormalized=item.PhoneNormalized AND oldItem.Status IN (N'SENT',N'UNKNOWN',N'IN_FLIGHT')
+             AND COALESCE(oldItem.CompletedAtUtc,oldItem.ClaimedAtUtc)>DATEADD(HOUR,-24,SYSUTCDATETIME()))
        ORDER BY run.CreatedAtUtc,item.PhoneNormalized`,
       args,
     );
