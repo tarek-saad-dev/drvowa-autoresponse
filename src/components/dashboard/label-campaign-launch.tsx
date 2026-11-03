@@ -71,10 +71,10 @@ export function LabelCampaignLaunch({draftId,preflightId,messageText}:{
       setError(err instanceof Error?err.message:"تعذر تحديث الحملة.");
     } finally {setBusy(false);}
   }
-  if (!preview) return <p role="status" className="text-xs text-muted-foreground">بنراجع جاهزية الإرسال…</p>;
+  if (!preview) return <p role="status" className="text-sm text-muted-foreground">بنجهّز بداية الإرسال…</p>;
 
-  return <div className="space-y-2 rounded-xl border border-border bg-surface/50 p-3">
-    <p className="text-xs font-bold">الإرسال والمتابعة</p>
+  return <div className="space-y-4">
+    <p className="text-sm font-black">{preview.run ? "متابعة الإرسال" : "بدء الإرسال"}</p>
     {preview.run ? <>
       <p className="text-xs font-semibold">
         {preview.run.status==="QUEUED"?"في انتظار الإرسال":
@@ -102,17 +102,17 @@ export function LabelCampaignLaunch({draftId,preflightId,messageText}:{
           onClick={()=>void refresh().catch(()=>setError("تعذر تحديث النتائج."))}>تحديث النتائج</Button>
       </div>
     </> : <>
-      <p className="text-xs leading-6 text-muted-foreground">
-        {preview.eligible.toLocaleString("ar-EG")} عميل موافق صراحة ومسموح إدراجه حاليًا.
-        المزامنة القديمة قد تكون جزئية.
-      </p>
+      <div className="rounded-xl bg-surface px-4 py-3">
+        <p className="text-sm font-bold">{preview.eligible.toLocaleString("ar-EG")} عميل مؤهل للإرسال</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          بنراجع الموافقات، وطلبات الإيقاف، والتكرار والباقة تلقائيًا قبل الإرسال.
+        </p>
+      </div>
       {!preview.labelActive?
         <p className="text-xs text-warning">المسودة أو القائمة اتغيرت؛ راجعها واعتمد الصياغة من جديد.</p>:null}
-      {preview.eligible===0?<div className="space-y-1">
-        <p className="text-xs">مفيش موافقات موثقة للرسائل التسويقية في القائمة حاليًا. لو العميل حابب يشترك، يقدر يبعث النص ده من رقمه:</p>
-        <p dir="auto" className="rounded-lg bg-card p-2 text-xs">{preview.optInText}</p>
-        <Button size="sm" variant="outline" onClick={()=>void navigator.clipboard.writeText(preview.optInText)}>نسخ النص</Button>
-      </div>:null}
+      {preview.eligible===0?<p className="text-xs text-warning">
+        مفيش رقم مؤهل حاليًا. لازم العميل يوافق على استقبال العروض من رقمه قبل بدء الإرسال.
+      </p>:null}
       {preview.eligible>0&&!preview.hasQuota?<p className="text-xs text-warning">
         باقتك الحالية مش بتسمح بإرسال العدد ده من رسائل واتساب. راجع الاستخدام أو الباقة.
       </p>:null}
@@ -122,20 +122,26 @@ export function LabelCampaignLaunch({draftId,preflightId,messageText}:{
       {preview.eligible>60?<p className="text-xs text-warning">
         الحد الأقصى للإرسال في الحملة الواحدة 60 رقمًا. قسم القائمة لحملات أصغر.
       </p>:null}
-      {preview.canLaunch?<div className="space-y-2">
-        <p className="text-[11px] text-muted-foreground">{preview.sendRate}</p>
+      <div className="space-y-3 border-t border-border pt-4">
+        <p className="text-xs leading-6 text-muted-foreground">
+          {preview.sendRate} · من ٩ صباحًا إلى ٩ مساءً بتوقيت القاهرة.
+          الإرسال التدريجي بيقلل المخاطر لكنه مش ضمان ضد قيود واتساب.
+        </p>
         {!confirm?
-          <Button size="sm" onClick={()=>setConfirm(true)}>مراجعة وإرسال ({preview.eligible.toLocaleString("ar-EG")})</Button>
-          :<div className="space-y-2 rounded-xl border border-border bg-card p-3">
-            <p className="text-xs font-bold">تأكيد نهائي: سيتم إرسال الرسالة التالية إلى {preview.eligible.toLocaleString("ar-EG")} عميل.</p>
+          <Button type="button" disabled={!preview.canLaunch || busy}
+            onClick={()=>setConfirm(true)}>بدء الإرسال</Button>
+          :<div className="space-y-3 rounded-xl border border-border bg-surface/50 p-4">
+            <p className="text-sm font-bold">تأكيد إرسال الرسالة إلى {preview.eligible.toLocaleString("ar-EG")} عميل مؤهل</p>
             <p dir="auto" className="whitespace-pre-wrap text-xs leading-6">{messageText}</p>
-            <p className="text-[11px] text-muted-foreground">بعد التأكيد، الرسائل هتتبعت تدريجيًا في أوقات العمل، وتقدر توقف الباقي.</p>
+            <p className="text-xs text-muted-foreground">بعد التأكيد الحملة هتدخل طابور الإرسال التدريجي. تقدر توقف الباقي في أي وقت.</p>
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" disabled={busy} onClick={()=>void submit()}>تأكيد بدء الإرسال</Button>
+              <Button size="sm" disabled={busy || !preview.canLaunch} onClick={()=>void submit()}>
+                {busy ? "بنبدأ…" : "تأكيد بدء الإرسال"}
+              </Button>
               <Button size="sm" variant="outline" disabled={busy} onClick={()=>setConfirm(false)}>رجوع</Button>
             </div>
           </div>}
-      </div>:null}
+      </div>
     </>}
     {error?<p role="alert" className="text-xs text-warning">{error}</p>:null}
   </div>;

@@ -106,5 +106,21 @@ describe("consent-only WhatsApp campaign worker",()=>{
     expect(send).toHaveBeenCalledTimes(1);
     expect(mocks.query.mock.calls[5][1].find((x:{name:string})=>x.name==="status").value)
       .toBe("UNKNOWN");
+    expect(mocks.query.mock.calls.some(([statement]) =>
+      String(statement).includes("SET Status=N'PAUSED'"))).toBe(true);
+    expect(quota.markUncertain).toHaveBeenCalledTimes(1);
+  });
+  it("pauses the remaining audience on explicit provider failure",async()=>{
+    setupClaim();
+    const send=vi.fn().mockResolvedValue({
+      success:false,status:"failed",code:"INVALID_PAYLOAD",
+    });
+    const getStatus=vi.fn().mockResolvedValue({ready:true,state:"READY"});
+    expect(await processNextCampaignDelivery({send,getStatus,...quota})).toBe("FAILED");
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(mocks.query.mock.calls.some(([statement]) =>
+      String(statement).includes("SET Status=N'PAUSED'"))).toBe(true);
+    expect(quota.release).toHaveBeenCalledTimes(1);
+    expect(quota.consume).not.toHaveBeenCalled();
   });
 });
