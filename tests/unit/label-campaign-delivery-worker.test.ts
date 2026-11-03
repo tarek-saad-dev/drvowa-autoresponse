@@ -109,6 +109,7 @@ describe("consent-only WhatsApp campaign worker",()=>{
     expect(mocks.query.mock.calls.some(([statement]) =>
       String(statement).includes("SET Status=N'PAUSED'"))).toBe(true);
     expect(quota.markUncertain).toHaveBeenCalledTimes(1);
+  });
   it("pauses the remaining audience on explicit provider failure",async()=>{
     setupClaim();
     const send=vi.fn().mockResolvedValue({
@@ -121,6 +122,5 @@ describe("consent-only WhatsApp campaign worker",()=>{
       String(statement).includes("SET Status=N'PAUSED'"))).toBe(true);
     expect(quota.release).toHaveBeenCalledTimes(1);
     expect(quota.consume).not.toHaveBeenCalled();
-  });
   });
 });
