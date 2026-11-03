@@ -53,6 +53,8 @@ export const RATE_LIMITS = {
   manualSend: { limit: 30, windowMs: 5 * 60 * 1000 },
   whatsappConnect: { limit: 20, windowMs: 15 * 60 * 1000 },
   knowledgeIngestAnalyze: { limit: 20, windowMs: 60 * 60 * 1000 },
+  labelCampaignDraft: { limit: 10, windowMs: 60 * 60 * 1000 },
+  labelCampaignAction: { limit: 30, windowMs: 5 * 60 * 1000 },
   onboardingPreviewReply: { limit: 12, windowMs: 15 * 60 * 1000 },
   voiceTranscribe: { limit: 20, windowMs: 15 * 60 * 1000 },
   onboardingDiscovery: { limit: 30, windowMs: 30 * 60 * 1000 },
