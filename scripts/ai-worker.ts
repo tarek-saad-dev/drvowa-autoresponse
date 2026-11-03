@@ -27,7 +27,7 @@ import {
 
 function loadDotEnvIfPresent(): void {
   // Prefer .env.local (dev secrets) then .env — same order as Next.js.
-  for (const name of [".env.local", ".env"]) {
+  for (const name of [".env.production.local", ".env.local", ".env"]) {
     const envPath = resolve(process.cwd(), name);
     if (!existsSync(envPath)) continue;
     const text = readFileSync(envPath, "utf8");
