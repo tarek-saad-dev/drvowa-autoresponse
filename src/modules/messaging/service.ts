@@ -162,7 +162,9 @@ export async function ingestWhatsAppInbound(
 
     // An exact, business-named inbound sentence is the only automatic
     // marketing opt-in; unrelated customer conversations are never inferred.
-    const optInCandidate = !ownerMessage && normalized.contentType === "TEXT"
+    // An OWNER may also opt in from a separate, genuine inbound test phone.
+    // Sender/fromMe and non-live messages were already rejected above.
+    const optInCandidate = normalized.contentType === "TEXT"
       && /^(?:أوافق على استقبال عروض |اشترك في عروض |i agree to receive whatsapp offers from )/iu
         .test(normalized.textContent?.trim() || "");
     if (optInCandidate) {
