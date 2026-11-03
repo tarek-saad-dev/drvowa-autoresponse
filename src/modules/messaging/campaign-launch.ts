@@ -143,3 +143,158 @@ export async function previewCampaignLaunch(
     coverage: "EVENT_DRIVEN_PARTIAL" as const,
   };
 }
+
+/**
+ * Explicit owner action, no send occurs during HTTP.
+ * Frozen message and eligible phone set must match the owner's current preview.
+ */
+export async function launchCampaign(params: {
+  businessId: string; draftId: string; preflightId: string;
+  userId: string; expectedEligible: number; expectedMessage: string;
+}): Promise<CampaignDeliveryStatus> {
+  if (!campaignsSendingEnabled()) {
+    throw new ConflictError("تشغيل حملات واتساب غير مفعل على السيرفر حتى الآن.");
+  }
+  if (params.expectedEligible < 1 || params.expectedEligible > MAX_LAUNCH_RECIPIENTS) {
+    throw new ValidationError("عدد المستلمين غير صالح.");
+  }
+  const meta = (await query<Meta>(
+    metaQuery, scope(params.businessId, params.draftId, params.preflightId),
+  )).recordset[0];
+  if (!meta || !isValid(meta) || params.expectedMessage !== meta.MessageText) {
+    throw new ConflictError("الرسالة أو القائمة اتغيرت. راجع الجمهور مرة تانية.");
+  }
+  // Fail closed on a disconnected or logged-out phone before any queue exists.
+  const state = await getAccountStatus(meta.AccountKey!);
+  if (!state.ready || state.state !== "READY") {
+    throw new ConflictError("رقم واتساب مش متصل حاليًا.");
+  }
+  const runId = randomUUID();
+  await withTransaction(async (trx: TransactionClient) => {
+    const bound = scope(params.businessId, params.draftId, params.preflightId);
+    const locked = (await trx.query<Meta>(
+      metaQuery.replace("FROM dbo.TblWhatsAppCampaignPreflight p",
+        "FROM dbo.TblWhatsAppCampaignPreflight p WITH (UPDLOCK, HOLDLOCK)"),
+      bound,
+    )).recordset[0];
+    if (!locked || !isValid(locked)
+        || locked.MessageText !== params.expectedMessage
+        || locked.ChannelConnectionID !== meta.ChannelConnectionID) {
+      throw new ConflictError("اتغيرت حالة المسودة أثناء التأكيد.");
+    }
+    const existing = await trx.query<{RunID:string}>(
+      "SELECT RunID FROM dbo.TblWhatsAppCampaignRun WHERE BusinessID=@businessId AND PreflightID=@preflightId",
+      bound,
+    );
+    if (existing.recordset.length) {
+      throw new ConflictError("الحملة اتجهزت للإرسال قبل كده. مش هنبعتها مرتين.");
+    }
+    const c = candidateInputs(locked, params.businessId);
+    const eligible = Number((await trx.query<{Total:number}>(candidateQuery, c))
+      .recordset[0]?.Total ?? 0);
+    if (eligible !== params.expectedEligible) {
+      throw new ConflictError("عدد المستلمين اتغير. افتح المعاينة من جديد.");
+    }
+    if (eligible > MAX_LAUNCH_RECIPIENTS) {
+      throw new ValidationError("الحد الأقصى للحملة الواحدة 60 مستلم.");
+    }
+    await trx.query(
+      `INSERT INTO dbo.TblWhatsAppCampaignRun
+        (RunID,BusinessID,CampaignDraftID,PreflightID,ChannelConnectionID,
+         ProviderLabelID,MessageText,CopyHash,RequestedByUserID,Status,EligibleCount)
+       VALUES (@runId,@businessId,@draftId,@preflightId,@channelConnectionId,
+         @labelId,@messageText,@copyHash,@userId,N'QUEUED',@eligible)`,
+      [
+        ...bound,
+        {name:"runId",type:sql.UniqueIdentifier,value:runId},
+        {name:"channelConnectionId",type:sql.UniqueIdentifier,value:locked.ChannelConnectionID},
+        {name:"labelId",type:sql.NVarChar(128),value:locked.ProviderLabelID},
+        {name:"messageText",type:sql.NVarChar(3000),value:locked.MessageText},
+        {name:"copyHash",type:sql.VarBinary(32),value:locked.CopyHash},
+        {name:"userId",type:sql.UniqueIdentifier,value:params.userId},
+        {name:"eligible",type:sql.Int,value:eligible},
+      ],
+    );
+    const inserted = await trx.query(
+      `INSERT INTO dbo.TblWhatsAppCampaignRunItem
+         (RunID,BusinessID,PhoneNormalized,ContactID,Status)
+       SELECT @runId,@businessId,pr.PhoneNormalized,pr.ContactID,N'PENDING'
+       FROM dbo.TblWhatsAppCampaignPreflightRecipient pr
+       JOIN dbo.TblWhatsAppCampaignPermission perm
+         ON perm.BusinessID=pr.BusinessID
+           AND perm.ChannelConnectionID=@channelConnectionId
+           AND perm.PhoneNormalized=pr.PhoneNormalized
+           AND perm.Source=N'EXPLICIT_INBOUND'
+       JOIN dbo.TblWhatsAppContactLabel cl
+         ON cl.BusinessID=pr.BusinessID
+           AND cl.ContactID=pr.ContactID
+           AND cl.ChannelConnectionID=@channelConnectionId
+           AND cl.ProviderLabelID=@labelId AND cl.IsActive=1
+       WHERE pr.BusinessID=@businessId AND pr.PreflightID=@preflightId
+         AND pr.Status=N'BLOCKED'
+         AND NOT EXISTS (SELECT 1 FROM dbo.TblWhatsAppCampaignOptOut o
+           WHERE o.BusinessID=pr.BusinessID
+             AND o.ChannelConnectionID=@channelConnectionId
+             AND o.PhoneNormalized=pr.PhoneNormalized)
+         AND NOT EXISTS (SELECT 1
+           FROM dbo.TblWhatsAppCampaignRunItem oldItem
+           JOIN dbo.TblWhatsAppCampaignRun oldRun ON oldRun.RunID=oldItem.RunID
+           WHERE oldRun.BusinessID=pr.BusinessID
+             AND oldRun.ChannelConnectionID=@channelConnectionId
+             AND oldItem.PhoneNormalized=pr.PhoneNormalized
+             AND oldItem.Status=N'SENT'
+             AND oldItem.CompletedAtUtc>DATEADD(HOUR,-24,SYSUTCDATETIME()))`,
+      [
+        ...c,
+        {name:"runId",type:sql.UniqueIdentifier,value:runId},
+      ],
+    );
+    if (inserted.rowsAffected[0] !== eligible) {
+      throw new ConflictError("جمهور الحملة اتغير أثناء حفظها.");
+    }
+    await trx.query(
+      `IF NOT EXISTS (SELECT 1 FROM dbo.TblWhatsAppCampaignThrottle WITH(UPDLOCK,HOLDLOCK)
+         WHERE ChannelConnectionID=@channelConnectionId)
+       INSERT INTO dbo.TblWhatsAppCampaignThrottle(ChannelConnectionID,BusinessID)
+       VALUES (@channelConnectionId,@businessId)`,
+      c,
+    );
+  });
+  const run = await getCampaignRunStatus(params);
+  if (!run || run.runId !== runId) throw new ConflictError("الحملة اتحفظت لكن تعذر تحميل حالتها.");
+  return run;
+}
+
+export async function changeCampaignRun(params: {
+  businessId: string; draftId: string; preflightId: string;
+  runId: string; action: "pause"|"resume"|"cancel";
+}): Promise<CampaignDeliveryStatus> {
+  const expected = params.action === "pause"
+    ? ["QUEUED", "RUNNING"]
+    : params.action === "resume" ? ["PAUSED"] : ["QUEUED", "RUNNING", "PAUSED"];
+  const status = params.action === "pause" ? "PAUSED"
+    : params.action === "resume" ? "QUEUED" : "CANCELLED";
+  const run = await getCampaignRunStatus(params);
+  if (!run || run.runId !== params.runId) throw new NotFoundError("الحملة غير موجودة.");
+  if (!expected.includes(run.status)) throw new ConflictError("حالة الحملة مش بتسمح بالإجراء ده.");
+  if (params.action === "resume") {
+    const current = await previewCampaignLaunch(params);
+    if (!current.labelActive) throw new ConflictError("المسودة اتغيرت أو رقم واتساب اتفصل.");
+  }
+  const changed = await query(
+    `UPDATE dbo.TblWhatsAppCampaignRun
+     SET Status=@status,UpdatedAtUtc=SYSUTCDATETIME()
+     WHERE BusinessID=@businessId AND RunID=@runId AND CampaignDraftID=@draftId
+       AND PreflightID=@preflightId AND Status IN (${expected.map((_,i)=>`@old${i}`).join(",")})`,
+    [
+      ...scope(params.businessId, params.draftId, params.preflightId),
+      {name:"runId",type:sql.UniqueIdentifier,value:params.runId},
+      {name:"status",type:sql.NVarChar(20),value:status},
+      ...expected.map((v,i)=>({name:`old${i}`,type:sql.NVarChar(20),value:v})),
+    ],
+  );
+  if (changed.rowsAffected[0] !== 1) throw new ConflictError("حالة الحملة اتغيرت أثناء الطلب.");
+  const next = await getCampaignRunStatus(params);
+  if (!next) throw new NotFoundError("الحملة غير موجودة.");
+  return next;
+}
