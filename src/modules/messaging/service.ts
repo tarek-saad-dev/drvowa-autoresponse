@@ -19,6 +19,7 @@ import {
 import * as repo from "./repository";
 import { canonicalizeWhatsAppContactIdentity } from "./whatsapp-identity";
 import { classifyBlockedWhatsAppSource } from "./whatsapp-source-guard";
+import { isCampaignOptOutRequest, recordCampaignOptOut } from "./campaign-optout";
 
 export type IngestOutcome =
   | {
@@ -97,6 +98,8 @@ export async function ingestWhatsAppInbound(
     parseOptionalUtc(dto.receivedAt) ?? new Date();
   const messageAt = providerTimestampUtc ?? receivedAtUtc;
   const ownerMessage = await isEscalationOwnerPhone(businessId, phoneNormalized);
+  const customerStoppedOffers = !ownerMessage && normalized.contentType === "TEXT"
+    && isCampaignOptOutRequest(normalized.textContent);
   const wantsHuman = !ownerMessage && normalized.contentType === "TEXT"
     && Boolean(normalized.textContent && requestsHumanAgent(normalized.textContent));
 
@@ -146,6 +149,13 @@ export async function ingestWhatsAppInbound(
         contactId: contact.contactId,
         businessId,
       };
+    }
+
+    if (customerStoppedOffers) {
+      await recordCampaignOptOut({
+        businessId, channelConnectionId, phoneNormalized,
+        providerMessageId: dto.providerMessageId,
+      }, trx);
     }
 
     await repo.touchConversationInbound(
