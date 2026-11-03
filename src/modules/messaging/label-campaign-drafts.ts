@@ -148,6 +148,67 @@ export async function createLabelCampaignDrafts(params: {
   });
 }
 
+/** Build one draft from an explicitly selected label ID, not a guessed name.
+ * This also permits labels whose names appear in the message text itself. */
+export async function createLabelCampaignDraftFromSelection(params: {
+  businessId: string;
+  userId: string;
+  channelConnectionId: string;
+  labelId: string;
+  messageText: string;
+}): Promise<LabelCampaignDraft> {
+  const messageText = params.messageText.trim();
+  if (messageText.length < 4 || messageText.length > 3000) {
+    throw new ValidationError("اكتب رسالة من 4 إلى 3000 حرف.");
+  }
+  const draftId = randomUUID();
+  return withTransaction(async trx => {
+    const inputs: QueryInput[] = [
+      bizParam(params.businessId),
+      { name: "draftId", type: sql.UniqueIdentifier, value: draftId },
+      { name: "channelConnectionId", type: sql.UniqueIdentifier, value: params.channelConnectionId },
+      { name: "labelId", type: sql.NVarChar(128), value: params.labelId },
+      { name: "messageText", type: sql.NVarChar(3000), value: messageText },
+      { name: "userId", type: sql.UniqueIdentifier, value: params.userId },
+    ];
+    const inserted = await trx.query(
+      `INSERT INTO dbo.TblWhatsAppLabelCampaignDraft (
+         CampaignDraftID, BusinessID, ChannelConnectionID, ProviderLabelID,
+         LabelNameSnapshot, MessageText, RequestedByUserID,
+         ObservedContactsAtDraft, Status
+       )
+       SELECT @draftId, l.BusinessID, l.ChannelConnectionID, l.ProviderLabelID,
+              l.LabelName, @messageText, @userId,
+              (SELECT COUNT(*) FROM dbo.TblWhatsAppContactLabel cl
+               WHERE cl.BusinessID=l.BusinessID AND cl.ChannelConnectionID=l.ChannelConnectionID
+                 AND cl.ProviderLabelID=l.ProviderLabelID AND cl.IsActive=1),
+              N'DRAFT'
+       FROM dbo.TblWhatsAppLabel l
+       JOIN dbo.TblChannelConnection ch
+         ON ch.BusinessID=l.BusinessID AND ch.ChannelConnectionID=l.ChannelConnectionID
+         AND ch.Channel=N'WHATSAPP' AND ch.IsActive=1 AND ch.Status=N'ACTIVE'
+       WHERE l.BusinessID=@businessId AND l.ChannelConnectionID=@channelConnectionId
+         AND l.ProviderLabelID=@labelId AND l.IsDeleted=0
+         AND l.LabelName IS NOT NULL AND LTRIM(RTRIM(l.LabelName))<>N''`,
+      inputs,
+    );
+    if (inserted.rowsAffected[0] !== 1) {
+      throw new ConflictError("القائمة مش متاحة حاليًا على واتساب. حدّث القوائم واختارها من جديد.");
+    }
+    const result = await trx.query<CampaignDraftRow>(
+      `SELECT CampaignDraftID, BusinessID, ChannelConnectionID, ProviderLabelID,
+              LabelNameSnapshot, MessageText, Status, ObservedContactsAtDraft,
+              CreatedAtUtc, UpdatedAtUtc, CopyApprovedAtUtc
+       FROM dbo.TblWhatsAppLabelCampaignDraft
+       WHERE BusinessID=@businessId AND CampaignDraftID=@draftId`,
+      inputs,
+    );
+    const row = result.recordset[0];
+    if (!row) throw new ConflictError("تعذر مراجعة الرسالة اللي اتحفظت.");
+    return mapDraft(row);
+  });
+}
+
 export async function updateLabelCampaignDraft(params: {
   businessId: string;
   draftId: string;

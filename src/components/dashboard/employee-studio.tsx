@@ -215,7 +215,7 @@ export function EmployeeStudio({
       <div className="flex shrink-0 flex-wrap items-start justify-between gap-2">
         <div>
           <h1 className="text-2xl font-black tracking-tight sm:text-3xl">الموظف الذكي</h1>
-          <p className="mt-1 text-sm text-muted-foreground">اختار شخصيته وعلّمه كل حاجة عن شغلك.</p>
+          <p className="mt-1 text-sm text-muted-foreground">{tab === "campaigns" ? "وصل لعملائك من القوائم الموجودة على واتساب." : "اختار شخصيته وعلّمه كل حاجة عن شغلك."}</p>
         </div>
         {!whatsappReady ? (
           <Link href="/dashboard/whatsapp"
@@ -244,7 +244,7 @@ export function EmployeeStudio({
             onClick={() => setTab("campaigns")}
             className={"rounded-xl px-3 py-3 text-sm font-black transition " +
               (tab === "campaigns" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-            رسائل القوائم
+            حملات واتساب
           </button>
         ) : null}
       </div>

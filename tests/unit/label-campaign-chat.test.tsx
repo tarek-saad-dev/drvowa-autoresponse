@@ -8,7 +8,8 @@ describe("label campaigns chat only prepares drafts until owner confirms", () =>
     const html = renderToStaticMarkup(<LabelCampaignChat />);
     expect(html).toContain("محادثة حملات القوائم");
     expect(html).toContain("تجهيز");
-    expect(html).toContain("مفيش إرسال إلا بعد اعتماد النص وتأكيد الحملة");
+    expect(html).toContain("قوائم عملائك على واتساب");
+    expect(html).toContain("مفيش إرسال إلا بعد مراجعة الرسالة وتأكيد الحملة");
     expect(html).not.toContain("إرسال الحملة");
     expect(html).not.toContain("ابدأ الإرسال");
   });
