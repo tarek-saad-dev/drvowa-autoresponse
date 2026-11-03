@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-type MirroredWhatsAppLabel = {
+export type MirroredWhatsAppLabel = {
   channelConnectionId: string;
   id: string;
   name: string | null;
@@ -22,7 +22,7 @@ export function CampaignLabelChoices({
   onPick,
 }: {
   labels: MirroredWhatsAppLabel[];
-  onPick: (name: string) => void;
+  onPick: (label: MirroredWhatsAppLabel) => void;
 }) {
   // The command parser cannot resolve identically named labels on two different
   // WhatsApp accounts. Do not silently target one of them.
@@ -45,7 +45,7 @@ export function CampaignLabelChoices({
         return (
           <button key={label.channelConnectionId + ":" + label.id}
             type="button" disabled={ambiguous}
-            onClick={() => onPick(name)}
+            onClick={() => onPick(label)}
             aria-label={"جهز رسالة لقائمة " + name}
             className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border bg-card px-3 py-3 text-start transition hover:border-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60">
             <span className="flex min-w-0 items-center gap-2">
@@ -71,7 +71,7 @@ export function CampaignLabelChoices({
  * This surfaces only server-mirrored WhatsApp labels.
  * It never creates remote labels, starts a send or claims historical completeness.
  */
-export function CampaignLabelPicker({ onPick }: { onPick: (name: string) => void }) {
+export function CampaignLabelPicker({ onPick }: { onPick: (label: MirroredWhatsAppLabel) => void }) {
   const [expanded, setExpanded] = useState(true);
   const [labels, setLabels] = useState<MirroredWhatsAppLabel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,8 +139,8 @@ export function CampaignLabelPicker({ onPick }: { onPick: (name: string) => void
               مش قادرين نقرأ القوائم حاليًا. اتأكد من اتصال واتساب واضغط تحديث.
             </p>
           ) : activeCount ? (
-            <CampaignLabelChoices labels={labels} onPick={name => {
-              onPick(name);
+            <CampaignLabelChoices labels={labels} onPick={label => {
+              onPick(label);
               setExpanded(false);
             }} />
           ) : loaded ? (
