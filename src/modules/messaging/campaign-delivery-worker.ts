@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { query, sql, withTransaction } from "@/lib/db";
 import { sendAccountMessage, type RuntimeSendResult } from "@/modules/channels/runtime-client";
+import { reserveQuota, consumeQuotaReservation, releaseQuotaReservation,
+  markQuotaReservationUncertain } from "@/modules/billing/entitlements";
+import { USAGE_EVENT_WHATSAPP_OUTBOUND } from "@/modules/billing/period";
 
 /** Bound all campaign delivery separately from normal conversational AI traffic. */
 export const CAMPAIGN_MIN_SPACING_SECONDS = 60;
@@ -312,6 +315,10 @@ function classifyReply(result: RuntimeSendResult): DeliveryResult {
 export async function processNextCampaignDelivery(deps: {
   getStatus?: typeof import("@/modules/channels/runtime-client").getAccountStatus;
   send?: typeof sendAccountMessage;
+  reserve?: typeof reserveQuota;
+  consume?: typeof consumeQuotaReservation;
+  release?: typeof releaseQuotaReservation;
+  markUncertain?: typeof markQuotaReservationUncertain;
 } = {}): Promise<"DISABLED"|"OUTSIDE_HOURS"|"IDLE"|"OFFLINE"|"SENT"|"FAILED"|"UNKNOWN"|"SKIPPED"> {
   if (process.env.DRVO_LABEL_CAMPAIGNS_SEND_ENABLED !== "true") return "DISABLED";
   if (!insideCampaignHours()) return "OUTSIDE_HOURS";
