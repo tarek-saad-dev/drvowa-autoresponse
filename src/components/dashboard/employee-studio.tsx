@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { EmployeeKnowledgeChat } from "@/components/dashboard/employee-knowledge-chat";
+import { LabelCampaignChat } from "@/components/dashboard/label-campaign-chat";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +51,7 @@ export function EmployeeStudio({
   whatsappState,
   businessId,
   knowledgeCount,
+  canManageCampaigns = false,
   initialTab = "personality",
 }: {
   initialAgents: Agent[];
@@ -57,10 +59,11 @@ export function EmployeeStudio({
   whatsappState: string;
   businessId: string;
   knowledgeCount: number;
-  initialTab?: "personality" | "knowledge";
+  canManageCampaigns?: boolean;
+  initialTab?: "personality" | "knowledge" | "campaigns";
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"personality" | "knowledge">(initialTab);
+  const [tab, setTab] = useState<"personality" | "knowledge" | "campaigns">(initialTab);
   const [agents, setAgents] = useState(initialAgents);
   const [setting, setSetting] = useState(initialSetting);
   const [selectedId, setSelectedId] = useState(initialSetting?.agentId ?? initialAgents[0]?.agentId ?? "");
@@ -223,7 +226,7 @@ export function EmployeeStudio({
       </div>
 
       <div role="tablist" aria-label="إدارة الموظف الذكي"
-        className="grid shrink-0 grid-cols-2 gap-1 rounded-2xl border border-border bg-surface p-1">
+        className={"grid shrink-0 gap-1 rounded-2xl border border-border bg-surface p-1 " + (canManageCampaigns ? "grid-cols-3" : "grid-cols-2")}>
         <button type="button" role="tab" aria-selected={tab === "personality"} aria-controls="studio-personality"
           onClick={() => setTab("personality")}
           className={"rounded-xl px-3 py-3 text-sm font-black transition " +
@@ -236,6 +239,14 @@ export function EmployeeStudio({
             (tab === "knowledge" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
           معلومات الموظف
         </button>
+        {canManageCampaigns ? (
+          <button type="button" role="tab" aria-selected={tab === "campaigns"} aria-controls="studio-campaigns"
+            onClick={() => setTab("campaigns")}
+            className={"rounded-xl px-3 py-3 text-sm font-black transition " +
+              (tab === "campaigns" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+            رسائل القوائم
+          </button>
+        ) : null}
       </div>
 
       <section role="tabpanel" id="studio-personality" aria-label="شخصية الموظف" hidden={tab !== "personality"}
@@ -390,6 +401,12 @@ export function EmployeeStudio({
         className="flex min-h-0 flex-1 flex-col [&[hidden]]:hidden">
         <EmployeeKnowledgeChat businessId={businessId} initialCount={knowledgeCount} />
       </div>
+      {canManageCampaigns ? (
+        <div role="tabpanel" id="studio-campaigns" aria-label="رسائل قوائم واتساب"
+          hidden={tab !== "campaigns"} className="min-h-0 flex-1 overflow-hidden">
+          {tab === "campaigns" ? <LabelCampaignChat /> : null}
+        </div>
+      ) : null}
     </main>
   );
 }
