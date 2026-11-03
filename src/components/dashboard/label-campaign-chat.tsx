@@ -28,7 +28,7 @@ type ApiPayload = {
 };
 
 const NEW_GREETING =
-  "قولّي تبعت إيه ولأنهي قائمة واتساب. هجهز الرسائل كمسودات تراجعها، ومش هبعت لأي عميل بدون تشغيل الإرسال بشكل صريح بعد مراجعة الموافقات.";
+  "قولّي الرسالة ولأنهي قائمة واتساب. هجهزها كمسودة تراجعها، ومفيش أي إرسال تلقائي.";
 
 export function LabelCampaignChat() {
   const [turns, setTurns] = useState<ChatTurn[]>([{ role: "agent", text: NEW_GREETING }]);
@@ -140,7 +140,7 @@ export function LabelCampaignChat() {
       <header className="shrink-0 border-b border-border px-4 py-3">
         <h2 className="text-sm font-black">رسائل قوائم واتساب</h2>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          مسودات فقط — أعداد العملاء مرصودة جزئيًا، وموافقة الاستلام التسويقي غير متحقَّق منها.
+          مسودات فقط — بنجهز الرسائل ونراجع جمهور القوائم قبل الإرسال.
         </p>
       </header>
 
@@ -166,7 +166,7 @@ export function LabelCampaignChat() {
                   <div>
                     <h3 className="text-sm font-black">{draft.labelName}</h3>
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      {draft.observedContacts.toLocaleString("ar-EG")} عميل مرصود • ٠ مؤهلين متحقق منهم
+                      {draft.observedContacts.toLocaleString("ar-EG")} عميل مرصود • العدد قد يكون جزئيًا
                     </p>
                   </div>
                   <span className="rounded-full bg-surface px-2 py-1 text-[11px] font-bold text-muted-foreground">
@@ -192,8 +192,7 @@ export function LabelCampaignChat() {
                   </p>
                 )}
                 <p className="text-[11px] leading-5 text-muted-foreground">
-                  القائمة متزامنة جزئيًا. لا توجد موافقات تسويقية متحقَّق منها،
-                  ومش هيتبعت أي شيء من اعتماد الصياغة.
+                  القائمة متزامنة جزئيًا. اعتماد الصياغة لا يرسل أي رسالة.
                 </p>
                 {editId !== draft.draftId ? (
                   <div className="flex flex-wrap gap-2">
