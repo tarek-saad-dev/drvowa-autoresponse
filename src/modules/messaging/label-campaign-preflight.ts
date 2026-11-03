@@ -20,6 +20,7 @@ type CountsRow = {
   Observed: number;
   UniquePhones: number;
   Invalid: number | null;
+  StoppedPhones: number | null;
 };
 type PlanRow = {
   PreflightID: string;
@@ -30,6 +31,7 @@ type PlanRow = {
   UniqueValidPhones: number;
   InvalidPhones: number;
   DuplicatePhones: number;
+  StoppedPhones: number;
   CreatedAtUtc: Date;
   CurrentDraftCopy: string;
   CurrentDraftStatus: string;
@@ -43,6 +45,7 @@ export type CampaignPreflightSummary = {
   uniqueValidPhones: number;
   invalidPhones: number;
   duplicatePhones: number;
+  optedOutPhones: number;
   blockedUnverifiedPermission: number;
   verifiedSendable: 0;
   isCurrentCopy: boolean;
@@ -70,7 +73,8 @@ function mapPlan(row: PlanRow, idempotent: boolean): CampaignPreflightSummary {
     uniqueValidPhones: Number(row.UniqueValidPhones),
     invalidPhones: Number(row.InvalidPhones),
     duplicatePhones: Number(row.DuplicatePhones),
-    blockedUnverifiedPermission: Number(row.UniqueValidPhones),
+    optedOutPhones: Number(row.StoppedPhones ?? 0),
+    blockedUnverifiedPermission: Number(row.UniqueValidPhones) - Number(row.StoppedPhones ?? 0),
     verifiedSendable: 0,
     isCurrentCopy: row.CurrentDraftStatus === "COPY_APPROVED"
       && Buffer.compare(Buffer.from(row.CopyHash), fingerprint(row.CurrentDraftCopy)) === 0,
@@ -83,7 +87,7 @@ function mapPlan(row: PlanRow, idempotent: boolean): CampaignPreflightSummary {
 
 const planSelect = `
  SELECT p.PreflightID, p.CampaignDraftID, p.CopyHash, p.Status,
-        p.ObservedMemberships, p.UniqueValidPhones, p.InvalidPhones, p.DuplicatePhones,
+        p.ObservedMemberships, p.UniqueValidPhones, p.InvalidPhones, p.DuplicatePhones, p.StoppedPhones,
         p.CreatedAtUtc,
         d.MessageText AS CurrentDraftCopy, d.Status AS CurrentDraftStatus
  FROM dbo.TblWhatsAppCampaignPreflight p
@@ -241,7 +245,7 @@ export async function listLabelCampaignPreflights(params: {
   const results = await query<PlanRow>(
     `SELECT TOP(10) p.PreflightID, p.CampaignDraftID, p.CopyHash, p.Status,
               p.ObservedMemberships, p.UniqueValidPhones, p.InvalidPhones,
-              p.DuplicatePhones, p.CreatedAtUtc,
+              p.DuplicatePhones, p.StoppedPhones, p.CreatedAtUtc,
               d.MessageText AS CurrentDraftCopy, d.Status AS CurrentDraftStatus
        FROM dbo.TblWhatsAppCampaignPreflight p
        INNER JOIN dbo.TblWhatsAppLabelCampaignDraft d
