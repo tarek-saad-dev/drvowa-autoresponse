@@ -141,6 +141,6 @@ describe("controlled marketing launch",()=>{
     expect(mocks.trxQuery.mock.calls[3][0]).toContain("INSERT INTO dbo.TblWhatsAppCampaignRun");
     expect(mocks.trxQuery.mock.calls[4][0]).toContain("TblWhatsAppCampaignPermission");
     expect(mocks.trxQuery.mock.calls[4][0]).toContain("TblWhatsAppCampaignOptOut");
-    expect(mocks.trxQuery.mock.calls.filter(call => /INSERT INTO dbo\\.TblWhatsAppCampaignRun\\s*(?:\\(|$)/.test(String(call[0]))).length).toBe(1);
+    expect(mocks.trxQuery.mock.calls.filter(call => String(call[0]).includes("INSERT INTO dbo.TblWhatsAppCampaignRun\n")).length).toBe(1);
   });
 });
