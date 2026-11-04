@@ -27,11 +27,12 @@ export function LabelCampaignLaunch({draftId,preflightId,messageText}:{
     const data=(await res.json().catch(()=>({}))) as {preview?:Preview;error?:string};
     if(!res.ok||!data.preview)throw new Error(data.error||"تعذر مراجعة جاهزية الحملة.");
     setPreview(data.preview);
+    setError(null);
   },[url,preflightId]);
 
   useEffect(()=>{
     let active=true;
-    void refresh().catch(()=>{if(active)setError("تعذر تحميل حالة الحملة.");});
+    void refresh().catch(()=>{if(active)setError("تعذر تحميل حالة الحملة. استخدم تحديث النتائج للمحاولة مرة أخرى.");});
     const timer=setInterval(()=>{
       void refresh().catch(()=>{});
     },30000);
@@ -51,7 +52,10 @@ export function LabelCampaignLaunch({draftId,preflightId,messageText}:{
       const data=(await res.json().catch(()=>({}))) as {run?:Run;error?:string};
       if(!res.ok||!data.run)throw new Error(data.error||"تعذر بدء الحملة.");
       setConfirm(false);
-      await refresh();
+      // The POST is committed: show its run immediately, even if the
+      // subsequent GET fails. Never invite the owner to press Start twice.
+      setPreview(previous => previous ? {...previous,run:data.run!,alreadyLaunched:true,canLaunch:false} : previous);
+      await refresh().catch(()=>setError("بدأت الحملة واتحفظت. تحديث النتائج غير متاح مؤقتًا؛ جرب تحديث النتائج."));
     } catch(err) {
       setError(err instanceof Error?err.message:"تعذر بدء الحملة.");
     } finally {setBusy(false);}
@@ -66,12 +70,18 @@ export function LabelCampaignLaunch({draftId,preflightId,messageText}:{
       });
       const data=(await res.json().catch(()=>({}))) as {run?:Run;error?:string};
       if(!res.ok||!data.run)throw new Error(data.error||"تعذر تغيير حالة الحملة.");
-      await refresh();
+      setPreview(previous => previous ? {...previous,run:data.run!} : previous);
+      await refresh().catch(()=>setError("اتحفظ تغيير الحملة، لكن تعذر تحديث النتائج. جرّب مرة تانية."));
     } catch(err) {
       setError(err instanceof Error?err.message:"تعذر تحديث الحملة.");
     } finally {setBusy(false);}
   }
-  if (!preview) return <p role="status" className="text-sm text-muted-foreground">بنجهّز بداية الإرسال…</p>;
+  if (!preview) return <div className="space-y-3">
+    <p role="status" className="text-sm text-muted-foreground">بنحمّل حالة الحملة…</p>
+    {error?<p role="alert" className="text-xs text-warning">{error}</p>:null}
+    <Button type="button" size="sm" variant="outline" disabled={busy}
+      onClick={()=>void refresh().catch(()=>setError("تعذر تحميل حالة الحملة."))}>تحديث الحالة</Button>
+  </div>;
 
   return <div className="space-y-4">
     <p className="text-sm font-black">{preview.run ? "متابعة الإرسال" : "بدء الإرسال"}</p>
