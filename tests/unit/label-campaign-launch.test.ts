@@ -131,12 +131,16 @@ describe("controlled marketing launch",()=>{
       .mockResolvedValueOnce({rowsAffected:[1]})
       .mockResolvedValueOnce({rowsAffected:[2]})
       .mockResolvedValueOnce({rowsAffected:[1]});
-    // runId is random: getRunStatus has to return the actual persisted ID.
-    // The test verifies the transactional selection and throw on summary mismatch.
-    await expect(launchCampaign({...params,userId:businessId,
-      expectedEligible:2,expectedMessage:message})).rejects.toThrow();
+    // After the queue commits, status recovery succeeds even if a follow-up
+    // response is retried. The caller gets the saved run, not a false error.
+    const saved = await launchCampaign({...params,userId:businessId,
+      expectedEligible:2,expectedMessage:message});
+    expect(saved.status).toBe("QUEUED");
+    expect(saved.pending).toBe(2);
+    expect(saved.total).toBe(2);
     expect(mocks.trxQuery.mock.calls[3][0]).toContain("INSERT INTO dbo.TblWhatsAppCampaignRun");
     expect(mocks.trxQuery.mock.calls[4][0]).toContain("TblWhatsAppCampaignPermission");
     expect(mocks.trxQuery.mock.calls[4][0]).toContain("TblWhatsAppCampaignOptOut");
+    expect(mocks.trxQuery.mock.calls.filter(call => String(call[0]).includes("INSERT INTO dbo.TblWhatsAppCampaignRun")).length).toBe(1);
   });
 });
