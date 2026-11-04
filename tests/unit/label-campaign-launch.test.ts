@@ -45,6 +45,46 @@ beforeEach(()=>{
 afterEach(()=>{delete process.env.DRVO_LABEL_CAMPAIGNS_SEND_ENABLED;});
 
 describe("controlled marketing launch",()=>{
+  it("shows a persisted run without requesting fresh eligibility or billing",async()=>{
+    const existing={
+      RunID:"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",Status:"RUNNING",
+      EligibleCount:2,CreatedAtUtc:new Date("2026-11-03T15:00:00Z"),
+      Pending:1,InFlight:0,Sent:1,Failed:0,Unknown:0,Skipped:0,
+    };
+    mocks.query.mockResolvedValueOnce({recordset:[details]})
+      .mockResolvedValueOnce({recordset:[existing]});
+    const result=await previewCampaignLaunch(params);
+    expect(result.run?.status).toBe("RUNNING");
+    expect(result.run?.sent).toBe(1);
+    expect(result.canLaunch).toBe(false);
+    expect(mocks.entitlement).not.toHaveBeenCalled();
+    expect(mocks.query).toHaveBeenCalledTimes(2);
+  });
+  it("retries a committed launch without writing another run",async()=>{
+    const existing={
+      RunID:"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",Status:"QUEUED",
+      EligibleCount:2,CreatedAtUtc:new Date("2026-11-03T15:00:00Z"),
+      Pending:2,InFlight:0,Sent:0,Failed:0,Unknown:0,Skipped:0,
+    };
+    mocks.query.mockResolvedValueOnce({recordset:[existing]});
+    const result=await launchCampaign({...params,userId:businessId,
+      expectedEligible:2,expectedMessage:message});
+    expect(result.runId).toBe(existing.RunID);
+    expect(mocks.trxQuery).not.toHaveBeenCalled();
+    expect(mocks.getStatus).not.toHaveBeenCalled();
+  });
+  it("reads persisted runs even without item rows during status recovery",async()=>{
+    mocks.query.mockResolvedValueOnce({recordset:[{
+      RunID:"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",Status:"QUEUED",
+      EligibleCount:2,CreatedAtUtc:new Date("2026-11-03T15:00:00Z"),
+      Pending:0,InFlight:0,Sent:0,Failed:0,Unknown:0,Skipped:0,
+    }]});
+    const {getCampaignRunStatus}=await import("@/modules/messaging/campaign-launch");
+    const result=await getCampaignRunStatus(params);
+    expect(result?.total).toBe(2);
+    expect(mocks.query.mock.calls[0][0]).toContain("OUTER APPLY");
+  });
+
   it("does not unlock launch without an explicit server feature gate",()=>{
     delete process.env.DRVO_LABEL_CAMPAIGNS_SEND_ENABLED;
     expect(campaignsSendingEnabled()).toBe(false);
