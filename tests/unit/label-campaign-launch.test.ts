@@ -102,22 +102,23 @@ describe("controlled marketing launch",()=>{
     expect(mocks.query.mock.calls[2][0]).toContain("TblWhatsAppCampaignOptOut");
   });
   it("blocks launch when copy was edited after approval",async()=>{
-    mocks.query.mockResolvedValueOnce({
-      recordset:[{...details,MessageText:"edited after preview"}],
-    });
+    mocks.query.mockResolvedValueOnce({recordset:[]})
+      .mockResolvedValueOnce({recordset:[{...details,MessageText:"edited after preview"}]});
     await expect(launchCampaign({...params,userId:businessId,
       expectedEligible:1,expectedMessage:message})).rejects.toThrow();
     expect(mocks.getStatus).not.toHaveBeenCalled();
   });
   it("blocks when WhatsApp account is not READY",async()=>{
-    mocks.query.mockResolvedValueOnce({recordset:[details]});
+    mocks.query.mockResolvedValueOnce({recordset:[]})
+      .mockResolvedValueOnce({recordset:[details]});
     mocks.getStatus.mockResolvedValueOnce({ready:false,state:"DISCONNECTED"});
     await expect(launchCampaign({...params,userId:businessId,
       expectedEligible:1,expectedMessage:message})).rejects.toThrow();
     expect(mocks.trxQuery).not.toHaveBeenCalled();
   });
   it("atomically snapshots eligible audience on confirmed owner launch",async()=>{
-    mocks.query.mockResolvedValueOnce({recordset:[details]})
+    mocks.query.mockResolvedValueOnce({recordset:[]})
+      .mockResolvedValueOnce({recordset:[details]})
       .mockResolvedValueOnce({recordset:[{
         RunID:"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",Status:"QUEUED",
         EligibleCount:2,CreatedAtUtc:new Date("2026-11-03T15:00:00Z"),
