@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deriveHomeBillingAlert } from "@/lib/dashboard/billing-alert";
+import { isAiReplyQuotaCurrentlyExhausted } from "@/lib/dashboard/pulse-quota-notice";
 import type { EntitlementSnapshot } from "@/modules/billing/entitlements";
 
 const now = new Date("2026-11-06T12:00:00Z");
@@ -106,5 +107,36 @@ describe("dashboard billing notices", () => {
   it("treats configured zero quotas as blocked, while unbounded quotas are not exhausted", () => {
     expect(compute(snapshot({ monthlyAiReplies: 0 }))?.kind).toBe("quota_exhausted");
     expect(compute(snapshot({ monthlyWhatsAppOutbound: null, whatsappOutboundUsed: 500 }))).toBeNull();
+  });
+});
+
+describe("historical Pulse quota warning matches live entitlements", () => {
+  it("hides old quota failure counts when an activated paid plan has available AI replies", () => {
+    expect(isAiReplyQuotaCurrentlyExhausted(snapshot({
+      planCode: "STARTER", monthlyAiReplies: 1000, aiUsed: 50,
+    }))).toBe(false);
+  });
+
+  it("only displays quota warning when the current plan really exhausted AI replies", () => {
+    expect(isAiReplyQuotaCurrentlyExhausted(snapshot({
+      planCode: "STARTER", monthlyAiReplies: 50, aiUsed: 50,
+    }))).toBe(true);
+    expect(isAiReplyQuotaCurrentlyExhausted(snapshot({
+      planCode: "STARTER", monthlyAiReplies: null, aiUsed: 50000,
+    }))).toBe(false);
+  });
+
+  it("does not claim quota exhaustion when billing cannot be verified or the subscription is inactive", () => {
+    expect(isAiReplyQuotaCurrentlyExhausted(null)).toBe(false);
+    expect(isAiReplyQuotaCurrentlyExhausted(snapshot({canAct: false, aiUsed: 100}))).toBe(false);
+  });
+
+  it("accounts for a one-time free trial that expired despite spare monthly counter capacity", () => {
+    expect(isAiReplyQuotaCurrentlyExhausted(snapshot({aiUsed: 0}), {
+      expired: true, used: 30, remaining: 0, expiresAtUtc: pastEnd,
+    })).toBe(true);
+    expect(isAiReplyQuotaCurrentlyExhausted(snapshot({planCode: "STARTER"}), {
+      expired: true, used: 30, remaining: 0, expiresAtUtc: pastEnd,
+    })).toBe(false);
   });
 });

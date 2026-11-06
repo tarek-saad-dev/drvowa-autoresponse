@@ -57,4 +57,16 @@ describe("dashboard review center preview", () => {
     expect(html).toContain('aria-modal="true"');
     expect(html).toContain("conversation-4");
   });
+
+  it("does not show historical quota failures as an active outage after payment", () => {
+    const history = { ...snapshot(5), quotaBlockedFollowups: 5 };
+    const paidHtml = renderToStaticMarkup(<PulseReviewCenter {...props} data={history} quotaWarningActive={false} />);
+    expect(paidHtml).not.toContain("رصيد ردود الموظف الذكي انتهى");
+    expect(paidHtml.match(/افتح المحادثة ←/g)).toHaveLength(3);
+    expect(paidHtml).toContain("عرض الكل");
+
+    const exhaustedHtml = renderToStaticMarkup(<PulseReviewCenter {...props} data={history} quotaWarningActive />);
+    expect(exhaustedHtml).toContain("رصيد ردود الموظف الذكي انتهى");
+    expect(exhaustedHtml).toContain("راجع الباقة");
+  });
 });

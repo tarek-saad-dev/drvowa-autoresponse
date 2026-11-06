@@ -3,8 +3,9 @@ import { redirect } from "next/navigation";
 import { ConnectionHealthStrip } from "@/components/dashboard/overview/connection-health-strip";
 import { BillingHealthNotice } from "@/components/dashboard/overview/billing-health-notice";
 import { deriveHomeBillingAlert } from "@/lib/dashboard/billing-alert";
+import { isAiReplyQuotaCurrentlyExhausted } from "@/lib/dashboard/pulse-quota-notice";
 import { getBillingOverview, getLastExpiredPaidPeriodEnd } from "@/modules/billing/service";
-import { getV1FreeTrialUsage } from "@/modules/pricing/free-trial-usage";
+import { getV1FreeTrialUsage, type FreeTrialUsage } from "@/modules/pricing/free-trial-usage";
 import { RecentConversations, type OverviewConversation } from "@/components/dashboard/overview/recent-conversations";
 import { PulseOverview } from "@/components/dashboard/pulse/pulse-overview";
 import { PulseAutoRefresh } from "@/components/dashboard/pulse/auto-refresh";
@@ -42,9 +43,10 @@ export default async function DashboardOverviewPage({searchParams}:{
   }),
  ]);
  let billingAlert:ReturnType<typeof deriveHomeBillingAlert>=null;
+ let freeTrial:FreeTrialUsage|null=null;
  if(billing){
   const free=billing.plan?.code==="FREE";
-  const [freeTrial,lastExpiredPaidAt]=await Promise.all([
+  const [trialUsage,lastExpiredPaidAt]=await Promise.all([
    free?getV1FreeTrialUsage(businessId).catch(error=>{
     console.error("[billing] free_trial_status_unavailable",{reason:error instanceof Error?error.name:"UNKNOWN"});
     return null;
@@ -54,6 +56,7 @@ export default async function DashboardOverviewPage({searchParams}:{
     return null;
    }):Promise.resolve(null),
   ]);
+  freeTrial=trialUsage;
   billingAlert=deriveHomeBillingAlert({
    snapshot:billing,freeTrial,lastExpiredPaidAt,timezone:business.timezone,
   });
@@ -86,7 +89,7 @@ export default async function DashboardOverviewPage({searchParams}:{
   <ConnectionHealthStrip initialUiState={health.whatsappLiveState}
    initialInboundHealth={health.inboundHealth} initialInboundIssue={health.inboundIssue} status={status}/>
   <PulseAutoRefresh/>
-  <PulseOverview data={pulse} selectedPeriod={period} businessName={business.name} businessId={businessId} allReviews={allReviews}/>
+  <PulseOverview data={pulse} selectedPeriod={period} businessName={business.name} businessId={businessId} quotaWarningActive={isAiReplyQuotaCurrentlyExhausted(billing,freeTrial)} allReviews={allReviews}/>
   <LiveOwnership initial={ownership} businessId={businessId}/>
   <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(290px,.8fr)]" aria-label="تفاصيل إضافية">
    <RecentConversations conversations={recent} whatsappConnected={health.whatsappLiveState==="READY"}/>

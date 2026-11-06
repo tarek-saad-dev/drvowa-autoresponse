@@ -57,11 +57,13 @@ export function PulseReviewCenter({
   data,
   businessId,
   periodLabel,
+  quotaWarningActive = false,
   allReviews = false,
 }: {
   data: PulseSnapshot | null;
   businessId: string;
   periodLabel: string;
+  quotaWarningActive?: boolean;
   allReviews?: boolean;
 }) {
   const [open, setOpen] = useState(allReviews);
@@ -136,7 +138,7 @@ export function PulseReviewCenter({
         </p>
       ) : null}
 
-      {data && data.quotaBlockedFollowups > 0 ? (
+      {data && quotaWarningActive && data.quotaBlockedFollowups > 0 ? (
         <div className="mb-3 rounded-xl border border-warning/25 bg-warning-soft/25 px-3 py-3 text-xs leading-6">
           <span className="font-bold">
             {data.quotaBlockedFollowups.toLocaleString("ar-EG")} محادثة لسه محتاجة رد يدوي لأن رصيد ردود الموظف الذكي انتهى خلال الفترة.
