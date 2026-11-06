@@ -49,7 +49,7 @@ export function PulseOverview({data,businessName,businessId,allReviews=false}:{d
    <Count label="محادثات واردة" value={data?.conversations??"—"} hint="عملاء بدأوا أو تفاعلوا خلال الفترة"/>
    <Count label="رد عليها الموظف الذكي" value={data?.aiConversations??"—"} hint="محادثات لها رد AI؛ مش بالضرورة اتحلت"/>
    <Count label="تصعيدات مفتوحة" value={data?.openFollowups??"—"} hint="حالات مفتوحة بدأت أو تجدد نشاطها خلال الفترة"/>
-   <Count label="تحتاج رد منك" value={data?.pendingSignals??"—"} hint="إشارات محتاجة تدخل؛ الرد البشري يحدثها تلقائيًا"/>
+   <Count label="تحتاج رد منك" value={data?actionable:"—"} hint="إجمالي طلبات المتابعة والإشارات اللي لسه محتاجة رد"/>
   </div>
   <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(290px,.85fr)]">
    <section className={card+" p-4 sm:p-5"} aria-label="مركز الطلبات">
@@ -59,14 +59,19 @@ export function PulseOverview({data,businessName,businessId,allReviews=false}:{d
       <p className="mt-1 text-xs text-muted-foreground">الطلبات اللي لسه محتاجة رد أو إجراء، ووصلت أو اتجدد طلبها خلال {periodLabel}</p>
      </div>
      <div className="flex items-center gap-3">
-      {handling>0?<span className="text-[11px] text-muted-foreground">{handling.toLocaleString("ar-EG")} جاري التعامل معها</span>:null}
+      {handling>0?<span className="text-[11px] text-muted-foreground">{handling.toLocaleString("ar-EG")} متابعة بدأ التعامل معها (مش ضمن القائمة)</span>:null}
       <Link href={periodHref(period,!allReviews)} className="text-xs font-bold text-primary hover:underline">{allReviews?"عرض المختصر":"عرض المزيد من الحالات"}</Link>
      </div>
     </div>
+    {data && data.quotaBlockedFollowups>0?
+     <div className="mb-3 rounded-xl border border-warning/25 bg-warning-soft/25 px-3 py-3 text-xs leading-6">
+      <span className="font-bold">{data.quotaBlockedFollowups.toLocaleString("ar-EG")} محادثة لسه محتاجة رد يدوي لأن رصيد ردود الموظف الذكي انتهى خلال الفترة.</span>
+      <Link href="/dashboard/billing" className="ms-2 font-black text-primary underline underline-offset-2">راجع الباقة</Link>
+     </div>:null}
     {!data?<p className="rounded-xl bg-surface p-4 text-sm text-muted-foreground">تعذر تحميل الحالات المصنفة.</p>:
      data.reviews.length===0?<div className="rounded-xl border border-dashed border-border p-7 text-center">
       <p className="font-bold">مفيش طلبات محتاجة مراجعة خلال {periodLabel}</p>
-      <p className="mt-2 text-xs leading-6 text-muted-foreground">الطلبات اللي اترد عليها انتقلت للمتابعة الجارية، وده مش معناه إن الشكوى اتحلت. راجع معدل تغطية التحليل فوق.</p>
+      <p className="mt-2 text-xs leading-6 text-muted-foreground">الحالات الجاري التعامل معها منفصلة عن الطلبات اللي مستنية رد جديد. راجع معدل تغطية التحليل فوق.</p>
      </div>:
      <div className="divide-y divide-border/65">
       {data.reviews.map((item,i)=><article key={item.kind+item.conversationId+item.intent+i} className="flex min-w-0 gap-3 py-4">
