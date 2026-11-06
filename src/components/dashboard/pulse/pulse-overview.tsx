@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { ReviewButton } from "./review-button";
+import { PulseReviewCenter } from "./review-center";
 import type { PulseSnapshot } from "@/modules/pulse/report";
-import type { PulseIntent } from "@/modules/pulse/classifier";
 
 const card="min-w-0 rounded-[22px] border border-border bg-card shadow-[0_16px_40px_-32px_rgba(5,43,58,.36)]";
 function Count({label,value,hint}:{label:string;value:number|string;hint:string}) {
@@ -11,7 +10,7 @@ function Count({label,value,hint}:{label:string;value:number|string;hint:string}
   <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>
  </div>;
 }
-function periodHref(period:"today"|"yesterday"|"month",all=false){return "/dashboard?period="+period+(all?"&view=reviews":"");}
+function periodHref(period:"today"|"yesterday"|"month"){return "/dashboard?period="+period;}
 export function PulseOverview({data,businessName,businessId,allReviews=false}:{data:PulseSnapshot|null;businessName:string;businessId:string;allReviews?:boolean}) {
  const period=data?.period||"month",monthly=period==="month",yesterday=period==="yesterday";
  const ready=Boolean(data),pending=data?Math.max(0,data.eligible-data.analyzed):0;
@@ -52,46 +51,7 @@ export function PulseOverview({data,businessName,businessId,allReviews=false}:{d
    <Count label="تحتاج رد منك" value={data?actionable:"—"} hint="إجمالي طلبات المتابعة والإشارات اللي لسه محتاجة رد"/>
   </div>
   <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(290px,.85fr)]">
-   <section className={card+" p-4 sm:p-5"} aria-label="مركز الطلبات">
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-     <div>
-      <h2 className="text-base font-black sm:text-lg">الطلبات اللي تحتاج مراجعة</h2>
-      <p className="mt-1 text-xs text-muted-foreground">الطلبات اللي لسه محتاجة رد أو إجراء، ووصلت أو اتجدد طلبها خلال {periodLabel}</p>
-     </div>
-     <div className="flex items-center gap-3">
-      {handling>0?<span className="text-[11px] text-muted-foreground">{handling.toLocaleString("ar-EG")} متابعة بدأ التعامل معها (مش ضمن القائمة)</span>:null}
-      <Link href={periodHref(period,!allReviews)} className="text-xs font-bold text-primary hover:underline">{allReviews?"عرض المختصر":"عرض المزيد من الحالات"}</Link>
-     </div>
-    </div>
-    {data && data.quotaBlockedFollowups>0?
-     <div className="mb-3 rounded-xl border border-warning/25 bg-warning-soft/25 px-3 py-3 text-xs leading-6">
-      <span className="font-bold">{data.quotaBlockedFollowups.toLocaleString("ar-EG")} محادثة لسه محتاجة رد يدوي لأن رصيد ردود الموظف الذكي انتهى خلال الفترة.</span>
-      <Link href="/dashboard/billing" className="ms-2 font-black text-primary underline underline-offset-2">راجع الباقة</Link>
-     </div>:null}
-    {!data?<p className="rounded-xl bg-surface p-4 text-sm text-muted-foreground">تعذر تحميل الحالات المصنفة.</p>:
-     data.reviews.length===0?<div className="rounded-xl border border-dashed border-border p-7 text-center">
-      <p className="font-bold">مفيش طلبات محتاجة مراجعة خلال {periodLabel}</p>
-      <p className="mt-2 text-xs leading-6 text-muted-foreground">الحالات الجاري التعامل معها منفصلة عن الطلبات اللي مستنية رد جديد. راجع معدل تغطية التحليل فوق.</p>
-     </div>:
-     <div className="divide-y divide-border/65">
-      {data.reviews.map((item,i)=><article key={item.kind+item.conversationId+item.intent+i} className="flex min-w-0 gap-3 py-4">
-       <span aria-hidden="true" className={"mt-1 h-2.5 w-2.5 shrink-0 rounded-full "+(item.priority==="URGENT"?"bg-warning":"bg-primary/50")}/>
-       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-         <span className="text-sm font-black">{item.name}</span>
-         <span className="rounded-full bg-surface px-2 py-1 text-[10px] font-bold text-muted-foreground">{item.label}</span>
-         {item.actionType==="OPPORTUNITY"?<span className="text-[10px] text-primary">فرصة محتملة</span>:null}
-        </div>
-        <p className="mt-1 line-clamp-2 break-words text-xs leading-6 text-muted-foreground" dir="auto">{item.evidence}</p>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-         <Link href={"/dashboard/inbox?businessId="+encodeURIComponent(businessId)+"&conversationId="+encodeURIComponent(item.conversationId)} className="text-xs font-black text-primary hover:underline">افتح المحادثة ←</Link>
-         {item.kind==="SIGNAL"?<ReviewButton conversationId={item.conversationId} intent={item.intent as PulseIntent}/>:<span className="text-[11px] text-muted-foreground">إدارة المتابعة من الشات</span>}
-        </div>
-       </div>
-      </article>)}
-     </div>}
-    {allReviews?<p className="mt-3 text-[11px] text-muted-foreground">القائمة تعرض أحدث الحالات المصنفة المتاحة، ولا تمثل أرشيفًا كاملًا لكل المحادثات.</p>:null}
-   </section>
+   <PulseReviewCenter data={data} businessId={businessId} periodLabel={periodLabel} allReviews={allReviews}/>
    <div className="min-w-0 space-y-4">
     <section className={card+" p-4 sm:p-5"} aria-label="مواضيع العملاء">
      <h2 className="text-base font-black">العملاء بيسألوا عن إيه؟</h2>

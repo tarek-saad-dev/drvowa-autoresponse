@@ -63,7 +63,7 @@ export default async function DashboardOverviewPage({searchParams}:{
  catch(error) { console.error("[ownership] overview_unavailable",{reason:error instanceof Error?error.name:"UNKNOWN"}); }
  let pulse:Awaited<ReturnType<typeof getPulseSnapshot>>|null=null;
  try{
-  pulse=await getPulseSnapshot({businessId,timezone:business.timezone,period,maxReviews:allReviews?100:12});
+  pulse=await getPulseSnapshot({businessId,timezone:business.timezone,period,maxReviews:100});
  }catch(error){
   if(!isMissingObjectError(error))console.error("[pulse] overview_unavailable",{reason:error instanceof Error?error.name:"UNKNOWN"});
  }
