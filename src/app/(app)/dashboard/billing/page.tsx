@@ -8,6 +8,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { BillingPlansClient } from "@/components/dashboard/billing-plans-client";
+import { BillingCustomerActions } from "@/components/dashboard/billing-customer-actions";
+import { customerRefundStatus, listCustomerRefundPayments } from "@/modules/billing/customer-account-actions";
+import { requireBusinessMembership } from "@/lib/tenancy/require-membership";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import { subscriptionStatusLabel } from "@/lib/ui/labels";
@@ -105,13 +108,16 @@ export default async function BillingPage() {
   const claimedInterval=promoCookies.get("drvo_promo_interval")?.value;
   const claimedPlan=promoCookies.get("drvo_promo_plan")?.value;
   const manualEnabled = isManualInstaPayEnabled();
-  const [overview, availablePlans, paymentStatus, scheduled, events] = await Promise.all([
+  const [overview, availablePlans, paymentStatus, scheduled, events, refunds, membership] = await Promise.all([
     getBillingOverview({ businessId }),
     listActivePlans(),
     getBusinessPaymentStatus({ businessId }),
     getScheduledBillingChange(businessId),
     listUsageEvents({ businessId, limit: 12 }),
+    listCustomerRefundPayments(businessId),
+    requireBusinessMembership(user.userId, businessId),
   ]);
+  const canManageBilling = membership.role === "OWNER" || membership.role === "ADMIN";
 
   const addonBalance = await getReplyAddonBalance(businessId);
   const plan = overview.plan;
@@ -287,6 +293,13 @@ export default async function BillingPage() {
               monthlyWhatsAppOutbound: item.monthlyWhatsAppOutbound ?? null,
             }))}
           />
+          <BillingCustomerActions
+            mode="cancellation"
+            paid={paid}
+            canManage={canManageBilling}
+            periodEnd={sub?.periodEndUtc?.toISOString() ?? null}
+            scheduledKind={scheduled?.Kind ?? null}
+          />
         </div>
       </section>
 
@@ -369,6 +382,22 @@ export default async function BillingPage() {
           </div>
         )}
       </section>
+
+      <BillingCustomerActions
+        mode="refunds"
+        canManage={canManageBilling}
+        payments={refunds.map(payment => ({
+          paymentRequestId: payment.PaymentRequestID,
+          reference: payment.PaymentReference,
+          planName: payment.PlanDisplayName,
+          amount: Number(payment.Amount),
+          currency: payment.CurrencyCode,
+          paidAt: payment.ReviewedAtUtc?.toISOString() ?? null,
+          invoiceNumber: payment.InvoiceNumber,
+          status: customerRefundStatus(payment.RefundState, payment.CustomerRequestStatus),
+          reviewNote: payment.CustomerReviewNote,
+        }))}
+      />
 
       <details className="group rounded-2xl border border-border bg-card">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 [&::-webkit-details-marker]:hidden">
