@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PulseReviewCenter } from "./review-center";
 import { PulseSummaryChat } from "./pulse-summary-chat";
 import type { PulseSnapshot } from "@/modules/pulse/report";
+import type { PulsePeriod } from "@/modules/pulse/time";
 
 const card="min-w-0 rounded-[22px] border border-border bg-card shadow-[0_16px_40px_-32px_rgba(5,43,58,.36)]";
 function Count({label,value,hint}:{label:string;value:number|string;hint:string}) {
@@ -12,8 +13,8 @@ function Count({label,value,hint}:{label:string;value:number|string;hint:string}
  </div>;
 }
 function periodHref(period:"today"|"yesterday"|"month"){return "/dashboard?period="+period;}
-export function PulseOverview({data,businessName,businessId,allReviews=false}:{data:PulseSnapshot|null;businessName:string;businessId:string;allReviews?:boolean}) {
- const period=data?.period||"month",monthly=period==="month",yesterday=period==="yesterday";
+export function PulseOverview({data,businessName,businessId,selectedPeriod,allReviews=false}:{data:PulseSnapshot|null;businessName:string;businessId:string;selectedPeriod?:PulsePeriod;allReviews?:boolean}) {
+ const period=selectedPeriod??data?.period??"month",monthly=period==="month",yesterday=period==="yesterday";
  const periodLabel=monthly?"الشهر الحالي":yesterday?"أمس":"اليوم";
  const actionable=(data?.needsAttentionFollowups??0)+(data?.pendingSignals??0);
  const maxTopic=data?.categories[0],totalTopics=(data?.categories??[]).reduce((s,t)=>s+t.conversations,0);
