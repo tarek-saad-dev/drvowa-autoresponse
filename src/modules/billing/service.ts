@@ -1,3 +1,4 @@
+import { query, sql } from "@/lib/db";
 import { DEFAULT_BOOTSTRAP_PLAN_CODE } from "@/constants/billing";
 import { isUniqueViolationError, sql, withTransaction } from "@/lib/db";
 import { NotFoundError } from "@/lib/tenancy/errors";
@@ -87,4 +88,20 @@ export async function ensureDefaultSubscription(params: {
     }
     throw error;
   }
+}
+
+/** Prior expired paid period used only for the home dashboard's status notice.
+ * Current FREE is not itself expired; do not infer paid expiry from FREE usage.
+ */
+export async function getLastExpiredPaidPeriodEnd(businessId: string): Promise<Date | null> {
+  const rows = await query<{ PeriodEndUtc: Date | null }>(
+    `SELECT TOP (1) s.PeriodEndUtc
+       FROM dbo.TblSubscription s
+       JOIN dbo.TblPlan p ON p.PlanID=s.PlanID
+       WHERE s.BusinessID=@businessId AND s.Status=N'EXPIRED'
+         AND p.Code<>N'FREE' AND s.PeriodEndUtc IS NOT NULL
+       ORDER BY s.UpdatedAtUtc DESC,s.CreatedAtUtc DESC`,
+    [{ name: "businessId", type: sql.UniqueIdentifier, value: businessId }],
+  );
+  return rows.recordset[0]?.PeriodEndUtc ?? null;
 }
