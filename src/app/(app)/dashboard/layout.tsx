@@ -10,6 +10,7 @@ import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import { listBusinessesForUser } from "@/modules/businesses/service";
 import { isPlatformAdminUser } from "@/modules/platform-admin/service";
+import { ensureCurrentSubscriptionEntitlements } from "@/modules/billing/subscription-entitlement-lifecycle";
 
 export default async function DashboardLayout({
   children,
@@ -37,10 +38,28 @@ export default async function DashboardLayout({
     user.activeBusinessId,
   );
   const showPlatformAdminLink = await isPlatformAdminUser(user.userId);
+  let planName = "الباقة غير محددة";
+  if (activeBusinessId) {
+    try {
+      const { plan } = await ensureCurrentSubscriptionEntitlements(activeBusinessId);
+      planName = plan?.displayName?.trim() || "الباقة غير محددة";
+    } catch (error) {
+      console.error("[dashboard] sidebar_plan_unavailable", {
+        reason: error instanceof Error ? error.name : "UNKNOWN",
+      });
+      planName = "تعذر تحميل الباقة";
+    }
+  }
 
   return (
     <DashboardShell
-      sidebar={<DashboardSidebar showPlatformAdminLink={showPlatformAdminLink} />}
+      sidebar={
+        <DashboardSidebar
+          showPlatformAdminLink={showPlatformAdminLink}
+          userName={user.fullName}
+          planName={planName}
+        />
+      }
       topbar={
         <DashboardTopbar
           userName={user.fullName}

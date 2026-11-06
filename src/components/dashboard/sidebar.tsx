@@ -16,11 +16,18 @@ import { cn } from "@/lib/utils/cn";
 
 export function DashboardSidebar({
   showPlatformAdminLink = false,
+  userName = "",
+  planName = null,
 }: {
   showPlatformAdminLink?: boolean;
+  userName?: string;
+  planName?: string | null;
 }) {
   const pathname = usePathname();
   const [userExpanded, setUserExpanded] = useState<Record<string, boolean>>({});
+  const displayName = userName.trim() || "حسابي";
+  const avatarInitial = Array.from(displayName)[0]?.toLocaleUpperCase() ?? "؟";
+  const displayPlan = planName?.trim() || "الباقة غير محددة";
 
   const itemClass = (active: boolean) =>
     cn(
@@ -31,14 +38,14 @@ export function DashboardSidebar({
     );
 
   return (
-    <aside className="flex w-[16.5rem] shrink-0 flex-col border-e border-white/10 bg-sidebar px-3 py-4 text-sidebar-foreground">
+    <aside className="sticky top-0 flex h-dvh w-[16.5rem] shrink-0 flex-col border-e border-white/10 bg-sidebar px-3 py-4 text-sidebar-foreground">
       <div className="px-3 pb-5 pt-1">
         <Link href="/dashboard" aria-label={APP_NAME} className="block">
           <BrandLogo surface="dark" priority className="h-auto w-full max-w-[12.5rem]" />
         </Link>
       </div>
 
-      <nav className="flex-1 overflow-y-auto" aria-label="القائمة الرئيسية">
+      <nav className="min-h-0 flex-1 overflow-y-auto" aria-label="القائمة الرئيسية">
         <div className="space-y-1">
           {DASHBOARD_NAV_GROUPS.map((group) => {
             const groupActive = isNavGroupActive(pathname, group);
@@ -146,6 +153,29 @@ export function DashboardSidebar({
           </Link>
         ) : null}
       </nav>
+      <footer className="mt-3 shrink-0 border-t border-white/10 pt-3">
+        <Link
+          href="/dashboard/settings?tab=account"
+          aria-label={`الحساب: ${displayName}، الباقة: ${displayPlan}`}
+          title={`${displayName} — ${displayPlan}`}
+          className="group flex min-w-0 items-center gap-3 rounded-2xl px-2.5 py-3 transition-colors hover:bg-white/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <span
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/20 text-base font-bold text-white ring-1 ring-primary/35"
+            aria-hidden="true"
+          >
+            {avatarInitial}
+          </span>
+          <span className="min-w-0 flex-1 text-start">
+            <span className="block truncate text-sm font-bold text-sidebar-foreground">
+              {displayName}
+            </span>
+            <span className="mt-0.5 block truncate text-xs text-sidebar-muted">
+              {displayPlan}
+            </span>
+          </span>
+        </Link>
+      </footer>
     </aside>
   );
 }
