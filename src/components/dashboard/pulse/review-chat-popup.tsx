@@ -81,6 +81,29 @@ export function ReviewChatPopup({
         setDelivered(true);
         onHandled(item);
       }
+      // An outbound phone observation can update the follow-up even before
+      // the phone's sent message is mirrored into the DRVO message table.
+      // Consult the persisted action state, not just chat bubbles.
+      if (!handledRef.current) {
+        const params = new URLSearchParams({
+          conversationId: item.conversationId,
+          kind: item.kind,
+          ...(item.kind === "SIGNAL" ? { intent: item.intent } : {}),
+        });
+        try {
+          const stateResponse = await fetch("/api/pulse/review-state?" + params.toString(), {
+            credentials: "same-origin", cache: "no-store",
+          });
+          if (stateResponse.ok) {
+            const state = await stateResponse.json() as {needsReply?:boolean;inProgress?:boolean};
+            if (state.inProgress && !state.needsReply && !handledRef.current) {
+              handledRef.current = true;
+              setDelivered(true);
+              onHandled(item);
+            }
+          }
+        } catch { /* Unavailable status checks never alter server-side state. */ }
+      }
       if (initial) requestAnimationFrame(() => {
         if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       });
