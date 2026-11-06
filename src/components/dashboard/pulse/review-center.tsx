@@ -43,7 +43,7 @@ function ReviewItem({item,onOpen}: {item:PulseReview;onOpen:(item:PulseReview)=>
 }
 
 export function PulseReviewCenter({
-  data, businessId: _businessId, periodLabel, allReviews=false,
+  data, periodLabel, allReviews=false,
 }: {
   data:PulseSnapshot|null;businessId:string;periodLabel:string;allReviews?:boolean;
 }) {
