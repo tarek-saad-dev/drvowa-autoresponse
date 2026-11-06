@@ -78,10 +78,10 @@ function limit(value: number | null | undefined): string {
 function planPrice(
   plan: PlanCard,
   interval: BillingInterval,
-  quotes: Props["v1Quotes"],
+  v1Quotes: Props["v1Quotes"],
 ): number | null {
   if (plan.monthlyPriceAmount == null) return null;
-  const v1 = quotes?.[plan.code];
+  const v1 = v1Quotes?.[plan.code];
   if (v1) return interval === "ANNUAL" ? v1.annual : v1.monthly;
   return Number((plan.monthlyPriceAmount * (interval === "ANNUAL" ? 12 : 1)).toFixed(2));
 }
@@ -541,7 +541,7 @@ export function BillingPlansClient({
                 onClick={() => {
                   setBillingInterval(value); setQuote(null); setError(null);
                 }} disabled={quoting || creating}>
-                {value === "MONTHLY" ? "شهري" : "سنوي"}
+                {value === "MONTHLY" ? "شهري" : "سنوي — دفعة واحدة"}
               </button>
             ))}
           </div>
@@ -652,7 +652,7 @@ export function BillingPlansClient({
           <Button type="button" variant="ghost" onClick={openExistingPayment}>عرض تعليمات الدفع</Button>
         ) : null}
         {initialPendingReview ? (
-          <span className="text-xs text-muted-foreground">لديك تحويل قيد المراجعة؛ لا يمكن إنشاء طلب جديد الآن.</span>
+          <span className="text-xs text-muted-foreground">لا يمكن بدء طلب جديد أثناء مراجعة التحويل الحالي.</span>
         ) : null}
       </div>
 
