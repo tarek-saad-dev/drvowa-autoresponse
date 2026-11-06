@@ -7,7 +7,10 @@ import { Button } from "@/components/ui/button";
 type Item = { paymentRequestId: string; paymentReference: string; businessName: string;
   planName: string; amount: number; currency: string; reviewedAt: string | null;
   state: string | null; invoiceStatus: string | null; refundedAmountMinor: number | null;
-  transferReference: string | null; reason: string | null; };
+  transferReference: string | null; reason: string | null;
+  customerRequestId: string | null; customerRequestStatus: string | null;
+  customerReason: string | null; customerRequestedAt: string | null;
+  customerReviewNote: string | null; };
 const labels: Record<string,string> = {
   NONE: "لم يُطلب", PENDING: "بانتظار التحويل", SUCCEEDED: "تم الاسترداد", FAILED: "فشل الاسترداد",
 };
@@ -22,9 +25,32 @@ export function RefundsPanel({items, enabled}: {items: Item[]; enabled: boolean}
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const visible = useMemo(() => items.filter(i =>
-    (filter === "ALL" || (i.state ?? "NONE") === filter) &&
+    (filter === "ALL" || (filter === "CUSTOMER_REQUESTED"
+      ? i.customerRequestStatus === "REQUESTED" && !i.state
+      : (i.state ?? "NONE") === filter)) &&
     [i.businessName, i.paymentReference, i.planName].some(v=>v.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
   ), [items, filter, search]);
+  async function rejectCustomerRequest() {
+    if (!selected?.customerRequestId || busy) return;
+    if (!reason.trim() || reason.trim().length < 5) {
+      setError("اكتب سبب رفض الطلب بوضوح.");
+      return;
+    }
+    if (!window.confirm("رفض طلب استرداد العميل؟ لن يتم تحويل أو إلغاء أي مبلغ.")) return;
+    setBusy(true); setError("");
+    try {
+      const response = await fetch("/api/admin/refund-requests/" + selected.customerRequestId, {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reject", note: reason.trim() }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "تعذر رفض الطلب");
+      setSelected(null); setReason(""); router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "تعذر تحديث الطلب");
+    } finally { setBusy(false); }
+  }
   async function act(action: "request_refund" | "confirm_refund" | "fail_refund" | "reconcile_legacy_invoice") {
     if (!selected || !reason.trim() || !enabled || busy) {setError("اكتب السبب أولًا وتأكد أن الاسترداد متاح."); return;}
     if ((action === "confirm_refund" || action === "reconcile_legacy_invoice") && !reference.trim()) {setError("مرجع تحويل الاسترداد الفعلي مطلوب."); return;}
@@ -54,9 +80,10 @@ export function RefundsPanel({items, enabled}: {items: Item[]; enabled: boolean}
       <select aria-label="تصفية حالة الاسترداد" value={filter} onChange={e=>setFilter(e.target.value)} className="rounded-xl border border-border bg-card px-4 py-3 text-foreground">
         <option value="ALL">كل الحالات</option><option value="PENDING">بانتظار التحويل</option><option value="NONE">لم يُطلب</option>
         <option value="SUCCEEDED">تم الاسترداد</option><option value="FAILED">فشل الاسترداد</option>
+        <option value="CUSTOMER_REQUESTED">طلبات العملاء الجديدة</option>
       </select>
     </div>
-    <p className="text-xs text-muted-foreground">عرض {visible.length} من آخر {items.length} دفعة معتمدة. الاسترداد الكامل فقط متاح حاليًا.</p>
+    <p className="text-xs text-muted-foreground">عرض {visible.length} من آخر {items.length} دفعة معتمدة. طلب العميل لا يمثل موافقة مالية، والاسترداد الكامل فقط متاح حاليًا.</p>
     <div className="overflow-x-auto rounded-2xl border border-border bg-card">
       <table className="min-w-full text-sm"><thead className="bg-surface text-muted-foreground"><tr>
         <th className="p-4 text-start">النشاط</th><th className="p-4 text-start">الدفع</th><th className="p-4 text-start">المبلغ</th>
@@ -65,14 +92,31 @@ export function RefundsPanel({items, enabled}: {items: Item[]; enabled: boolean}
         <td className="p-4 font-bold">{i.businessName}<div className="text-xs font-normal text-muted-foreground">{i.planName}</div></td>
         <td className="p-4 font-mono text-xs">{i.paymentReference}</td>
         <td className="p-4 tabular-nums">{i.amount} {i.currency}</td>
-        <td className="p-4">{labels[i.state ?? "NONE"] ?? i.state}</td>
-        <td className="p-4"><Button size="sm" variant="outline" onClick={()=>{setSelected(i);setReason(i.reason ?? "");setReference("");setVerified(false);setError("");}}>التفاصيل والإجراءات</Button></td>
+        <td className="p-4">
+          {i.customerRequestStatus === "REQUESTED" && !i.state
+            ? <span className="rounded-full bg-warning-soft px-2 py-1 text-xs font-bold text-warning">العميل طلب استردادًا</span>
+            : labels[i.state ?? "NONE"] ?? i.state}
+          {i.customerRequestStatus === "REJECTED" && !i.state
+            ? <div className="mt-1 text-xs text-muted-foreground">طلب العميل مرفوض</div> : null}
+        </td>
+        <td className="p-4"><Button size="sm" variant="outline" onClick={()=>{setSelected(i);setReason(i.customerRequestStatus === "REQUESTED" ? (i.customerReason ?? "") : (i.reason ?? ""));setReference("");setVerified(false);setError("");}}>التفاصيل والإجراءات</Button></td>
       </tr>)}</tbody></table>
       {!visible.length ? <p className="p-8 text-center text-sm text-muted-foreground">لا توجد مدفوعات مطابقة للبحث.</p> : null}
     </div>
     {selected ? <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center" role="dialog" aria-modal="true" aria-label="مراجعة طلب استرداد">
       <div className="max-h-[90vh] w-full max-w-xl space-y-4 overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-xl">
         <div className="flex items-start justify-between gap-3"><div><h2 className="text-xl font-black">{selected.businessName}</h2><p className="text-xs text-muted-foreground">{selected.paymentReference} · {selected.planName}</p></div><Button variant="ghost" onClick={()=>setSelected(null)} disabled={busy}>إغلاق</Button></div>
+        {selected.customerRequestId ? (
+          <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 text-sm">
+            <p className="font-bold">طلب استرداد مقدّم من العميل</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {selected.customerRequestStatus === "REQUESTED" ? "بانتظار قرار الإدارة" : "تم رفض الطلب"}
+              {selected.customerRequestedAt ? " • " + new Date(selected.customerRequestedAt).toLocaleDateString("ar-EG") : ""}
+            </p>
+            <p className="mt-2 whitespace-pre-wrap">{selected.customerReason || "لم يُرفق سبب"}</p>
+            {selected.customerReviewNote ? <p className="mt-2 text-xs">قرار الإدارة: {selected.customerReviewNote}</p> : null}
+          </div>
+        ) : null}
         <div className="rounded-xl bg-surface p-4 text-sm"><p>المدفوع: <strong>{selected.amount} {selected.currency}</strong></p><p className="mt-2">الحالة: {labels[selected.state ?? "NONE"] ?? selected.state}</p><p className="mt-2">الفاتورة: {selected.invoiceStatus === "PAID" ? "مدفوعة" : selected.invoiceStatus ?? "غير موجودة"}</p>
           {selected.transferReference ? <p className="mt-2">مرجع الاسترداد: {selected.transferReference}</p> : null}
         </div>
@@ -84,7 +128,12 @@ export function RefundsPanel({items, enabled}: {items: Item[]; enabled: boolean}
         {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
         <div className="flex flex-wrap gap-2">
           {!selected.invoiceStatus && !selected.state ? <Button disabled={!enabled || busy || !verified || !reference.trim()} onClick={()=>act("reconcile_legacy_invoice")}>تسوية الدفع القديم وإصدار الفاتورة</Button> : null}
-          {selected.invoiceStatus === "PAID" && (!selected.state || selected.state === "FAILED") ? <Button disabled={!enabled || busy} onClick={()=>act("request_refund")}>إنشاء طلب استرداد</Button> : null}
+          {selected.invoiceStatus === "PAID" && (!selected.state || selected.state === "FAILED") ? <Button disabled={!enabled || busy} onClick={()=>act("request_refund")}>
+            {selected.customerRequestStatus === "REQUESTED" ? "قبول وبدء إجراءات الاسترداد" : "إنشاء طلب استرداد"}
+          </Button> : null}
+          {selected.customerRequestStatus === "REQUESTED" && !selected.state ? (
+            <Button variant="outline" disabled={busy} onClick={()=>void rejectCustomerRequest()}>رفض طلب العميل مع ذكر السبب</Button>
+          ) : null}
           {selected.state === "PENDING" ? <>
             <Button disabled={!enabled || busy || !reference.trim()} onClick={()=>act("confirm_refund")}>تأكيد التحويل الفعلي</Button>
             <Button variant="outline" disabled={!enabled || busy} onClick={()=>act("fail_refund")}>تسجيل فشل الاسترداد</Button>
