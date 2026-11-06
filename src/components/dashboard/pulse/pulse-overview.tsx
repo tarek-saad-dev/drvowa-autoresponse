@@ -13,7 +13,7 @@ function Count({label,value,hint}:{label:string;value:number|string;hint:string}
  </div>;
 }
 function periodHref(period:"today"|"yesterday"|"month"){return "/dashboard?period="+period;}
-export function PulseOverview({data,businessName,businessId,selectedPeriod,allReviews=false}:{data:PulseSnapshot|null;businessName:string;businessId:string;selectedPeriod?:PulsePeriod;allReviews?:boolean}) {
+export function PulseOverview({data,businessName,businessId,selectedPeriod,quotaWarningActive=false,allReviews=false}:{data:PulseSnapshot|null;businessName:string;businessId:string;selectedPeriod?:PulsePeriod;quotaWarningActive?:boolean;allReviews?:boolean}) {
  const period=selectedPeriod??data?.period??"month",monthly=period==="month",yesterday=period==="yesterday";
  const periodLabel=monthly?"الشهر الحالي":yesterday?"أمس":"اليوم";
  const actionable=(data?.needsAttentionFollowups??0)+(data?.pendingSignals??0);
@@ -33,7 +33,7 @@ export function PulseOverview({data,businessName,businessId,selectedPeriod,allRe
    <Count label="تحتاج رد منك" value={data?actionable:"—"} hint="إجمالي طلبات المتابعة والإشارات اللي لسه محتاجة رد"/>
   </div>
   <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(290px,.85fr)]">
-   <PulseReviewCenter data={data} businessId={businessId} periodLabel={periodLabel} allReviews={allReviews}/>
+   <PulseReviewCenter data={data} businessId={businessId} periodLabel={periodLabel} quotaWarningActive={quotaWarningActive} allReviews={allReviews}/>
    <div className="min-w-0 space-y-4">
     <section className={card+" p-4 sm:p-5"} aria-label="مواضيع العملاء">
      <h2 className="text-base font-black">العملاء بيسألوا عن إيه؟</h2>
