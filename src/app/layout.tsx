@@ -37,13 +37,22 @@ export const metadata: Metadata = {
     title: `${appConfig.name} — ${APP_TAGLINE}`,
     description: appConfig.description,
     locale: "ar_EG",
-    images: [{ url: "/brand/logo-on-light.png", width: 790, height: 129, alt: appConfig.name }],
+    ...(siteUrl ? { url: siteUrl } : {}),
+    images: [
+      {
+        url: "/og-image.jpg",
+        width: 1024,
+        height: 537,
+        type: "image/jpeg",
+        alt: `${appConfig.name} — ${APP_TAGLINE}`,
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: `${appConfig.name} — ${APP_TAGLINE}`,
     description: appConfig.description,
-    images: ["/brand/logo-on-light.png"],
+    images: ["/og-image.jpg"],
   },
 };
 
