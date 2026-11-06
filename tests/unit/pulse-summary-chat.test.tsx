@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+vi.mock("next/navigation",()=>({useRouter:()=>({refresh:()=>{}})}));
 import { PulseOverview } from "@/components/dashboard/pulse/pulse-overview";
 import { getPulseSummaryCopy, PulseSummaryChat } from "@/components/dashboard/pulse/pulse-summary-chat";
 import type { PulseSnapshot } from "@/modules/pulse/report";
