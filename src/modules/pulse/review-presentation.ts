@@ -23,7 +23,7 @@ export function presentEscalationReview(input: {
     if (reason.includes("QUOTA_EXCEEDED")) {
       return {
         label: "محتاج رد يدوي",
-        evidence: customerText || "العميل مستني رد؛ رصيد ردود الموظف الذكي في الباقة انتهى.",
+        evidence: customerText || "العميل مستني رد بعد تعذر إرسال رد آلي سابقًا. راجع المحادثة.",
         issueType: "AI_QUOTA",
       };
     }
