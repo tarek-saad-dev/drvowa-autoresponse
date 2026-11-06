@@ -86,7 +86,7 @@ export default async function DashboardOverviewPage({searchParams}:{
   <ConnectionHealthStrip initialUiState={health.whatsappLiveState}
    initialInboundHealth={health.inboundHealth} initialInboundIssue={health.inboundIssue} status={status}/>
   <PulseAutoRefresh/>
-  <PulseOverview data={pulse} businessName={business.name} businessId={businessId} allReviews={allReviews}/>
+  <PulseOverview data={pulse} selectedPeriod={period} businessName={business.name} businessId={businessId} allReviews={allReviews}/>
   <LiveOwnership initial={ownership} businessId={businessId}/>
   <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(290px,.8fr)]" aria-label="تفاصيل إضافية">
    <RecentConversations conversations={recent} whatsappConnected={health.whatsappLiveState==="READY"}/>
