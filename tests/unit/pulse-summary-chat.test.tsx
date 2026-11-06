@@ -49,6 +49,11 @@ describe("floating Pulse activity summary", () => {
   it("adapts the prompt to the selected period and handles unavailable data", () => {
     expect(getPulseSummaryCopy(snapshot, "today").question).toBe("✦ إيه اللي حصل النهارده؟");
     expect(getPulseSummaryCopy(snapshot, "yesterday").question).toBe("✦ إيه اللي حصل أمس؟");
+    const offlineMarkup = renderToStaticMarkup(
+      <PulseOverview data={null} selectedPeriod="yesterday" businessName="Cut Salon" businessId="business-1" />,
+    );
+    expect(offlineMarkup).toContain("إيه اللي حصل أمس؟");
+    expect(offlineMarkup).toContain('aria-current="page"');
     const fallback = getPulseSummaryCopy(null, "month");
     expect(fallback.summary).toContain("غير متاح");
     expect(fallback.coverage).toBeNull();
