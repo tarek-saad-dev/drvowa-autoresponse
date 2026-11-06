@@ -53,6 +53,7 @@ export function ReviewChatPopup({
   const [error, setError] = useState("");
   const [delivered, setDelivered] = useState(false);
   const [uncertain, setUncertain] = useState(false);
+  const [quotaBlocked, setQuotaBlocked] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -146,6 +147,7 @@ export function ReviewChatPopup({
     pendingSendRef.current = { text, key };
     setSending(true);
     setError("");
+    setQuotaBlocked(false);
     try {
       const response = await fetch(
         "/api/inbox/conversations/" + encodeURIComponent(item.conversationId) + "/messages",
@@ -161,6 +163,7 @@ export function ReviewChatPopup({
         throw new Error("نتيجة إرسال الرسالة غير مؤكدة. افتح المحادثة الكاملة وتأكد قبل إعادة الإرسال.");
       }
       if (!response.ok || !["SENT","DUPLICATE"].includes(data.status ?? "")) {
+        if (data.code?.includes("QUOTA_EXCEEDED")) setQuotaBlocked(true);
         throw new Error(briefError(data, "تعذر إرسال الرد. الرسالة محفوظة في المسودة."));
       }
       pendingSendRef.current = null;
@@ -210,7 +213,7 @@ export function ReviewChatPopup({
     <div className="pointer-events-none fixed inset-0 z-[130]" dir="rtl">
       <div className="pointer-events-auto absolute inset-0 bg-black/45 sm:hidden"
         onClick={() => setConfirmClose(true)} aria-hidden="true" />
-      <section role="dialog" aria-modal="true" aria-label={"محادثة " + item.name}
+      <section role="dialog" aria-modal="false" aria-label={"محادثة " + item.name}
         className="pointer-events-auto absolute inset-x-0 bottom-0 top-0 flex flex-col overflow-hidden border border-border bg-card shadow-[0_24px_80px_-20px_rgba(0,0,0,.42)] sm:inset-x-auto sm:top-auto sm:bottom-5 sm:left-5 sm:h-[min(670px,calc(100dvh-45px))] sm:w-[410px] sm:rounded-[22px]">
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -255,7 +258,7 @@ export function ReviewChatPopup({
           ))}
         </div>
         <div className="shrink-0 border-t border-border bg-card p-3">
-          {error ? <p role="alert" className="mb-2 rounded-lg bg-warning-soft p-2 text-xs leading-6 text-warning">{error}</p> : null}
+          {error ? <p role="alert" className="mb-2 rounded-lg bg-warning-soft p-2 text-xs leading-6 text-warning">{error}{quotaBlocked ? <Link href="/dashboard/billing" className="mr-2 font-black underline underline-offset-2">راجع حدود الباقة</Link> : null}</p> : null}
           <div className="flex items-end gap-2">
             <textarea ref={inputRef} rows={2} maxLength={4000} value={draft}
               onChange={e => {
