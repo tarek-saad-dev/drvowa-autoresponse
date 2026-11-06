@@ -42,7 +42,7 @@ describe("dashboard review center preview", () => {
     const html = renderToStaticMarkup(<PulseReviewCenter {...props} data={snapshot(5)} />);
     expect(html.match(/رد على العميل/g)).toHaveLength(3);
     expect(html).not.toContain("/dashboard/inbox?businessId=");
-    expect(html).toContain("محتاج رد");
+    expect(html).toContain("محتاجة رد من الفريق");
     expect(html).toContain("عرض الكل");
     expect(html).not.toContain('role="dialog"');
     expect(html).not.toContain("conversation-4");
