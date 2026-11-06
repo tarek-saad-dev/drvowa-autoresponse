@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+vi.mock("next/navigation",()=>({useRouter:()=>({refresh:()=>{}})}));
 import { PulseReviewCenter } from "@/components/dashboard/pulse/review-center";
 import type { PulseSnapshot } from "@/modules/pulse/report";
 
@@ -37,9 +38,11 @@ function snapshot(count: number): PulseSnapshot {
 describe("dashboard review center preview", () => {
   const props = { businessId: "business-1", periodLabel: "اليوم" };
 
-  it("renders only three chats in the dashboard while offering all reviews in a popup", () => {
+  it("shows three compact review cards with reply actions, not inbox navigation", () => {
     const html = renderToStaticMarkup(<PulseReviewCenter {...props} data={snapshot(5)} />);
-    expect(html.match(/افتح المحادثة ←/g)).toHaveLength(3);
+    expect(html.match(/رد على العميل/g)).toHaveLength(3);
+    expect(html).not.toContain("/dashboard/inbox?businessId=");
+    expect(html).toContain("محتاجة رد من الفريق");
     expect(html).toContain("عرض الكل");
     expect(html).not.toContain('role="dialog"');
     expect(html).not.toContain("conversation-4");
@@ -47,7 +50,7 @@ describe("dashboard review center preview", () => {
 
   it("hides the see-more action when three or fewer chats need review", () => {
     const html = renderToStaticMarkup(<PulseReviewCenter {...props} data={snapshot(2)} />);
-    expect(html.match(/افتح المحادثة ←/g)).toHaveLength(2);
+    expect(html.match(/رد على العميل/g)).toHaveLength(2);
     expect(html).not.toContain("عرض الكل");
   });
 
@@ -55,6 +58,6 @@ describe("dashboard review center preview", () => {
     const html = renderToStaticMarkup(<PulseReviewCenter {...props} data={snapshot(5)} allReviews />);
     expect(html).toContain('role="dialog"');
     expect(html).toContain('aria-modal="true"');
-    expect(html).toContain("conversation-4");
+    expect(html).toContain("عميل 4");
   });
 });
