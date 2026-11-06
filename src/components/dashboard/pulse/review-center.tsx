@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { PulseIntent } from "@/modules/pulse/classifier";
 import type { PulseReview, PulseSnapshot } from "@/modules/pulse/report";
 import { ReviewButton } from "./review-button";
@@ -92,7 +92,7 @@ export function PulseReviewCenter({
     };
   }, [open]);
 
-  const trapFocus = (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const trapFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Tab" || !dialogRef.current) return;
     const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
       'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
