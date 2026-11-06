@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ConnectionHealthStrip } from "@/components/dashboard/overview/connection-health-strip";
+import { BillingHealthNotice } from "@/components/dashboard/overview/billing-health-notice";
+import { deriveHomeBillingAlert } from "@/lib/dashboard/billing-alert";
+import { getBillingOverview, getLastExpiredPaidPeriodEnd } from "@/modules/billing/service";
+import { getV1FreeTrialUsage } from "@/modules/pricing/free-trial-usage";
 import { RecentConversations, type OverviewConversation } from "@/components/dashboard/overview/recent-conversations";
 import { PulseOverview } from "@/components/dashboard/pulse/pulse-overview";
 import { PulseAutoRefresh } from "@/components/dashboard/pulse/auto-refresh";
@@ -29,10 +33,31 @@ export default async function DashboardOverviewPage({searchParams}:{
  const user=await requireAuthenticatedUser();
  const businessId=await resolveActiveBusiness(user.userId,user.activeBusinessId);
  if(!businessId)redirect("/onboarding");
- const [business,agents,knowledgeItems,aiSetting,conversations]=await Promise.all([
+ const [business,agents,knowledgeItems,aiSetting,conversations,billing]=await Promise.all([
   getBusinessById({businessId}),listAgents({businessId}),listItems({businessId}),
   getWhatsAppAiSetting({businessId}),listInboxConversations({businessId,limit:5}),
+  getBillingOverview({businessId}).catch(error=>{
+   console.error("[billing] overview_unavailable",{reason:error instanceof Error?error.name:"UNKNOWN"});
+   return null;
+  }),
  ]);
+ let billingAlert:ReturnType<typeof deriveHomeBillingAlert>=null;
+ if(billing){
+  const free=billing.plan?.code==="FREE";
+  const [freeTrial,lastExpiredPaidAt]=await Promise.all([
+   free?getV1FreeTrialUsage(businessId).catch(error=>{
+    console.error("[billing] free_trial_status_unavailable",{reason:error instanceof Error?error.name:"UNKNOWN"});
+    return null;
+   }):Promise.resolve(null),
+   free?getLastExpiredPaidPeriodEnd(businessId).catch(error=>{
+    console.error("[billing] last_paid_period_unavailable",{reason:error instanceof Error?error.name:"UNKNOWN"});
+    return null;
+   }):Promise.resolve(null),
+  ]);
+  billingAlert=deriveHomeBillingAlert({
+   snapshot:billing,freeTrial,lastExpiredPaidAt,timezone:business.timezone,
+  });
+ }
  let ownership:Awaited<ReturnType<typeof getHumanOwnershipSnapshot>>|null=null;
  try { ownership=await getHumanOwnershipSnapshot(businessId); }
  catch(error) { console.error("[ownership] overview_unavailable",{reason:error instanceof Error?error.name:"UNKNOWN"}); }
@@ -57,6 +82,7 @@ export default async function DashboardOverviewPage({searchParams}:{
   statusTone:c.hasOpenEscalation?"attention":"neutral",
  }));
  return <div className="mx-auto w-full max-w-[1420px] space-y-5 pb-6 sm:space-y-6">
+  <BillingHealthNotice alert={billingAlert}/>
   <ConnectionHealthStrip initialUiState={health.whatsappLiveState}
    initialInboundHealth={health.inboundHealth} initialInboundIssue={health.inboundIssue} status={status}/>
   <PulseAutoRefresh/>
@@ -71,7 +97,9 @@ export default async function DashboardOverviewPage({searchParams}:{
     </div>
     <p className="mt-5 text-base font-black">{activeAgent?.name||"موظفك الذكي"}</p>
     <p className="mt-1 text-xs text-muted-foreground">{activeAgent?.roleTitle||"مساعد العملاء"} • {activeKnowledge.toLocaleString("en-US")} معلومة نشطة</p>
-    <p className="mt-4 text-xs leading-6 text-muted-foreground">{status.kind==="working"?"جاهز للرد على العملاء بالمعلومات اللي اتعلمها.":status.detail}</p>
+    <p className="mt-4 text-xs leading-6 text-muted-foreground">{billingAlert && ["subscription_inactive","paid_expired","free_trial_ended","quota_exhausted"].includes(billingAlert.kind)
+      ?"الردود التلقائية الجديدة قد تتعطل بسبب الاشتراك أو حدود الاستخدام. راجع الباقة من التنبيه أعلى الصفحة."
+      :status.kind==="working"?"جاهز للرد على العملاء بالمعلومات اللي اتعلمها.":status.detail}</p>
     <Link href="/dashboard/agent" className="mt-auto block rounded-xl bg-primary px-4 py-3 text-center text-xs font-black text-primary-foreground">إدارة الموظف ←</Link>
    </div>
   </section>
