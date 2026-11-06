@@ -1,17 +1,19 @@
 import { query, sql } from "@/lib/db";
 import { PULSE_INTENT_LABELS, type PulseIntent } from "./classifier";
 import { pulseBounds, type PulsePeriod } from "./time";
+import { presentEscalationReview, type EscalationReviewIssue } from "./review-presentation";
 
 export type PulseReview={
   conversationId:string;intent:string;label:string;evidence:string;
   priority:"URGENT"|"NORMAL";actionType:"REVIEW"|"OPPORTUNITY";
-  name:string;at:string;kind:"SIGNAL"|"ESCALATION";
+  name:string;at:string;kind:"SIGNAL"|"ESCALATION";issueType?:EscalationReviewIssue;
 };
 export type PulseSnapshot={
   period:PulsePeriod; start:string; end:string;
   conversations:number;messages:number;aiConversations:number;
   eligible:number;analyzed:number;openFollowups:number;pendingSignals:number;
   handlingSignals:number;handlingFollowups:number;needsAttentionFollowups:number;
+  quotaBlockedFollowups:number;
   categories:Array<{intent:PulseIntent;label:string;conversations:number}>;
   reviews:PulseReview[];
 };
@@ -71,11 +73,17 @@ export async function getPulseSnapshot(input:{
    "WHERE BusinessID=@businessId AND MessageAtUtc>=@start AND MessageAtUtc<@end",
    "GROUP BY Intent ORDER BY Total DESC"
   ].join(" "),a),
-  query<{ConversationID:string;Name:string|null;Reason:string;At:Date}>([
-   "SELECT TOP (@reviewLimit) e.ConversationID,ct.DisplayName AS Name,e.ReasonText AS Reason,",
+  query<{ConversationID:string;Name:string|null;Reason:string|null;ReasonCode:string|null;LastCustomerText:string|null;At:Date}>([
+   "SELECT TOP (@reviewLimit) e.ConversationID,",
+   "COALESCE(NULLIF(LTRIM(RTRIM(ct.DisplayName)),N''),NULLIF(ct.PhoneNormalized,N''),N'عميل') AS Name,",
+   "e.ReasonText AS Reason,e.ReasonCode AS ReasonCode,lastInbound.LastCustomerText,",
    `${followupAttentionAt} AS At FROM dbo.TblHumanEscalation e`,
    "JOIN dbo.TblConversation c ON c.BusinessID=e.BusinessID AND c.ConversationID=e.ConversationID",
    "JOIN dbo.TblContact ct ON ct.BusinessID=c.BusinessID AND ct.ContactID=c.ContactID",
+   "OUTER APPLY (SELECT TOP (1) LEFT(m.TextContent,240) AS LastCustomerText",
+   "FROM dbo.TblMessage m WHERE m.BusinessID=e.BusinessID AND m.ConversationID=e.ConversationID",
+   "AND m.Direction=N'INBOUND' AND m.IsHistorical=0 AND m.TextContent IS NOT NULL",
+   "ORDER BY COALESCE(m.ProviderTimestampUtc,m.ReceivedAtUtc,m.CreatedAtUtc) DESC,m.CreatedAtUtc DESC) lastInbound",
    "WHERE e.BusinessID=@businessId AND e.ResolvedAtUtc IS NULL",
    "AND e.Status IN(N'OPEN',N'ACKNOWLEDGED') AND e.FollowUpPhase=N'NEEDS_ATTENTION'",
    `AND ${followupAttentionAt}>=@start AND ${followupAttentionAt}<@end`,
@@ -94,10 +102,13 @@ export async function getPulseSnapshot(input:{
    `WHERE p.rn=1 ${withoutOpenEscalation}`,
    "ORDER BY CASE WHEN p.Priority=N'URGENT' THEN 0 ELSE 1 END,p.ActionAt DESC"
   ].join(" "),reviewArgs),
-  query<{Total:number;NeedsAttention:number;Handling:number}>([
+  query<{Total:number;NeedsAttention:number;Handling:number;QuotaBlocked:number}>([
    "SELECT COUNT(1) AS Total,",
    "COALESCE(SUM(CASE WHEN e.FollowUpPhase=N'NEEDS_ATTENTION' THEN 1 ELSE 0 END),0) AS NeedsAttention,",
-   "COALESCE(SUM(CASE WHEN e.FollowUpPhase IN(N'IN_PROGRESS',N'WAITING_CUSTOMER') THEN 1 ELSE 0 END),0) AS Handling",
+   "COALESCE(SUM(CASE WHEN e.FollowUpPhase IN(N'IN_PROGRESS',N'WAITING_CUSTOMER') THEN 1 ELSE 0 END),0) AS Handling,",
+   "COALESCE(SUM(CASE WHEN e.FollowUpPhase=N'NEEDS_ATTENTION'",
+   "AND e.ReasonCode=N'AI_REPLY_FAILED' AND e.ReasonText LIKE N'%QUOTA_EXCEEDED%'",
+   "THEN 1 ELSE 0 END),0) AS QuotaBlocked",
    "FROM dbo.TblHumanEscalation e WHERE e.BusinessID=@businessId",
    "AND e.ResolvedAtUtc IS NULL AND e.Status IN(N'OPEN',N'ACKNOWLEDGED')",
    `AND ${followupActivityAt}>=@start AND ${followupActivityAt}<@end`
@@ -119,11 +130,18 @@ export async function getPulseSnapshot(input:{
    "GROUP BY p.ConversationID,p.Intent) q"
   ].join(" "),a),
  ]);
- const follow:PulseReview[]=followups.recordset.map(x=>({
-  conversationId:x.ConversationID,intent:"FOLLOW_UP",label:"متابعة بشرية",
-  evidence:x.Reason||"متابعة مفتوحة",priority:"URGENT",
-  actionType:"REVIEW",name:x.Name||"عميل",at:x.At.toISOString(),kind:"ESCALATION",
- }));
+ const follow:PulseReview[]=followups.recordset.map(x=>{
+  const copy=presentEscalationReview({
+   reasonCode:x.ReasonCode,
+   reason:x.Reason,
+   lastCustomerText:x.LastCustomerText,
+  });
+  return {
+   conversationId:x.ConversationID,intent:"FOLLOW_UP",label:copy.label,
+   evidence:copy.evidence,issueType:copy.issueType,priority:"URGENT",
+   actionType:"REVIEW",name:x.Name||"عميل",at:x.At.toISOString(),kind:"ESCALATION",
+  };
+ });
  const inferred:PulseReview[]=signals.recordset.map(x=>({
   conversationId:x.ConversationID,intent:x.Intent,label:PULSE_INTENT_LABELS[x.Intent as PulseIntent]||x.Intent,
   evidence:x.Evidence,priority:x.Priority==="URGENT"?"URGENT":"NORMAL",
@@ -145,6 +163,7 @@ export async function getPulseSnapshot(input:{
   handlingSignals:Number(handlingSignals.recordset[0]?.Total??0),
   handlingFollowups:Number(followCount.recordset[0]?.Handling??0),
   needsAttentionFollowups:Number(followCount.recordset[0]?.NeedsAttention??0),
+  quotaBlockedFollowups:Number(followCount.recordset[0]?.QuotaBlocked??0),
   reviews,
  };
 }
