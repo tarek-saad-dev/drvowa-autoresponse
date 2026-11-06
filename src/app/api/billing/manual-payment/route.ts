@@ -25,6 +25,7 @@ function serializePayment(p: {
   submittedAtUtc: Date | null;
   reviewedAtUtc?: Date | null;
   reviewNote?: string | null;
+  billingInterval?: "MONTHLY" | "ANNUAL";
   requestedPlanCode: string;
   requestedPlanDisplayName: string;
   payerName?: string | null;
@@ -42,6 +43,7 @@ function serializePayment(p: {
     reviewedAtUtc: p.reviewedAtUtc ?? null,
     reviewNote: p.status === "REJECTED" ? (p.reviewNote ?? null) : null,
     planDisplayName: p.requestedPlanDisplayName,
+    billingInterval: p.billingInterval ?? "MONTHLY",
     planCode: p.requestedPlanCode,
     payerName: p.payerName ?? null,
   };
