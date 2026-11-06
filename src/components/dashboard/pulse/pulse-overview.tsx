@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PulseReviewCenter } from "./review-center";
+import { PulseSummaryChat } from "./pulse-summary-chat";
 import type { PulseSnapshot } from "@/modules/pulse/report";
 
 const card="min-w-0 rounded-[22px] border border-border bg-card shadow-[0_16px_40px_-32px_rgba(5,43,58,.36)]";
@@ -13,37 +14,17 @@ function Count({label,value,hint}:{label:string;value:number|string;hint:string}
 function periodHref(period:"today"|"yesterday"|"month"){return "/dashboard?period="+period;}
 export function PulseOverview({data,businessName,businessId,allReviews=false}:{data:PulseSnapshot|null;businessName:string;businessId:string;allReviews?:boolean}) {
  const period=data?.period||"month",monthly=period==="month",yesterday=period==="yesterday";
- const ready=Boolean(data),pending=data?Math.max(0,data.eligible-data.analyzed):0;
  const periodLabel=monthly?"الشهر الحالي":yesterday?"أمس":"اليوم";
  const actionable=(data?.needsAttentionFollowups??0)+(data?.pendingSignals??0);
- const handling=(data?.handlingFollowups??0)+(data?.handlingSignals??0);
- const summary=!ready
-  ?"ملخص Pulse غير متاح حاليًا. المحادثات والمتابعة ما زالوا متاحين في قائمة المحادثات."
-  :data!.messages===0
-   ?"مفيش رسائل واردة جديدة خلال الفترة المختارة. طلبات المراجعة المعروضة مرتبطة بالفترة دي بس."
-   :"خلال "+periodLabel+" وصلتك "+data!.messages.toLocaleString("ar-EG")+" رسالة واردة ضمن "+data!.conversations.toLocaleString("ar-EG")+" محادثة. "+
-    (actionable>0?"عندك "+actionable.toLocaleString("ar-EG")+" متابعة أو إشارة محتاجة مراجعة.":"مفيش طلبات مراجعة مفتوحة مصنفة حتى الآن.")+
-    (pending>0?" ولسه بيتم تحليل بعض الرسائل.":"");
  const maxTopic=data?.categories[0],totalTopics=(data?.categories??[]).reduce((s,t)=>s+t.conversations,0);
  return <div className="space-y-5 sm:space-y-6" dir="rtl">
-  <header className="flex flex-wrap items-end justify-between gap-4">
-   <div>
-    <p className="mb-1 text-[11px] font-black tracking-wide text-primary">DRVO / PULSE</p>
-    <h1 className="text-2xl font-black tracking-tight sm:text-[30px]">نبض نشاطك</h1>
-    <p className="mt-1 text-sm text-muted-foreground">كل المهم عن {businessName}، من غير زحمة.</p>
-   </div>
+  <div className="flex flex-wrap items-center gap-2">
    <nav aria-label="الفترة" className="flex rounded-xl border border-border bg-card p-1">
     <Link aria-current={period==="today"?"page":undefined} href={periodHref("today")} className={"rounded-lg px-4 py-2 text-xs font-black "+(period==="today"?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-surface")}>ملخص اليوم</Link>
     <Link aria-current={yesterday?"page":undefined} href={periodHref("yesterday")} className={"rounded-lg px-4 py-2 text-xs font-black "+(yesterday?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-surface")}>أمس</Link>
     <Link aria-current={monthly?"page":undefined} href={periodHref("month")} className={"rounded-lg px-4 py-2 text-xs font-black "+(monthly?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-surface")}>ملخص الشهر</Link>
    </nav>
-  </header>
-  <section className={card+" border-primary/15 bg-primary/[.035] p-4 sm:p-6"} aria-label="ملخص نبض النشاط">
-   <div className="flex items-center gap-2 text-sm font-black"><span className="text-lg text-primary">✦</span> إيه اللي حصل {monthly?"الشهر ده":yesterday?"أمس":"النهارده"}؟</div>
-   <p className="mt-3 max-w-4xl text-sm leading-8 text-foreground/90">{summary}</p>
-   {ready && handling>0?<p className="mt-2 text-xs leading-6 text-muted-foreground">وفيه {handling.toLocaleString("ar-EG")} متابعة بدأ الفريق التعامل معاها بالفعل؛ مش محسوبة كطلبات محتاجة رد جديد.</p>:null}
-   {data?<p className="mt-3 text-xs text-muted-foreground">التصنيف المبدئي: {data.analyzed.toLocaleString("en-US")} من {data.eligible.toLocaleString("en-US")} رسالة نصية متاحة في الفترة • الحجوزات والمشتريات المعروضة استفسارات، وليست عمليات مؤكدة.</p>:null}
-  </section>
+  </div>
   <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
    <Count label="محادثات واردة" value={data?.conversations??"—"} hint="عملاء بدأوا أو تفاعلوا خلال الفترة"/>
    <Count label="رد عليها الموظف الذكي" value={data?.aiConversations??"—"} hint="محادثات لها رد AI؛ مش بالضرورة اتحلت"/>
@@ -79,5 +60,6 @@ export function PulseOverview({data,businessName,businessId,allReviews=false}:{d
     </section>
    </div>
   </div>
+  <PulseSummaryChat data={data} period={period} businessName={businessName}/>
  </div>;
 }
