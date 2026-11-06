@@ -24,6 +24,30 @@ export async function getPulseSnapshot(input:{
  const {start,end}=pulseBounds(input.period,input.timezone);
  const a=[...args(input.businessId),{name:"start",type:sql.DateTime2,value:start},
    {name:"end",type:sql.DateTime2,value:end}];
+ const reviewLimit=Math.min(100,Math.max(1,Math.trunc(input.maxReviews??12)));
+ const reviewArgs=[...a,{name:"reviewLimit",type:sql.Int,value:reviewLimit}];
+
+ // Filter by the latest event that requires attention, not by the age of an
+ // unresolved case. A customer follow-up can make an older request actionable
+ // again today (or yesterday). Bounds are business-local calendar dates.
+ const followupAttentionAt="COALESCE(e.LastCustomerReplyAtUtc,e.CreatedAtUtc)";
+ const followupActivityAt=[
+  "CASE WHEN e.FollowUpPhase=N'NEEDS_ATTENTION'",
+  "THEN COALESCE(e.LastCustomerReplyAtUtc,e.CreatedAtUtc)",
+  "WHEN e.FollowUpPhase IN(N'IN_PROGRESS',N'WAITING_CUSTOMER')",
+  "THEN COALESCE(e.LastHumanReplyAtUtc,e.CreatedAtUtc)",
+  "ELSE e.CreatedAtUtc END",
+ ].join(" ");
+ const signalAttentionAt="COALESCE(p.LastCustomerFollowupAtUtc,p.MessageAtUtc)";
+ const signalHandlingAt="COALESCE(p.LastHumanReplyAtUtc,p.MessageAtUtc)";
+ // The same open escalation must own the conversation in both the visible
+ // list and the count, even when its original creation is outside the period.
+ const withoutOpenEscalation=[
+  "AND NOT EXISTS(SELECT 1 FROM dbo.TblHumanEscalation e",
+  "WHERE e.BusinessID=p.BusinessID AND e.ConversationID=p.ConversationID",
+  "AND e.ResolvedAtUtc IS NULL AND e.Status IN(N'OPEN',N'ACKNOWLEDGED'))",
+ ].join(" ");
+
  const [volume,ai,coverage,topics,followups,signals,followCount,signalCount,handlingSignals]=await Promise.all([
   query<{Conversations:number;Messages:number;Eligible:number}>([
    "SELECT COUNT(DISTINCT m.ConversationID) AS Conversations,COUNT(1) AS Messages,",
@@ -47,65 +71,60 @@ export async function getPulseSnapshot(input:{
    "WHERE BusinessID=@businessId AND MessageAtUtc>=@start AND MessageAtUtc<@end",
    "GROUP BY Intent ORDER BY Total DESC"
   ].join(" "),a),
-  query<{ConversationID:string;Name:string|null;Reason:string;Phase:string;At:Date}>([
-   "SELECT TOP (30) e.ConversationID,ct.DisplayName AS Name,e.ReasonText AS Reason,",
-   "e.FollowUpPhase AS Phase,e.CreatedAtUtc AS At FROM dbo.TblHumanEscalation e",
+  query<{ConversationID:string;Name:string|null;Reason:string;At:Date}>([
+   "SELECT TOP (@reviewLimit) e.ConversationID,ct.DisplayName AS Name,e.ReasonText AS Reason,",
+   `${followupAttentionAt} AS At FROM dbo.TblHumanEscalation e`,
    "JOIN dbo.TblConversation c ON c.BusinessID=e.BusinessID AND c.ConversationID=e.ConversationID",
    "JOIN dbo.TblContact ct ON ct.BusinessID=c.BusinessID AND ct.ContactID=c.ContactID",
    "WHERE e.BusinessID=@businessId AND e.ResolvedAtUtc IS NULL",
-   "AND e.Status IN(N'OPEN',N'ACKNOWLEDGED')",
-   "ORDER BY CASE WHEN e.FollowUpPhase=N'NEEDS_ATTENTION' THEN 0 ELSE 1 END,e.CreatedAtUtc DESC"
-  ].join(" "),args(input.businessId)),
+   "AND e.Status IN(N'OPEN',N'ACKNOWLEDGED') AND e.FollowUpPhase=N'NEEDS_ATTENTION'",
+   `AND ${followupAttentionAt}>=@start AND ${followupAttentionAt}<@end`,
+   `ORDER BY ${followupAttentionAt} DESC,e.CreatedAtUtc DESC`
+  ].join(" "),reviewArgs),
   query<{ConversationID:string;Name:string|null;Intent:string;Priority:string;ActionType:string;Evidence:string;At:Date}>([
-   "SELECT TOP (40) p.ConversationID,ct.DisplayName AS Name,p.Intent,p.Priority,p.ActionType,",
-   "p.Evidence,p.MessageAtUtc AS At FROM",
-   "(SELECT p.*,ROW_NUMBER() OVER(PARTITION BY p.ConversationID,p.Intent",
-   "ORDER BY p.MessageAtUtc DESC,p.SignalID DESC) AS rn FROM dbo.TblPulseSignal p",
+   "SELECT TOP (@reviewLimit) p.ConversationID,ct.DisplayName AS Name,p.Intent,p.Priority,p.ActionType,",
+   "p.Evidence,p.ActionAt AS At FROM",
+   `(SELECT p.*,${signalAttentionAt} AS ActionAt,ROW_NUMBER() OVER(PARTITION BY p.ConversationID,p.Intent`,
+   `ORDER BY ${signalAttentionAt} DESC,p.SignalID DESC) AS rn FROM dbo.TblPulseSignal p`,
    "WHERE p.BusinessID=@businessId AND p.ActionType IS NOT NULL AND p.ReviewStatus=N'OPEN'",
    "AND p.ActionState=N'NEEDS_REPLY'",
-   "AND p.MessageAtUtc>=DATEADD(day,-60,SYSUTCDATETIME())) p",
+   `AND ${signalAttentionAt}>=@start AND ${signalAttentionAt}<@end) p`,
    "JOIN dbo.TblConversation c ON c.ConversationID=p.ConversationID AND c.BusinessID=p.BusinessID",
    "JOIN dbo.TblContact ct ON ct.ContactID=c.ContactID AND ct.BusinessID=c.BusinessID",
-   "WHERE p.rn=1 ORDER BY CASE WHEN p.Priority=N'URGENT' THEN 0 ELSE 1 END,p.MessageAtUtc DESC"
-  ].join(" "),args(input.businessId)),
-  query<{Total:number; NeedsAttention:number; Handling:number}>([
+   `WHERE p.rn=1 ${withoutOpenEscalation}`,
+   "ORDER BY CASE WHEN p.Priority=N'URGENT' THEN 0 ELSE 1 END,p.ActionAt DESC"
+  ].join(" "),reviewArgs),
+  query<{Total:number;NeedsAttention:number;Handling:number}>([
    "SELECT COUNT(1) AS Total,",
    "COALESCE(SUM(CASE WHEN e.FollowUpPhase=N'NEEDS_ATTENTION' THEN 1 ELSE 0 END),0) AS NeedsAttention,",
    "COALESCE(SUM(CASE WHEN e.FollowUpPhase IN(N'IN_PROGRESS',N'WAITING_CUSTOMER') THEN 1 ELSE 0 END),0) AS Handling",
    "FROM dbo.TblHumanEscalation e WHERE e.BusinessID=@businessId",
-   "AND e.ResolvedAtUtc IS NULL AND e.Status IN(N'OPEN',N'ACKNOWLEDGED')"
-  ].join(" "),args(input.businessId)),
+   "AND e.ResolvedAtUtc IS NULL AND e.Status IN(N'OPEN',N'ACKNOWLEDGED')",
+   `AND ${followupActivityAt}>=@start AND ${followupActivityAt}<@end`
+  ].join(" "),a),
   query<{Total:number}>([
    "SELECT COUNT(1) AS Total FROM (SELECT p.ConversationID,p.Intent FROM dbo.TblPulseSignal p",
    "WHERE p.BusinessID=@businessId AND p.ReviewStatus=N'OPEN' AND p.ActionType IS NOT NULL",
    "AND p.ActionState=N'NEEDS_REPLY'",
-   "AND p.MessageAtUtc>=DATEADD(day,-60,SYSUTCDATETIME())",
-   "AND NOT EXISTS(SELECT 1 FROM dbo.TblHumanEscalation e WHERE e.BusinessID=p.BusinessID",
-   "AND e.ConversationID=p.ConversationID AND e.ResolvedAtUtc IS NULL",
-   "AND e.Status IN(N'OPEN',N'ACKNOWLEDGED'))",
+   `AND ${signalAttentionAt}>=@start AND ${signalAttentionAt}<@end`,
+   withoutOpenEscalation,
    "GROUP BY p.ConversationID,p.Intent) q"
-  ].join(" "),args(input.businessId)),
+  ].join(" "),a),
   query<{Total:number}>([
-   "SELECT COUNT(1) AS Total FROM (SELECT p.ConversationID,p.Intent",
-   "FROM dbo.TblPulseSignal p WHERE p.BusinessID=@businessId",
-   "AND p.ReviewStatus=N'OPEN' AND p.ActionType IS NOT NULL",
-   "AND p.ActionState=N'IN_PROGRESS' AND p.MessageAtUtc>=DATEADD(day,-60,SYSUTCDATETIME())",
-   "AND NOT EXISTS(SELECT 1 FROM dbo.TblHumanEscalation e WHERE e.BusinessID=p.BusinessID",
-   "AND e.ConversationID=p.ConversationID AND e.ResolvedAtUtc IS NULL",
-   "AND e.Status IN(N'OPEN',N'ACKNOWLEDGED'))",
+   "SELECT COUNT(1) AS Total FROM (SELECT p.ConversationID,p.Intent FROM dbo.TblPulseSignal p",
+   "WHERE p.BusinessID=@businessId AND p.ReviewStatus=N'OPEN' AND p.ActionType IS NOT NULL",
+   "AND p.ActionState=N'IN_PROGRESS'",
+   `AND ${signalHandlingAt}>=@start AND ${signalHandlingAt}<@end`,
+   withoutOpenEscalation,
    "GROUP BY p.ConversationID,p.Intent) q"
-  ].join(" "),args(input.businessId)),
+  ].join(" "),a),
  ]);
- const follow:PulseReview[]=followups.recordset
-   .filter(x=>x.Phase==="NEEDS_ATTENTION")
-   .map(x=>({
-  conversationId:x.ConversationID,intent:"FOLLOW_UP",label:x.Phase==="IN_PROGRESS"?"جاري التعامل":"متابعة بشرية",
-  evidence:x.Reason||"متابعة مفتوحة",priority:x.Phase==="NEEDS_ATTENTION"?"URGENT":"NORMAL",
+ const follow:PulseReview[]=followups.recordset.map(x=>({
+  conversationId:x.ConversationID,intent:"FOLLOW_UP",label:"متابعة بشرية",
+  evidence:x.Reason||"متابعة مفتوحة",priority:"URGENT",
   actionType:"REVIEW",name:x.Name||"عميل",at:x.At.toISOString(),kind:"ESCALATION",
  }));
- // An open Smart Follow-up owns this conversation even when a human is handling it.
- const openIds=new Set(followups.recordset.map(x=>x.ConversationID));
- const inferred:PulseReview[]=signals.recordset.filter(x=>!openIds.has(x.ConversationID)).map(x=>({
+ const inferred:PulseReview[]=signals.recordset.map(x=>({
   conversationId:x.ConversationID,intent:x.Intent,label:PULSE_INTENT_LABELS[x.Intent as PulseIntent]||x.Intent,
   evidence:x.Evidence,priority:x.Priority==="URGENT"?"URGENT":"NORMAL",
   actionType:x.ActionType==="OPPORTUNITY"?"OPPORTUNITY":"REVIEW",
@@ -113,7 +132,7 @@ export async function getPulseSnapshot(input:{
  }));
  const reviews=[...follow,...inferred].sort((a,b)=>
   (a.priority==="URGENT"?0:1)-(b.priority==="URGENT"?0:1)||b.at.localeCompare(a.at)
- ).slice(0,input.maxReviews??12);
+ ).slice(0,reviewLimit);
  return {period:input.period,start:start.toISOString(),end:end.toISOString(),
   conversations:Number(volume.recordset[0]?.Conversations??0),
   messages:Number(volume.recordset[0]?.Messages??0),
