@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { DrvoLoading } from "@/components/ui/drvo-loading";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
@@ -491,8 +492,8 @@ export function BillingPlansClient({
             </div>
           ) : null}
           {quoting ? (
-            <div role="status" className="rounded-xl bg-surface p-6 text-center text-sm text-muted-foreground">
-              جاري التحقق من السعر والكود…
+            <div className="rounded-xl bg-surface">
+              <DrvoLoading variant="inline" label="بنراجع السعر والكود…" />
             </div>
           ) : quote && validQuote ? (
             <div className="space-y-3 rounded-2xl bg-surface px-4 py-4">

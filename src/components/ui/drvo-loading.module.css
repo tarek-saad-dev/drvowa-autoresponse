@@ -1,0 +1,71 @@
+.appear {
+  animation: drvo-loading-appear 340ms cubic-bezier(.22, 1, .36, 1) 120ms both;
+}
+
+.mark {
+  animation: drvo-loading-float 2.8s ease-in-out infinite;
+}
+
+.dot {
+  animation: drvo-loading-dot 1.15s ease-in-out infinite;
+}
+
+.progress {
+  animation: drvo-loading-progress 1.65s cubic-bezier(.45, 0, .2, 1) infinite;
+}
+
+@keyframes drvo-loading-appear {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes drvo-loading-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes drvo-loading-dot {
+  0%, 65%, 100% {
+    opacity: .3;
+    transform: translateY(0);
+  }
+
+  35% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes drvo-loading-progress {
+  from {
+    transform: translateX(-160%);
+  }
+
+  to {
+    transform: translateX(260%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .appear, .mark, .dot, .progress {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .progress {
+    width: 100%;
+  }
+}

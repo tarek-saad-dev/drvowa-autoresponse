@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { BrandLogo } from "@/components/brand/brand-logo";
+import { DrvoLoading } from "@/components/ui/drvo-loading";
 import { useInboxChrome } from "@/components/dashboard/inbox-chrome";
 import { messageBodyDisplay } from "@/lib/ui/labels";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
@@ -1390,7 +1391,7 @@ export function InboxPanel({
                 aria-label="رسائل المحادثة"
               >
                 <div className="mx-auto flex min-h-full max-w-[900px] flex-col">
-                  {loadingThread ? <div className="m-auto text-sm text-muted-foreground">بنفتح المحادثة...</div>
+                  {loadingThread ? <DrvoLoading variant="inline" label="بنفتح المحادثة…" className="m-auto max-w-xs" />
                     : messages.length === 0 ? <div className="m-auto rounded-xl bg-card/80 p-5 text-center text-sm text-muted-foreground">لسه مفيش رسائل محفوظة للمحادثة دي.</div>
                       : <>
                           {hasOlder ? (
