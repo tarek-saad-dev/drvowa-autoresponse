@@ -28,7 +28,7 @@ export async function quoteDiscount(input: {
   billingInterval: BillingInterval;
   subtotalMinor: number;
   businessId: string;
-}, trx?: TransactionClient): Promise<DiscountQuote> {
+}, trx?: TransactionClient, options?: { ignoreOwnAwaitingTransfer?: boolean }): Promise<DiscountQuote> {
   const code = normalizeDiscountCode(input.code);
   const runner = trx ? trx.query.bind(trx) : query;
   const result = await runner<{
@@ -60,7 +60,8 @@ export async function quoteDiscount(input: {
     SELECT COUNT(*) AS Total,
       COALESCE(SUM(CASE WHEN BusinessID=@businessId THEN 1 ELSE 0 END),0) AS TenantTotal
     FROM dbo.TblManualPaymentRequest
-    WHERE DiscountCode=@code AND Status IN (N'AWAITING_TRANSFER',N'PENDING',N'APPROVED')`,
+    WHERE DiscountCode=@code AND Status IN (N'AWAITING_TRANSFER',N'PENDING',N'APPROVED')
+    ${options?.ignoreOwnAwaitingTransfer ? "AND NOT (BusinessID=@businessId AND Status=N'AWAITING_TRANSFER')" : ""}`,
     [{ name:"code",type:sql.NVarChar(32),value:code },
      { name:"businessId",type:sql.UniqueIdentifier,value:input.businessId }]);
   if (Number(reserved.recordset[0]?.TenantTotal ?? 0) > 0) {

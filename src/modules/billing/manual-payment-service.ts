@@ -74,6 +74,60 @@ export async function getBusinessPaymentStatus(params: {
 }
 
 /**
+ * Read-only checkout quote. Uses the same server-side pricing and coupon rules
+ * as payment intent creation. No request, invoice or reservation is created here.
+ * The real intent revalidates the quote at checkout.
+ */
+export async function previewManualPaymentQuote(params: {
+  businessId: string;
+  planCode: string;
+  billingInterval: "MONTHLY" | "ANNUAL";
+  discountCode?: string | null;
+}) {
+  assertManualBillingEnabled();
+  const planCode = params.planCode.trim().toUpperCase();
+  if (!isPaidPlanCode(planCode)) throw new ValidationError("الباقة المختارة غير متاحة للدفع");
+  const plan = await getPlanByCode(planCode);
+  if (!plan || plan.status !== "ACTIVE" || plan.monthlyPriceAmount == null || plan.monthlyPriceAmount <= 0) {
+    throw new ValidationError("سعر الباقة غير متاح");
+  }
+  const code = params.discountCode?.trim() ? normalizeDiscountCode(params.discountCode) : null;
+  const v1 = isPricingV1PaymentEnabled() ? quotePricingV1(planCode, params.billingInterval) : null;
+  const originalAmount = v1?.amount ?? Number(
+    (plan.monthlyPriceAmount * (params.billingInterval === "ANNUAL" ? 12 : 1)).toFixed(2),
+  );
+
+  const open = await paymentRepo.findOpenByBusinessId(params.businessId);
+  if (open?.status === "PENDING") {
+    throw new ConflictError("لديك تحويل قيد المراجعة بالفعل. انتظر نتيجة المراجعة.");
+  }
+  // Show the exact held amount for an already-created, matching request.
+  if (open?.status === "AWAITING_TRANSFER" && open.requestedPlanId === plan.planId
+    && (open.billingInterval ?? "MONTHLY") === params.billingInterval
+    && (open.discountCode ?? null) === code) {
+    return {
+      planCode, planDisplayName: plan.displayName,
+      billingInterval: params.billingInterval, currencyCode: open.currencyCode,
+      originalAmount: open.subtotalMinor == null ? open.amount : open.subtotalMinor / 100,
+      discountAmount: (open.discountMinor ?? 0) / 100,
+      discountCode: open.discountCode ?? null, amount: open.amount,
+    };
+  }
+
+  const discount = code ? await quoteDiscount({
+    code, planCode, billingInterval: params.billingInterval,
+    subtotalMinor: Math.round(originalAmount * 100), businessId: params.businessId,
+  }, undefined, { ignoreOwnAwaitingTransfer: true }) : null;
+  return {
+    planCode, planDisplayName: plan.displayName,
+    billingInterval: params.billingInterval, currencyCode: plan.currencyCode ?? "EGP",
+    originalAmount, discountAmount: (discount?.discountMinor ?? 0) / 100,
+    discountCode: discount?.code ?? null,
+    amount: discount ? discount.amountMinor / 100 : originalAmount,
+  };
+}
+
+/**
  * Create/reserve a payment intent BEFORE transfer.
  * Snapshots plan id/code/name + amount/currency server-side.
  * Returns existing open intent for the same plan (idempotent resume).

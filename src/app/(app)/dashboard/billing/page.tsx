@@ -269,6 +269,7 @@ export default async function BillingPage() {
                   discountCode:paymentStatus.open.discountCode??null,
                   currencyCode: paymentStatus.open.currencyCode,
                   planDisplayName: paymentStatus.open.requestedPlanDisplayName,
+                  billingInterval: paymentStatus.open.billingInterval ?? "MONTHLY",
                   planCode: paymentStatus.open.requestedPlanCode,
                 }
               : null}

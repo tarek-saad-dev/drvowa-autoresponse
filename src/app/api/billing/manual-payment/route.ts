@@ -5,6 +5,7 @@ import { handleApiError, jsonOk, parseJsonBody } from "@/lib/api/http";
 import {
   confirmManualPaymentTransfer,
   createManualPaymentIntent,
+  previewManualPaymentQuote,
   getBusinessPaymentStatus,
   getPaymentInstructions,
 } from "@/modules/billing/manual-payment-service";
@@ -24,6 +25,7 @@ function serializePayment(p: {
   submittedAtUtc: Date | null;
   reviewedAtUtc?: Date | null;
   reviewNote?: string | null;
+  billingInterval?: "MONTHLY" | "ANNUAL";
   requestedPlanCode: string;
   requestedPlanDisplayName: string;
   payerName?: string | null;
@@ -41,6 +43,7 @@ function serializePayment(p: {
     reviewedAtUtc: p.reviewedAtUtc ?? null,
     reviewNote: p.status === "REJECTED" ? (p.reviewNote ?? null) : null,
     planDisplayName: p.requestedPlanDisplayName,
+    billingInterval: p.billingInterval ?? "MONTHLY",
     planCode: p.requestedPlanCode,
     payerName: p.payerName ?? null,
   };
@@ -74,6 +77,13 @@ const createIntentSchema = z.object({
   discountCode: z.string().trim().max(32).optional().nullable(),
 });
 
+const previewQuoteSchema = z.object({
+  action: z.literal("preview_quote"),
+  planCode: z.string().min(1).max(32),
+  billingInterval: z.enum(["MONTHLY", "ANNUAL"]),
+  discountCode: z.string().trim().max(32).optional().nullable(),
+});
+
 const confirmSchema = z.object({
   action: z.literal("confirm_transfer"),
   paymentRequestId: z.string().uuid(),
@@ -82,7 +92,7 @@ const confirmSchema = z.object({
   customerNote: z.string().max(1000).optional().nullable(),
 });
 
-const postSchema = z.union([confirmSchema, createIntentSchema]);
+const postSchema = z.union([confirmSchema, previewQuoteSchema, createIntentSchema]);
 
 export async function POST(request: Request) {
   try {
@@ -103,6 +113,16 @@ export async function POST(request: Request) {
         customerNote: body.customerNote,
       });
       return jsonOk(serializePayment(confirmed));
+    }
+
+    if (body.action === "preview_quote") {
+      const quote = await previewManualPaymentQuote({
+        businessId,
+        planCode: body.planCode,
+        billingInterval: body.billingInterval,
+        discountCode: body.discountCode,
+      });
+      return jsonOk(quote);
     }
 
     const created = await createManualPaymentIntent({
