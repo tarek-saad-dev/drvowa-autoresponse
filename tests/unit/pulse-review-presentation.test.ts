@@ -23,7 +23,8 @@ describe("Pulse review-center escalation copy", () => {
       lastCustomerText: null,
     });
     expect(card.issueType).toBe("AI_QUOTA");
-    expect(card.evidence).toContain("رصيد");
+    expect(card.evidence).toContain("تعذر إرسال رد آلي سابقًا");
+    expect(card.evidence).not.toContain("رصيد");
     expect(card.evidence).not.toContain("PLAN_AI_QUOTA_EXCEEDED");
   });
 
