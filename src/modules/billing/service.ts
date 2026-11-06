@@ -1,6 +1,5 @@
-import { query, sql } from "@/lib/db";
 import { DEFAULT_BOOTSTRAP_PLAN_CODE } from "@/constants/billing";
-import { isUniqueViolationError, sql, withTransaction } from "@/lib/db";
+import { isUniqueViolationError, query, sql, withTransaction } from "@/lib/db";
 import { NotFoundError } from "@/lib/tenancy/errors";
 import type { Plan, Subscription } from "@/types/domain";
 
