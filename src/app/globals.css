@@ -40,7 +40,7 @@ html[data-theme="light"] {
   --card: #ffffff;
   --card-foreground: #0b0f14;
   --border: #dce3ea;
-  --input: #b9c6d1;
+  --input: #8895a1;
   --ring: #188342;
   --primary: #188342;
   --primary-foreground: #ffffff;
@@ -69,8 +69,8 @@ html[data-theme="light"] {
   --sidebar-muted: #bac5d0;
   --sidebar-active: #243728;
   --radius: 0.75rem;
-  --shadow-sm: 0 1px 2px rgb(11 15 20 / 0.06);
-  --shadow-md: 0 12px 32px rgb(11 15 20 / 0.10);
+  --elevation-sm: 0 1px 2px rgb(11 15 20 / 0.06);
+  --elevation-md: 0 12px 32px rgb(11 15 20 / 0.10);
   --atmosphere:
     radial-gradient(ellipse 76% 48% at 100% -10%, rgb(31 157 85 / 0.045), transparent 58%),
     radial-gradient(ellipse 55% 34% at 0% 100%, rgb(123 243 106 / 0.04), transparent 55%),
@@ -88,7 +88,7 @@ html[data-theme="dark"],
   --card: #151b23;
   --card-foreground: #f7f9fc;
   --border: #35404a;
-  --input: #4c5965;
+  --input: #64717f;
   --ring: #7bf36a;
   --primary: #7bf36a;
   --primary-foreground: #0b0f14;
@@ -115,8 +115,8 @@ html[data-theme="dark"],
   --sidebar-foreground: #f7f9fc;
   --sidebar-muted: #bac5d0;
   --sidebar-active: #243728;
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.28);
-  --shadow-md: 0 16px 44px rgb(0 0 0 / 0.34);
+  --elevation-sm: 0 1px 2px rgb(0 0 0 / 0.28);
+  --elevation-md: 0 16px 44px rgb(0 0 0 / 0.34);
   --atmosphere:
     radial-gradient(ellipse 78% 48% at 100% -10%, rgb(123 243 106 / 0.07), transparent 58%),
     radial-gradient(ellipse 55% 36% at 0% 100%, rgb(31 157 85 / 0.05), transparent 55%),
@@ -171,8 +171,8 @@ html[data-theme="dark"],
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --shadow-sm: var(--shadow-sm);
-  --shadow-md: var(--shadow-md);
+  --shadow-sm: var(--elevation-sm);
+  --shadow-md: var(--elevation-md);
 }
 
 /*
