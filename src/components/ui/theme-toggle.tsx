@@ -43,7 +43,8 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggleTheme}
-      className="group grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-border bg-card text-sm text-muted-foreground shadow-sm transition hover:border-primary/35 hover:bg-surface hover:text-primary"
+      aria-pressed={dark}
+      className="group grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-border bg-card text-sm text-muted-foreground shadow-sm transition motion-reduce:transition-none hover:border-primary/35 hover:bg-surface hover:text-primary"
       aria-label={dark ? "تفعيل الوضع الفاتح" : "تفعيل الوضع الداكن"}
       title={dark ? "الوضع الفاتح" : "الوضع الداكن"}
     >
