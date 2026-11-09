@@ -1,4 +1,4 @@
-import type { SVGProps } from "react";
+import type { ReactNode, SVGProps } from "react";
 
 /** Minimal consistent stroke-icon system for the existing app chrome.
  * Decorative only: every navigation target keeps its visible Arabic label.
@@ -21,7 +21,7 @@ export function AppIcon({
   className,
   ...props
 }: Omit<SVGProps<SVGSVGElement>, "children"> & { name: AppIconName }) {
-  let content: React.ReactNode;
+  let content: ReactNode;
   switch (name) {
     case "home":
       content = <><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10Z" /><path d="M9 21v-7h6v7" /></>;
