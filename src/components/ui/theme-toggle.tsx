@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AppIcon } from "@/components/ui/app-icon";
 
 type ThemeMode = "light" | "dark";
 
@@ -48,12 +49,10 @@ export function ThemeToggle() {
       aria-label={dark ? "تفعيل الوضع الفاتح" : "تفعيل الوضع الداكن"}
       title={dark ? "الوضع الفاتح" : "الوضع الداكن"}
     >
-      <span
-        aria-hidden
-        className="transition-transform duration-200 group-active:scale-90"
-      >
-        {dark ? "☀" : "◐"}
-      </span>
+      <AppIcon
+        name={dark ? "sun" : "moon"}
+        className="h-[18px] w-[18px] transition-transform duration-200 group-active:scale-90 motion-reduce:transition-none"
+      />
     </button>
   );
 }

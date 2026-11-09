@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { BrandLogo } from "@/components/brand/brand-logo";
+import { AppIcon } from "@/components/ui/app-icon";
 import {
   DASHBOARD_NAV_GROUPS,
   getNavGroupChildren,
@@ -33,7 +34,7 @@ export function DashboardSidebar({
     cn(
       "group flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-bold transition-all duration-200 motion-reduce:transition-none",
       active
-        ? "bg-primary text-primary-foreground shadow-[0_10px_28px_rgba(0,117,154,.24)]"
+        ? "bg-primary text-primary-foreground shadow-md"
         : "text-sidebar-muted hover:bg-white/5 hover:text-sidebar-foreground",
     );
 
@@ -65,10 +66,10 @@ export function DashboardSidebar({
                   <span
                     className={cn(
                       "grid h-8 w-8 shrink-0 place-items-center rounded-xl text-base transition",
-                      groupActive ? "bg-white/15 text-white" : "bg-white/6",
+                      groupActive ? "bg-black/10 text-current" : "bg-white/6",
                     )}
                   >
-                    {group.icon}
+                    <AppIcon name={group.id} className="h-5 w-5" />
                   </span>
                   <span className="min-w-0 flex-1 truncate">{group.label}</span>
                 </Link>
@@ -85,10 +86,10 @@ export function DashboardSidebar({
                     <span
                       className={cn(
                         "grid h-8 w-8 shrink-0 place-items-center rounded-xl text-base",
-                        groupActive ? "bg-white/15 text-white" : "bg-white/6",
+                        groupActive ? "bg-black/10 text-current" : "bg-white/6",
                       )}
                     >
-                      {group.icon}
+                      <AppIcon name={group.id} className="h-5 w-5" />
                     </span>
                     <span className="min-w-0 flex-1 truncate">{group.label}</span>
                   </Link>
@@ -111,7 +112,7 @@ export function DashboardSidebar({
                       )}
                       aria-hidden
                     >
-                      ◂
+                      <AppIcon name="chevron" className="h-4 w-4" />
                     </span>
                   </button>
                 </div>
@@ -131,7 +132,7 @@ export function DashboardSidebar({
                               : "text-sidebar-muted hover:bg-white/5 hover:text-sidebar-foreground",
                           )}
                         >
-                          <span className="opacity-70">{child.icon}</span>
+                          <span className="opacity-70"><AppIcon name={child.key === "Billing" ? "billing" : child.key === "Integrations" ? "integrations" : "settings"} className="h-4 w-4" /></span>
                           <span className="truncate">{child.label}</span>
                         </Link>
                       );
@@ -148,7 +149,7 @@ export function DashboardSidebar({
             href="/admin"
             className="mt-5 flex items-center gap-3 rounded-2xl border border-primary/35 px-3 py-3 text-sm font-bold text-primary transition hover:bg-primary/10"
           >
-            <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary/15">◆</span>
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary/15"><AppIcon name="admin" className="h-5 w-5" /></span>
             <span>إدارة المنصة</span>
           </Link>
         ) : null}

@@ -10,7 +10,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "rounded-xl border border-border bg-card text-card-foreground shadow-sm",
+        "min-w-0 rounded-2xl border border-border bg-card text-card-foreground shadow-sm",
         className,
       )}
       {...props}
@@ -26,7 +26,7 @@ export function CardHeader({
   ...props
 }: HTMLAttributes<HTMLDivElement> & { children: ReactNode }) {
   return (
-    <div className={cn("border-b border-border px-5 py-4", className)} {...props}>
+    <div className={cn("min-w-0 border-b border-border min-w-0 px-5 py-4", className)} {...props}>
       {children}
     </div>
   );
@@ -39,7 +39,7 @@ export function CardTitle({
 }: HTMLAttributes<HTMLHeadingElement> & { children: ReactNode }) {
   return (
     <h3
-      className={cn("text-base font-semibold tracking-tight", className)}
+      className={cn("text-base font-bold leading-6 tracking-tight", className)}
       {...props}
     >
       {children}
