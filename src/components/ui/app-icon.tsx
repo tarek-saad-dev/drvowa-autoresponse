@@ -14,7 +14,9 @@ export type AppIconName =
   | "admin"
   | "chevron"
   | "sun"
-  | "moon";
+  | "moon"
+  | "user"
+  | "log-out";
 
 export function AppIcon({
   name,
@@ -52,6 +54,12 @@ export function AppIcon({
       break;
     case "moon":
       content = <path d="M20.7 13.2A9 9 0 0 1 10.8 3.3 9 9 0 1 0 20.7 13.2Z" />;
+      break;
+    case "user":
+      content = <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>;
+      break;
+    case "log-out":
+      content = <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5M21 12H9" /></>;
       break;
   }
   return (
