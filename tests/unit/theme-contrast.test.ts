@@ -113,11 +113,11 @@ describe("site-wide color contrast", () => {
     // against the page token declarations instead of expecting inline hex.
     const paletteBlock = landing.slice(landing.indexOf(".page {"), landing.indexOf(".page *"));
     const roleColors = Object.fromEntries(
-      [...paletteBlock.matchAll(/--(lp-[\\w-]+):\\s*(?:var\\(--[\\w-]+,\\s*)?(#[\\da-f]{6})\\)?\\s*;/gi)]
+      [...paletteBlock.matchAll(/--(lp-[\w-]+):\s*(?:var\(--[\w-]+,\s*)?(#[\da-f]{6})\)?\s*;/gi)]
         .map((match) => [match[1], match[2]]),
     );
-    const backgroundRole = styles.match(/background:\\s*var\\(--(lp-[\\w-]+)\\)/)?.[1];
-    const foregroundRole = styles.match(/color:\\s*var\\(--(lp-[\\w-]+)\\)/)?.[1];
+    const backgroundRole = styles.match(/background:\s*var\(--(lp-[\w-]+)\)/)?.[1];
+    const foregroundRole = styles.match(/color:\s*var\(--(lp-[\w-]+)\)/)?.[1];
     expect(backgroundRole).toBeTruthy();
     expect(foregroundRole).toBeTruthy();
     const background = roleColors[backgroundRole!];
