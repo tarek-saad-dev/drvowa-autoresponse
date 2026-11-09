@@ -53,8 +53,8 @@ export default function ForgotPasswordPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>استعادة كلمة المرور</CardTitle>
-        <CardDescription>
+        <CardTitle className="text-xl sm:text-2xl">استعادة كلمة المرور</CardTitle>
+        <CardDescription className="leading-6">
           أدخل بريدك وسنرسل رابط إعادة التعيين إن وُجد حساب مرتبط به.
         </CardDescription>
       </CardHeader>
@@ -87,7 +87,7 @@ export default function ForgotPasswordPage() {
                 className="text-start"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={pending}>
+            <Button type="submit" className="w-full text-base" disabled={pending} loading={pending}>
               {pending ? "جارٍ الإرسال..." : "إرسال رابط الاستعادة"}
             </Button>
             <p className="text-center text-sm text-muted-foreground">
