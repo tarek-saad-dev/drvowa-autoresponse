@@ -29,7 +29,7 @@ describe("Brand V2 public launch surfaces", () => {
     const legacy = /#(?:00759a|0b8bb5|38c6ed|3de7ff|0ba8d4|149bc7|005f80|004a66)\b/i;
     for (const file of [marketingCss, promoCss, conversation]) {
       expect(file).not.toMatch(legacy);
-      expect(file).not.toMatch(/rgba?\(\\s*0\\s*[, ]\\s*117\\s*[, ]\\s*154/i);
+      expect(file).not.toMatch(/rgba?\(\s*0\s*[, ]\s*117\s*[, ]\s*154/i);
     }
   });
 
