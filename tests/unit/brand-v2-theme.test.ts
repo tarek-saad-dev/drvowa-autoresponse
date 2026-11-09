@@ -86,7 +86,7 @@ describe("Brand V2 theme foundation contract", () => {
   });
 
   it("removes former decorative teal color values from global theme styles", () => {
-    expect(css).not.toMatch(/#(?:00759a|0b8bb5|38c6ed|3de7ff|149bc7|005f80|004a66)\\b/i);
+    expect(css).not.toMatch(/#(?:00759a|0b8bb5|38c6ed|3de7ff|149bc7|005f80|004a66)\b/i);
     // The alias remains to avoid breaking existing animation consumers during P03.
     expect(css).toContain("--brand-teal: var(--primary)");
   });
