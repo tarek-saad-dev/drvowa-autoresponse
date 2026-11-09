@@ -1,4 +1,11 @@
-.page {  --lp-bg: var(--brand-ink, #0b0f14);  --lp-panel: var(--brand-carbon, #151b23);  --lp-line: #35473e;  --lp-text: var(--brand-white, #f7f9fc);  --lp-muted: #bac5d0;  --lp-accent: var(--brand-signal, #7bf36a);
+.page {
+  /* Official DRVO AutoRespond core palette is declared once in globals.css. */
+  --lp-bg: var(--brand-ink, #0b0f14);
+  --lp-panel: var(--brand-carbon, #151b23);
+  --lp-line: #35473e;
+  --lp-text: var(--brand-white, #f7f9fc);
+  --lp-muted: #bac5d0;
+  --lp-accent: var(--brand-signal, #7bf36a);
   background: var(--lp-bg);
   color: var(--lp-text);
   /* Derived editorial tones; the official core palette stays in globals.css. */
@@ -134,7 +141,7 @@
   border: 1px solid var(--lp-accent);
 }
 .primary:hover {
-  background: var(--lp-accent);
+  background: var(--lp-accent-light);
   transform: translateY(-2px);
 }
 .secondary {
