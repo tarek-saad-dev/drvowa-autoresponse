@@ -75,6 +75,23 @@ describe("Brand V2 theme foundation contract", () => {
     expect(valueOf(dark, "card")).toBe("#151b23");
   });
 
+  it.each([
+    ["light", light],
+    ["dark", dark],
+  ])("%s input border has non-text contrast >= 3:1 against the card", (_theme, section) => {
+    const inputBorder = valueOf(section, "input");
+    const card = valueOf(section, "card");
+    expect(contrastRatio(inputBorder, card)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("maps reusable elevation tokens without self-referencing custom properties", () => {
+    expect(light).toContain("--elevation-sm:");
+    expect(dark).toContain("--elevation-md:");
+    expect(css).toContain("--shadow-sm: var(--elevation-sm)");
+    expect(css).toContain("--shadow-md: var(--elevation-md)");
+    expect(css).not.toContain("--shadow-sm: var(--shadow-sm)");
+  });
+
   it("preserves expected semantic and operational tokens", () => {
     for (const token of ["destructive", "success", "warning", "info", "whatsapp-bubble", "sidebar-active"]) {
       expect(light).toContain(`--${token}:`);
