@@ -8,6 +8,8 @@
 - The CSS now maps semantic roles (`primary`, `background`, `card`, `border`, `ring`, `surface`, `sidebar`, `info`, `warning`, `success`, `destructive`) for both themes, rather than directly choosing a brand accent in individual screens.
 - On light surfaces, primary is an **accessible derivative** `#188342` (not a new brand palette color); hover is `#116833`. Dark primary is the approved `#7BF36A`. Hover `#A3F78D` is a derived state.
 - Other brand shades, selected/translucent states and off-white gradients are generated from the foundation color system; they are not new core brand tokens.
+- Input boundaries now use `#8895A1` (light on white, 3.06:1) and `#64717F` (dark on Carbon, 3.47:1) to support WCAG non-text contrast, instead of faint borders.
+- Shadow role variables are `--elevation-sm` and `--elevation-md`, mapped to Tailwind shadow tokens without recursive `--shadow-*` references.
 - Functional colors remain distinct. Do not flatten errors, warnings, information, WhatsApp bubbles, avatar categories or third-party InstaPay colors into neon green.
 - Typography: the app retains its actual IBM Plex Sans Arabic and Space Grotesk loaders. `--font-ui-arabic`, `--font-display-arabic`, `--font-display-latin` and `--font-data` are now role tokens. Approved Bold Editorial lettering is **not** a font asset. Do not claim typography is final until the actual approved/licensed assets are available.
 - Brand logo PNG assets are unchanged until official export is supplied. No guessed custom logo should be deployed.
