@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Accordion } from "@/components/ui/accordion";
+import { Alert } from "@/components/ui/alert";
 
 describe("Brand V2 shared controls contract", () => {
   it("uses semantic primary contrast and visible keyboard focus for buttons", () => {
@@ -56,6 +57,15 @@ describe("Brand V2 shared controls contract", () => {
       expect(html).toContain("motion-reduce:transition-none");
       expect(html).toContain('aria-invalid="true"');
     }
+  });
+
+  it("announces errors urgently but treats ordinary information as a polite status", () => {
+    const info = renderToStaticMarkup(createElement(Alert, { variant: "info", children: "معلومات" }));
+    const danger = renderToStaticMarkup(createElement(Alert, { variant: "error", children: "حدث خطأ" }));
+    expect(info).toContain('role="status"');
+    expect(info).toContain("bg-info-soft");
+    expect(danger).toContain('role="alert"');
+    expect(danger).toContain("bg-destructive-soft");
   });
 
   it("renders accordion headers as native buttons with announced state", () => {
