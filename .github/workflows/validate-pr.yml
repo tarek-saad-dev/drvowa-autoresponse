@@ -33,3 +33,9 @@ jobs:
         run: npx vitest run tests/unit/inbox-layout-contract.test.tsx
       - name: Full test suite
         run: npm test
+      - name: Brand V2 source inventory (informational)
+        if: ${{ github.base_ref == 'feat/brand-v2' }}
+        run: |
+          node scripts/brand-v2-audit.mjs --json > /tmp/brand-v2-inventory.json
+          node -e 'const t=JSON.parse(require("node:fs").readFileSync("/tmp/brand-v2-inventory.json","utf8")).totals; console.log("Brand V2 audit counts:",JSON.stringify(t))'
+
