@@ -35,7 +35,8 @@ async function screenshotGrid(page: Page, name: string, href: string) {
       await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
       await expect(page.locator("body")).toBeVisible();
       await expect(page.locator("body")).not.toContainText(/AutoResponse\b/);
-      expect(new URL(page.url()).pathname, `${name}: login/choose-plan redirect must not occur`).not.toMatch(/^\/(login|choose-plan|onboarding)(?:\/|$)/);
+      const actualPath = new URL(page.url()).pathname;
+      expect(actualPath, `${name}: unexpected redirect`).toBe(new URL(href, page.url()).pathname);
       const sizes = await page.evaluate(() => ({
         document: document.documentElement.scrollWidth,
         viewport: innerWidth,
