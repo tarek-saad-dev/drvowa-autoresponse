@@ -142,7 +142,7 @@ export function AdminFinancialDashboard({
       </section>
 
       <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
-        <section className="rounded-[24px] border border-border bg-card p-5 shadow-sm sm:p-6" aria-labelledby="monthly-trend">
+        <section className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6" aria-labelledby="monthly-trend">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 id="monthly-trend" className="text-lg font-bold">اتجاه التحصيلات</h2>
@@ -151,7 +151,7 @@ export function AdminFinancialDashboard({
             <div className="flex flex-wrap items-center gap-2">
               <a
                 href={"/api/admin/financials/export?range=" + report.months}
-                className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold text-primary transition hover:bg-surface"
+                className="inline-flex min-h-10 items-center rounded-xl border border-input bg-card px-3 py-2 text-xs font-bold text-primary transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               >
                 تصدير CSV ↓
               </a>
@@ -184,7 +184,7 @@ export function AdminFinancialDashboard({
           </div>
         </section>
 
-        <section id="plans" className="rounded-[24px] border border-border bg-card p-5 shadow-sm sm:p-6">
+        <section id="plans" className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
           <h2 className="text-lg font-bold">توزيع الخطط</h2>
           <p className="mt-1 text-xs leading-6 text-muted-foreground">اشتراكات سارية فقط، والخطط المجانية والتجريبية ظاهرة في التوزيع</p>
           <div className="mt-6 space-y-5">
@@ -212,7 +212,7 @@ export function AdminFinancialDashboard({
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <section id="renewals" className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm">
+        <section id="renewals" className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
           <div className="flex items-center justify-between gap-3 p-5 sm:p-6">
             <div>
               <h2 className="text-lg font-bold">اشتراكات قريبة من الانتهاء</h2>
@@ -240,13 +240,13 @@ export function AdminFinancialDashboard({
           )}
         </section>
 
-        <section className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm">
+        <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
           <div className="flex items-center justify-between gap-3 p-5 sm:p-6">
             <div>
               <h2 className="text-lg font-bold">آخر المدفوعات المعتمدة</h2>
               <p className="mt-1 text-xs text-muted-foreground">آخر عمليات تم اعتمادها بعد المراجعة</p>
             </div>
-            <Link href="/admin/payments?status=APPROVED" className="shrink-0 text-xs font-bold text-primary hover:underline">عرض الكل ←</Link>
+            <Link href="/admin/payments?status=APPROVED" className="shrink-0 rounded-md text-xs font-bold text-primary underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">عرض الكل ←</Link>
           </div>
           {recent.length === 0 ? (
             <p className="px-6 pb-7 text-sm text-muted-foreground">لسه مفيش مدفوعات تم اعتمادها.</p>
