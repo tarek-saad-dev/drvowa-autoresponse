@@ -46,7 +46,8 @@ jobs:
   brand-v2-public-browser:
     name: Anonymous browser screenshots (Brand V2 release only)
     if: ${{ github.head_ref == 'feat/brand-v2-p09-release-gates' || (github.base_ref == 'main' && github.head_ref == 'feat/brand-v2') }}
-    runs-on: ubuntu-latest
+    # Playwright 1.55 does not support Ubuntu 26.04 used by ubuntu-latest here.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
