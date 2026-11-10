@@ -14,7 +14,7 @@ export default function TermsPage() {
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-12 sm:px-6">
         <h1 className="text-3xl font-bold tracking-tight">شروط الاستخدام</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          شروط تشغيل منصة DRVOWA AutoResponse (الإصدار V1). مشغل الخدمة:{" "}
+          شروط تشغيل منصة DRVO AutoRespond (الإصدار V1). مشغل الخدمة:{" "}
           {OPERATOR_NAME}.
         </p>
         <p className="mt-1 text-sm text-muted-foreground">

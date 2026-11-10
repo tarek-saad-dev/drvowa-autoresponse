@@ -80,7 +80,20 @@ const totals = {
   customColorUtilities: sum("customColorUtilities"),
 };
 
-if (process.argv.includes("--json")) {
+if (process.argv.includes("--review")) {
+  console.log("# Brand V2 remaining legacy-name and palette matches");
+  console.log("# Read-only: review each match; internal identifiers and third-party brands may be intentional.");
+  console.log(JSON.stringify(totals));
+  for (const candidate of files) {
+    if (!candidate.legacyProductName && !candidate.legacyPalette) continue;
+    const lines = readFileSync(join(root, candidate.path), "utf8").split(/\r?\n/);
+    lines.forEach((line, index) => {
+      if (!/AutoResponse\b/.test(line) && !staleDecorative.test(line)) return;
+      staleDecorative.lastIndex = 0;
+      console.log(`${candidate.path}:${index + 1}: ${line.trim().slice(0, 250)}`);
+    });
+  }
+} else if (process.argv.includes("--json")) {
   console.log(JSON.stringify({ totals, files }, null, 2));
 } else {
   console.log("# Brand V2 source audit (read-only)\n");
