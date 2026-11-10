@@ -101,6 +101,8 @@ test.describe.serial("Brand V2 isolated logged-in browser QA", () => {
   test("platform admin finances and privileged action screens, read-only", async ({ page }) => {
     const userId = await signup(page, "brand_admin");
     await upsertPlatformAdmin({ userId, role: "SUPER_ADMIN" });
+    // Establish the localhost origin before localStorage theme access.
+    await page.goto("/privacy", { waitUntil: "domcontentloaded" });
     for (const [name, href] of [
       ["admin", "/admin"],
       ["admin-payments", "/admin/payments"],
