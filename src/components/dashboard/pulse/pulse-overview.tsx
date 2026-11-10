@@ -22,9 +22,12 @@ export function PulseOverview({data,businessName,businessId,selectedPeriod,allRe
  return <div className="space-y-5 sm:space-y-6" dir="rtl">
   <div className="flex flex-wrap items-center gap-2">
    <nav aria-label="الفترة" className="flex max-w-full flex-wrap gap-1 rounded-xl border border-border bg-card p-1">
-    <Link aria-current={period==="today"?"page":undefined} href={periodHref("today")} className={ "rounded-lg px-3 py-2 text-xs font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:px-4 "++(period==="today"?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-surface")}>ملخص اليوم</Link>
-    <Link aria-current={yesterday?"page":undefined} href={periodHref("yesterday")} className={"rounded-lg px-4 py-2 text-xs font-black "+(yesterday?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-surface")}>أمس</Link>
-    <Link aria-current={monthly?"page":undefined} href={periodHref("month")} className={"rounded-lg px-4 py-2 text-xs font-black "+(monthly?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-surface")}>ملخص الشهر</Link>
+    {(["today","yesterday","month"] as const).map((choice)=>(
+     <Link key={choice} aria-current={period===choice?"page":undefined} href={periodHref(choice)}
+      className={"rounded-lg px-3 py-2 text-xs font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:px-4 "+(period===choice?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-surface")}>
+      {choice==="today"?"ملخص اليوم":choice==="yesterday"?"أمس":"ملخص الشهر"}
+     </Link>
+    ))}
    </nav>
   </div>
   <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
