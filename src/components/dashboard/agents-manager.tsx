@@ -217,7 +217,7 @@ export function AgentsManager({
               />
             </div>
             <div className="rounded-2xl border border-primary/10 bg-primary/5 p-4">
-              <p className="text-xs font-black text-primary">اختار ستايل جاهز</p>
+              <p className="text-xs font-bold text-primary">اختار ستايل جاهز</p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
                 ابدأ بستايل قريب من فريقك وبعدها عدّل أي حاجة.
               </p>
@@ -231,7 +231,7 @@ export function AgentsManager({
                     key={label}
                     type="button"
                     onClick={() => applyStylePreset(dialect, tone)}
-                    className="rounded-full border border-border bg-card px-3 py-2 text-[11px] font-black text-foreground transition hover:border-primary/40 hover:bg-surface hover:text-primary"
+                    className="min-h-10 rounded-full border border-input bg-card px-3 py-2 text-[11px] font-semibold text-foreground transition-colors hover:border-primary/50 hover:bg-surface hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none"
                   >
                     {label}
                   </button>
@@ -368,7 +368,7 @@ export function AgentsManager({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-black">{agent.name}</p>
+                    <p className="text-sm font-bold">{agent.name}</p>
                     <p className="text-xs text-muted-foreground">{agent.roleTitle}</p>
                   </div>
                   <Badge variant={agent.isActive ? "success" : "muted"}>
@@ -453,7 +453,7 @@ export function AgentsManager({
     return (
       <div className="space-y-5">
         <div>
-          <p className="text-sm font-black">
+          <p className="text-sm font-bold">
             {editing ? "عدّل شخصية الموظف" : "خلّي طريقته شبه فريقك"}
           </p>
           <p className="mt-1 text-xs leading-6 text-muted-foreground">
