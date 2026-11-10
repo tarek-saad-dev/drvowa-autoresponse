@@ -32,10 +32,10 @@ export function LiveOwnership({initial,businessId}:{initial:HumanOwnershipSnapsh
     };
   },[businessId]);
   const href="/dashboard/inbox?filter=HUMAN";
-  return <section aria-label="حالة المحادثات مع الفريق" className="rounded-[22px] border border-border bg-card p-4 sm:p-5">
+  return <section aria-label="حالة المحادثات مع الفريق" className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h2 className="text-sm font-black">المحادثات مع الفريق</h2>
+        <h2 className="font-display text-sm font-bold">المحادثات مع الفريق</h2>
         <p className="mt-1 text-[11px] text-muted-foreground">الحالة الحالية لكل المحادثات، مش بس حالات التصعيد أو محادثات اليوم</p>
       </div>
       <Link href={href} className="text-xs font-bold text-primary hover:underline">عرض المحادثات ←</Link>
@@ -45,7 +45,7 @@ export function LiveOwnership({initial,businessId}:{initial:HumanOwnershipSnapsh
         <Link href={href} className="rounded-xl bg-surface px-4 py-3 text-sm font-bold">
           مع الفريق <span className="ms-2 text-xl tabular-nums">{state.withTeam.toLocaleString("en-US")}</span>
         </Link>
-        <Link href={href} className={"rounded-xl px-4 py-3 text-sm font-bold "+(state.awaitingTeamReply?"bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-200":"bg-surface")}>
+        <Link href={href} className={"rounded-xl px-4 py-3 text-sm font-bold "+(state.awaitingTeamReply?"border border-warning/30 bg-warning-soft text-warning":"bg-surface")}>
           مستنيين رد الفريق <span className="ms-2 text-xl tabular-nums">{state.awaitingTeamReply.toLocaleString("en-US")}</span>
         </Link>
         <span className="text-xs text-muted-foreground">مع الفريق بدون رد جديد: {state.waitingCustomer.toLocaleString("en-US")}</span>
@@ -55,7 +55,7 @@ export function LiveOwnership({initial,businessId}:{initial:HumanOwnershipSnapsh
         href={"/dashboard/inbox?businessId="+encodeURIComponent(businessId)+"&conversationId="+encodeURIComponent(chat.conversationId)}
         className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border/65 px-3 py-3 hover:bg-surface">
         <span className="min-w-0 truncate text-xs font-bold">{chat.name}</span>
-        <span className={"shrink-0 text-[11px] "+(chat.waitingForTeam?"font-bold text-amber-700 dark:text-amber-300":"text-muted-foreground")}>
+        <span className={"shrink-0 text-[11px] "+(chat.waitingForTeam?"font-bold text-warning":"text-muted-foreground")}>
           {chat.waitingForTeam?"محتاج رد":"جاري التعامل"}
         </span>
       </Link>)}
