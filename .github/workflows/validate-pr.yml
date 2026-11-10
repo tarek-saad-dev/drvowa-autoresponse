@@ -33,6 +33,9 @@ jobs:
         run: npx vitest run tests/unit/inbox-layout-contract.test.tsx
       - name: Full test suite
         run: npm test
+      - name: Brand V2 final legacy-name / palette review (informational)
+        if: ${{ github.head_ref == 'feat/brand-v2-p09-release-gates' }}
+        run: node scripts/brand-v2-audit.mjs --review
       - name: Brand V2 source inventory (informational)
         if: ${{ github.base_ref == 'feat/brand-v2' }}
         run: |
