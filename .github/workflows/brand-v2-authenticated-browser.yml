@@ -72,7 +72,9 @@ jobs:
       - name: Apply isolated migrations
         run: npm run db:migrate
       - name: Production build (test-only database)
-        run: npm run build
+        # The isolated runner occasionally fails Next/Turbopack's remote Google-font
+        # resolver; using Webpack avoids that Turbopack-specific import-map failure.
+        run: npm run build -- --webpack
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Capture real owner/admin pages without external sends
