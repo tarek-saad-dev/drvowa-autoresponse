@@ -106,6 +106,22 @@ describe("Brand V2 Inbox accessibility, responsive behavior and data safety", ()
     expect(paused).toContain("text-destructive");
   });
 
+  it("displays text labels for human ownership without requiring a selected thread", () => {
+    const handover = htmlFor(row({ aiMode: "HUMAN_PAUSED" }));
+    const responding = htmlFor(row({
+      aiMode: "HUMAN_PAUSED",
+      awaitingHumanReply: true,
+    }));
+    const defaultAi = htmlFor(row());
+    expect(handover).toContain("مع الفريق");
+    expect(handover).toContain("text-info");
+    expect(responding).toContain("ينتظر رد الفريق");
+    expect(responding).toContain("text-warning");
+    expect(inbox).toContain("const showOwnership =");
+    expect(inbox).toContain("s.color");
+    expect(defaultAi).not.toContain(">AI شغال<");
+  });
+
   it("keeps WhatsApp message bubble color separate from marketing green", () => {
     expect(inbox).toContain("bg-whatsapp-bubble text-whatsapp-bubble-text");
     expect(inbox).toContain("border border-border/70 bg-card text-foreground");
@@ -146,10 +162,7 @@ describe("Brand V2 Inbox accessibility, responsive behavior and data safety", ()
       "const escalateConversation = useCallback",
       "const updateChatMetadata = useCallback",
       "whatsappSendReady !== true",
-      '"pinned" | "archived"',
     ]) {
-      // Metadata union ordering is not a business invariant.
-      if (phrase.includes("pinned") && phrase.includes("archived")) continue;
       expect(inbox).toContain(phrase);
     }
     expect(inbox).toContain("const updateChatMetadata");
