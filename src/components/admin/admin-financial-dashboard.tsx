@@ -41,15 +41,15 @@ function Kpi({
       </div>
       <div>
         <p className={accent
-          ? "break-words text-2xl font-black tracking-tight text-primary sm:text-3xl"
-          : "break-words text-2xl font-black tracking-tight sm:text-3xl"
+          ? "break-words text-2xl font-bold tracking-tight text-primary sm:text-3xl"
+          : "break-words text-2xl font-bold tracking-tight sm:text-3xl"
         }>{value}</p>
         <p className="mt-2 text-xs leading-5 text-muted-foreground">{hint}</p>
       </div>
     </div>
   );
 
-  const classes = "block min-h-[154px] rounded-2xl border border-border bg-card p-5 shadow-sm transition hover:border-primary/30 hover:shadow-md";
+  const classes = "block min-h-[154px] rounded-2xl border border-border bg-card p-5 shadow-sm transition-colors hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
   return href ? <Link href={href} className={classes}>{inner}</Link> : <div className={classes}>{inner}</div>;
 }
 
@@ -71,36 +71,36 @@ export function AdminFinancialDashboard({
 
   return (
     <div className="space-y-6 pb-8">
-      <section className="relative overflow-hidden rounded-[28px] bg-sidebar p-6 text-sidebar-foreground shadow-md sm:p-8">
+      <section className="relative overflow-hidden rounded-2xl bg-sidebar p-6 text-sidebar-foreground shadow-md sm:p-8">
         <div aria-hidden="true" className="pointer-events-none absolute -left-16 -top-24 h-80 w-80 rounded-full bg-primary/25 blur-3xl" />
-        <div aria-hidden="true" className="pointer-events-none absolute -bottom-24 right-1/3 h-64 w-64 rounded-full bg-cyan-400/10 blur-3xl" />
+        <div aria-hidden="true" className="pointer-events-none absolute -bottom-24 right-1/3 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
         <div className="relative flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
             <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-bold text-white/80">
               DRVO / PLATFORM OVERVIEW
             </span>
-            <h1 className="mt-4 text-2xl font-black tracking-tight sm:text-4xl">
-              {detail ? "المالية والاشتراكات" : "لوحة قيادة DRVO AutoResponse"}
+            <h1 className="mt-4 font-display text-2xl font-bold tracking-tight sm:text-4xl">
+              {detail ? "المالية والاشتراكات" : "لوحة قيادة DRVO AutoRespond"}
             </h1>
             <p className="mt-3 text-sm leading-7 text-white/70">
               متابعة العملاء والاشتراكات والتحصيلات المعتمدة ومواعيد التجديد،
               بأرقام مباشرة من قاعدة بيانات المنصة.
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
-              <Link href="/admin/payments?status=PENDING" className="rounded-xl bg-white px-4 py-2 text-sm font-black text-slate-900 transition hover:bg-white/90">
+              <Link href="/admin/payments?status=PENDING" className="inline-flex min-h-11 items-center rounded-xl bg-white px-4 py-2 text-sm font-bold text-slate-900 transition-colors hover:bg-white/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
                 مراجعة المدفوعات ←
               </Link>
-              <Link href="/admin/financials" className="rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/20">
+              <Link href="/admin/financials" className="inline-flex min-h-11 items-center rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
                 التقارير المالية
               </Link>
-              <Link href="/admin/subscriptions" className="rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/20">
+              <Link href="/admin/subscriptions" className="inline-flex min-h-11 items-center rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
                 العملاء والاشتراكات
               </Link>
             </div>
           </div>
           <div className="rounded-2xl border border-white/15 bg-white/10 p-5 lg:min-w-60">
             <p className="text-xs text-white/65">المتحصلات المعتمدة • {month}</p>
-            <p className="mt-2 text-3xl font-black tabular-nums sm:text-4xl">{money(o.collectedEgp)}</p>
+            <p className="mt-2 text-3xl font-bold tabular-nums sm:text-4xl">{money(o.collectedEgp)}</p>
             <p className="mt-2 text-xs text-white/65">
               {change === null
                 ? "لا توجد متحصلات معتمدة في الشهر السابق للمقارنة"
@@ -112,7 +112,7 @@ export function AdminFinancialDashboard({
 
       {(o.pendingCount > 0 || o.pastDue > 0 || o.expiringSoon > 0) ? (
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-warning/20 bg-warning-soft/35 px-5 py-4 text-sm">
-          <span className="font-black text-foreground">محتاج متابعة:</span>
+          <span className="font-bold text-foreground">محتاج متابعة:</span>
           {o.pendingCount > 0 ? <Link href="/admin/payments?status=PENDING" className="font-bold text-warning underline-offset-4 hover:underline">{number.format(o.pendingCount)} طلب دفع معلّق</Link> : null}
           {o.pastDue > 0 ? <span className="font-bold text-warning">{number.format(o.pastDue)} اشتراك متأخر</span> : null}
           {o.expiringSoon > 0 ? <a href="#renewals" className="font-bold text-warning underline-offset-4 hover:underline">{number.format(o.expiringSoon)} اشتراك ينتهي خلال 7 أيام</a> : null}
@@ -122,7 +122,7 @@ export function AdminFinancialDashboard({
       <section aria-label="مؤشرات المنصة">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-black">أهم المؤشرات</h2>
+            <h2 className="text-lg font-bold">أهم المؤشرات</h2>
             <p className="mt-1 text-xs text-muted-foreground">القيم بالجنيه المصري، والتواريخ حسب UTC</p>
           </div>
           <span className="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
@@ -145,7 +145,7 @@ export function AdminFinancialDashboard({
         <section className="rounded-[24px] border border-border bg-card p-5 shadow-sm sm:p-6" aria-labelledby="monthly-trend">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 id="monthly-trend" className="text-lg font-black">اتجاه التحصيلات</h2>
+              <h2 id="monthly-trend" className="text-lg font-bold">اتجاه التحصيلات</h2>
               <p className="mt-1 text-xs leading-6 text-muted-foreground">المدفوعات المعتمدة شهريًا • بدون الطلبات المعلّقة</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -185,7 +185,7 @@ export function AdminFinancialDashboard({
         </section>
 
         <section id="plans" className="rounded-[24px] border border-border bg-card p-5 shadow-sm sm:p-6">
-          <h2 className="text-lg font-black">توزيع الخطط</h2>
+          <h2 className="text-lg font-bold">توزيع الخطط</h2>
           <p className="mt-1 text-xs leading-6 text-muted-foreground">اشتراكات سارية فقط، والخطط المجانية والتجريبية ظاهرة في التوزيع</p>
           <div className="mt-6 space-y-5">
             {plans.length === 0 ? (
@@ -196,7 +196,7 @@ export function AdminFinancialDashboard({
                 <div key={plan.code}>
                   <div className="mb-2 flex items-center justify-between gap-4 text-sm">
                     <div><strong>{plan.name}</strong><span className="mr-2 text-[10px] text-muted-foreground" dir="ltr">{plan.code}</span></div>
-                    <span className="font-black tabular-nums">{number.format(plan.count)} <span className="text-xs font-normal text-muted-foreground">({percentage}%)</span></span>
+                    <span className="font-bold tabular-nums">{number.format(plan.count)} <span className="text-xs font-normal text-muted-foreground">({percentage}%)</span></span>
                   </div>
                   <div className="h-2.5 overflow-hidden rounded-full bg-secondary">
                     <div className="h-full rounded-full bg-primary transition-all" style={{ width: percentage + "%" }} />
@@ -215,10 +215,10 @@ export function AdminFinancialDashboard({
         <section id="renewals" className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm">
           <div className="flex items-center justify-between gap-3 p-5 sm:p-6">
             <div>
-              <h2 className="text-lg font-black">اشتراكات قريبة من الانتهاء</h2>
+              <h2 className="text-lg font-bold">اشتراكات قريبة من الانتهاء</h2>
               <p className="mt-1 text-xs text-muted-foreground">أقرب المواعيد خلال 14 يومًا</p>
             </div>
-            <span className="rounded-lg bg-warning-soft px-3 py-1 text-xs font-black text-warning">{number.format(o.expiringSoon)} خلال 7 أيام</span>
+            <span className="rounded-lg bg-warning-soft px-3 py-1 text-xs font-bold text-warning">{number.format(o.expiringSoon)} خلال 7 أيام</span>
           </div>
           {renewals.length === 0 ? (
             <p className="px-6 pb-7 text-sm text-muted-foreground">مفيش اشتراكات مدفوعة بتنتهي خلال الأسبوعين الجايين.</p>
@@ -243,10 +243,10 @@ export function AdminFinancialDashboard({
         <section className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm">
           <div className="flex items-center justify-between gap-3 p-5 sm:p-6">
             <div>
-              <h2 className="text-lg font-black">آخر المدفوعات المعتمدة</h2>
+              <h2 className="text-lg font-bold">آخر المدفوعات المعتمدة</h2>
               <p className="mt-1 text-xs text-muted-foreground">آخر عمليات تم اعتمادها بعد المراجعة</p>
             </div>
-            <Link href="/admin/payments?status=APPROVED" className="shrink-0 text-xs font-black text-primary hover:underline">عرض الكل ←</Link>
+            <Link href="/admin/payments?status=APPROVED" className="shrink-0 text-xs font-bold text-primary hover:underline">عرض الكل ←</Link>
           </div>
           {recent.length === 0 ? (
             <p className="px-6 pb-7 text-sm text-muted-foreground">لسه مفيش مدفوعات تم اعتمادها.</p>
@@ -259,7 +259,7 @@ export function AdminFinancialDashboard({
                     <tr key={payment.paymentRequestId} className="hover:bg-surface/50">
                       <td className="max-w-56 px-5 py-3"><p className="truncate font-bold">{payment.businessName}</p><p className="mt-1 truncate text-xs text-muted-foreground">{payment.planName} · {payment.reference}</p></td>
                       <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{dateLabel(payment.reviewedAtUtc)}</td>
-                      <td className="whitespace-nowrap px-5 py-3 font-black text-success">{money(payment.amountEgp)}</td>
+                      <td className="whitespace-nowrap px-5 py-3 font-bold text-success">{money(payment.amountEgp)}</td>
                     </tr>
                   ))}
                 </tbody>
