@@ -1136,23 +1136,23 @@ export function InboxPanel({
         <header className="shrink-0 border-b border-border px-4 pb-3 pt-3">
           <div className="mb-3 flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <Link href="/dashboard" className="mb-2 inline-flex md:hidden" aria-label="DRVO AutoRespond">
+              <Link href="/dashboard" className="mb-2 inline-flex rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:hidden" aria-label="DRVO AutoRespond">
                 <BrandLogo className="h-6" />
               </Link>
-              <h1 className="text-[21px] font-extrabold tracking-tight">المحادثات</h1>
+              <h1 className="font-display text-[21px] font-bold tracking-tight">المحادثات</h1>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {counts.total.toLocaleString("ar-EG")} محادثة محفوظة في DRVO
               </p>
             </div>
             <div className="flex items-center gap-0.5">
               <ActionIcon name="refresh" title="تحديث المحادثات" onClick={() => void loadFirstPage()} disabled={loadingList} />
-              <Link href="/dashboard/agent" className="grid h-10 w-10 place-items-center rounded-xl text-primary hover:bg-primary/10" title="إعدادات الموظف الذكي"><Glyph name="spark" /></Link>
+              <Link href="/dashboard/agent" className="grid h-10 w-10 place-items-center rounded-xl text-primary transition-colors hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" title="إعدادات الموظف الذكي"><Glyph name="spark" /></Link>
             </div>
           </div>
           {canResumeAll && (
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <button type="button" onClick={() => void resumeAllAi()} disabled={resumingAll}
-                className="inline-flex min-h-9 items-center gap-2 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-primary-foreground transition hover:bg-primary-hover disabled:opacity-60">
+                className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60 motion-reduce:transition-none">
                 <Glyph name="bot" size={17} />
                 {resumingAll ? "جاري إرجاع المحادثات..." : "إرجاع جميع الشاتات للبوت"}
               </button>
@@ -1160,16 +1160,16 @@ export function InboxPanel({
             </div>
           )}
           {bulkFeedback && <p role="status" className="mb-2 rounded-lg bg-success-soft px-3 py-2 text-xs font-semibold text-success">{bulkFeedback}</p>}
-          <div className="flex h-11 items-center gap-2 rounded-xl bg-surface px-3 ring-1 ring-transparent focus-within:ring-ring">
+          <div className="flex h-11 items-center gap-2 rounded-xl border border-input bg-card px-3 transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/25 motion-reduce:transition-none">
             <Glyph name="search" size={19} className="shrink-0 text-muted-foreground" />
             <input
               ref={searchInput} type="search" value={searchText}
               onChange={e => setSearchText(e.target.value)}
               placeholder="ابحث بالاسم أو الرقم..."
               aria-label="بحث في جميع المحادثات"
-              className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-muted-foreground"
+              className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground"
             />
-            {searchText ? <button type="button" title="مسح البحث" aria-label="مسح البحث" onClick={() => setSearchText("")}><Glyph name="close" size={16} /></button> : <kbd className="hidden text-[10px] text-muted-foreground lg:block">Ctrl K</kbd>}
+            {searchText ? <button type="button" title="مسح البحث" aria-label="مسح البحث" onClick={() => setSearchText("")} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-surface hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"><Glyph name="close" size={16} /></button> : <kbd className="hidden text-[10px] text-muted-foreground lg:block">Ctrl K</kbd>}
           </div>
           <div className="mt-3 flex gap-1.5 overflow-x-auto [scrollbar-width:none]" role="group" aria-label="فلاتر المحادثات">
             {actionFilters.map(item => (
@@ -1177,7 +1177,7 @@ export function InboxPanel({
                 key={item.id} type="button" onClick={() => setFilter(item.id)}
                 aria-pressed={filter === item.id}
                 className={
-                  "flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-bold transition " +
+                  "flex min-h-9 shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none " +
                   (filter === item.id
                     ? "bg-primary text-primary-foreground"
                     : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground")
@@ -1194,14 +1194,14 @@ export function InboxPanel({
         <div ref={listScroller} className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:thin]" aria-live="polite">
           {loadingList && grouped.length === 0 ? (
             <div className="space-y-1 p-3" aria-label="جاري تحميل المحادثات">
-              {Array.from({ length: 7 }, (_,i) => <div key={i} className="flex animate-pulse gap-3 rounded-xl p-3"><span className="h-11 w-11 rounded-full bg-surface" /><span className="flex-1 space-y-2 pt-1"><span className="block h-3 w-1/2 rounded bg-surface" /><span className="block h-2 w-5/6 rounded bg-surface" /></span></div>)}
+              {Array.from({ length: 7 }, (_,i) => <div key={i} className="flex animate-pulse gap-3 rounded-xl p-3 motion-reduce:animate-none"><span className="h-11 w-11 rounded-full bg-surface" /><span className="flex-1 space-y-2 pt-1"><span className="block h-3 w-1/2 rounded bg-surface" /><span className="block h-2 w-5/6 rounded bg-surface" /></span></div>)}
             </div>
           ) : grouped.length === 0 ? (
             <div className="flex h-64 flex-col items-center justify-center px-8 text-center">
               <span className="mb-3 grid h-14 w-14 place-items-center rounded-full bg-primary/10 text-primary"><Glyph name="chat" size={26} /></span>
               <p className="text-sm font-bold">{debouncedSearch ? "مفيش نتائج مطابقة" : filter === "FOLLOW_UP" ? "مفيش حالات متابعة مفتوحة" : "مفيش محادثات في الفلتر ده"}</p>
               <p className="mt-1.5 text-xs leading-6 text-muted-foreground">جرّب اسم تاني أو غيّر الفلتر لعرض محادثات أكتر.</p>
-              {(debouncedSearch || filter !== "ALL") && <button type="button" onClick={() => { setSearchText(""); setFilter("ALL"); }} className="mt-3 rounded-lg bg-primary/10 px-4 py-2 text-xs font-bold text-primary">اعرض الكل</button>}
+              {(debouncedSearch || filter !== "ALL") && <button type="button" onClick={() => { setSearchText(""); setFilter("ALL"); }} className="mt-3 min-h-10 rounded-lg bg-primary/10 px-4 py-2 text-xs font-bold text-primary transition-colors hover:bg-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">اعرض الكل</button>}
             </div>
           ) : (
             <ul>
@@ -1214,8 +1214,8 @@ export function InboxPanel({
                       type="button" onClick={() => selectConversation(c.conversationId)}
                       aria-current={active ? "true" : undefined}
                       className={
-                        "group flex min-h-[70px] w-full items-center gap-3 border-b border-border/70 px-4 py-2.5 text-right transition-colors hover:bg-surface focus-visible:bg-primary/10 " +
-                        (active ? "bg-primary/10 shadow-[inset_3px_0_0_var(--primary)]" : "") +
+                        "group flex min-h-[70px] w-full items-center gap-3 border-b border-s-[3px] border-b-border/70 border-s-transparent px-4 py-2.5 text-right transition-colors hover:bg-surface focus-visible:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring motion-reduce:transition-none " +
+                        (active ? "border-s-primary bg-primary/10" : "") +
                         (c.unread ? " font-bold" : "")
                       }
                     >
@@ -1240,9 +1240,7 @@ export function InboxPanel({
                             {c.lastMessageDirection === "OUTBOUND" ? "✓ " : ""}
                             {c.lastMessagePreview?.trim() || "مرفق أو رسالة بدون نص"}
                           </p>
-                          {c.unread ? <span className="grid h-[19px] min-w-[19px] place-items-center rounded-full bg-primary px-1 text-[10px] text-primary-foreground" aria-label="رسالة غير مقروءة">●</span>
-                            : s.attention ? <span className={"h-[7px] w-[7px] shrink-0 rounded-full " + s.dot} aria-label={s.label} />
-                              : null}
+                          {c.unread ? <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" aria-label="رسالة غير مقروءة" title="رسالة غير مقروءة" /> : null}
                         </div>
                         {s.attention && (
                           <span className="sr-only">{s.label}</span>
@@ -1264,7 +1262,7 @@ export function InboxPanel({
         </div>
         <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-t border-border bg-surface/80 px-4 text-[10px] text-muted-foreground">
           <span>{filter === "ALL" && !debouncedSearch ? "معروض " + loadedCount + " من " + counts.total : "معروض " + loadedCount + " نتيجة"}</span>
-          {failedCount > 0 ? <span className="font-bold text-amber-600">{failedCount} محتاج متابعة من الظاهرين</span> : <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-success" />متابعة مباشرة</span>}
+          {failedCount > 0 ? <span className="font-bold text-warning">{failedCount} محتاج متابعة من الظاهرين</span> : <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-success" />متابعة مباشرة</span>}
         </div>
       </aside>
 
