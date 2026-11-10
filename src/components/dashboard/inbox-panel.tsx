@@ -1421,7 +1421,7 @@ export function InboxPanel({
                                     )}
                                     {m.isHistorical && <span className="mb-1 block text-[9px] opacity-65">من سجل واتساب السابق</span>}
                                     {m.quotedProviderMessageId && (
-                                      <div className="mb-2 rounded-lg border-r-2 border-primary bg-black/[.035] px-2 py-1 text-[11px] dark:bg-white/[.06]">
+                                      <div className="mb-2 rounded-lg border-s-2 border-s-primary bg-foreground/5 px-2 py-1 text-[11px]">
                                         <span className="opacity-60">رد على رسالة سابقة</span>
                                         <p className="truncate" dir="auto">{messages.find(prev =>
                                           prev.providerMessageId === m.quotedProviderMessageId ||
@@ -1430,7 +1430,7 @@ export function InboxPanel({
                                       </div>
                                     )}
                                     {m.contentType !== "TEXT" && m.contentType !== "UNKNOWN" && (
-                                      <div className="mb-2 rounded-lg bg-black/[.04] p-2 text-xs dark:bg-white/[.06]">
+                                      <div className="mb-2 min-w-0 rounded-lg bg-foreground/5 p-2 text-xs">
                                         <p className="font-bold">{m.contentType === "IMAGE" ? "📷 صورة" :
                                           m.contentType === "VIDEO" ? "🎬 فيديو" :
                                           m.contentType === "AUDIO" ? "🎤 رسالة صوتية" :
@@ -1443,17 +1443,17 @@ export function InboxPanel({
                                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                                 <img src={"/api/inbox/media/" + m.messageId}
                                                   alt={m.mediaFileName || "صورة واتساب"} loading="lazy"
-                                                  className="max-h-[290px] max-w-[270px] rounded-lg object-contain" />
+                                                  className="max-h-[290px] max-w-full rounded-lg object-contain sm:max-w-[270px]" />
                                               </a>
                                             ) : m.contentType === "AUDIO" ? (
-                                              <audio controls preload="none" className="max-w-[240px]"
+                                              <audio controls preload="none" className="max-w-full sm:max-w-[240px]"
                                                 src={"/api/inbox/media/" + m.messageId}>رسالة صوتية</audio>
                                             ) : m.contentType === "VIDEO" ? (
-                                              <video controls preload="metadata" className="max-h-[290px] max-w-[270px] rounded-lg"
+                                              <video controls preload="metadata" className="max-h-[290px] max-w-full rounded-lg sm:max-w-[270px]"
                                                 src={"/api/inbox/media/" + m.messageId}>فيديو واتساب</video>
                                             ) : null}
                                             <a href={"/api/inbox/media/" + m.messageId} target="_blank" rel="noreferrer"
-                                              className="mt-1 block font-bold underline">فتح المرفق</a>
+                                              className="mt-1 block rounded-sm font-bold underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">فتح المرفق</a>
                                           </div>
                                         ) : <p className="mt-1 text-[10px] opacity-70">المرفق لم يُحفظ على DRVO بعد</p>}
                                       </div>
@@ -1473,12 +1473,12 @@ export function InboxPanel({
                         </>}
                 </div>
               </div>
-              {showScrollDown && <button type="button" onClick={scrollToBottom} aria-label="آخر الرسائل" title="آخر الرسائل" className="absolute bottom-3 left-4 grid h-10 w-10 place-items-center rounded-full bg-card text-primary shadow-md"><Glyph name="arrow-down" size={18} /></button>}
+              {showScrollDown && <button type="button" onClick={scrollToBottom} aria-label="آخر الرسائل" title="آخر الرسائل" className="absolute bottom-3 left-4 grid h-10 w-10 place-items-center rounded-full border border-border bg-card text-primary shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"><Glyph name="arrow-down" size={18} /></button>}
             </div>
 
             <footer className="z-10 shrink-0 border-t border-border bg-card px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
               <div className="mx-auto flex max-w-[940px] items-end gap-2">
-                <div className="flex min-h-[48px] min-w-0 flex-1 items-end gap-2 rounded-2xl border border-border bg-background px-4 py-2 shadow-sm focus-within:border-primary">
+                <div className="flex min-h-[48px] min-w-0 flex-1 items-end gap-2 rounded-2xl border border-input bg-background px-4 py-2 shadow-sm transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/25 motion-reduce:transition-none">
                   <textarea
                     ref={textArea} value={draft}
                     onChange={e => setDraft(e.target.value)}
@@ -1496,13 +1496,13 @@ export function InboxPanel({
                         void sendManual();
                       }
                     }}
-                    className="min-h-[30px] max-h-36 w-full resize-none overflow-y-auto bg-transparent py-1 text-sm leading-6 outline-none placeholder:text-muted-foreground"
+                    className="min-h-[30px] max-h-36 w-full resize-none overflow-y-auto bg-transparent py-1 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground"
                     style={{ height: "auto" }}
                   />
                 </div>
                 <button
                   type="button" onClick={() => void sendManual()} disabled={sending || !draft.trim() || whatsappSendReady !== true}
-                  className="grid h-[48px] w-[48px] shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-muted"
+                  className="grid h-[48px] w-[48px] shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground motion-reduce:transition-none"
                   title={whatsappSendReady === true ? "إرسال الرسالة" : "الإرسال غير متاح حتى اتصال واتساب"} aria-label="إرسال الرسالة"
                 ><Glyph name="send" size={20} /></button>
               </div>
