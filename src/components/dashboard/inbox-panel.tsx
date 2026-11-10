@@ -259,7 +259,7 @@ function conversationStatus(c: ConversationRow): {
     : {
       label: c.followUpPhase === "WAITING_CUSTOMER" ? "بانتظار العميل" : "تحتاج متابعة",
       detail: "العميل محتاج رد بشري أو إجراء من الفريق",
-      color: "text-amber-700 dark:text-amber-300",
+      color: "text-warning",
       dot: "bg-amber-500", attention: c.followUpPhase !== "WAITING_CUSTOMER",
     };
   if (c.aiMode === "SAFETY_PAUSED") return {
@@ -1274,7 +1274,7 @@ export function InboxPanel({
           <>
             <header className="z-10 flex h-[64px] shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-3 sm:px-5">
               <div className="flex min-w-0 items-center gap-2.5">
-                <button type="button" onClick={() => setMobileThread(false)} className="grid h-9 w-9 place-items-center rounded-xl hover:bg-surface md:hidden" aria-label="رجوع لقائمة المحادثات"><Glyph name="back" /></button>
+                <button type="button" onClick={() => setMobileThread(false)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:hidden" aria-label="رجوع لقائمة المحادثات"><Glyph name="back" /></button>
                 <Avatar c={selected} size="sm" />
                 <div className="min-w-0">
                   <h2 className="truncate text-[15px] font-bold">{contactLabel(selected)}</h2>
@@ -1289,14 +1289,14 @@ export function InboxPanel({
                 {selected.aiMode !== "AUTO" && !escalation ? (
                   <button
                     type="button" onClick={() => void resumeAi()} disabled={resuming}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-primary px-3 text-[11px] font-bold text-primary-foreground transition hover:bg-primary-hover disabled:opacity-50 sm:px-4"
+                    className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-primary px-3 text-[11px] font-bold text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50 motion-reduce:transition-none sm:px-4"
                   >
                     <Glyph name="spark" size={16} /><span className="hidden sm:inline">{resuming ? "جارٍ التشغيل" : "رجّع البوت"}</span><span className="sm:hidden">AI</span>
                   </button>
                 ) : !escalation ? <div className="hidden items-center gap-1.5 rounded-full bg-success-soft px-3 py-2 text-[10px] font-bold text-success sm:flex"><Glyph name="bot" size={15} />AI بيتابع</div> : null}
                 {!escalation ? (
                   <button type="button" onClick={() => void escalateConversation()} disabled={escalating}
-                    className="rounded-xl border border-amber-300 px-2 py-2 text-[11px] font-bold text-amber-800 hover:bg-amber-50 disabled:opacity-50 dark:text-amber-300"
+                    className="min-h-10 rounded-xl border border-warning/40 bg-warning-soft px-2 py-2 text-[11px] font-bold text-warning transition-colors hover:border-warning/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50 motion-reduce:transition-none"
                     title="فتح حالة تدخل بشري وإخطار المالك">تدخل بشري</button>
                 ) : null}
                 <ActionIcon name="info" title="تفاصيل العميل" active={detailsOpen} onClick={() => setDetailsOpen(v => !v)} />
@@ -1307,7 +1307,7 @@ export function InboxPanel({
               <details className="group shrink-0 border-b border-border bg-card" aria-label="متابعة العميل">
                 <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-xs [&::-webkit-details-marker]:hidden sm:px-5">
                   <span className={"h-2 w-2 shrink-0 rounded-full " +
-                    (escalation.phase === "NEEDS_ATTENTION" ? "bg-amber-500" : "bg-sky-500")} />
+                    (escalation.phase === "NEEDS_ATTENTION" ? "bg-warning" : "bg-info")} />
                   <strong className="text-foreground">متابعة العميل</strong>
                   <span className="truncate text-muted-foreground">
                     {escalation.phase === "IN_PROGRESS" ? "جاري التعامل — بدأ رد بشري بالفعل"
@@ -1363,9 +1363,9 @@ export function InboxPanel({
             )}
             {(error || notice || status.attention) && (
               <div className="z-10 shrink-0 border-b border-border bg-card/90 px-4 py-2 text-xs">
-                {error && <p role="alert" className="font-bold text-red-600">{error}</p>}
+                {error && <p role="alert" className="font-bold text-destructive">{error}</p>}
                 {notice && <p role="status" className="font-bold text-primary">{notice}</p>}
-                {!error && !notice && status.attention && !escalation && <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300"><Glyph name="alert" size={15} />{status.detail}{selected.aiMode === "AUTO" ? " — تقدر ترد بنفسك من تحت." : ""}</div>}
+                {!error && !notice && status.attention && !escalation && <div className="flex items-center gap-2 text-warning"><Glyph name="alert" size={15} />{status.detail}{selected.aiMode === "AUTO" ? " — تقدر ترد بنفسك من تحت." : ""}</div>}
                 {selected.aiMode === "AUTO" && !escalation && (status.attention || Boolean(notice)) && (
                   <button type="button" onClick={() => void checkLastAiDelivery()} disabled={checkingAi}
                     className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border border-primary/25 px-2.5 py-1.5 font-bold text-primary hover:bg-primary/10 disabled:opacity-60"
@@ -1386,7 +1386,7 @@ export function InboxPanel({
                 className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 [scrollbar-width:thin] sm:px-8 lg:px-10"
                 style={{
                   backgroundColor: "transparent",
-                  backgroundImage: "radial-gradient(circle at 2px 2px, rgb(0 117 154 / 0.08) 1px, transparent 0)",
+                  backgroundImage: "radial-gradient(circle at 2px 2px, color-mix(in srgb, var(--foreground) 4%, transparent) 1px, transparent 0)",
                   backgroundSize: "34px 34px",
                 }}
                 aria-label="رسائل المحادثة"
@@ -1408,10 +1408,10 @@ export function InboxPanel({
                                 {showDay && <div className="my-5 flex justify-center"><span className="rounded-lg bg-card/90 px-3 py-1.5 text-[10px] font-bold text-muted-foreground shadow-sm">{messageDay(m)}</span></div>}
                                 <div className={"mb-2 flex " + (outgoing ? "justify-start" : "justify-end")}>
                                   <article id={"message-" + m.messageId} dir="rtl" className={
-                                    "max-w-[88%] rounded-[13px] px-3.5 py-2 shadow-[0_1px_1px_rgba(0,0,0,.045)] sm:max-w-[76%] " +
+                                    "min-w-0 max-w-[88%] rounded-[15px] px-3.5 py-2 shadow-sm sm:max-w-[76%] " +
                                     (outgoing
                                       ? "rounded-tr-[3px] bg-whatsapp-bubble text-whatsapp-bubble-text"
-                                      : "rounded-tl-[3px] bg-card text-foreground")
+                                      : "rounded-tl-[3px] border border-border/70 bg-card text-foreground")
                                   }>
                                     {outgoing && (
                                       <div className="mb-1 flex items-center gap-1.5 text-[10px] font-bold opacity-70">
