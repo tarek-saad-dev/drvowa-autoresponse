@@ -112,7 +112,7 @@ function CopyRow({ label, value, copyId, copied, onCopy, testId }: {
       </div>
       <button type="button" onClick={() => onCopy(value, copyId)}
         aria-label={"نسخ " + label}
-        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-xs font-bold text-foreground transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+        className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border border-input bg-card px-3 text-xs font-bold text-foreground transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none">
         <Icon name={copied === copyId ? "check" : "copy"} className="h-4 w-4" />
         {copied === copyId ? "تم النسخ" : "نسخ"}
       </button>
@@ -130,7 +130,7 @@ function InstaPayBrand() {
         </svg>
       </span>
       <div className="min-w-0">
-        <p dir="ltr" className="text-lg font-black leading-none tracking-tight text-[#69338d]">InstaPay</p>
+        <p dir="ltr" className="text-lg font-bold leading-none tracking-tight text-[#69338d]">InstaPay</p>
         <p className="mt-1 text-[11px] text-muted-foreground">تحويل مباشر من تطبيق إنستاباي</p>
       </div>
     </div>
@@ -326,7 +326,7 @@ export function BillingPlansClient({
         <div className="grid h-16 w-16 place-items-center rounded-full bg-warning-soft text-warning">
           <Icon name="clock" className="h-8 w-8" />
         </div>
-        <h3 className="text-xl font-black text-foreground">طلب الدفع قيد المراجعة</h3>
+        <h3 className="text-xl font-bold text-foreground">طلب الدفع قيد المراجعة</h3>
         <p className="text-sm leading-7 text-muted-foreground">
           {showPending
             ? "طلبك مسجل بالفعل لدى DRVO. لا تحتاج إلى إرسال تأكيد آخر."
@@ -361,10 +361,10 @@ export function BillingPlansClient({
             <Icon name="shield" className="h-4 w-4" /> تحويل يدوي • مراجعة بشرية
           </span>
         </div>
-        <section className="rounded-[22px] border border-border bg-card p-4 shadow-sm sm:p-6">
+        <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
           <div className="rounded-2xl bg-[#69338d]/6 px-3 py-6 text-center sm:px-5">
             <p className="text-xs font-semibold text-muted-foreground">المبلغ المطلوب تحويله</p>
-            <p className="mt-2 text-4xl font-black tracking-tight text-foreground sm:text-5xl"
+            <p className="mt-2 text-4xl font-bold tracking-tight text-foreground sm:text-5xl"
               dir="ltr" data-testid="pay-amount">{money(intent.amount, intent.currencyCode)}</p>
             <p className="mt-2 text-sm text-muted-foreground">
               <span data-testid="pay-plan-name">{intent.planDisplayName}</span>
@@ -378,7 +378,7 @@ export function BillingPlansClient({
           </div>
           <div className="mt-4">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-black">بيانات المستفيد</h3>
+              <h3 className="text-sm font-bold">بيانات المستفيد</h3>
               <span className="text-xs text-muted-foreground">انسخ البيانات للتحويل</span>
             </div>
             <CopyRow label="اسم المستفيد" value={instructions?.displayName ?? "—"}
@@ -406,10 +406,10 @@ export function BillingPlansClient({
           ) : null}
         </section>
         {step === "confirm" ? (
-          <form className="space-y-4 rounded-[22px] border border-border bg-card p-4 sm:p-6"
+          <form className="space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-6"
             onSubmit={(event) => { event.preventDefault(); void submitConfirmation(); }}>
             <div>
-              <h3 className="text-lg font-black">تأكيد بيانات التحويل</h3>
+              <h3 className="text-lg font-bold">تأكيد بيانات التحويل</h3>
               <p className="mt-1 text-xs text-muted-foreground">
                 ادخل البيانات بعد تنفيذ التحويل فعليًا. سنراجعها يدويًا قبل تفعيل الباقة.
               </p>
@@ -426,15 +426,15 @@ export function BillingPlansClient({
                 placeholder="الرقم الموجود في إيصال InstaPay" />
             </div>
             <details className="rounded-xl border border-border px-3 py-2.5">
-              <summary className="cursor-pointer text-sm font-bold">إضافة ملاحظة (اختياري)</summary>
+              <summary className="cursor-pointer rounded-md text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">إضافة ملاحظة (اختياري)</summary>
               <Textarea id="customerNote" className="mt-3" rows={2} value={customerNote}
                 onChange={(event) => setCustomerNote(event.target.value)} maxLength={1000} />
             </details>
             {error ? <p role="alert" className="text-sm font-bold text-destructive">{error}</p> : null}
-            <Button type="submit" disabled={submitting || !payerName.trim()} size="lg" className="w-full rounded-xl">
+            <Button type="submit" disabled={submitting || !payerName.trim()} loading={submitting} size="lg" className="w-full rounded-xl">
               {submitting ? "جاري إرسال التأكيد…" : "إرسال تأكيد التحويل للمراجعة"}
             </Button>
-            <button type="button" className="block w-full text-center text-sm font-semibold text-muted-foreground hover:text-foreground"
+            <button type="button" className="block min-h-11 w-full rounded-lg text-center text-sm font-semibold text-muted-foreground transition-colors hover:bg-surface hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               onClick={() => { setError(null); setStep("pay"); }}>
               الرجوع لبيانات التحويل
             </button>
@@ -453,14 +453,14 @@ export function BillingPlansClient({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-bold text-primary">الخطوة ٢ من ٣</p>
-            <h3 className="mt-1 text-xl font-black">راجع طلب الاشتراك</h3>
+            <h3 className="mt-1 text-xl font-bold">راجع طلب الاشتراك</h3>
             <p className="mt-1 text-sm text-muted-foreground">
               {selectedPlan?.displayName ?? "الباقة المختارة"} • {billingInterval === "ANNUAL" ? "سنوي" : "شهري"}
             </p>
           </div>
           <Button variant="ghost" size="sm" onClick={() => { setStep("plans"); setError(null); }}>تغيير الباقة</Button>
         </div>
-        <section className="space-y-4 rounded-[22px] border border-border bg-card p-4 sm:p-6">
+        <section className="space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-6">
           <div>
             <label htmlFor="billing-discount-code" className="mb-2 block text-sm font-bold">عندك كود خصم؟</label>
             <div className="flex flex-wrap gap-2 sm:flex-nowrap">
@@ -508,8 +508,8 @@ export function BillingPlansClient({
                 </div>
               ) : null}
               <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
-                <span className="text-sm font-black">الإجمالي المطلوب</span>
-                <strong dir="ltr" className="text-2xl font-black tracking-tight">{money(quote.amount, quote.currencyCode)}</strong>
+                <span className="text-sm font-bold">الإجمالي المطلوب</span>
+                <strong dir="ltr" className="text-2xl font-bold tracking-tight">{money(quote.amount, quote.currencyCode)}</strong>
               </div>
             </div>
           ) : null}
@@ -517,7 +517,7 @@ export function BillingPlansClient({
             السعر محسوب من نظام الاشتراكات. لن يتم خصم أي مبلغ الآن؛ ستظهر لك بيانات تحويل InstaPay بعد المتابعة.
             {currentPlanCode && selectedCode !== currentPlanCode ? " تُطبَّق تغييرات الباقة بعد مراجعة الدفع وفق شروط الاشتراك." : ""}
           </p>
-          <Button size="lg" className="w-full rounded-xl" disabled={!validQuote || quoting || creating}
+          <Button size="lg" className="w-full rounded-xl" disabled={!validQuote || quoting || creating} loading={creating}
             onClick={() => void createIntent()}>
             {creating ? "جاري تجهيز الدفع…" : "متابعة إلى الدفع عبر InstaPay"}
             <Icon name="arrow" className="h-4 w-4" />
@@ -530,7 +530,7 @@ export function BillingPlansClient({
       <div className="space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="space-y-1">
-            <h3 className="text-xl font-black">اختار الباقة المناسبة لشغلك</h3>
+            <h3 className="text-xl font-bold">اختار الباقة المناسبة لشغلك</h3>
             <p className="text-xs text-muted-foreground">مراجعة السعر والخصم قبل الدفع، من غير أي خصم تلقائي.</p>
           </div>
           <div role="group" aria-label="دورة الاشتراك"
@@ -570,10 +570,10 @@ export function BillingPlansClient({
               ? Math.round((1 - yearly / (monthly * 12)) * 100) : 0;
             return (
               <article key={plan.code} data-testid={"plan-card-" + plan.code}
-                className={"flex min-w-0 flex-col rounded-[20px] border p-4 transition sm:p-5 " +
+                className={"flex min-w-0 flex-col rounded-2xl border p-4 shadow-sm transition-colors motion-reduce:transition-none sm:p-5 " +
                   (isCurrent ? "border-primary/50 bg-primary/5" : "border-border bg-card hover:border-primary/45")}>
                 <div className="flex items-center justify-between gap-2">
-                  <h4 className="text-base font-black">{plan.displayName}</h4>
+                  <h4 className="text-base font-bold">{plan.displayName}</h4>
                   {isCurrent ? <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-bold text-primary">باقتك الحالية</span> : null}
                   {!isCurrent && percent > 0 ? (
                     <span className="rounded-full bg-success-soft px-2 py-1 text-[10px] font-bold text-success">
@@ -581,7 +581,7 @@ export function BillingPlansClient({
                     </span>
                   ) : null}
                 </div>
-                <p className="mt-4 text-[27px] font-black leading-none tracking-tight" dir="ltr">
+                <p className="mt-4 text-[27px] font-bold leading-none tracking-tight" dir="ltr">
                   {price == null ? "—" : money(price, plan.currencyCode)}
                 </p>
                 <p className="mt-2 text-xs text-muted-foreground">
@@ -668,7 +668,7 @@ export function BillingPlansClient({
             style={{ maxHeight: "calc(100dvh - 2rem)" }}>
             <div className="mb-5 flex items-center justify-between gap-3 border-b border-border pb-4">
               <div>
-                <h2 id="billing-modal-title" className="text-lg font-black">
+                <h2 id="billing-modal-title" className="text-lg font-bold">
                   {step === "plans" ? "الباقات والاشتراكات" : "إدارة الباقة والدفع"}
                 </h2>
                 {step !== "plans" && step !== "done" ? (
