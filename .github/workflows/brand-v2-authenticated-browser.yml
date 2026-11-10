@@ -76,7 +76,9 @@ jobs:
         # resolver; using Webpack avoids that Turbopack-specific import-map failure.
         run: npm run build -- --webpack
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        # Ubuntu 24.04 GitHub image has the required browser libraries; avoid
+        # apt update/install stalls while SQL Server is running in CI.
+        run: npx playwright install chromium
       - name: Capture real owner/admin pages without external sends
         env:
           E2E_START_SERVER: '1'
