@@ -91,9 +91,9 @@ test.describe.serial("Brand V2 isolated logged-in browser QA", () => {
       ["dashboard", "/dashboard"],
       ["inbox", "/dashboard/inbox"],
       ["agent", "/dashboard/agent"],
-      ["knowledge", "/dashboard/knowledge"],
+      ["knowledge", "/dashboard/agent?tab=knowledge"],
       ["billing", "/dashboard/billing"],
-      ["campaigns", "/dashboard/whatsapp?tab=campaigns"],
+      ["campaigns", "/dashboard/agent?tab=campaigns"],
     ]) {
       await screenshotGrid(page, name, href);
     }
