@@ -28,8 +28,8 @@ export function AdminNavigation() {
             href={item.href}
             aria-current={current ? "page" : undefined}
             className={current
-              ? "whitespace-nowrap rounded-xl bg-primary px-4 py-2.5 text-xs font-black text-primary-foreground shadow-sm sm:text-sm"
-              : "whitespace-nowrap rounded-xl px-4 py-2.5 text-xs font-bold text-muted-foreground transition-colors hover:bg-surface hover:text-foreground sm:text-sm"}
+              ? "inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:text-sm"
+              : "inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-xl px-4 py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-surface hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:text-sm"}
           >
             {item.label}
           </Link>
