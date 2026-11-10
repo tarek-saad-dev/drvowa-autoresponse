@@ -32,7 +32,7 @@ for (const screen of cases) {
         await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
         await expect(page.locator("html")).toHaveAttribute("data-theme", scheme);
         await expect(page.locator("body")).toBeVisible();
-        await expect(page.locator("h1").first()).toBeVisible({ timeout: 20_000 });
+        await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 20_000 });
         await expect(page.locator("body")).not.toContainText(/AutoResponse\b/);
 
         await page.evaluate(() => document.fonts.ready);
