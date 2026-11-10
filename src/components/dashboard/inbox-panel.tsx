@@ -22,7 +22,7 @@ type InboxFilter = "ALL" | "UNREAD" | "HUMAN" | "FOLLOW_UP" | "AUTO" | "ARCHIVED
 type GlyphName =
   | "chat" | "back" | "search" | "refresh" | "settings" | "bot"
   | "book" | "send" | "info" | "close" | "check" | "alert"
-  | "chevron" | "menu" | "home" | "spark" | "arrow-down" | "user";
+  | "chevron" | "menu" | "home" | "spark" | "arrow-down" | "user" | "pin";
 
 type ConversationCursor = { beforeAt: string; beforeId: string };
 type Counts = { total: number; unread: number; followUp?: number };
@@ -150,6 +150,7 @@ const shapes: Record<GlyphName, ReactNode> = {
   home: <><path d="m3 11 9-8 9 8v10H3V11Z" /><path d="M9 21v-7h6v7" /></>,
   spark: <><path d="m12 2 2.5 7.5L22 12l-7.5 2.5L12 22l-2.5-7.5L2 12l7.5-2.5L12 2Z" /></>,
   "arrow-down": <><path d="M12 4v16m-6-6 6 6 6-6" /></>,
+  pin: <><path d="M15 3 21 9l-3.5 1.5-2.5 5-2 2-6.5-6.5 2-2 5-2L15 3Z" /><path d="m9 15-6 6" /></>,
 };
 
 function Glyph({
@@ -178,12 +179,14 @@ function contactInitial(c: ConversationRow): string | null {
 }
 
 function avatarTone(key: string) {
+  // Avatar variation stays within the semantic palette, instead of
+  // creating five unrelated fixed color schemes in light/dark modes.
   const colors = [
-    "bg-[#d8eff0] text-[#186b71] dark:bg-[#173b40] dark:text-[#8fe3dc]",
-    "bg-[#f2e4d5] text-[#9c6138] dark:bg-[#4a3325] dark:text-[#f6c69e]",
-    "bg-[#eadff6] text-[#7653a3] dark:bg-[#352a48] dark:text-[#ceb0f3]",
-    "bg-[#dce9fb] text-[#47699d] dark:bg-[#25354d] dark:text-[#a9c7fa]",
-    "bg-[#f6dfdf] text-[#aa5b65] dark:bg-[#49292d] dark:text-[#fac0c5]",
+    "bg-primary/10 text-primary",
+    "bg-secondary text-secondary-foreground",
+    "bg-surface text-foreground",
+    "bg-card text-muted-foreground ring-1 ring-border",
+    "bg-primary/5 text-primary",
   ];
   let hash = 0;
   for (const c of key) hash = (hash * 31 + c.charCodeAt(0)) | 0;
@@ -244,14 +247,14 @@ function conversationStatus(c: ConversationRow): {
 } {
   if (c.aiMode==="HUMAN_PAUSED" && c.awaitingHumanReply) return {
     label:"ينتظر رد الفريق",detail:"وصلت رسالة من العميل بعد آخر رد بشري",
-    color:"text-amber-700 dark:text-amber-300",
-    dot:"bg-amber-500",attention:true,
+    color:"text-warning",
+    dot:"bg-warning",attention:true,
   };
   if (c.hasOpenEscalation) return c.followUpPhase === "IN_PROGRESS"
     ? {
       label: "جاري التعامل", detail: "المسؤول بدأ المتابعة",
-      color: "text-sky-700 dark:text-sky-300",
-      dot: "bg-sky-500", attention: false,
+      color: "text-info",
+      dot: "bg-info", attention: false,
     }
     : {
       label: c.followUpPhase === "WAITING_CUSTOMER" ? "بانتظار العميل" : "تحتاج متابعة",
@@ -261,29 +264,29 @@ function conversationStatus(c: ConversationRow): {
     };
   if (c.aiMode === "SAFETY_PAUSED") return {
     label: "محتاج مراجعة", detail: "مراجعة أمان قبل تشغيل الرد",
-    color: "text-rose-600 dark:text-rose-300",
-    dot: "bg-rose-500", attention: true,
+    color: "text-destructive",
+    dot: "bg-destructive", attention: true,
   };
   if (c.aiMode === "HUMAN_PAUSED") return {
     label: "مع الفريق", detail: "الفريق مسؤول عن المحادثة؛ مفيش رد جديد منتظر",
-    color: "text-sky-700 dark:text-sky-300",
-    dot: "bg-sky-500", attention: false,
+    color: "text-info",
+    dot: "bg-info", attention: false,
   };
   const health = c.aiReplyHealth;
   if (health?.state === "DISABLED" || health?.state === "FAILED") return {
     label: "محتاج تدخل", detail: FAILURES[health.reason ?? "UNKNOWN"] ?? FAILURES.UNKNOWN!,
-    color: "text-rose-600 dark:text-rose-300",
-    dot: "bg-rose-500", attention: true,
+    color: "text-destructive",
+    dot: "bg-destructive", attention: true,
   };
   if (health?.state === "REPLYING") return {
     label: "بيجهّز رد", detail: "الموظف الذكي بيجهّز الرد",
-    color: "text-sky-700 dark:text-sky-300",
-    dot: "bg-sky-500", attention: false,
+    color: "text-info",
+    dot: "bg-info", attention: false,
   };
   return {
     label: "AI شغال", detail: "الموظف الذكي بيتابع المحادثة",
-    color: "text-emerald-700 dark:text-emerald-300",
-    dot: "bg-emerald-500", attention: false,
+    color: "text-success",
+    dot: "bg-success", attention: false,
   };
 }
 
@@ -1133,7 +1136,7 @@ export function InboxPanel({
         <header className="shrink-0 border-b border-border px-4 pb-3 pt-3">
           <div className="mb-3 flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <Link href="/dashboard" className="mb-2 inline-flex md:hidden" aria-label="DRVO AutoResponse">
+              <Link href="/dashboard" className="mb-2 inline-flex md:hidden" aria-label="DRVO AutoRespond">
                 <BrandLogo className="h-6" />
               </Link>
               <h1 className="text-[21px] font-extrabold tracking-tight">المحادثات</h1>
@@ -1220,7 +1223,7 @@ export function InboxPanel({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <span className="min-w-0 truncate text-[14px] font-semibold" dir="auto">{contactLabel(c)}</span>
-                          {c.isPinned && <span title="محادثة مثبتة" className="text-[10px] text-primary">📌</span>}
+                          {c.isPinned && <span title="محادثة مثبتة" aria-label="محادثة مثبتة" className="text-primary"><Glyph name="pin" size={14} /></span>}
                           {s.attention ? (
                             <span className={"h-2 w-2 shrink-0 rounded-full " + s.dot} title={s.label} aria-label={s.label} />
                           ) : null}
