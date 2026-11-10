@@ -260,7 +260,7 @@ function conversationStatus(c: ConversationRow): {
       label: c.followUpPhase === "WAITING_CUSTOMER" ? "بانتظار العميل" : "تحتاج متابعة",
       detail: "العميل محتاج رد بشري أو إجراء من الفريق",
       color: "text-warning",
-      dot: "bg-amber-500", attention: c.followUpPhase !== "WAITING_CUSTOMER",
+      dot: "bg-warning", attention: c.followUpPhase !== "WAITING_CUSTOMER",
     };
   if (c.aiMode === "SAFETY_PAUSED") return {
     label: "محتاج مراجعة", detail: "مراجعة أمان قبل تشغيل الرد",
