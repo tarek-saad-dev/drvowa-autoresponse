@@ -105,14 +105,14 @@ export function PulseSummaryChat({
           aria-modal="false"
           aria-labelledby="pulse-summary-chat-title"
           aria-describedby="pulse-summary-chat-description"
-          className="pointer-events-auto fixed bottom-[calc(10.75rem+env(safe-area-inset-bottom))] right-3 flex max-h-[calc(100dvh-12.25rem-env(safe-area-inset-bottom))] w-[min(24.5rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-[22px] border border-border bg-card shadow-[0_24px_70px_-18px_rgba(5,43,58,.42)] sm:right-6 md:bottom-[6rem] md:left-6 md:right-auto md:max-h-[min(35rem,calc(100dvh-7.5rem))]"
+          className="pointer-events-auto fixed bottom-[calc(10.75rem+env(safe-area-inset-bottom))] right-3 flex max-h-[calc(100dvh-12.25rem-env(safe-area-inset-bottom))] w-[min(24.5rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-[22px] border border-border bg-card shadow-md sm:right-6 md:bottom-[6rem] md:left-6 md:right-auto md:max-h-[min(35rem,calc(100dvh-7.5rem))]"
         >
           <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border/70 px-4 py-3.5">
             <div className="flex min-w-0 items-center gap-2.5">
               <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-primary/10 text-xl text-primary">✦</span>
               <div className="min-w-0">
-                <p className="text-[10px] font-black tracking-wider text-primary">DRVO / PULSE</p>
-                <h2 id="pulse-summary-chat-title" className="text-sm font-black">نبض نشاطك</h2>
+                <p className="text-[10px] font-bold tracking-wider text-primary">DRVO / PULSE</p>
+                <h2 id="pulse-summary-chat-title" className="text-sm font-bold">نبض نشاطك</h2>
                 <p className="truncate text-[11px] text-muted-foreground">كل المهم عن {businessName}، من غير زحمة.</p>
               </div>
             </div>
@@ -155,10 +155,10 @@ export function PulseSummaryChat({
         aria-expanded={open}
         aria-label={copy.question}
         onClick={() => setOpen(value => !value)}
-        className="pointer-events-auto fixed bottom-[calc(6.25rem+env(safe-area-inset-bottom))] right-3 flex max-w-[calc(100vw-1.5rem)] items-center gap-2.5 rounded-2xl border border-primary/20 bg-card px-3 py-2.5 text-start shadow-[0_16px_48px_-16px_rgba(5,43,58,.42)] transition duration-200 hover:-translate-y-0.5 hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none sm:right-6 md:bottom-6 md:left-6 md:right-auto"
+        className="pointer-events-auto fixed bottom-[calc(6.25rem+env(safe-area-inset-bottom))] right-3 flex max-w-[calc(100vw-1.5rem)] items-center gap-2.5 rounded-2xl border border-primary/20 bg-card px-3 py-2.5 text-start shadow-md transition duration-200 hover:-translate-y-0.5 hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none sm:right-6 md:bottom-6 md:left-6 md:right-auto"
       >
         <span aria-hidden="true" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-lg text-primary-foreground">✦</span>
-        <span className="min-w-0 text-[13px] font-black text-foreground">{copy.question.slice(2)}</span>
+        <span className="min-w-0 text-[13px] font-bold text-foreground">{copy.question.slice(2)}</span>
         <span aria-hidden="true" className="text-muted-foreground">{open ? "⌄" : "⌃"}</span>
       </button>
     </div>
