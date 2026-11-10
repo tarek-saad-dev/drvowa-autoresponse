@@ -346,7 +346,7 @@ function ActionIcon({
   return (
     <button
       type="button" onClick={onClick} disabled={disabled} title={title}
-      aria-label={title} aria-pressed={active}
+      aria-label={title} aria-pressed={name === "info" ? active : undefined}
       className={
         "grid h-10 w-10 shrink-0 place-items-center rounded-xl transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-40 " +
         (active ? "bg-primary/15 text-primary"
@@ -1208,6 +1208,10 @@ export function InboxPanel({
               {grouped.map(c => {
                 const active = selectedId === c.conversationId;
                 const s = conversationStatus(c);
+                // The default AI state stays visually quiet; exceptions deserve a
+                // named label instead of relying on color-only dots.
+                const showOwnership = c.hasOpenEscalation || c.aiMode !== "AUTO" ||
+                  ["DISABLED", "FAILED", "REPLYING"].includes(c.aiReplyHealth?.state ?? "");
                 return (
                   <li key={c.conversationId}>
                     <button
@@ -1242,7 +1246,13 @@ export function InboxPanel({
                           </p>
                           {c.unread ? <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" aria-label="رسالة غير مقروءة" title="رسالة غير مقروءة" /> : null}
                         </div>
-                        {s.attention && (
+                        {showOwnership && (
+                          <span className={"mt-1 inline-flex items-center gap-1 text-[10px] font-semibold " + s.color}>
+                            <span aria-hidden="true" className={"h-1.5 w-1.5 shrink-0 rounded-full " + s.dot} />
+                            {s.label}
+                          </span>
+                        )}
+                        {s.attention && !showOwnership && (
                           <span className="sr-only">{s.label}</span>
                         )}
                       </div>
