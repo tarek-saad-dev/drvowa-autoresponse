@@ -102,7 +102,7 @@ describe("Brand V2 billing and platform admin design contracts", () => {
     expect(adminActions).toContain("مرجع تحويل الاسترداد");
     expect(adminActions).toContain("بعد التحويل الفعلي");
     expect(adminActions).toContain("window.confirm");
-    expect(paymentPage).toContain("status=PENDING");
+    expect(paymentPage).toContain("/admin/payments?status=${value}");
   });
 
   it("keeps discount caps, influencer link and usage constraints without enabling new payment paths", () => {
