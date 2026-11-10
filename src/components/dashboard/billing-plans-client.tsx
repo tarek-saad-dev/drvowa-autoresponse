@@ -130,7 +130,7 @@ function InstaPayBrand() {
         </svg>
       </span>
       <div className="min-w-0">
-        <p dir="ltr" className="text-lg font-bold leading-none tracking-tight text-[#69338d]">InstaPay</p>
+        <p dir="ltr" className="text-lg font-bold leading-none tracking-tight text-[#69338d] dark:text-[#d5b4ec]">InstaPay</p>
         <p className="mt-1 text-[11px] text-muted-foreground">تحويل مباشر من تطبيق إنستاباي</p>
       </div>
     </div>
@@ -371,7 +371,7 @@ export function BillingPlansClient({
               {intent.billingInterval ? (intent.billingInterval === "ANNUAL" ? " • اشتراك سنوي" : " • اشتراك شهري") : ""}
             </p>
             {(intent.discountAmount ?? 0) > 0 ? (
-              <p className="mt-2 text-xs font-semibold text-[#69338d]">
+              <p className="mt-2 text-xs font-semibold text-[#69338d] dark:text-[#d5b4ec]">
                 وفّرت {money(intent.discountAmount ?? 0, intent.currencyCode)} باستخدام كود {intent.discountCode}
               </p>
             ) : null}
