@@ -42,3 +42,36 @@ jobs:
           node scripts/brand-v2-audit.mjs --json > /tmp/brand-v2-inventory.json
           node -e 'const t=JSON.parse(require("node:fs").readFileSync("/tmp/brand-v2-inventory.json","utf8")).totals; console.log("Brand V2 audit counts:",JSON.stringify(t))'
 
+
+  brand-v2-public-browser:
+    name: Anonymous browser screenshots (Brand V2 release only)
+    if: ${{ github.head_ref == 'feat/brand-v2-p09-release-gates' || (github.base_ref == 'main' && github.head_ref == 'feat/brand-v2') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Production build
+        run: npm run build
+      - name: Install Chromium and system dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Capture and validate public light/dark RTL pages
+        env:
+          E2E_START_SERVER: '1'
+          E2E_BASE_URL: 'http://localhost:3000'
+        run: npx playwright test e2e/brand-v2-public-review.spec.ts --project=chromium
+      - name: Upload visual QA screenshots and test reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: brand-v2-public-browser-evidence
+          path: |
+            test-results/brand-v2/*.png
+            test-results/**/*.zip
+          if-no-files-found: warn
+          retention-days: 14
