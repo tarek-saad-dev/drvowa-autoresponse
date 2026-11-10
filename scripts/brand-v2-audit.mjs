@@ -86,9 +86,9 @@ if (process.argv.includes("--review")) {
   console.log(JSON.stringify(totals));
   for (const candidate of files) {
     if (!candidate.legacyProductName && !candidate.legacyPalette) continue;
-    const lines = readFileSync(join(root, candidate.path), "utf8").split(/\\r?\\n/);
+    const lines = readFileSync(join(root, candidate.path), "utf8").split(/\r?\n/);
     lines.forEach((line, index) => {
-      if (!/AutoResponse\\b/.test(line) && !staleDecorative.test(line)) return;
+      if (!/AutoResponse\b/.test(line) && !staleDecorative.test(line)) return;
       staleDecorative.lastIndex = 0;
       console.log(`${candidate.path}:${index + 1}: ${line.trim().slice(0, 250)}`);
     });
