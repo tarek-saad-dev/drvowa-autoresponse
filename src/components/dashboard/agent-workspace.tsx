@@ -247,7 +247,7 @@ export function AgentWorkspace({
   return (
     <div className="mx-auto w-full max-w-3xl space-y-4 sm:space-y-5" dir="rtl">
       <header className="space-y-1">
-        <h1 className="text-2xl font-black tracking-tight sm:text-3xl">
+        <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
           الموظف الذكي
         </h1>
         <p className="text-sm leading-7 text-muted-foreground">
@@ -271,11 +271,11 @@ export function AgentWorkspace({
               <span
                 className={cn(
                   "h-2.5 w-2.5 shrink-0 rounded-full",
-                  enabled && waReady ? "bg-success motion-safe:animate-pulse" : "bg-muted-foreground/50",
+                  enabled && waReady ? "bg-success" : "bg-muted-foreground/50",
                 )}
                 aria-hidden
               />
-              <h2 className="text-lg font-black sm:text-xl">
+              <h2 className="font-display text-lg font-bold sm:text-xl">
                 {enabled && waReady ? "الموظف شغّال" : "الموظف محتاج متابعة"}
               </h2>
             </div>
@@ -285,17 +285,17 @@ export function AgentWorkspace({
             <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
               <div>
                 <dt className="font-bold text-muted-foreground">الرد التلقائي</dt>
-                <dd className="mt-0.5 font-black">
+                <dd className="mt-0.5 font-bold">
                   {enabled ? "مفعّل" : "متوقف"}
                 </dd>
               </div>
               <div>
                 <dt className="font-bold text-muted-foreground">واتساب</dt>
-                <dd className="mt-0.5 font-black">{waLabel}</dd>
+                <dd className="mt-0.5 font-bold">{waLabel}</dd>
               </div>
               <div>
                 <dt className="font-bold text-muted-foreground">الصحة</dt>
-                <dd className="mt-0.5 font-black text-muted-foreground">
+                <dd className="mt-0.5 font-bold text-muted-foreground">
                   {checkedAt}
                 </dd>
               </div>
@@ -388,14 +388,14 @@ export function AgentWorkspace({
                   ) : (
                     <>
                       <label
-                        className="block text-sm font-black"
+                        className="block text-sm font-bold"
                         htmlFor="active-agent"
                       >
                         الشخصية النشطة على واتساب
                       </label>
                       <select
                         id="active-agent"
-                        className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm font-bold"
+                        className="h-11 w-full rounded-xl border border-input bg-card px-3 text-sm font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                         value={agentId}
                         disabled={busy}
                         onChange={(e) => setAgentId(e.target.value)}
@@ -506,7 +506,7 @@ export function AgentWorkspace({
               children: (
                 <div className="space-y-4">
                   <div>
-                    <p className="text-sm font-black">
+                    <p className="text-sm font-bold">
                       بعد تدخل موظف بشري، إمتى الـ AI يرجع يرد؟
                     </p>
                     <p className="mt-1 text-xs leading-6 text-muted-foreground">
@@ -532,7 +532,7 @@ export function AgentWorkspace({
                               : "border-border/70 hover:border-primary/25",
                           )}
                         >
-                          <span className="text-sm font-black">
+                          <span className="text-sm font-bold">
                             {option.label}
                           </span>
                           <p className="mt-1 text-[11px] leading-5 text-muted-foreground">

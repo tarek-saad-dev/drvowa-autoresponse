@@ -373,7 +373,7 @@ export function WhatsAppConnectionPanel({
                 </span>
               ) : null}
             </div>
-            <h2 className="mt-3 text-2xl font-black tracking-[-0.03em]">
+            <h2 className="mt-3 font-display text-2xl font-bold tracking-tight">
               {state === "READY"
                 ? inboundDegraded
                   ? inboundProblem.title
@@ -391,7 +391,7 @@ export function WhatsAppConnectionPanel({
             </p>
           </div>
 
-          <div className="grid h-20 w-20 shrink-0 place-items-center rounded-[24px] border border-white/70 bg-white/80 text-3xl shadow-sm">
+          <div aria-hidden="true" className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl border border-border bg-card text-2xl text-primary shadow-sm sm:h-20 sm:w-20">
             {state === "READY" ? "✓" : state === "QR_REQUIRED" ? "▦" : "◉"}
           </div>
         </div>
@@ -424,10 +424,10 @@ export function WhatsAppConnectionPanel({
                 ["3", "امسح QR", "وخلي الصفحة مفتوحة لحظات"],
               ].map(([number, title, description]) => (
                 <div key={number} className="rounded-2xl border border-border bg-surface/45 p-4">
-                  <span className="grid h-8 w-8 place-items-center rounded-full bg-primary text-xs font-black text-primary-foreground">
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                     {number}
                   </span>
-                  <p className="mt-3 text-sm font-black">{title}</p>
+                  <p className="mt-3 text-sm font-bold">{title}</p>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
                 </div>
               ))}
@@ -437,6 +437,7 @@ export function WhatsAppConnectionPanel({
               className="mt-5 w-full sm:w-auto sm:min-w-44"
               onClick={() => void connect()}
               disabled={busy}
+              loading={busy}
             >
               {busy
                 ? "بنجهز الربط..."
@@ -454,7 +455,7 @@ export function WhatsAppConnectionPanel({
             <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-2xl text-primary">
               …
             </div>
-            <p className="mt-4 text-lg font-black">ثواني وبنكون جاهزين</p>
+            <p className="mt-4 text-lg font-bold">ثواني وبنكون جاهزين</p>
             <p className="mt-2 text-sm text-muted-foreground">{explanation}</p>
           </CardContent>
         </Card>
@@ -464,8 +465,8 @@ export function WhatsAppConnectionPanel({
         <Card className="overflow-hidden">
           <CardContent className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[1fr_auto] lg:items-center">
             <div>
-              <p className="text-xs font-black text-primary">الخطوة الأخيرة</p>
-              <h3 className="mt-1 text-xl font-black">امسح الكود من واتساب</h3>
+              <p className="text-xs font-bold text-primary">الخطوة الأخيرة</p>
+              <h3 className="mt-1 text-xl font-bold">امسح الكود من واتساب</h3>
               <div className="mt-4 space-y-2 text-sm leading-7 text-muted-foreground">
                 <p>1. افتح واتساب على الموبايل.</p>
                 <p>2. ادخل على الأجهزة المرتبطة.</p>
@@ -484,16 +485,16 @@ export function WhatsAppConnectionPanel({
               </Button>
             </div>
 
-            <div className="rounded-[26px] border border-border bg-white p-4 shadow-lg">
+            <div className="mx-auto w-fit rounded-2xl border border-border bg-white p-3 shadow-md sm:p-4">
               {qrImageDataUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={qrImageDataUrl}
                   alt="رمز QR لربط واتساب"
-                  className="h-64 w-64 rounded-2xl bg-white"
+                  className="h-64 w-64 max-w-full rounded-xl bg-white"
                 />
               ) : (
-                <div className="grid h-64 w-64 place-items-center rounded-2xl bg-surface text-sm font-bold text-muted-foreground">
+                <div className="grid h-64 w-64 max-w-full place-items-center rounded-xl bg-white text-sm font-semibold text-muted-foreground">
                   بنجهز QR…
                 </div>
               )}
@@ -515,7 +516,7 @@ export function WhatsAppConnectionPanel({
               <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-surface/45 p-4">
                 <div>
                   <p className="text-xs font-bold text-muted-foreground">استقبال الرسائل</p>
-                  <p className="mt-1 text-sm font-black">
+                  <p className="mt-1 text-sm font-bold">
                     {inboundLabel}
                   </p>
                 </div>
@@ -525,13 +526,13 @@ export function WhatsAppConnectionPanel({
               {lastDeliveryRelative ? (
                 <div className="rounded-2xl border border-border bg-surface/45 p-4">
                   <p className="text-xs font-bold text-muted-foreground">آخر رسالة وصلت</p>
-                  <p className="mt-1 text-sm font-black">{lastDeliveryRelative}</p>
+                  <p className="mt-1 text-sm font-bold">{lastDeliveryRelative}</p>
                 </div>
               ) : null}
 
               {inboundDegraded ? (
                 <div className="space-y-3 rounded-xl border border-warning/30 bg-warning-soft/25 p-4">
-                  <p className="text-sm font-black text-warning">{inboundProblem.title}</p>
+                  <p className="text-sm font-bold text-warning">{inboundProblem.title}</p>
                   <p className="text-sm leading-6 text-foreground">{inboundProblem.detail}</p>
                   <p className="text-xs leading-6 text-muted-foreground">{inboundProblem.nextStep}</p>
                   <Button
