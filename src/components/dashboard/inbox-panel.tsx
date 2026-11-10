@@ -1523,17 +1523,17 @@ export function InboxPanel({
             </footer>
           </>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+          <div className="flex h-full flex-col items-center justify-center px-6 text-center sm:px-8">
             {requestedConversationUnavailable ? (
               <>
-                <h2 className="text-xl font-extrabold">المحادثة المطلوبة مش متاحة</h2>
+                <h2 className="font-display text-xl font-bold">المحادثة المطلوبة مش متاحة</h2>
                 <p className="mt-3 max-w-sm text-sm leading-7 text-muted-foreground">المحادثة مش موجودة في النشاط الحالي أو اتنقلت. تقدر تفتح محادثة تانية من القائمة أو ترجع للمراجعات.</p>
-                <Link href="/dashboard" className="mt-4 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">العودة للمراجعات</Link>
+                <Link href="/dashboard" className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">العودة للمراجعات</Link>
               </>
             ) : (
               <>
                 <BrandLogo className="mb-6 h-8" />
-                <h2 className="text-2xl font-extrabold">كل محادثاتك. في مكان واحد.</h2>
+                <h2 className="font-display text-2xl font-bold">كل محادثاتك. في مكان واحد.</h2>
                 <p className="mt-3 max-w-sm text-sm leading-7 text-muted-foreground">افتح أي شات من القائمة، والـAI يتابع معاك أو ترد بنفسك في أي وقت.</p>
               </>
             )}
@@ -1569,21 +1569,21 @@ export function InboxPanel({
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => void updateChatMetadata("pinned", !selected.isPinned)}
-                  className="rounded-xl border border-border px-3 py-2.5 text-xs font-bold text-primary">
+                  className="min-h-11 rounded-xl border border-input bg-card px-3 py-2.5 text-xs font-bold text-foreground transition-colors hover:border-primary hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                   {selected.isPinned ? "إلغاء التثبيت" : "📌 تثبيت"}
                 </button>
                 <button type="button" onClick={() => void updateChatMetadata("archived", !selected.isArchived)}
-                  className="rounded-xl border border-border px-3 py-2.5 text-xs font-bold text-primary">
+                  className="min-h-11 rounded-xl border border-input bg-card px-3 py-2.5 text-xs font-bold text-foreground transition-colors hover:border-primary hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                   {selected.isArchived ? "إلغاء الأرشفة" : "أرشفة الشات"}
                 </button>
               </div>
               <button
                 type="button"
                 onClick={() => { setDetailsOpen(false); textArea.current?.focus(); }}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-border px-3 py-3 text-xs font-bold text-primary"
+                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-input bg-card px-3 py-3 text-xs font-bold text-foreground transition-colors hover:border-primary hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               ><Glyph name="chat" size={17} />رد يدوي على العميل</button>
               {selected.aiMode !== "AUTO" && (
-                <button type="button" onClick={() => void resumeAi()} disabled={resuming} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-3 text-xs font-bold text-primary-foreground disabled:opacity-50"><Glyph name="spark" size={17} />رجّع الرد التلقائي</button>
+                <button type="button" onClick={() => void resumeAi()} disabled={resuming} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-3 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"><Glyph name="spark" size={17} />رجّع الرد التلقائي</button>
               )}
             </div>
           </aside>
