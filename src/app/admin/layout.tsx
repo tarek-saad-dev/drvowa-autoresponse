@@ -28,19 +28,19 @@ export default async function AdminLayout({ children }: { children: ReactNode })
         <div className="mx-auto max-w-7xl px-4 pt-3 sm:px-6">
           <div className="flex flex-wrap items-center justify-between gap-4 pb-3">
             <div className="flex min-w-0 items-center gap-4">
-              <Link href="/admin" aria-label="الرئيسية - DRVO AutoResponse">
+              <Link href="/admin" aria-label="الرئيسية - DRVO AutoRespond" className="rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 <BrandLogo priority className="h-8 max-w-[170px] object-contain sm:h-9" />
               </Link>
               <div className="hidden border-r border-border pr-4 sm:block">
-                <p className="text-[10px] font-black tracking-[0.18em] text-primary" dir="ltr">
+                <p className="text-[10px] font-bold tracking-[0.18em] text-primary" dir="ltr">
                   PLATFORM ADMIN
                 </p>
-                <p className="mt-0.5 text-xs font-black">إدارة DRVO AutoResponse</p>
+                <p className="mt-0.5 text-xs font-bold">إدارة DRVO AutoRespond</p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {businesses.length > 0 ? (
-                <Link href="/dashboard" className="rounded-lg border border-border px-3 py-2 text-xs font-bold text-muted-foreground hover:bg-surface hover:text-foreground">
+                <Link href="/dashboard" className="inline-flex min-h-10 items-center rounded-lg border border-input bg-card px-3 py-2 text-xs font-bold text-foreground transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                   مساحة العمل
                 </Link>
               ) : null}
