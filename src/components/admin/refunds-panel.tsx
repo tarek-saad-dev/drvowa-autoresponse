@@ -76,8 +76,8 @@ export function RefundsPanel({items, enabled}: {items: Item[]; enabled: boolean}
   return <div className="space-y-4">
     <div className="flex flex-wrap gap-3">
       <input aria-label="بحث عن نشاط أو مرجع دفع" placeholder="ابحث باسم النشاط، مثل فواكه الرحمن..." value={search} onChange={e=>setSearch(e.target.value)}
-        className="min-w-[220px] flex-1 rounded-xl border border-border bg-card px-4 py-3 text-foreground outline-none focus:border-primary" />
-      <select aria-label="تصفية حالة الاسترداد" value={filter} onChange={e=>setFilter(e.target.value)} className="rounded-xl border border-border bg-card px-4 py-3 text-foreground">
+        className="min-h-11 min-w-0 flex-1 rounded-xl border border-input bg-card px-4 py-3 text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25 sm:min-w-[220px]" />
+      <select aria-label="تصفية حالة الاسترداد" value={filter} onChange={e=>setFilter(e.target.value)} className="min-h-11 rounded-xl border border-input bg-card px-4 py-3 text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
         <option value="ALL">كل الحالات</option><option value="PENDING">بانتظار التحويل</option><option value="NONE">لم يُطلب</option>
         <option value="SUCCEEDED">تم الاسترداد</option><option value="FAILED">فشل الاسترداد</option>
         <option value="CUSTOMER_REQUESTED">طلبات العملاء الجديدة</option>
@@ -104,10 +104,10 @@ export function RefundsPanel({items, enabled}: {items: Item[]; enabled: boolean}
       {!visible.length ? <p className="p-8 text-center text-sm text-muted-foreground">لا توجد مدفوعات مطابقة للبحث.</p> : null}
     </div>
     {selected ? <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center" role="dialog" aria-modal="true" aria-label="مراجعة طلب استرداد">
-      <div className="max-h-[90vh] w-full max-w-xl space-y-4 overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-xl">
-        <div className="flex items-start justify-between gap-3"><div><h2 className="text-xl font-black">{selected.businessName}</h2><p className="text-xs text-muted-foreground">{selected.paymentReference} · {selected.planName}</p></div><Button variant="ghost" onClick={()=>setSelected(null)} disabled={busy}>إغلاق</Button></div>
+      <div className="max-h-[90dvh] w-full max-w-xl space-y-4 overflow-y-auto rounded-2xl border border-border bg-card p-4 shadow-xl sm:p-6">
+        <div className="flex items-start justify-between gap-3"><div><h2 className="text-xl font-bold">{selected.businessName}</h2><p className="text-xs text-muted-foreground">{selected.paymentReference} · {selected.planName}</p></div><Button variant="ghost" onClick={()=>setSelected(null)} disabled={busy}>إغلاق</Button></div>
         {selected.customerRequestId ? (
-          <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 text-sm">
+          <div className="rounded-xl border border-warning/30 bg-warning-soft p-4 text-sm">
             <p className="font-bold">طلب استرداد مقدّم من العميل</p>
             <p className="mt-1 text-xs text-muted-foreground">
               {selected.customerRequestStatus === "REQUESTED" ? "بانتظار قرار الإدارة" : "تم رفض الطلب"}
@@ -120,9 +120,9 @@ export function RefundsPanel({items, enabled}: {items: Item[]; enabled: boolean}
         <div className="rounded-xl bg-surface p-4 text-sm"><p>المدفوع: <strong>{selected.amount} {selected.currency}</strong></p><p className="mt-2">الحالة: {labels[selected.state ?? "NONE"] ?? selected.state}</p><p className="mt-2">الفاتورة: {selected.invoiceStatus === "PAID" ? "مدفوعة" : selected.invoiceStatus ?? "غير موجودة"}</p>
           {selected.transferReference ? <p className="mt-2">مرجع الاسترداد: {selected.transferReference}</p> : null}
         </div>
-        <label className="block text-sm font-bold">سبب الاسترداد <textarea rows={3} maxLength={1000} value={reason} onChange={e=>setReason(e.target.value)} className="mt-2 w-full rounded-lg border border-border bg-background p-3 text-foreground" /></label>
+        <label className="block text-sm font-bold">سبب الاسترداد <textarea rows={3} maxLength={1000} value={reason} onChange={e=>setReason(e.target.value)} className="mt-2 w-full rounded-lg border border-input bg-card p-3 text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25" /></label>
         {(!selected.invoiceStatus || selected.state === "PENDING") ? <label className="block text-sm font-bold">{!selected.invoiceStatus ? "مرجع التحويل الأصلي الوارد من البنك" : "مرجع تحويل المبلغ للعميل (بعد التحويل الفعلي)"}
-          <input maxLength={160} value={reference} onChange={e=>setReference(e.target.value)} className="mt-2 w-full rounded-lg border border-border bg-background p-3 text-foreground" /></label> : null}
+          <input maxLength={160} value={reference} onChange={e=>setReference(e.target.value)} className="mt-2 w-full rounded-lg border border-input bg-card p-3 text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25" /></label> : null}
         <p className="text-xs leading-6 text-muted-foreground">إنشاء الطلب لا يحوّل فلوس. زر التأكيد يُستخدم فقط بعد إرسال المبلغ للعميل والتحقق من التحويل خارج النظام.</p>
         {!selected.invoiceStatus && !selected.state ? <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={verified} onChange={e=>setVerified(e.target.checked)} /> راجعت سجل الحساب البنكي وتأكدت من وصول التحويل الأصلي وقيمته وتطابقه مع طلب الدفع.</label> : null}
         {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
