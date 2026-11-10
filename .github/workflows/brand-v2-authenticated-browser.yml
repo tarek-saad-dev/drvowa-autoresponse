@@ -1,0 +1,93 @@
+name: Brand V2 isolated authenticated browser QA
+
+on:
+  pull_request:
+    branches: [main, 'feat/brand-v2']
+    paths:
+      - '.github/workflows/brand-v2-authenticated-browser.yml'
+      - 'e2e/brand-v2-authenticated-review.spec.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-browser:
+    name: Isolated SQL + owner/admin Chromium screens
+    if: ${{ github.head_ref == 'feat/brand-v2-p09-authenticated-e2e' || (github.base_ref == 'main' && github.head_ref == 'feat/brand-v2') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: BillingCI-only-7aF!42
+        ports:
+          - 1433:1433
+    env:
+      DB_SERVER: localhost
+      DB_PORT: '1433'
+      DB_NAME: brand_v2_qa
+      DB_USER: sa
+      DB_PASSWORD: BillingCI-only-7aF!42
+      DB_ENCRYPT: 'true'
+      DB_TRUST_SERVER_CERTIFICATE: 'true'
+      DRVO_TEST_ISOLATED_DB: '1'
+      MANUAL_INSTAPAY_ENABLED: '1'
+      DRVO_SAAS_FINANCIAL_CAPTURE_ENABLED: '0'
+      BILLING_EMAIL_NOTICES_ENABLED: '0'
+      DRVO_LABEL_CAMPAIGNS_SEND_ENABLED: 'false'
+      E2E_KNOWLEDGE_INGEST_MOCK: '1'
+      APP_BASE_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Initialize isolated test database
+        run: |
+          node --input-type=module <<'JS'
+          import sql from 'mssql';
+          let connected = false;
+          for (let attempt = 0; attempt < 45; attempt++) {
+            const pool = new sql.ConnectionPool({ server: process.env.DB_SERVER,
+              port: Number(process.env.DB_PORT), database: 'master', user: process.env.DB_USER,
+              password: process.env.DB_PASSWORD, options: { encrypt: true, trustServerCertificate: true },
+              connectionTimeout: 2000 });
+            try {
+              await pool.connect();
+              await pool.request().query("IF DB_ID(N'brand_v2_qa') IS NULL CREATE DATABASE brand_v2_qa");
+              connected = true;
+              break;
+            } catch { await new Promise(resolve => setTimeout(resolve, 2000)); }
+            finally { await pool.close(); }
+          }
+          if (!connected) throw new Error('Isolated Brand V2 SQL test DB unavailable');
+          JS
+      - name: Apply isolated migrations
+        run: npm run db:migrate
+      - name: Production build (test-only database)
+        run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Capture real owner/admin pages without external sends
+        env:
+          E2E_START_SERVER: '1'
+          E2E_BASE_URL: 'http://localhost:3000'
+        run: npx playwright test e2e/brand-v2-authenticated-review.spec.ts --project=chromium
+      - name: Upload authenticated visual QA evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: brand-v2-authenticated-browser-evidence
+          path: |
+            test-results/brand-v2-authenticated/*.png
+            test-results/**/*.zip
+            test-results/**/*.png
+          if-no-files-found: warn
+          retention-days: 14
