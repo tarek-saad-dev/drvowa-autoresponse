@@ -164,14 +164,14 @@ export function AiAutoReplyPanel({
       <CardHeader className="pb-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-xs font-black text-primary">تشغيل الموظف</p>
+            <p className="text-xs font-bold text-primary">تشغيل الموظف</p>
             <CardTitle className="mt-1 text-xl">الرد التلقائي على واتساب</CardTitle>
             <CardDescription className="mt-2 max-w-xl leading-6">
               لما يكون شغال، الموظف يرد على الرسائل الجديدة. ولو حد من فريقك رد يدويًا، يسيب المحادثة ليكم مؤقتًا ويرجع حسب المدة اللي تختارها.
             </CardDescription>
           </div>
           <div
-            className={`inline-flex items-center gap-2 self-start rounded-full px-3 py-2 text-xs font-black ${
+            className={`inline-flex items-center gap-2 self-start rounded-full px-3 py-2 text-xs font-bold ${
               enabled
                 ? "bg-success-soft text-success"
                 : "bg-secondary text-muted-foreground"
@@ -187,7 +187,7 @@ export function AiAutoReplyPanel({
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-border bg-card p-4">
             <p className="text-[11px] font-bold text-muted-foreground">واتساب</p>
-            <p className="mt-1 text-sm font-black">{whatsappStatusLabel(whatsapp.uiState)}</p>
+            <p className="mt-1 text-sm font-bold">{whatsappStatusLabel(whatsapp.uiState)}</p>
             {whatsapp.maskedPhone ? (
               <p className="mt-1 text-[11px] text-muted-foreground" dir="ltr">
                 {whatsapp.maskedPhone}
@@ -196,7 +196,7 @@ export function AiAutoReplyPanel({
           </div>
           <div className="rounded-2xl border border-border bg-card p-4">
             <p className="text-[11px] font-bold text-muted-foreground">الموظف</p>
-            <p className="mt-1 text-sm font-black">
+            <p className="mt-1 text-sm font-bold">
               {hasAgent
                 ? agents.find((a) => a.agentId === agentId)?.name ?? "جاهز"
                 : "لسه مش جاهز"}
@@ -204,7 +204,7 @@ export function AiAutoReplyPanel({
           </div>
           <div className="rounded-2xl border border-border bg-card p-4">
             <p className="text-[11px] font-bold text-muted-foreground">المعرفة</p>
-            <p className="mt-1 text-sm font-black">
+            <p className="mt-1 text-sm font-bold">
               {knowledgeActiveCount > 0 ? `${knowledgeActiveCount} معلومة` : "مفيش معلومات"}
             </p>
           </div>
@@ -217,7 +217,7 @@ export function AiAutoReplyPanel({
             </p>
             <Link
               href="/dashboard/whatsapp"
-              className="inline-flex h-9 items-center justify-center rounded-xl bg-primary px-3 text-sm font-black text-primary-foreground"
+              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-3 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               {waCta}
             </Link>
@@ -230,7 +230,7 @@ export function AiAutoReplyPanel({
           </Alert>
         ) : (
           <div className="rounded-2xl border border-border bg-surface/45 p-4">
-            <label className="block text-sm font-black" htmlFor="active-agent">
+            <label className="block text-sm font-bold" htmlFor="active-agent">
               مين الموظف اللي يرد؟
             </label>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -238,7 +238,7 @@ export function AiAutoReplyPanel({
             </p>
             <select
               id="active-agent"
-              className="mt-3 h-11 w-full rounded-xl border border-input bg-card px-3 text-sm font-bold"
+              className="mt-3 h-11 w-full rounded-xl border border-input bg-card px-3 text-sm font-bold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               value={agentId}
               disabled={busy}
               onChange={(e) => setAgentId(e.target.value)}
@@ -256,14 +256,14 @@ export function AiAutoReplyPanel({
           <div className="rounded-2xl border border-border bg-surface/45 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <label className="block text-sm font-black">
+                <label className="block text-sm font-bold">
                   بعد تدخل موظف بشري، إمتى الـ AI يرجع يرد؟
                 </label>
                 <p className="mt-1 text-xs leading-6 text-muted-foreground">
                   المدة بتتحسب من آخر رد يدوي من فريقك على نفس المحادثة.
                 </p>
               </div>
-              <span className="rounded-full bg-primary/10 px-3 py-1.5 text-[11px] font-black text-primary">
+              <span className="rounded-full bg-primary/10 px-3 py-1.5 text-[11px] font-bold text-primary">
                 الحالي: {takeoverPolicyLabel(humanTakeoverResumePolicy)}
               </span>
             </div>
@@ -277,13 +277,14 @@ export function AiAutoReplyPanel({
                     type="button"
                     disabled={busy}
                     onClick={() => setHumanTakeoverResumePolicy(option.value)}
-                    className={`rounded-2xl border-2 p-3 text-start transition ${selected
+                    aria-pressed={selected}
+                    className={`min-h-14 rounded-2xl border-2 p-3 text-start transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none ${selected
                       ? "border-primary bg-primary/5 shadow-sm"
                       : "border-border bg-card hover:border-primary/30"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className={`text-sm font-black ${selected ? "text-primary" : "text-foreground"}`}>
+                      <span className={`text-sm font-bold ${selected ? "text-primary" : "text-foreground"}`}>
                         {option.label}
                       </span>
                       <span className={`h-3 w-3 rounded-full border-2 ${selected
