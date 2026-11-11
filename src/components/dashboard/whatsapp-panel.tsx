@@ -196,6 +196,7 @@ export function WhatsAppConnectionPanel({
     }
     if (mounted.current) {
       setView(data);
+      if (data.uiState !== "QR_REQUIRED") setQrImageDataUrl(null);
       if (data.uiState === "READY") {
         setQrImageDataUrl(null);
         setPairingActive(false);
@@ -225,6 +226,7 @@ export function WhatsAppConnectionPanel({
       setView((prev) => ({ ...prev, uiState: "READY" }));
       return data;
     }
+    if (!data.qrImageDataUrl) setQrImageDataUrl(null);
     if (data.qrImageDataUrl) {
       setError(null);
       setQrImageDataUrl(data.qrImageDataUrl);
