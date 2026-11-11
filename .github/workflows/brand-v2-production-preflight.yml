@@ -1,0 +1,147 @@
+name: Brand V2 production preflight (read only)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+    paths:
+      - '.github/workflows/brand-v2-production-preflight.yml'
+      - 'db/migrations/**'
+      - 'src/components/brand/**'
+      - 'src/modules/brand/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production-preflight:
+    # Never run against arbitrary PRs or forks; only the known internal release branch.
+    if: ${{ github.event_name == 'pull_request' && github.head_ref == 'feat/brand-v2' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Confirm SSH secret availability without disclosure
+        env:
+          HOST: ${{ secrets.DRVOWA_VPS_HOST }}
+          USER: ${{ secrets.DRVOWA_VPS_USER }}
+          KEY: ${{ secrets.DRVOWA_VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$HOST" && test -n "$USER" && test -n "$KEY" || {
+            echo "::error::Production SSH secrets are unavailable; release blocked"
+            exit 1
+          }
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DRVOWA_VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.DRVOWA_VPS_HOST }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Read-only production health, rollback SHA and SQL full-backup evidence
+        env:
+          VPS_HOST: ${{ secrets.DRVOWA_VPS_HOST }}
+          VPS_USER: ${{ secrets.DRVOWA_VPS_USER }}
+          EXPECTED_MAIN_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -o ConnectTimeout=15 -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" "EXPECTED_MAIN_SHA=$EXPECTED_MAIN_SHA bash -se" <<'REMOTE'
+          set -euo pipefail
+          cd /home/drvowa/app
+
+          printf '==> Running read-only production release gate\n'
+          sha="$(git rev-parse HEAD)"
+          printf 'Deployed app SHA: %s\nExpected main SHA: %s\n' "$sha" "$EXPECTED_MAIN_SHA"
+          test "$sha" = "$EXPECTED_MAIN_SHA" || {
+            echo "BLOCKED: VPS is not on current main. Review unexpected divergence before deploy."
+            exit 1
+          }
+          test -r .env.production.local || {
+            echo "BLOCKED: production env is unavailable"
+            exit 1
+          }
+
+          for unit in drvowa.service drvowa-ai-worker.service nginx.service; do
+            if systemctl is-active --quiet "$unit"; then
+              printf 'Active service: %s\n' "$unit"
+            else
+              printf 'BLOCKED: %s inactive\n' "$unit"
+              exit 1
+            fi
+          done
+
+          curl --fail --silent --show-error --max-time 15             'http://127.0.0.1:3100/api/health?ready=1' |
+            node -e '
+              let raw="";
+              process.stdin.on("data",(chunk)=>raw+=chunk);
+              process.stdin.on("end",()=>{
+                const health=JSON.parse(raw);
+                if(health.status!=="ok"||health.database!=="up"){
+                  console.error("BLOCKED: app or SQL readiness not healthy");
+                  process.exitCode=1;
+                }else{
+                  console.log("App and SQL readiness: OK");
+                }
+              });
+            '
+
+          echo '==> Checking SQL Server full backup metadata (no names, paths or secrets printed)'
+          node --env-file=.env.production.local --input-type=module <<'JS'
+          import sql from "mssql";
+          const required = ["DB_SERVER", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD"];
+          for (const key of required) {
+            if (!process.env[key]) throw new Error("BLOCKED: DB config incomplete (" + key + ")");
+          }
+          const parseBool = (value, fallback) =>
+            value == null ? fallback : ["true","1","yes"].includes(value.toLowerCase());
+          const pool = await new sql.ConnectionPool({
+            server: process.env.DB_SERVER,
+            port: Number(process.env.DB_PORT),
+            database: process.env.DB_NAME,
+            user: process.env.DB_USER,
+            password: process.env.DB_PASSWORD,
+            options: {
+              encrypt: parseBool(process.env.DB_ENCRYPT, true),
+              trustServerCertificate: parseBool(process.env.DB_TRUST_SERVER_CERTIFICATE, false),
+            },
+            connectionTimeout: 15000,
+            requestTimeout: 20000,
+          }).connect();
+          try {
+            const result = await pool.request().query(`
+              SELECT TOP (1)
+                backup_finish_date AS finished,
+                backup_size AS bytes,
+                is_damaged AS damaged,
+                has_backup_checksums AS checksummed
+              FROM msdb.dbo.backupset
+              WHERE database_name = DB_NAME()
+                AND type = N'D'
+              ORDER BY backup_finish_date DESC
+            `);
+            const backup = result.recordset[0];
+            if (!backup) throw new Error("BLOCKED: no full production SQL backup visible in msdb");
+            const ageHours = (Date.now() - new Date(backup.finished).getTime()) / 3600000;
+            const ok = ageHours >= 0 && ageHours <= 24 &&
+              Number(backup.bytes) > 0 && !backup.damaged;
+            console.log("Latest SQL full backup age (hours):", ageHours.toFixed(1));
+            console.log("Backup metadata:", ok ? "recent and non-damaged" : "missing, stale or damaged");
+            console.log("Backup checksum recorded:", Boolean(backup.checksummed));
+            if (!ok) throw new Error("BLOCKED: recent (<=24h) full SQL backup is not verified by metadata");
+            console.log("SQL backup metadata gate: PASS (restore/VERIFYONLY still needs independent validation)");
+          } catch (error) {
+            // Do not log SQL connection strings, backup paths or sensitive SQL errors.
+            console.error("BLOCKED: cannot establish recent SQL full-backup evidence");
+            process.exitCode = 1;
+          } finally {
+            await pool.close();
+          }
+          JS
+          echo 'Production preflight complete: no application or database writes performed'
+          REMOTE
