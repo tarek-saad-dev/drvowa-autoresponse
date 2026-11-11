@@ -8,18 +8,18 @@ import { Button } from "@/components/ui/button";
 export function LandingHero() {
   return (
     <section className="relative overflow-hidden">
-      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[42rem] bg-[radial-gradient(circle_at_72%_18%,rgba(0,117,154,.18),transparent_34%),radial-gradient(circle_at_16%_12%,rgba(11,139,181,.11),transparent_30%)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[42rem]" style={{ backgroundImage: "radial-gradient(circle at 72% 18%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 34%), radial-gradient(circle at 16% 12%, color-mix(in srgb, var(--primary) 11%, transparent), transparent 30%)" }} />
 
       <div className="mx-auto grid max-w-7xl gap-7 px-4 pb-10 pt-8 sm:min-h-[calc(100svh-4rem)] sm:gap-10 sm:px-6 sm:pb-16 sm:pt-16 lg:grid-cols-[0.88fr_1.12fr] lg:items-center lg:gap-10 lg:px-8 lg:pb-16 lg:pt-10 xl:grid-cols-[0.82fr_1.18fr] xl:gap-16 xl:pb-20 xl:pt-14 2xl:max-w-[1480px]">
         <div className="relative z-10">
-          <div className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/7 px-3 py-1.5 text-[11px] font-black text-primary">
-            <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_0_5px_rgba(0,117,154,.08)]" />
+          <div className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/7 px-3 py-1.5 text-[11px] font-bold text-primary">
+            <span className="h-2 w-2 rounded-full bg-primary ring-4 ring-primary/10" />
             DRVO AutoRespond
           </div>
 
-          <h1 className="mt-4 max-w-2xl text-[2.65rem] font-black leading-[1.02] tracking-[-0.055em] text-foreground sm:mt-5 sm:text-5xl sm:leading-[1.14] lg:text-[3.55rem] lg:leading-[1.06] xl:text-[4.25rem] 2xl:text-[4.7rem]">
+          <h1 className="mt-4 max-w-2xl font-display text-[2.65rem] font-bold leading-[1.02] tracking-[-0.055em] text-foreground sm:mt-5 sm:text-5xl sm:leading-[1.14] lg:text-[3.55rem] lg:leading-[1.06] xl:text-[4.25rem] 2xl:text-[4.7rem]">
             مساعدك إنت.
-            <span className="block bg-[linear-gradient(90deg,#00759A,#0B8BB5)] bg-clip-text text-transparent">
+            <span className="block bg-clip-text text-transparent" style={{ backgroundImage: "linear-gradient(90deg, var(--primary), var(--brand-deep-green))" }}>
               بطريقتك.
             </span>
           </h1>
@@ -42,7 +42,7 @@ export function LandingHero() {
             </Link>
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-1.5 text-[10px] font-black text-muted-foreground sm:mt-8 sm:gap-2 sm:text-[11px]">
+          <div className="mt-5 flex flex-wrap gap-1.5 text-[10px] font-bold text-muted-foreground sm:mt-8 sm:gap-2 sm:text-[11px]">
             {["للبيزنس", "لشغلك", "ليك شخصيًا"].map((item) => (
               <span
                 key={item}

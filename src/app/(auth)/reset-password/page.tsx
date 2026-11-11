@@ -62,8 +62,8 @@ function ResetPasswordForm() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>رابط غير صالح</CardTitle>
-          <CardDescription>اطلب رابطاً جديداً من صفحة الاستعادة.</CardDescription>
+          <CardTitle className="text-xl sm:text-2xl">رابط غير صالح</CardTitle>
+          <CardDescription className="leading-6">اطلب رابطاً جديداً من صفحة الاستعادة.</CardDescription>
         </CardHeader>
         <CardContent>
           <Link href="/forgot-password" className="text-sm font-medium text-primary">
@@ -77,8 +77,8 @@ function ResetPasswordForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>تعيين كلمة مرور جديدة</CardTitle>
-        <CardDescription>اختر كلمة مرور من 8 أحرف على الأقل.</CardDescription>
+        <CardTitle className="text-xl sm:text-2xl">تعيين كلمة مرور جديدة</CardTitle>
+        <CardDescription className="leading-6">اختر كلمة مرور من 8 أحرف على الأقل.</CardDescription>
       </CardHeader>
       <CardContent>
         <form className="space-y-4" onSubmit={onSubmit}>
@@ -109,7 +109,7 @@ function ResetPasswordForm() {
               className="text-start"
             />
           </div>
-          <Button type="submit" className="w-full" disabled={pending}>
+          <Button type="submit" className="w-full text-base" disabled={pending} loading={pending}>
             {pending ? "جارٍ الحفظ..." : "حفظ كلمة المرور"}
           </Button>
         </form>
@@ -124,7 +124,7 @@ export default function ResetPasswordPage() {
       fallback={
         <Card>
           <CardHeader>
-            <CardTitle>تحميل…</CardTitle>
+            <CardTitle className="text-xl sm:text-2xl">تحميل…</CardTitle>
           </CardHeader>
         </Card>
       }

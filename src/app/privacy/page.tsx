@@ -14,7 +14,7 @@ export default function PrivacyPage() {
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-12 sm:px-6">
         <h1 className="text-3xl font-bold tracking-tight">سياسة الخصوصية</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          إشعار تشغيلي لمنصة DRVOWA AutoResponse. مشغل الخدمة: {OPERATOR_NAME}.
+          إشعار تشغيلي لمنصة DRVO AutoRespond. مشغل الخدمة: {OPERATOR_NAME}.
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
           آخر تحديث: 22 سبتمبر 2026

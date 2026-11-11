@@ -12,13 +12,14 @@ const navigation = [
   { href: "/admin/discount-codes", label: "أكواد الخصم" },
   { href: "/admin/refunds", label: "الاستردادات" },
   { href: "/admin/whatsapp", label: "واتساب" },
+  { href: "/admin/brand-assets", label: "الهوية واللوجوهات", superAdminOnly: true },
 ];
 
-export function AdminNavigation() {
+export function AdminNavigation({ canManageBrand = false }: { canManageBrand?: boolean }) {
   const pathname = usePathname();
   return (
     <nav aria-label="أقسام إدارة المنصة" className="flex w-full gap-1 overflow-x-auto px-1 py-1 scrollbar-none">
-      {navigation.map((item) => {
+      {navigation.filter((item) => !("superAdminOnly" in item) || canManageBrand).map((item) => {
         const current = item.exact
           ? pathname === item.href
           : pathname === item.href || pathname.startsWith(item.href + "/");
@@ -28,8 +29,8 @@ export function AdminNavigation() {
             href={item.href}
             aria-current={current ? "page" : undefined}
             className={current
-              ? "whitespace-nowrap rounded-xl bg-primary px-4 py-2.5 text-xs font-black text-primary-foreground shadow-sm sm:text-sm"
-              : "whitespace-nowrap rounded-xl px-4 py-2.5 text-xs font-bold text-muted-foreground transition-colors hover:bg-surface hover:text-foreground sm:text-sm"}
+              ? "inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:text-sm"
+              : "inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-xl px-4 py-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-surface hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:text-sm"}
           >
             {item.label}
           </Link>

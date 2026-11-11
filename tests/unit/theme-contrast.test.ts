@@ -109,9 +109,22 @@ describe("site-wide color contrast", () => {
     expect(start).toBeGreaterThan(-1);
     const end = landing.indexOf("}", start);
     const styles = landing.slice(start, end);
-    const background = styles.match(/#[0-9a-f]{6}/i)?.[0];
+    // Marketing now uses CSS role tokens. Resolve actual foreground/background
+    // against the page token declarations instead of expecting inline hex.
+    const paletteBlock = landing.slice(landing.indexOf(".page {"), landing.indexOf(".page *"));
+    const roleColors = Object.fromEntries(
+      [...paletteBlock.matchAll(/--(lp-[\w-]+):\s*(?:var\(--[\w-]+,\s*)?(#[\da-f]{6})\)?\s*;/gi)]
+        .map((match) => [match[1], match[2]]),
+    );
+    const backgroundRole = styles.match(/background:\s*var\(--(lp-[\w-]+)\)/)?.[1];
+    const foregroundRole = styles.match(/color:\s*var\(--(lp-[\w-]+)\)/)?.[1];
+    expect(backgroundRole).toBeTruthy();
+    expect(foregroundRole).toBeTruthy();
+    const background = roleColors[backgroundRole!];
+    const foreground = roleColors[foregroundRole!];
     expect(background).toMatch(/^#[0-9a-f]{6}$/i);
-    expect(contrast("#ffffff", background!)).toBeGreaterThanOrEqual(4.5);
+    expect(foreground).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(contrast(foreground, background)).toBeGreaterThanOrEqual(4.5);
   });
 
   it("uses the semantic foreground for primary and destructive buttons", () => {

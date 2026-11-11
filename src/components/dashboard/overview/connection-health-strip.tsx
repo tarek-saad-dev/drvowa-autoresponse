@@ -146,7 +146,7 @@ export function ConnectionHealthStrip({
       aria-label="حالة تشغيل النظام"
       aria-live="polite"
       className={cn(
-        "rounded-[22px] border px-4 py-4 shadow-[0_12px_32px_-27px_rgba(5,50,69,.45)] sm:px-5",
+        "rounded-2xl border px-4 py-4 shadow-sm sm:px-5",
         toneClasses[displayTone],
       )}
     >

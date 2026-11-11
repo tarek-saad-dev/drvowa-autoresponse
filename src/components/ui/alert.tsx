@@ -26,9 +26,9 @@ export function Alert({
 }: AlertProps) {
   return (
     <div
-      role="alert"
+      role={variant === "warning" || variant === "error" ? "alert" : "status"}
       className={cn(
-        "rounded-lg border px-4 py-3 text-sm",
+        "rounded-lg border px-4 py-3 text-sm leading-6",
         variantClass[variant],
         className,
       )}

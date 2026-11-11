@@ -71,12 +71,15 @@ export function LabelCampaignLaunch({draftId,preflightId,messageText}:{
       setError(err instanceof Error?err.message:"تعذر تحديث الحملة.");
     } finally {setBusy(false);}
   }
-  if (!preview) return <p role="status" className="text-sm text-muted-foreground">بنجهّز بداية الإرسال…</p>;
+  if (!preview) return <p role="status" className="rounded-xl border border-border bg-surface p-4 text-sm text-muted-foreground">بنجهّز بداية الإرسال…</p>;
 
-  return <div className="space-y-4">
-    <p className="text-sm font-black">{preview.run ? "متابعة الإرسال" : "بدء الإرسال"}</p>
+  return <section aria-label="حالة إرسال حملة واتساب" className="space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
+    <h4 className="font-display text-base font-bold">{preview.run ? "متابعة الإرسال" : "بدء الإرسال"}</h4>
     {preview.run ? <>
-      <p className="text-xs font-semibold">
+      <p role="status" className={"inline-flex rounded-full px-3 py-2 text-xs font-semibold " +
+        (preview.run.status === "COMPLETED" ? "bg-success-soft text-success" :
+          preview.run.status === "PAUSED" || preview.run.status === "CANCELLED" ? "bg-warning-soft text-warning" :
+            "bg-info-soft text-info")}>
         {preview.run.status==="QUEUED"?"في انتظار الإرسال":
           preview.run.status==="RUNNING"?"جاري إرسال الرسائل تدريجيًا":
           preview.run.status==="PAUSED"?"الحملة متوقفة مؤقتًا":
@@ -90,11 +93,11 @@ export function LabelCampaignLaunch({draftId,preflightId,messageText}:{
         {" "}{preview.run.unknown.toLocaleString("ar-EG")} نتائجها غير مؤكدة
       </p>
       {preview.run.unknown>0?
-        <p className="text-xs text-warning">فيه محاولات مش معروف وصلت ولا لأ؛ مش هنعيدها تلقائيًا لمنع التكرار.</p>:null}
+        <p role="status" className="rounded-xl border border-warning/30 bg-warning-soft px-3 py-2 text-xs leading-6 text-warning">فيه محاولات مش معروف وصلت ولا لأ؛ مش هنعيدها تلقائيًا لمنع التكرار.</p>:null}
       <div className="flex flex-wrap gap-2">
         {["QUEUED","RUNNING"].includes(preview.run.status)?<>
           <Button size="sm" variant="outline" disabled={busy} onClick={()=>void action("pause")}>إيقاف مؤقت</Button>
-          <Button size="sm" variant="ghost" disabled={busy} onClick={()=>void action("cancel")}>إلغاء الباقي</Button>
+          <Button size="sm" variant="outline" disabled={busy} onClick={()=>void action("cancel")}>إلغاء الباقي</Button>
         </>:null}
         {preview.run.status==="PAUSED"?
           <Button size="sm" disabled={busy} onClick={()=>void action("resume")}>استئناف</Button>:null}
@@ -102,14 +105,14 @@ export function LabelCampaignLaunch({draftId,preflightId,messageText}:{
           onClick={()=>void refresh().catch(()=>setError("تعذر تحديث النتائج."))}>تحديث النتائج</Button>
       </div>
     </> : <>
-      <div className="rounded-xl bg-surface px-4 py-3">
+      <div className="rounded-xl border border-border bg-surface px-4 py-3">
         <p className="text-sm font-bold">{preview.eligible.toLocaleString("ar-EG")} عميل مؤهل للإرسال</p>
         <p className="mt-1 text-xs text-muted-foreground">
           بنراجع الموافقات، وطلبات الإيقاف، والتكرار والباقة تلقائيًا قبل الإرسال.
         </p>
       </div>
       {!preview.labelActive?
-        <p className="text-xs text-warning">المسودة أو القائمة اتغيرت؛ راجعها واعتمد الصياغة من جديد.</p>:null}
+        <p className="rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning">المسودة أو القائمة اتغيرت؛ راجعها واعتمد الصياغة من جديد.</p>:null}
       {preview.eligible===0?<p className="text-xs text-warning">
         مفيش رقم مؤهل حاليًا. لازم العميل يوافق على استقبال العروض من رقمه قبل بدء الإرسال.
       </p>:null}
@@ -130,12 +133,12 @@ export function LabelCampaignLaunch({draftId,preflightId,messageText}:{
         {!confirm?
           <Button type="button" disabled={!preview.canLaunch || busy}
             onClick={()=>setConfirm(true)}>بدء الإرسال</Button>
-          :<div className="space-y-3 rounded-xl border border-border bg-surface/50 p-4">
+          :<div className="space-y-3 rounded-xl border border-primary/35 bg-primary/5 p-4">
             <p className="text-sm font-bold">تأكيد إرسال الرسالة إلى {preview.eligible.toLocaleString("ar-EG")} عميل مؤهل</p>
-            <p dir="auto" className="whitespace-pre-wrap text-xs leading-6">{messageText}</p>
+            <p dir="auto" className="whitespace-pre-wrap break-words rounded-xl border border-border bg-card p-3 text-xs leading-6 text-foreground">{messageText}</p>
             <p className="text-xs text-muted-foreground">بعد التأكيد الحملة هتدخل طابور الإرسال التدريجي. تقدر توقف الباقي في أي وقت.</p>
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" disabled={busy || !preview.canLaunch} onClick={()=>void submit()}>
+              <Button size="sm" disabled={busy || !preview.canLaunch} loading={busy} onClick={()=>void submit()}>
                 {busy ? "بنبدأ…" : "تأكيد بدء الإرسال"}
               </Button>
               <Button size="sm" variant="outline" disabled={busy} onClick={()=>setConfirm(false)}>رجوع</Button>
@@ -143,6 +146,6 @@ export function LabelCampaignLaunch({draftId,preflightId,messageText}:{
           </div>}
       </div>
     </>}
-    {error?<p role="alert" className="text-xs text-warning">{error}</p>:null}
-  </div>;
+    {error?<p role="alert" className="rounded-xl border border-destructive/30 bg-destructive-soft px-3 py-2 text-xs text-destructive">{error}</p>:null}
+  </section>;
 }

@@ -1,12 +1,24 @@
 .page {
-  --lp-bg: #050d12;
-  --lp-panel: #0a1820;
-  --lp-line: #1a303b;
-  --lp-text: #f3f8fa;
-  --lp-muted: #a0b4bf;
-  --lp-accent: #38c6ed;
+  /* Official DRVO AutoRespond core palette is declared once in globals.css. */
+  --lp-bg: var(--brand-ink, #0b0f14);
+  --lp-panel: var(--brand-carbon, #151b23);
+  --lp-line: #35473e;
+  --lp-text: var(--brand-white, #f7f9fc);
+  --lp-muted: #bac5d0;
+  --lp-accent: var(--brand-signal, #7bf36a);
   background: var(--lp-bg);
   color: var(--lp-text);
+  /* Derived editorial tones; the official core palette stays in globals.css. */
+  --lp-ink: var(--brand-ink, #0b0f14);
+  --lp-border: #35473e;
+  --lp-border-strong: #536c5a;
+  --lp-surface: #1b242e;
+  --lp-surface-elevated: #26382d;
+  --lp-muted-bright: #dce3ea;
+  --lp-accent-strong: var(--brand-deep-green, #1f9d55);
+  --lp-accent-light: #a3f78d;
+  --lp-accent-pale: #e6fbe1;
+  --lp-display-font: var(--font-display-arabic, var(--font-ibm-plex-arabic));
   overflow: clip;
   line-height: 1.8;
   color-scheme: dark;
@@ -23,6 +35,10 @@
 .page p {
   margin: 0;
 }
+.page h1,
+.page h2 {
+  font-family: var(--lp-display-font);
+}
 .page h2 {
   font-size: clamp(30px, 3.4vw, 48px);
   line-height: 1.45;
@@ -37,8 +53,8 @@
   font-weight: 700;
   line-height: 1.6;
 }
-.page :is(a, summary):focus-visible {
-  outline: 3px solid #8cddf4;
+.page :is(a, summary, button):focus-visible {
+  outline: 3px solid var(--lp-accent);
   outline-offset: 5px;
 }
 .page section[id] {
@@ -52,8 +68,8 @@
   position: fixed;
   top: -100px;
   right: 20px;
-  background: #fff;
-  color: #000;
+  background: var(--lp-text);
+  color: var(--lp-ink);
   padding: 12px 20px;
   z-index: 100;
 }
@@ -64,8 +80,8 @@
   position: sticky;
   top: 0;
   z-index: 40;
-  background: #050d12eb;
-  border-bottom: 1px solid #152a34;
+  background: color-mix(in srgb, var(--lp-bg) 92%, transparent);
+  border-bottom: 1px solid var(--lp-surface);
   backdrop-filter: blur(20px);
 }
 .headerInner {
@@ -86,7 +102,7 @@
   display: flex;
   gap: 25px;
   font-size: 13px;
-  color: #b4c7d0;
+  color: var(--lp-muted-bright);
 }
 .desktopNav a:hover,
 .footer a:hover {
@@ -99,7 +115,7 @@
 }
 .login {
   font-size: 13px;
-  color: #c8d7dd;
+  color: var(--lp-muted-bright);
   white-space: nowrap;
 }
 .primary,
@@ -119,22 +135,22 @@
     transform 0.2s;
 }
 .primary {
-  background: #0ba8d4;
-  color: #031017;
-  box-shadow: 0 6px 25px #05a3d31c;
-  border: 1px solid #27b8df;
+  background: var(--lp-accent);
+  color: var(--lp-bg);
+  box-shadow: 0 6px 25px color-mix(in srgb, var(--lp-accent-strong) 11%, transparent);
+  border: 1px solid var(--lp-accent);
 }
 .primary:hover {
-  background: #4ccff0;
+  background: var(--lp-accent-light);
   transform: translateY(-2px);
 }
 .secondary {
-  border: 1px solid #2a4654;
-  background: #11232c;
-  color: #e3f1f7;
+  border: 1px solid var(--lp-surface-elevated);
+  background: var(--lp-bg);
+  color: var(--lp-accent-pale);
 }
 .secondary:hover {
-  background: #193743;
+  background: var(--lp-surface);
 }
 .headerActions .primary {
   font-size: 13px;
@@ -159,7 +175,7 @@
   position: absolute;
   pointer-events: none;
   inset: 0 -150px;
-  background: radial-gradient(ellipse at 20% 55%, #00759a21, transparent 60%);
+  background: radial-gradient(ellipse at 20% 55%, color-mix(in srgb, var(--lp-surface-elevated) 13%, transparent), transparent 60%);
 }
 .heroCopy {
   position: relative;
@@ -168,10 +184,10 @@
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid #25505f;
+  border: 1px solid var(--lp-surface-elevated);
   border-radius: 40px;
-  color: #a8dfee;
-  background: #0c2632;
+  color: var(--lp-accent-pale);
+  background: var(--lp-surface);
   font-size: 12px;
   padding: 6px 13px;
 }
@@ -181,8 +197,8 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #39d3b0;
-  box-shadow: 0 0 12px #39d3b066;
+  background: var(--lp-accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--lp-accent) 40%, transparent);
   display: inline-block;
 }
 .page h1 {
@@ -212,18 +228,18 @@
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  color: #d1e9f2;
+  color: var(--lp-accent-pale);
   font-size: 14px;
   padding-block: 12px;
 }
 .textLink:hover {
-  color: #38c6ed;
+  color: var(--lp-accent);
 }
 .heroBenefits {
   display: flex;
   gap: 14px;
   flex-wrap: wrap;
-  color: #93aab5;
+  color: var(--lp-muted);
   font-size: 11px;
   margin-top: 20px;
 }
@@ -238,15 +254,15 @@
   position: absolute;
   inset: 10% -5% -2%;
   border-radius: 50%;
-  border: 1px solid #11637d33;
+  border: 1px solid color-mix(in srgb, var(--lp-surface-elevated) 20%, transparent);
   transform: rotate(-13deg);
-  background: radial-gradient(ellipse, #0b87b521, transparent 68%);
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--lp-accent-strong) 13%, transparent), transparent 68%);
   z-index: -1;
 }
 .sceneTop {
   display: flex;
   justify-content: space-between;
-  color: #8cc5d7;
+  color: var(--lp-accent-light);
   font-size: 11px;
   margin-bottom: 33px;
   padding-inline: 10px;
@@ -257,7 +273,7 @@
   gap: 8px;
 }
 .sceneTop small {
-  color: #849eaa;
+  color: var(--lp-muted);
 }
 .sceneCards {
   display: grid;
@@ -270,12 +286,12 @@
   direction: rtl;
   position: relative;
   padding: 19px 12px;
-  background: linear-gradient(145deg, #0e2632e6, #07151cee);
-  border: 1px solid #285568;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--lp-surface) 90%, transparent), color-mix(in srgb, var(--lp-bg) 93%, transparent));
+  border: 1px solid var(--lp-surface-elevated);
   border-radius: 20px;
   box-shadow:
-    inset 0 1px 15px #149bc713,
-    0 18px 50px #0004;
+    inset 0 1px 15px color-mix(in srgb, var(--lp-accent-strong) 7%, transparent),
+    0 18px 50px color-mix(in srgb, var(--lp-ink) 27%, transparent);
   min-width: 0;
 }
 .cardNumber {
@@ -284,24 +300,24 @@
   left: calc(50% - 16px);
   height: 30px;
   width: 30px;
-  background: #071820;
+  background: var(--lp-bg);
   display: grid;
   place-items: center;
-  border: 1px solid #4b879d;
-  box-shadow: 0 0 18px #0b8bb533;
+  border: 1px solid var(--lp-accent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--lp-accent-strong) 20%, transparent);
   border-radius: 50%;
   font-size: 12px;
-  color: #b5e9f8;
+  color: var(--lp-accent-pale);
 }
 .cardIcon {
   width: 34px;
   height: 34px;
-  border: 1px solid #25627a;
-  background: #0b3344;
+  border: 1px solid var(--lp-surface-elevated);
+  background: var(--lp-surface);
   border-radius: 10px;
   display: grid;
   place-items: center;
-  color: #64c8e7;
+  color: var(--lp-accent-light);
   font-size: 21px;
   margin-bottom: 10px;
 }
@@ -311,28 +327,28 @@
 }
 .glassCard > p {
   font-size: 10px;
-  color: #9bb5c2;
+  color: var(--lp-muted);
   margin-top: 4px;
 }
 .knowledgeNote {
-  background: #172c37;
-  border: 1px solid #29434f;
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-surface-elevated);
   border-radius: 12px;
   padding: 11px 9px;
   font-size: 11px;
   line-height: 1.9;
   margin-top: 17px;
-  color: #d2e2e9;
+  color: var(--lp-accent-pale);
 }
 .saved {
   font-size: 10px;
-  color: #9ed8d0;
-  border-bottom: 1px solid #24404b;
+  color: var(--lp-accent-light);
+  border-bottom: 1px solid var(--lp-surface);
   padding-block: 13px;
   line-height: 1.8;
 }
 .saved > span {
-  color: #69ddbc;
+  color: var(--lp-accent);
   margin-inline-end: 3px;
 }
 .miniTags {
@@ -341,34 +357,34 @@
   flex-wrap: wrap;
   margin-top: 13px;
   font-size: 8px;
-  color: #95c6d8;
+  color: var(--lp-accent-light);
 }
 .miniTags span {
-  border: 1px solid #284955;
+  border: 1px solid var(--lp-surface-elevated);
   border-radius: 5px;
   padding: 2px 5px;
 }
 .chatCard {
   padding: 20px 10px 10px;
-  border-color: #3a8daa;
+  border-color: var(--lp-accent);
   box-shadow:
-    0 0 35px #009ccc16,
-    inset 0 0 24px #149bc710;
+    0 0 35px color-mix(in srgb, var(--lp-accent-strong) 9%, transparent),
+    inset 0 0 24px color-mix(in srgb, var(--lp-accent-strong) 6%, transparent);
 }
 .chatHeader {
   display: flex;
   gap: 8px;
   align-items: center;
   padding-bottom: 14px;
-  border-bottom: 1px solid #24404b;
+  border-bottom: 1px solid var(--lp-surface);
 }
 .chatHeader p {
   font-size: 9px;
-  color: #8faebc;
+  color: var(--lp-muted);
 }
 .avatar {
-  background: #164258;
-  color: #7ad5ee;
+  background: var(--lp-surface);
+  color: var(--lp-accent-light);
   flex-shrink: 0;
   display: grid;
   place-items: center;
@@ -397,38 +413,38 @@
   max-width: 92%;
 }
 .incoming {
-  background: #1c303b;
+  background: var(--lp-surface);
   align-self: flex-start;
   border-start-start-radius: 2px;
-  color: #d8e4e9;
+  color: var(--lp-text);
 }
 .outgoing {
-  background: #07473f;
+  background: var(--lp-surface);
   align-self: flex-end;
   border-end-end-radius: 2px;
-  color: #d8f3e9;
-  border: 1px solid #166354;
+  color: var(--lp-accent-pale);
+  border: 1px solid var(--lp-surface-elevated);
 }
 .chatBody small {
   display: block;
   font-size: 8px;
   margin-top: 5px;
-  color: #91aaa9;
+  color: var(--lp-muted);
   text-align: left;
 }
 .chatInput {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border: 1px solid #29424e;
+  border: 1px solid var(--lp-surface-elevated);
   border-radius: 20px;
-  color: #a1b6c1;
+  color: var(--lp-muted-bright);
   font-size: 8px;
   padding: 7px;
 }
 .chatInput b {
-  background: #0a7962;
-  color: #fff;
+  background: var(--lp-surface-elevated);
+  color: var(--lp-text);
   border-radius: 50%;
   width: 23px;
   height: 23px;
@@ -440,14 +456,14 @@
   margin-top: 95px;
 }
 .alertIcon {
-  background: #352323;
-  border-color: #805254;
+  background: var(--lp-surface);
+  border-color: var(--lp-border-strong);
   color: #f8a09b;
 }
 .alertNote {
   margin-top: 16px;
   padding: 12px 9px;
-  background: #332327;
+  background: var(--lp-surface);
   border: 1px solid #59353b;
   border-radius: 10px;
 }
@@ -475,7 +491,7 @@
 .customer small {
   font-size: 8px;
   display: block;
-  color: #a1b3bc;
+  color: var(--lp-muted);
 }
 .customer .avatar {
   width: 23px;
@@ -484,21 +500,21 @@
 .mockButton {
   display: flex;
   justify-content: space-between;
-  border: 1px solid #466272;
+  border: 1px solid var(--lp-border);
   border-radius: 7px;
   padding: 7px;
   font-size: 9px;
-  color: #d3e5ed;
+  color: var(--lp-accent-pale);
 }
 .scene figcaption {
   font-size: 10px;
-  color: #9ab5c2;
+  color: var(--lp-muted);
   text-align: center;
   margin-top: 25px;
 }
 .promiseStrip {
   border-block: 1px solid var(--lp-line);
-  background: #09161d;
+  background: var(--lp-bg);
 }
 .promiseStrip > .container {
   display: grid;
@@ -510,7 +526,7 @@
 .promiseStrip p {
   font-size: 21px;
   line-height: 1.7;
-  color: #e2eff4;
+  color: var(--lp-accent-pale);
 }
 .promiseStrip p strong {
   color: var(--lp-accent);
@@ -518,13 +534,13 @@
 }
 .promiseStrip span {
   font-size: 12px;
-  color: #839fac;
-  border-inline-start: 1px solid #24414e;
+  color: var(--lp-muted);
+  border-inline-start: 1px solid var(--lp-surface-elevated);
   padding-inline-start: 25px;
 }
 .promiseStrip b {
   font-size: 15px;
-  color: #d2e2ea;
+  color: var(--lp-accent-pale);
   font-weight: 500;
 }
 .section {
@@ -540,13 +556,13 @@
 .eyebrow {
   font-size: 11px;
   letter-spacing: 0.03em;
-  color: #4ac5e7;
+  color: var(--lp-accent);
   font-weight: 600;
   display: block;
   margin-bottom: 15px;
 }
 .sectionHeading > p {
-  color: #91a9b6;
+  color: var(--lp-muted);
   font-size: 15px;
   line-height: 2;
 }
@@ -557,8 +573,8 @@
 }
 .step {
   padding: 27px;
-  background: linear-gradient(140deg, #0d202a, #09151c);
-  border: 1px solid #203844;
+  background: linear-gradient(140deg, var(--lp-bg), var(--lp-bg));
+  border: 1px solid var(--lp-surface);
   border-radius: 20px;
 }
 .stepTop {
@@ -570,36 +586,36 @@
 .stepTop > span {
   font-size: 32px;
   line-height: 1;
-  color: #47b9da;
+  color: var(--lp-accent);
   font-weight: 500;
 }
 .stepTop small {
   font-size: 10px;
-  border: 1px solid #284955;
+  border: 1px solid var(--lp-surface-elevated);
   border-radius: 30px;
   padding: 4px 10px;
-  color: #9fbdca;
+  color: var(--lp-muted-bright);
 }
 .step > p {
   font-size: 14px;
-  color: #a0b5c0;
+  color: var(--lp-muted-bright);
   line-height: 1.95;
   margin-top: 13px;
   min-height: 83px;
 }
 .example {
-  border-top: 1px solid #223b48;
+  border-top: 1px solid var(--lp-surface);
   padding-top: 20px;
   margin-top: 25px;
 }
 .example > span {
   font-size: 10px;
-  color: #628c9e;
+  color: var(--lp-border-strong);
 }
 .example p {
   font-size: 12px;
   line-height: 1.95;
-  color: #c5dbe5;
+  color: var(--lp-accent-pale);
   margin-top: 8px;
 }
 .inlineCta {
@@ -611,11 +627,11 @@
 }
 .inlineCta > span {
   font-size: 13px;
-  color: #94aab6;
+  color: var(--lp-muted);
 }
 .controlSection {
-  border-block: 1px solid #1a3441;
-  background: linear-gradient(120deg, #071319, #0b2633);
+  border-block: 1px solid var(--lp-surface);
+  background: linear-gradient(120deg, var(--lp-bg), var(--lp-surface));
   padding-block: 80px;
 }
 .controlGrid {
@@ -627,7 +643,7 @@
 .lead {
   font-size: 15px;
   line-height: 2.1;
-  color: #a5bdca;
+  color: var(--lp-muted-bright);
   margin-block: 22px !important;
   max-width: 430px;
 }
@@ -638,19 +654,19 @@
 .controlCards article {
   display: flex;
   gap: 20px;
-  background: #08182099;
+  background: color-mix(in srgb, var(--lp-bg) 60%, transparent);
   padding: 23px;
-  border: 1px solid #264554;
+  border: 1px solid var(--lp-surface-elevated);
   border-radius: 15px;
 }
 .controlCards article > span {
   font-size: 12px;
-  color: #52c8e8;
+  color: var(--lp-accent);
   display: grid;
   place-items: center;
   width: 36px;
   height: 36px;
-  background: #103847;
+  background: var(--lp-surface);
   border-radius: 10px;
   flex-shrink: 0;
 }
@@ -659,7 +675,7 @@
 }
 .controlCards p {
   font-size: 13px;
-  color: #9eb6c2;
+  color: var(--lp-muted-bright);
   line-height: 1.95;
   margin-top: 6px;
 }
@@ -670,18 +686,18 @@
 }
 .centerHeading > p {
   font-size: 15px;
-  color: #9eb4c0;
+  color: var(--lp-muted);
   margin-top: 17px;
 }
 .billingLabel {
   display: inline-flex;
   margin-top: 25px;
-  border: 1px solid #2b4e5b;
+  border: 1px solid var(--lp-surface-elevated);
   padding: 6px 22px;
   font-size: 12px;
   border-radius: 30px;
-  background: #0e2631;
-  color: #c8e8f4;
+  background: var(--lp-surface);
+  color: var(--lp-accent-pale);
 }
 .pricingStack {
   display: grid;
@@ -698,10 +714,10 @@
   align-items: center;
   gap: 18px 28px;
   padding: 16px 22px;
-  border: 1px solid #2a3840;
+  border: 1px solid var(--lp-surface);
   border-radius: 14px;
-  background: #12181c;
-  color: #8a9aa3;
+  background: var(--lp-bg);
+  color: var(--lp-muted);
 }
 .freePlanCopy {
   display: flex;
@@ -711,20 +727,20 @@
 }
 .freePlanCopy .eyebrow {
   margin: 0;
-  color: #7d8d96;
+  color: var(--lp-muted);
   min-height: 0;
 }
 .freePlanCopy h3 {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: #b7c4cb;
+  color: var(--lp-muted-bright);
 }
 .freePlanCopy p {
   margin: 4px 0 0;
   font-size: 12px;
   line-height: 1.7;
-  color: #7f9099;
+  color: var(--lp-muted);
 }
 .freePlanMeta {
   display: grid;
@@ -740,42 +756,42 @@
   font-size: 26px;
   font-weight: 600;
   letter-spacing: -0.5px;
-  color: #9eafb8;
+  color: var(--lp-muted);
 }
 .freePlanPrice span,
 .freePlanPrice small {
   font-size: 11px;
-  color: #7a8b94;
+  color: var(--lp-muted);
 }
 .freePlanLimits {
   margin: 0;
   font-size: 11px;
   line-height: 1.7;
-  color: #6f8089;
+  color: var(--lp-border-strong);
 }
 .freePlanRow > a {
   justify-self: end;
   min-height: 40px;
   padding-inline: 16px;
   font-size: 12px;
-  color: #aebcc4;
-  border-color: #3a4a52;
-  background: #1a2227;
+  color: var(--lp-muted-bright);
+  border-color: var(--lp-border);
+  background: var(--lp-panel);
 }
 .freePlanRow > a:hover {
-  border-color: #52636c;
-  color: #d5dee3;
+  border-color: var(--lp-border);
+  color: var(--lp-text);
 }
 .plan {
   padding: 25px 20px;
-  border: 1px solid #27424e;
+  border: 1px solid var(--lp-surface-elevated);
   border-radius: 18px;
-  background: #0a1820;
+  background: var(--lp-bg);
 }
 .plan.featured {
-  border-color: #35b4d7;
-  background: linear-gradient(160deg, #103745, #0b1a23);
-  box-shadow: 0 0 40px #0a91b314;
+  border-color: var(--lp-accent);
+  background: linear-gradient(160deg, var(--lp-surface), var(--lp-bg));
+  box-shadow: 0 0 40px color-mix(in srgb, var(--lp-accent-strong) 8%, transparent);
 }
 .plan .eyebrow {
   font-size: 10px;
@@ -784,7 +800,7 @@
 }
 .planDescription {
   font-size: 12px;
-  color: #9cb5c1;
+  color: var(--lp-muted);
   margin-top: 5px !important;
 }
 .price {
@@ -801,7 +817,7 @@
 }
 .price > span {
   font-size: 12px;
-  color: #abc0ca;
+  color: var(--lp-muted-bright);
 }
 .price small {
   font-size: 10px;
@@ -824,28 +840,28 @@
   align-items: baseline;
   gap: 7px;
   font-size: 11px;
-  color: #a0b8c5;
+  color: var(--lp-muted-bright);
 }
 .planLimits b {
-  color: #deedf3;
+  color: var(--lp-accent-pale);
   font-weight: 500;
   white-space: nowrap;
 }
 .pricingNotice {
-  border: 1px solid #294b59;
+  border: 1px solid var(--lp-surface-elevated);
   border-radius: 16px;
   padding: 35px;
   text-align: center;
   line-height: 2;
-  background: #0a1a23;
-  color: #a9c4d0;
+  background: var(--lp-bg);
+  color: var(--lp-muted-bright);
 }
 .pricingNotice a {
   margin-top: 16px;
 }
 .pricingFootnote {
   text-align: center;
-  color: #8da6b3;
+  color: var(--lp-muted);
   font-size: 11px;
   margin-top: 24px !important;
 }
@@ -856,7 +872,7 @@
   gap: 90px;
 }
 .faqs details {
-  border-bottom: 1px solid #223844;
+  border-bottom: 1px solid var(--lp-surface);
 }
 .faqs summary {
   list-style: none;
@@ -866,7 +882,7 @@
   gap: 25px;
   font-size: 16px;
   padding: 23px 0;
-  color: #dceaf1;
+  color: var(--lp-accent-pale);
   line-height: 1.7;
 }
 .faqs summary::-webkit-details-marker {
@@ -874,7 +890,7 @@
 }
 .faqs summary > span {
   font-size: 23px;
-  color: #56c6e6;
+  color: var(--lp-accent);
   line-height: 1;
 }
 .faqs details[open] summary > span {
@@ -883,18 +899,18 @@
 .faqs details > p {
   font-size: 14px;
   line-height: 2.1;
-  color: #a5bdc8;
+  color: var(--lp-muted-bright);
   padding-bottom: 25px;
   max-width: 620px;
 }
 .finalCta {
   position: relative;
   text-align: center;
-  border: 1px solid #2c6075;
+  border: 1px solid var(--lp-surface-elevated);
   border-radius: 26px;
   background:
-    radial-gradient(ellipse at 50% 130%, #0a719455, transparent 70%),
-    linear-gradient(120deg, #0c202c, #06131c);
+    radial-gradient(ellipse at 50% 130%, color-mix(in srgb, var(--lp-surface-elevated) 33%, transparent), transparent 70%),
+    linear-gradient(120deg, var(--lp-bg), var(--lp-bg));
   padding: 65px 24px;
   margin-bottom: 75px;
 }
@@ -903,36 +919,36 @@
 }
 .finalCta p {
   font-size: 15px;
-  color: #a6bfcd;
+  color: var(--lp-muted-bright);
   margin-block: 20px 25px;
 }
 .finalCta small {
   display: block;
   margin-top: 14px;
-  color: #8daab9;
+  color: var(--lp-muted);
   font-size: 11px;
 }
 .footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-top: 1px solid #1d343f;
+  border-top: 1px solid var(--lp-surface);
   padding-block: 35px;
   gap: 25px;
 }
 .footer p {
   font-size: 11px;
-  color: #819ca9;
+  color: var(--lp-muted);
   margin-top: 12px;
 }
 .footer nav {
   display: flex;
   gap: 24px;
   font-size: 12px;
-  color: #b5c9d3;
+  color: var(--lp-muted-bright);
 }
 .footer > small {
-  color: #7f99a6;
+  color: var(--lp-muted);
   font-size: 10px;
   direction: ltr;
 }
@@ -1123,7 +1139,7 @@
     list-style: none;
     cursor: pointer;
     padding: 6px 10px;
-    border: 1px solid #2b4856;
+    border: 1px solid var(--lp-surface-elevated);
     border-radius: 8px;
     font-size: 20px;
     line-height: 1.5;
@@ -1137,17 +1153,17 @@
     top: 52px;
     width: 220px;
     padding: 10px;
-    border: 1px solid #355567;
-    background: #0b1c27;
+    border: 1px solid var(--lp-surface-elevated);
+    background: var(--lp-bg);
     border-radius: 13px;
-    box-shadow: 0 15px 50px #0007;
+    box-shadow: 0 15px 50px color-mix(in srgb, var(--lp-ink) 47%, transparent);
     display: grid;
     z-index: 50;
   }
   .mobileMenu nav a {
     padding: 12px 14px;
     font-size: 14px;
-    color: #d1e5ee;
+    color: var(--lp-accent-pale);
   }
 }
 @media (max-width: 640px) {
@@ -1523,10 +1539,10 @@
   height: 3px;
   z-index: 60;
   pointer-events: none;
-  background: linear-gradient(90deg, #38c6ed, #80f4de);
+  background: linear-gradient(90deg, var(--lp-accent), var(--lp-accent-light));
   transform: scaleX(0);
   transform-origin: right;
-  box-shadow: 0 0 14px #38c6ed66;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--lp-accent) 40%, transparent);
 }
 .step,
 .plan,
@@ -1568,7 +1584,7 @@
   inset: -1px;
   pointer-events: none;
   z-index: -1;
-  background: radial-gradient(ellipse at 15% 50%, #0ba8d418, transparent 55%);
+  background: radial-gradient(ellipse at 15% 50%, color-mix(in srgb, var(--lp-accent) 9%, transparent), transparent 55%);
 }
 .faqs details[open] > p {
   animation: answerReveal 0.3s ease-out;
@@ -1588,10 +1604,10 @@
 @keyframes statusPulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 #39d3b000;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--lp-accent) 0%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 5px #39d3b022;
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--lp-accent) 13%, transparent);
   }
 }
 @keyframes messageArrive {
@@ -1619,8 +1635,8 @@
   .plan:hover,
   .controlCards article:hover {
     transform: translateY(-5px);
-    border-color: #39839c;
-    box-shadow: 0 15px 35px #0003;
+    border-color: var(--lp-accent-strong);
+    box-shadow: 0 15px 35px color-mix(in srgb, var(--lp-ink) 20%, transparent);
   }
   .textLink span {
     transition: transform 0.25s ease;
@@ -1659,7 +1675,7 @@
   gap: 16px;
 }
 .pricingToolbar p {
-  color: #a5bbc6;
+  color: var(--lp-muted-bright);
   font-size: 13px;
 }
 .billingSwitch {
@@ -1667,15 +1683,15 @@
   align-items: center;
   gap: 3px;
   padding: 5px;
-  border: 1px solid #2b4a58;
+  border: 1px solid var(--lp-surface-elevated);
   border-radius: 14px;
-  background: #0d1b24;
+  background: var(--lp-bg);
 }
 .billingSwitch button {
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: #9db5c2;
+  color: var(--lp-muted);
   cursor: pointer;
   padding: 9px 15px;
   font: inherit;
@@ -1683,22 +1699,22 @@
   transition: background .2s ease, color .2s ease;
 }
 .billingSwitch button:hover {
-  color: #f1faff;
+  color: var(--lp-accent-pale);
 }
 .billingSwitch button:focus-visible {
-  outline: 2px solid #76d6f0;
+  outline: 2px solid var(--lp-accent-light);
   outline-offset: 2px;
 }
 .billingSwitch .billingSwitchActive {
-  background: #205466;
-  color: #f4fbfe;
-  box-shadow: 0 2px 12px #0002;
+  background: var(--lp-surface-elevated);
+  color: var(--lp-accent-pale);
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--lp-ink) 13%, transparent);
 }
 .savePill {
   display: inline-block;
-  border: 1px solid #2b8c84;
+  border: 1px solid var(--lp-accent-strong);
   border-radius: 20px;
-  color: #8fe4d5;
+  color: var(--lp-accent-light);
   font-size: 10px;
   padding: 2px 7px;
   margin-inline-start: 6px;
@@ -1710,13 +1726,13 @@
   min-width: 0;
   position: relative;
   padding: 25px 24px 23px;
-  background: linear-gradient(180deg, #0f232d, #0a1921);
-  border-color: #2b4553;
+  background: linear-gradient(180deg, var(--lp-bg), var(--lp-bg));
+  border-color: var(--lp-surface-elevated);
 }
 .pricingGrid .plan.featured {
-  background: linear-gradient(162deg, #123946 0%, #0b222c 55%, #0b1c26 100%);
-  border-color: #39b8d8;
-  box-shadow: inset 0 1px 0 #46c3df33, 0 14px 36px #0a91b315;
+  background: linear-gradient(162deg, var(--lp-surface) 0%, var(--lp-bg) 55%, var(--lp-bg) 100%);
+  border-color: var(--lp-accent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--lp-accent) 20%, transparent), 0 14px 36px color-mix(in srgb, var(--lp-accent-strong) 8%, transparent);
 }
 .planTopline {
   display: flex;
@@ -1728,14 +1744,14 @@
 .planTopline .eyebrow {
   margin: 0;
   min-height: 0;
-  color: #91b8c9;
+  color: var(--lp-accent-light);
   letter-spacing: 1.1px;
 }
 .recommendedPill {
   border-radius: 100px;
-  background: #38b8d722;
-  border: 1px solid #42b8d855;
-  color: #a0e5f6;
+  background: color-mix(in srgb, var(--lp-accent) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--lp-accent) 33%, transparent);
+  color: var(--lp-accent-pale);
   padding: 4px 11px;
   font-size: 10px;
   font-weight: 700;
@@ -1761,13 +1777,13 @@
   white-space: nowrap;
 }
 .planBillingNote {
-  color: #9bb4c0;
+  color: var(--lp-muted);
   font-size: 11px;
   min-height: 34px;
   margin-bottom: 21px;
 }
 .planBillingNote b {
-  color: #99e8d5;
+  color: var(--lp-accent-light);
   font-weight: 700;
 }
 .pricingGrid .plan > a {
@@ -1779,7 +1795,7 @@
   margin-bottom: 2px;
 }
 .pricingGrid .planLimits {
-  border-top: 1px solid #284653;
+  border-top: 1px solid var(--lp-surface-elevated);
   padding-top: 21px;
   margin-top: 22px;
   gap: 12px;
@@ -1788,16 +1804,16 @@
   font-size: 12px;
 }
 .freePlanRow {
-  background: #0c151a;
-  border-color: #23333c;
+  background: var(--lp-bg);
+  border-color: var(--lp-surface);
 }
 .comparisonShell {
   min-width: 0;
   margin-top: 25px;
-  border: 1px solid #274653;
+  border: 1px solid var(--lp-surface-elevated);
   border-radius: 20px;
   overflow: hidden;
-  background: linear-gradient(180deg, #0d2029, #0b1920);
+  background: linear-gradient(180deg, var(--lp-bg), var(--lp-bg));
 }
 .comparisonHeading {
   padding: 25px 29px 22px;
@@ -1805,7 +1821,7 @@
   gap: 24px;
   align-items: flex-end;
   justify-content: space-between;
-  border-bottom: 1px solid #203d4b;
+  border-bottom: 1px solid var(--lp-surface);
 }
 .comparisonHeading .eyebrow {
   font-size: 10px;
@@ -1817,22 +1833,22 @@
 }
 .comparisonHeading p {
   font-size: 12px;
-  color: #a4bac6;
+  color: var(--lp-muted-bright);
   margin-top: 3px;
 }
 .compareHint {
   font-size: 11px;
-  color: #7695a4;
+  color: var(--lp-muted);
   display: none;
 }
 .compareScroll {
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scrollbar-width: thin;
-  scrollbar-color: #365e70 #0b1a22;
+  scrollbar-color: var(--lp-surface-elevated) var(--lp-bg);
 }
 .compareScroll:focus-visible {
-  outline: 2px solid #6de0f2;
+  outline: 2px solid var(--lp-accent-light);
   outline-offset: -2px;
 }
 .comparisonTable {
@@ -1840,20 +1856,20 @@
   border-collapse: separate;
   border-spacing: 0;
   font-size: 12px;
-  color: #c6d9e2;
+  color: var(--lp-accent-pale);
   text-align: center;
 }
 .comparisonTable th,
 .comparisonTable td {
   padding: 15px 14px;
-  border-bottom: 1px solid #1a3440;
+  border-bottom: 1px solid var(--lp-surface);
   min-width: 130px;
   white-space: nowrap;
 }
 .comparisonTable thead th {
   padding-block: 20px;
-  color: #eaf7fc;
-  background: #102732;
+  color: var(--lp-accent-pale);
+  background: var(--lp-surface);
   font-size: 14px;
 }
 .comparisonTable thead th span,
@@ -1863,17 +1879,17 @@
 .comparisonTable thead th small {
   font-size: 10px;
   font-weight: 500;
-  color: #8bdbe9;
+  color: var(--lp-accent-light);
 }
 .comparisonTable th:first-child {
   text-align: start;
   min-width: 195px;
   font-weight: 500;
-  color: #a9c4cf;
-  background: #0d2029;
+  color: var(--lp-muted-bright);
+  background: var(--lp-bg);
 }
 .comparisonTable thead th:first-child {
-  background: #102732;
+  background: var(--lp-surface);
 }
 .comparisonTable tbody tr:last-child th,
 .comparisonTable tbody tr:last-child td {
@@ -1881,27 +1897,27 @@
 }
 .comparisonTable tbody tr:hover td,
 .comparisonTable tbody tr:hover th {
-  background-color: #173643;
+  background-color: var(--lp-surface);
 }
 .comparisonTable td strong {
-  color: #f1faff;
+  color: var(--lp-accent-pale);
   font-size: 14px;
   font-weight: 650;
 }
 .comparisonTable .compareFeatured {
-  background-color: #133441;
-  color: #d6f3fa;
+  background-color: var(--lp-surface);
+  color: var(--lp-accent-pale);
 }
 .comparisonFootnote {
   padding: 14px 29px 18px;
-  border-top: 1px solid #1f3c49;
+  border-top: 1px solid var(--lp-surface);
   font-size: 11px;
   line-height: 1.9;
-  color: #91aeba;
+  color: var(--lp-muted);
 }
 .addonStrip {
-  border: 1px solid #294954;
-  background: linear-gradient(100deg, #0d272c, #0c1c25);
+  border: 1px solid var(--lp-surface-elevated);
+  background: linear-gradient(100deg, var(--lp-bg), var(--lp-bg));
   border-radius: 17px;
   padding: 19px 23px;
   display: flex;
@@ -1909,16 +1925,16 @@
   justify-content: space-between;
   gap: 14px 26px;
 }
-.addonStrip b { font-size: 14px; color: #e0f4f5; }
-.addonStrip p { font-size: 12px; color: #9bb9be; margin-top: 2px; }
+.addonStrip b { font-size: 14px; color: var(--lp-accent-pale); }
+.addonStrip p { font-size: 12px; color: var(--lp-muted); margin-top: 2px; }
 .addonChips { display: flex; flex-wrap: wrap; gap: 8px; }
 .addonChips span {
-  border: 1px solid #35616a;
+  border: 1px solid var(--lp-surface-elevated);
   border-radius: 100px;
   padding: 7px 11px;
-  color: #b7dde5;
+  color: var(--lp-accent-pale);
   font-size: 11px;
-  background: #17333b;
+  background: var(--lp-surface);
   white-space: nowrap;
 }
 @media (max-width: 900px) {
@@ -1947,11 +1963,11 @@
 .mobilePlanTabs,.mobileComparison{display:none}
 @media (max-width:700px){
  .pricingStack,.pricingGrid,.pricingToolbar,.comparisonShell,.freePlanRow{min-width:0;max-width:100%}
- .mobilePlanTabs,.mobileComparePicker{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;padding:5px;border:1px solid #294652;background:#0a1a23;border-radius:14px}
- .mobilePlanTabs button,.mobileComparePicker button{min-width:0;border:0;border-radius:10px;background:transparent;color:#adcad5;padding:12px 6px;font-size:12px;font-weight:700;cursor:pointer}
- .mobilePlanTabs .mobilePlanTabActive,.mobileComparePicker .mobilePlanTabActive{background:#225363;color:#f4fdff;box-shadow:inset 0 0 0 1px #4cc1da55}
+ .mobilePlanTabs,.mobileComparePicker{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;padding:5px;border:1px solid var(--lp-surface-elevated);background:var(--lp-bg);border-radius:14px}
+ .mobilePlanTabs button,.mobileComparePicker button{min-width:0;border:0;border-radius:10px;background:transparent;color:var(--lp-accent-light);padding:12px 6px;font-size:12px;font-weight:700;cursor:pointer}
+ .mobilePlanTabs .mobilePlanTabActive,.mobileComparePicker .mobilePlanTabActive{background:var(--lp-surface-elevated);color:var(--lp-accent-pale);box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--lp-accent) 33%, transparent)}
  .pricingGrid .plan[data-mobile-active="false"]{display:none}
- .pricingGrid .plan[data-mobile-active="true"]{display:flex;min-width:0;width:100%;box-shadow:0 12px 40px #0003}
+ .pricingGrid .plan[data-mobile-active="true"]{display:flex;min-width:0;width:100%;box-shadow:0 12px 40px color-mix(in srgb, var(--lp-ink) 20%, transparent)}
  .pricingGrid .price{flex-wrap:wrap;overflow-wrap:anywhere}
  .pricingGrid .price strong{font-size:clamp(34px,9vw,46px)}
  .freePlanRow{gap:14px;padding:20px}
@@ -1962,11 +1978,11 @@
  .mobileComparison{display:block;padding:0 14px 14px}
  .mobileComparePicker{grid-template-columns:repeat(4,minmax(0,1fr));margin:8px 0 13px}
  .mobileComparePicker button{font-size:11px;padding:10px 2px}
- .mobileCompareRows{display:grid;gap:0;margin:0;background:#0d212a;border:1px solid #1e3947;border-radius:13px;overflow:hidden}
- .mobileCompareRows>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 12px;border-bottom:1px solid #203a46;min-width:0}
+ .mobileCompareRows{display:grid;gap:0;margin:0;background:var(--lp-bg);border:1px solid var(--lp-surface);border-radius:13px;overflow:hidden}
+ .mobileCompareRows>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 12px;border-bottom:1px solid var(--lp-surface);min-width:0}
  .mobileCompareRows>div:last-child{border-bottom:0}
- .mobileCompareRows dt{font-size:12px;color:#a2c0ca;min-width:0}
- .mobileCompareRows dd{margin:0;text-align:left;font-size:12px;font-weight:700;color:#e7f8fd;white-space:normal}
+ .mobileCompareRows dt{font-size:12px;color:var(--lp-muted-bright);min-width:0}
+ .mobileCompareRows dd{margin:0;text-align:left;font-size:12px;font-weight:700;color:var(--lp-accent-pale);white-space:normal}
  .compareHint{display:none}
  .addonChips{width:100%}
  .addonChips span{flex:1 1 auto;text-align:center}

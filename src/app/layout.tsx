@@ -31,6 +31,8 @@ export const metadata: Metadata = {
   },
   description: appConfig.description,
   applicationName: appConfig.name,
+  // Uploaded app icon is served from durable Brand Assets; fallback is the bundled favicon.
+  icons: { icon: [{ url: "/api/brand/assets/icon" }] },
   openGraph: {
     type: "website",
     siteName: appConfig.name,
@@ -58,8 +60,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#00759a" },
-    { media: "(prefers-color-scheme: dark)", color: "#05090b" },
+    { media: "(prefers-color-scheme: light)", color: "#f7f9fc" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0f14" },
   ],
 };
 
