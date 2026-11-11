@@ -12,13 +12,14 @@ const navigation = [
   { href: "/admin/discount-codes", label: "أكواد الخصم" },
   { href: "/admin/refunds", label: "الاستردادات" },
   { href: "/admin/whatsapp", label: "واتساب" },
+  { href: "/admin/brand-assets", label: "الهوية واللوجوهات", superAdminOnly: true },
 ];
 
-export function AdminNavigation() {
+export function AdminNavigation({ canManageBrand = false }: { canManageBrand?: boolean }) {
   const pathname = usePathname();
   return (
     <nav aria-label="أقسام إدارة المنصة" className="flex w-full gap-1 overflow-x-auto px-1 py-1 scrollbar-none">
-      {navigation.map((item) => {
+      {navigation.filter((item) => !("superAdminOnly" in item) || canManageBrand).map((item) => {
         const current = item.exact
           ? pathname === item.href
           : pathname === item.href || pathname.startsWith(item.href + "/");

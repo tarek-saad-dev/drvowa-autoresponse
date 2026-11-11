@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/brand-v2-authenticated-browser.yml'
       - 'e2e/brand-v2-authenticated-review.spec.ts'
+      - 'db/migrations/104_brand_asset_gallery.sql'
   workflow_dispatch:
 
 permissions:
@@ -14,7 +15,7 @@ permissions:
 jobs:
   isolated-browser:
     name: Isolated SQL + owner/admin Chromium screens
-    if: ${{ github.head_ref == 'feat/brand-v2-p09-authenticated-e2e' || (github.base_ref == 'main' && github.head_ref == 'feat/brand-v2') }}
+    if: ${{ github.head_ref == 'feat/brand-v2-p09-authenticated-e2e' || github.head_ref == 'feat/brand-v2-admin-asset-library' || (github.base_ref == 'main' && github.head_ref == 'feat/brand-v2') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
