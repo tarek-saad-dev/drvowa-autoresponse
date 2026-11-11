@@ -19,7 +19,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ variant: st
   try {
     const asset = await getPublishedBrandImage(variant);
     if (asset) {
-      return new Response(asset.data, {
+      return new Response(Uint8Array.from(asset.data), {
         headers: {
           "Content-Type": asset.mime,
           "Content-Length": String(asset.data.length),
