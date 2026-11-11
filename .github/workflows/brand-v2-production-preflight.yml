@@ -91,6 +91,36 @@ jobs:
               });
             '
 
+          echo '==> Read-only SQL backup operator readiness'
+          if [ "$(id -u)" -eq 0 ]; then echo 'SSH operator can administer VPS: yes'; else echo 'SSH operator can administer VPS: no'; fi
+          if command -v sqlcmd >/dev/null 2>&1 || test -x /opt/mssql-tools18/bin/sqlcmd; then
+            echo 'SQL Server client on VPS: yes'
+          else
+            echo 'SQL Server client on VPS: no'
+          fi
+          if systemctl list-unit-files mssql-server.service --no-legend 2>/dev/null | grep -q '^mssql-server.service'; then
+            echo 'Local SQL Server systemd service configured: yes'
+          else
+            echo 'Local SQL Server systemd service configured: no'
+          fi
+          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+            echo 'Docker daemon accessible: yes'
+          else
+            echo 'Docker daemon accessible: no'
+          fi
+          node --env-file=.env.production.local --input-type=module <<'DISCOVERY'
+          import { lookup } from 'node:dns/promises';
+          import { networkInterfaces } from 'node:os';
+          const server = process.env.DB_SERVER;
+          if (!server) { console.log('SQL endpoint is on VPS: unknown'); process.exit(0); }
+          const host = server.replace(/^\\[|\\]$/g, '').split('\\\\')[0].trim();
+          const own = new Set(['127.0.0.1','::1','localhost']);
+          for (const items of Object.values(networkInterfaces())) for (const item of items ?? []) own.add(item.address);
+          try {
+            const addresses = await lookup(host, { all: true });
+            console.log('SQL endpoint is on VPS:', own.has(host) || addresses.some(x => own.has(x.address)) ? 'yes' : 'no');
+          } catch { console.log('SQL endpoint is on VPS: unknown'); }
+          DISCOVERY
           echo '==> Checking SQL Server full backup metadata (no names, paths or secrets printed)'
           node --env-file=.env.production.local --input-type=module <<'JS'
           import sql from "mssql";
