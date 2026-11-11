@@ -125,6 +125,36 @@ jobs:
                 AND type = N'D'
               ORDER BY backup_finish_date DESC
             `);
+            // Read-only capacity and privilege diagnostics, printed without host paths or credentials.
+            const diag = await pool.request().query(`
+              SELECT
+                CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(4000)) AS backupRoot,
+                HAS_PERMS_BY_NAME(DB_NAME(), 'DATABASE', 'BACKUP DATABASE') AS canBackup,
+                (SELECT SUM(CAST(size AS bigint)) * 8192 FROM sys.database_files WHERE type = 0) AS dataBytes
+            `);
+            const d = diag.recordset[0] || {};
+            console.log("SQL backup default path configured:", Boolean(d.backupRoot));
+            console.log("SQL user can back up this database:", Number(d.canBackup) === 1);
+            console.log("SQL data allocation (GiB):", (Number(d.dataBytes || 0) / 1073741824).toFixed(2));
+            try {
+              const volumes = await pool.request().query(`
+                SELECT TOP (1) v.volume_mount_point AS mount,
+                  v.available_bytes AS availableBytes
+                FROM sys.database_files f
+                CROSS APPLY sys.dm_os_volume_stats(DB_ID(), f.file_id) v
+                WHERE f.type=0 ORDER BY f.file_id
+              `);
+              const disk = volumes.recordset[0];
+              const backupRoot = String(d.backupRoot || "");
+              const mount = String(disk?.mount || "");
+              const sameVolume = Boolean(backupRoot && mount &&
+                backupRoot.toLowerCase().startsWith(mount.toLowerCase()));
+              console.log("Default backup path appears on DB data-file volume:", sameVolume);
+              console.log("DB data-file volume free (GiB):",
+                disk ? (Number(disk.availableBytes) / 1073741824).toFixed(2) : "unknown");
+            } catch {
+              console.log("SQL volume free-space probe unavailable: permission or provider restriction");
+            }
             const backup = result.recordset[0];
             if (!backup) throw new Error("BLOCKED: no full production SQL backup visible in msdb");
             const ageHours = (Date.now() - new Date(backup.finished).getTime()) / 3600000;
