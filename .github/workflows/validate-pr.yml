@@ -26,7 +26,19 @@ jobs:
       - name: Migration file order
         run: npm run test:migration-gate -- --files-only
       - name: Production build
-        run: npm run build
+        run: |
+          set -o pipefail
+          if npm run build 2>&1 | tee /tmp/drvo-brand-build.log; then
+            exit 0
+          fi
+          # This is a known CI-only Turbopack next/font resolver failure on
+          # GitHub's networked runner. Do not hide unrelated build failures.
+          if grep -Fq "Can't resolve '@vercel/turbopack-next/internal/font/google/font'" /tmp/drvo-brand-build.log; then
+            echo "::warning::Turbopack Google Fonts resolver failed; retrying production compilation with Webpack."
+            npm run build -- --webpack
+          else
+            exit 1
+          fi
       - name: Resume catch-up unit tests
         run: npx vitest run tests/unit/resume-catch-up.test.ts tests/unit/resume-catch-up-service.test.ts
       - name: Inbox viewport regression tests
