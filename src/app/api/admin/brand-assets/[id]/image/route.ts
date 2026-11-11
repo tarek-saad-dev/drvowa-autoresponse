@@ -12,7 +12,7 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
     if (!/^[a-f0-9-]{36}$/i.test(id)) return jsonError("Invalid asset", 400);
     const image = await getBrandImageById(id);
     if (!image) return jsonError("Asset not found", 404);
-    return new Response(image.data, {
+    return new Response(Uint8Array.from(image.data), {
       headers: {
         "Content-Type": image.mime,
         "Content-Length": String(image.data.length),
