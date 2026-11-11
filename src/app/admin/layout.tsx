@@ -48,7 +48,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
               <AdminLogoutButton />
             </div>
           </div>
-          <AdminNavigation />
+          <AdminNavigation canManageBrand={adminCtx.admin.role === "SUPER_ADMIN"} />
         </div>
       </header>
       <main id="main-content" className="mx-auto min-w-0 max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
