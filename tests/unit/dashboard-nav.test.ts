@@ -9,14 +9,22 @@ import {
 } from "@/constants/nav";
 
 describe("dashboard navigation IA", () => {
-  it("exposes four mobile-primary destinations", () => {
+  it("exposes five mobile-primary destinations including CRM", () => {
     const mobile = DASHBOARD_NAV_GROUPS.filter((group) => group.mobilePrimary);
     expect(mobile.map((group) => group.id)).toEqual([
       "home",
       "inbox",
+      "crm",
       "employee",
       "settings",
     ]);
+  });
+
+  it("keeps campaigns discoverable without crowding mobile primary", () => {
+    const campaigns = DASHBOARD_NAV_GROUPS.find((group) => group.id === "campaigns");
+    expect(campaigns).toBeTruthy();
+    expect(campaigns?.mobilePrimary).toBe(false);
+    expect(getNavGroupChildren(campaigns!).some((item) => item.href === "/dashboard/campaigns/create")).toBe(true);
   });
 
   it("keeps legacy leaf routes discoverable", () => {
@@ -24,6 +32,8 @@ describe("dashboard navigation IA", () => {
     expect(hrefs).toEqual(expect.arrayContaining([
       "/dashboard",
       "/dashboard/inbox",
+      "/dashboard/contacts",
+      "/dashboard/campaigns",
       "/dashboard/agent",
       "/dashboard/knowledge",
       "/dashboard/whatsapp",
@@ -33,6 +43,9 @@ describe("dashboard navigation IA", () => {
       "/dashboard/reliability",
       "/dashboard/integrations",
       "/dashboard/account",
+      "/dashboard/crm/follow-ups",
+      "/dashboard/crm/segments",
+      "/dashboard/crm/erp",
     ]));
   });
 
@@ -40,6 +53,23 @@ describe("dashboard navigation IA", () => {
     const employee = DASHBOARD_NAV_GROUPS.find((group) => group.id === "employee")!;
     expect(isNavGroupActive("/dashboard/knowledge", employee)).toBe(true);
     expect(isNavHrefActive("/dashboard/knowledge", "/dashboard/agent")).toBe(false);
+  });
+
+  it("activates crm group for contacts and crm child routes", () => {
+    const crm = DASHBOARD_NAV_GROUPS.find((group) => group.id === "crm")!;
+    expect(isNavGroupActive("/dashboard/contacts", crm)).toBe(true);
+    expect(isNavGroupActive("/dashboard/contacts/abc", crm)).toBe(true);
+    expect(isNavGroupActive("/dashboard/crm/follow-ups", crm)).toBe(true);
+    expect(isNavGroupActive("/dashboard/crm/segments", crm)).toBe(true);
+    expect(isNavGroupActive("/dashboard/crm/erp", crm)).toBe(true);
+    expect(isNavGroupActive("/dashboard/campaigns", crm)).toBe(false);
+  });
+
+  it("activates campaigns group for campaign routes", () => {
+    const campaigns = DASHBOARD_NAV_GROUPS.find((group) => group.id === "campaigns")!;
+    expect(isNavGroupActive("/dashboard/campaigns", campaigns)).toBe(true);
+    expect(isNavGroupActive("/dashboard/campaigns/create", campaigns)).toBe(true);
+    expect(isNavGroupActive("/dashboard/contacts", campaigns)).toBe(false);
   });
 
   it("activates settings group for WhatsApp and billing", () => {
