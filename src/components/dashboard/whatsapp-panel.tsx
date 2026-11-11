@@ -219,12 +219,14 @@ export function WhatsAppConnectionPanel({
     }
     if (!mounted.current) return data;
     if (data.uiState === "READY") {
+      setError(null);
       setQrImageDataUrl(null);
       setPairingActive(false);
       setView((prev) => ({ ...prev, uiState: "READY" }));
       return data;
     }
     if (data.qrImageDataUrl) {
+      setError(null);
       setQrImageDataUrl(data.qrImageDataUrl);
       setPairingActive(false);
     }
