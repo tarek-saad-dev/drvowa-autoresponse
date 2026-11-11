@@ -59,6 +59,8 @@ import {
   assessInboundDeliveryHealth,
   diagnoseInboundDelivery,
   getWhatsAppConnectionView,
+  getWhatsAppQrForBusiness,
+  startWhatsAppPairing,
   inboundErrorCodeLabelAr,
 } from "@/modules/channels/whatsapp-service";
 
@@ -385,5 +387,54 @@ describe("WhatsApp connection view exposes safe inboundDelivery", () => {
     });
     expect(view.runtime?.inboundDelivery?.health).toBe("degraded");
     expect(view.runtime?.inboundDelivery?.lastErrorCode).toBe("MAPPING_CONFIG");
+  });
+});
+
+describe("WhatsApp reconnect contract", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("marks the Connect action as an explicit user-initiated re-pair", async () => {
+    const existing = connection({ status: "INACTIVE", isActive: false });
+    const disconnected = {
+      ...readyStatus(null),
+      state: "DISCONNECTED",
+      ready: false,
+      qrAvailable: false,
+      lastConnectedAt: null,
+      lastDisconnectAt: new Date().toISOString(),
+    };
+    repoMocks.findWhatsAppConnection.mockResolvedValue(existing);
+    repoMocks.updateChannelConnection.mockResolvedValue(existing);
+    runtimeMocks.startAccount.mockResolvedValue(disconnected);
+
+    const view = await startWhatsAppPairing({ businessId: existing.businessId });
+    expect(runtimeMocks.startAccount).toHaveBeenCalledWith(
+      existing.externalAccountKey,
+      { runtimeEngine: "BAILEYS_V6", rePair: true },
+    );
+    // A successful HTTP request does not imply a live socket.
+    expect(view.uiState).toBe("DISCONNECTED");
+    expect(view.runtime?.qrAvailable).toBe(false);
+  });
+
+  it("offers QR when it is available even if an earlier status was disconnected", async () => {
+    const existing = connection({ status: "INACTIVE", isActive: false });
+    repoMocks.findWhatsAppConnection.mockResolvedValue(existing);
+    runtimeMocks.getAccountStatus.mockResolvedValue({
+      ...readyStatus(null),
+      state: "DISCONNECTED",
+      ready: false,
+      qrAvailable: false,
+    });
+    runtimeMocks.getAccountQr.mockResolvedValue({
+      accountKey: existing.externalAccountKey,
+      qr: "transient-qr-token",
+      qrAvailable: true,
+    });
+    const result = await getWhatsAppQrForBusiness({ businessId: existing.businessId });
+    expect(result.uiState).toBe("QR_REQUIRED");
+    expect(result.qrImageDataUrl).toBe("data:image/png;base64,TEST_QR");
   });
 });
