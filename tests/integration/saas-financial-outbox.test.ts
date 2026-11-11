@@ -380,7 +380,7 @@ describe.runIf(isolated)("financial outbox on verified isolated SQL Server", () 
        FROM dbo.TblManualPaymentRequest WHERE PaymentRequestID = @id`,
       [{ name: "id", type: sql.UniqueIdentifier, value: old.paymentRequestId }],
     );
-    expect(approval.recordset[0]?.ReviewedAtText).toMatch(/\\.\\d{3}0000$/);
+    expect(approval.recordset[0]?.ReviewedAtText).toMatch(/\.\d{3}0000$/);
     expect(await rows(old.paymentRequestId)).toHaveLength(0);
 
     captureConfig();
