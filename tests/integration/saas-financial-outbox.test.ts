@@ -373,6 +373,14 @@ describe.runIf(isolated)("financial outbox on verified isolated SQL Server", () 
       businessId: ctx.businessId, userId: ctx.userId, planCode: "STARTER", payerName: "Precutoff",
     });
     await approveManualPayment({ paymentRequestId: old.paymentRequestId, reviewerUserId: ctx.adminId });
+    // Financial capture requires SQL DATETIME2(7) approval timestamps to be
+    // exactly millisecond-aligned, including under SQL Server CI clock variations.
+    const approval = await query<{ ReviewedAtText: string }>(
+      `SELECT CONVERT(varchar(27), ReviewedAtUtc, 126) AS ReviewedAtText
+       FROM dbo.TblManualPaymentRequest WHERE PaymentRequestID = @id`,
+      [{ name: "id", type: sql.UniqueIdentifier, value: old.paymentRequestId }],
+    );
+    expect(approval.recordset[0]?.ReviewedAtText).toMatch(/\\.\\d{3}0000$/);
     expect(await rows(old.paymentRequestId)).toHaveLength(0);
 
     captureConfig();
