@@ -1,6 +1,14 @@
 # Brand V2 — Production go/no-go
 
 ## State
+## Owner scope decision — visual identity now, logo uploads later
+
+- The owner explicitly accepted **temporary existing bundled logos** on dark/light surfaces for this release. The agreed identity colors and typography/UI style must ship; final logo/lettering variants are **not** a release blocker.
+- Keep the current logos as safe fallbacks: `/brand/logo-on-dark.png` and `/brand/logo-on-light.png`. Do not invent new logos or silently publish draft assets.
+- Once the release is live, the owner can upload PNG/JPG/WebP variants as `SUPER_ADMIN` at `/admin/brand-assets` (Admin → الهوية واللوجوهات), review each draft and explicitly **اعتماد ونشر**. This functionality requires migration 104 and is unavailable on production until the actual release deploy.
+- **No intentional Pricing V1 or campaign-send flag changes in the Brand V2 deployment.** Preserve the VPS's existing flag values.
+- This concession is **logos only**; the verified SQL backup / restore proof and final production readiness gates remain mandatory before merge.
+
 The rollout PR is [#121](https://github.com/tarek-saad-dev/drvowa-autoresponse/pull/121), targeting `main`. Merging `main` deploys directly to the production VPS, runs SQL migrations, and restarts app + AI worker. The current brand integration branch may introduce `db/migrations/104_brand_asset_gallery.sql`.
 
 ## Automatic read-only preflight
@@ -22,8 +30,8 @@ The operator runbook is [PRODUCTION-DB-BACKUP-OPERATOR.md](./PRODUCTION-DB-BACKU
 - Verify actual restorable SQL backup and most recent successful restore/VERIFYONLY (record operator confirmation with date, without attaching customer data).
 - Check WhatsApp session backup with the runtime operator (keep session tokens off GitHub).
 - Record deployed app SHA and durable external storage/secret backup; make sure previous known-good SHA can be redeployed safely.
-- Inspect release's existing env changes: `DRVO_PRICING_V1_*` and `DRVO_LABEL_CAMPAIGNS_SEND_ENABLED` are set `true` by current deploy workflow. Confirm these are the intended production settings or adjust deploy separately before the main merge.
-- Take screenshots/check the release approved primary green logo/font files; when using admin upload after release, the old bundled blue logo is the fallback until variants are published.
+- Verify `DRVO_PRICING_V1_*` and `DRVO_LABEL_CAMPAIGNS_SEND_ENABLED` retain their **current** values. The Brand V2 release must not toggle Pricing, add-ons or campaign sends.
+- Verify the owner-approved temporary bundled logo fallback and full color/theme QA now; final wordmark/lettering can be uploaded separately after release from Super Admin.
 - Prior to merge, confirm all checks at final release SHA, including billing SQL, WhatsApp source, Typecheck, production build, Vitest, anonymous and authenticated Chromium.
 - Owner/admin smoke post-merge: health ready, login, admin asset upload, WhatsApp owner handover, plan page/manual transfer status, no unauthorized send, billing active and admin permissions.
 - Do not roll back a migration by deleting tables. Prefer app code rollback to previous SHA and coordinate data restore with operator if needed.
