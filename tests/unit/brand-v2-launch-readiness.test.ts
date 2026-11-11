@@ -68,5 +68,20 @@ describe("Brand V2 public name, metadata and safe-release gate", () => {
     expect(deploy).toContain("http://127.0.0.1:3100/api/health");
     expect(releasePR).toContain("pull_request:");
     expect(releasePR).toContain("branches: [main, 'feat/brand-v2']");
+    // Branding must never silently change production financial / send features.
+    expect(deploy).not.toContain("for key in DRVO_PRICING_V1_PAYMENTS");
+    expect(deploy).not.toContain("DRVO_LABEL_CAMPAIGNS_SEND_ENABLED=true");
+    expect(deploy).toContain("recent production SQL full-backup metadata");
+  });
+
+  it("keeps temporary bundled logos and an explicit Super Admin upload path", () => {
+    const brandAdmin = read("src/components/admin/admin-navigation.tsx");
+    const editor = read("src/app/admin/brand-assets/page.tsx");
+    expect(logo).toContain("/api/brand/assets/primary-dark");
+    expect(logo).toContain("/api/brand/assets/primary-light");
+    expect(brandAdmin).toContain('href: "/admin/brand-assets"');
+    expect(brandAdmin).toContain("superAdminOnly: true");
+    expect(editor).toContain('roles: ["SUPER_ADMIN"]');
+    expect(existsSync(resolve(process.cwd(), "db/migrations/104_brand_asset_gallery.sql"))).toBe(true);
   });
 });
