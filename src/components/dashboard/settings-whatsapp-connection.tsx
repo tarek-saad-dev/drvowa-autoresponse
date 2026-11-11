@@ -26,10 +26,12 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
   const [qr, setQr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [pairingActive, setPairingActive] = useState(false);
+  const pairingDeadline = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(true);
   const lock = useRef(false);
-  const shouldPoll = view?.uiState === "QR_REQUIRED" || view?.uiState === "STARTING" || view?.uiState === "CONNECTING";
+  const shouldPoll = pairingActive || view?.uiState === "QR_REQUIRED" || view?.uiState === "STARTING" || view?.uiState === "CONNECTING";
 
   const refresh = useCallback(async () => {
     if (lock.current) return;
@@ -41,7 +43,7 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
       if (alive.current) {
         setView(data);
         setError(null);
-        if (data.uiState === "READY") { setQr(null); setExpanded(false); }
+        if (data.uiState === "READY") { setQr(null); setExpanded(false); setPairingActive(false); }
       }
     } catch {
       if (alive.current) {
@@ -62,9 +64,14 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
     if (!alive.current) return;
     if (data.uiState === "READY") {
       setQr(null);
+      setPairingActive(false);
       await refresh();
     } else if (data.qrImageDataUrl) {
       setQr(data.qrImageDataUrl);
+      setPairingActive(false);
+      // The QR endpoint is authoritative for available pairing codes, even if
+      // a preceding status request returned a transient DISCONNECTED state.
+      setView((previous) => previous ? { ...previous, uiState: "QR_REQUIRED" } : { uiState: "QR_REQUIRED" });
     }
   }, [refresh]);
 
@@ -77,23 +84,40 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
   useEffect(() => {
     // Short polling only while pairing. Slow health refresh while connected, with no live status fabrication.
     const timer = window.setInterval(() => {
+      if (pairingActive && Date.now() >= pairingDeadline.current) {
+        setPairingActive(false);
+        setError("رمز QR ما ظهرش خلال دقيقة. جرّب إعادة الربط، ولو المشكلة مستمرة راجع حالة خدمة واتساب.");
+        return;
+      }
       void refresh();
       if (shouldPoll) void refreshQr().catch(() => {});
     }, shouldPoll ? 2500 : 20_000);
     return () => window.clearInterval(timer);
-  }, [refresh, refreshQr, shouldPoll]);
+  }, [refresh, refreshQr, shouldPoll, pairingActive]);
 
   async function connect() {
     setError(null); setBusy(true); setExpanded(true);
+    setQr(null);
+    pairingDeadline.current = Date.now() + 60_000;
+    setPairingActive(true);
     try {
       const res = await fetch("/api/channels/whatsapp/connect", { method: "POST" });
       const data = (await res.json().catch(() => ({}))) as ConnectionView;
-      if (!res.ok && !data.uiState) throw new Error(mapUserFacingError(data, "تعذر بدء ربط واتساب."));
+      if (!res.ok || !data.uiState) throw new Error(mapUserFacingError(data, "تعذر بدء ربط واتساب."));
       if (alive.current) setView(data);
-      if (data.uiState === "QR_REQUIRED" || data.uiState === "STARTING" || data.uiState === "CONNECTING") {
-        await refreshQr();
-      } else if (data.uiState === "READY") await refresh();
+      if (data.uiState === "READY") {
+        setPairingActive(false);
+        await refresh();
+      } else if (data.uiState === "ERROR" || data.uiState === "RUNTIME_DISABLED") {
+        setPairingActive(false);
+        setError(mapUserFacingError(data, "تعذر بدء الربط. حاول مرة تانية."));
+      } else {
+        // A 200 response may still be DISCONNECTED; fetch QR and keep polling
+        // while the runtime rebuilds the socket.
+        void refreshQr().catch(() => {});
+      }
     } catch (e) {
+      setPairingActive(false);
       setError(e instanceof Error ? e.message : "تعذر بدء ربط واتساب.");
     } finally { if (alive.current) setBusy(false); }
   }
@@ -112,7 +136,7 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
 
   const ready = view?.uiState === "READY";
   const degraded = ready && view?.runtime?.inboundDelivery?.health === "degraded";
-  const connecting = view?.uiState === "CONNECTING" || view?.uiState === "STARTING";
+  const connecting = pairingActive || view?.uiState === "CONNECTING" || view?.uiState === "STARTING";
   const pairing = view?.uiState === "QR_REQUIRED";
   const hasError = Boolean(error);
   const heading = hasError || loading || !view ? "جاري التحقق من واتساب" :
@@ -137,7 +161,9 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
           <Button type="button" variant="outline" size="sm" onClick={() => void disconnect()} disabled={busy}>قطع الاتصال</Button>
         ) : !loading && !hasError && !connecting && !pairing && view?.uiState !== "RUNTIME_DISABLED" ? (
           <Button type="button" size="sm" onClick={() => void connect()} disabled={busy}>{busy ? "جاري الربط..." : "ربط واتساب"}</Button>
-        ) : !loading && (hasError || view?.uiState === "RUNTIME_DISABLED") ? (
+        ) : !loading && hasError && view?.uiState !== "RUNTIME_DISABLED" ? (
+          <Button type="button" size="sm" onClick={() => void connect()} disabled={busy}>إعادة محاولة الربط</Button>
+        ) : !loading && view?.uiState === "RUNTIME_DISABLED" ? (
           <Button type="button" variant="outline" size="sm" onClick={() => void refresh()} disabled={busy}>إعادة التحقق</Button>
         ) : null}
       </div>
