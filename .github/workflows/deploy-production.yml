@@ -127,22 +127,10 @@ jobs:
               SECRET_VALUE="$(openssl rand -hex 32)"
               printf '\nINTEGRATION_SECRET_KEY=%s\n' "$SECRET_VALUE" >> "$ENV_FILE"
             fi
-            # Activate Pricing V1 for the owner's production test businesses.
-            # All flags remain explicit and reversible via the environment file.
-            for key in DRVO_PRICING_V1_PAYMENTS DRVO_PRICING_V1_FREE_TRIAL DRVO_PRICING_V1_ADDON_DRAFTS DRVO_PRICING_V1_ADDON_CONSUMPTION; do
-              if grep -q "^$key=" "$ENV_FILE"; then
-                sed -i "s/^$key=.*/$key=true/" "$ENV_FILE"
-              else
-                printf '%s=true\n' "$key" >> "$ENV_FILE"
-              fi
-            done
-            # Owner-confirmed, opt-in-only label campaigns. No run is created
-            # unless an OWNER reviews copy and eligible recipient count.
-            if grep -q '^DRVO_LABEL_CAMPAIGNS_SEND_ENABLED=' "$ENV_FILE"; then
-              sed -i 's/^DRVO_LABEL_CAMPAIGNS_SEND_ENABLED=.*/DRVO_LABEL_CAMPAIGNS_SEND_ENABLED=true/' "$ENV_FILE"
-            else
-              printf '%s\n' 'DRVO_LABEL_CAMPAIGNS_SEND_ENABLED=true' >> "$ENV_FILE"
-            fi
+            # Brand V2 is a visual release: preserve existing production feature
+            # flags. Pricing, trial, add-ons and label-campaign sending must only
+            # change via a separate, explicit operational release.
+            # Do not rewrite DRVO_PRICING_V1_* or DRVO_LABEL_CAMPAIGNS_SEND_ENABLED.
             chmod 600 "$ENV_FILE"
 
             echo "==> Installing locked dependencies"
