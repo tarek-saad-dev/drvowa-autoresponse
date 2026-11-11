@@ -17,7 +17,7 @@ Run in SSMS / sqlcmd connected **as the authorized operator** to the production 
 ```sql
 SET NOCOUNT ON;
 DECLARE @DatabaseName sysname = N'<PRODUCTION_DATABASE_NAME>';
-DECLARE @BackupFile nvarchar(4000) = N'<PRIVATE_SQL_HOST_BACKUP_DIRECTORY>\\drvo-full-YYYYMMDD-HHMMSS.bak';
+DECLARE @BackupFile nvarchar(4000) = N'<PRIVATE_SQL_HOST_BACKUP_DIRECTORY>\drvo-full-YYYYMMDD-HHMMSS.bak';
 
 IF @DatabaseName LIKE N'%<%' OR @BackupFile LIKE N'%<%'
   THROW 51000, 'Operator must replace all placeholders before execution.', 1;
