@@ -28,6 +28,7 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
   const [busy, setBusy] = useState(false);
   const [pairingActive, setPairingActive] = useState(false);
   const pairingDeadline = useRef(0);
+  const pairingTimedOut = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(true);
   const lock = useRef(false);
@@ -42,8 +43,11 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
       if (!res.ok || !data.uiState) throw new Error(mapUserFacingError(data, "تعذر التحقق من اتصال واتساب."));
       if (alive.current) {
         setView(data);
-        setError(null);
-        if (data.uiState === "READY") { setQr(null); setExpanded(false); setPairingActive(false); }
+        if (!pairingTimedOut.current || data.uiState === "READY") setError(null);
+        if (data.uiState === "READY") {
+          pairingTimedOut.current = false;
+          setQr(null); setExpanded(false); setPairingActive(false);
+        }
       }
     } catch {
       if (alive.current) {
@@ -63,10 +67,14 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
     if (!res.ok) throw new Error(mapUserFacingError(data, "تعذر تحميل QR."));
     if (!alive.current) return;
     if (data.uiState === "READY") {
+      pairingTimedOut.current = false;
+      setError(null);
       setQr(null);
       setPairingActive(false);
       await refresh();
     } else if (data.qrImageDataUrl) {
+      pairingTimedOut.current = false;
+      setError(null);
       setQr(data.qrImageDataUrl);
       setPairingActive(false);
       // The QR endpoint is authoritative for available pairing codes, even if
@@ -85,6 +93,7 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
     // Short polling only while pairing. Slow health refresh while connected, with no live status fabrication.
     const timer = window.setInterval(() => {
       if (pairingActive && Date.now() >= pairingDeadline.current) {
+        pairingTimedOut.current = true;
         setPairingActive(false);
         setError("رمز QR ما ظهرش خلال دقيقة. جرّب إعادة الربط، ولو المشكلة مستمرة راجع حالة خدمة واتساب.");
         return;
@@ -97,6 +106,7 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
 
   async function connect() {
     setError(null); setBusy(true); setExpanded(true);
+    pairingTimedOut.current = false;
     setQr(null);
     pairingDeadline.current = Date.now() + 60_000;
     setPairingActive(true);
@@ -139,7 +149,8 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
   const connecting = pairingActive || view?.uiState === "CONNECTING" || view?.uiState === "STARTING";
   const pairing = view?.uiState === "QR_REQUIRED";
   const hasError = Boolean(error);
-  const heading = hasError || loading || !view ? "جاري التحقق من واتساب" :
+  const heading = loading || !view ? "جاري التحقق من واتساب" :
+    hasError ? "تعذر ربط واتساب" :
     ready ? (degraded ? "واتساب متصل، والاستقبال محتاج مراجعة" : "واتساب متصل") :
     pairing ? "امسح QR لربط واتساب" :
     connecting ? "جاري ربط واتساب" : "واتساب غير متصل";
