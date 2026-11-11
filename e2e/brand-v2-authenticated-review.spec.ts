@@ -113,7 +113,8 @@ test.describe.serial("Brand V2 isolated logged-in browser QA", () => {
     ]) {
       await screenshotGrid(page, name, href);
     }
- 
+  });
+
   test("super admin can upload a draft, publish, restore history and keep drafts private", async ({ page, browser }) => {
     const userId = await signup(page, "brand_assets");
     await upsertPlatformAdmin({ userId, role: "SUPER_ADMIN" });
@@ -176,6 +177,5 @@ test.describe.serial("Brand V2 isolated logged-in browser QA", () => {
       await guest.close();
     }
     await page.screenshot({ path: "test-results/brand-v2-authenticated/brand-assets-admin-upload.png", fullPage: true });
-  });
   });
 });
