@@ -105,6 +105,7 @@ test.describe.serial("Brand V2 isolated logged-in browser QA", () => {
     // Establish the localhost origin before localStorage theme access.
     await page.goto("/privacy", { waitUntil: "domcontentloaded" });
     for (const [name, href] of [
+      ["brand-assets", "/admin/brand-assets"],
       ["admin", "/admin"],
       ["admin-payments", "/admin/payments"],
       ["admin-refunds", "/admin/refunds"],
@@ -112,5 +113,69 @@ test.describe.serial("Brand V2 isolated logged-in browser QA", () => {
     ]) {
       await screenshotGrid(page, name, href);
     }
+ 
+  test("super admin can upload a draft, publish, restore history and keep drafts private", async ({ page, browser }) => {
+    const userId = await signup(page, "brand_assets");
+    await upsertPlatformAdmin({ userId, role: "SUPER_ADMIN" });
+
+    await page.goto("/admin/brand-assets", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "هوية DRVO AutoRespond" })).toBeVisible();
+
+    const original = await page.request.get("/api/brand/assets/primary-dark");
+    expect(original.ok()).toBe(true);
+    const fallbackBytes = Buffer.from(await original.body());
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4//8/AwAI/AL+QblvAAAAAElFTkSuQmCC", "base64");
+
+    await page.locator('input[name="brand-primary-dark"]').setInputFiles({
+      name: "brand-v2-dark.png",
+      mimeType: "image/png",
+      buffer: png,
+    });
+    await page.getByRole("button", { name: "رفع كمسودة" }).first().click();
+    await expect(page.getByRole("status")).toContainText("تم الرفع كمسودة");
+    let items = await page.request.get("/api/admin/brand-assets");
+    expect(items.ok()).toBe(true);
+    let rows = (await items.json()).assets as { id: string; variant: string; active: boolean }[];
+    const first = rows.find((asset) => asset.variant === "primary-dark");
+    expect(first?.active).toBe(false);
+
+    // Uploading a draft never changes the public image.
+    const beforePublish = await page.request.get("/api/brand/assets/primary-dark");
+    expect(Buffer.from(await beforePublish.body()).equals(fallbackBytes)).toBe(true);
+
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.getByRole("button", { name: "اعتماد ونشر" }).first().click();
+    await expect(page.getByRole("status")).toContainText("تم نشر اللوجو الجديد");
+    const published = await page.request.get("/api/brand/assets/primary-dark");
+    expect(Buffer.from(await published.body()).equals(png)).toBe(true);
+
+    // Re-publish an older version: history is durable and one per variant is active.
+    const secondUpload = await page.request.post("/api/admin/brand-assets", {
+      headers: { origin: "http://localhost:3000" },
+      multipart: { variant: "primary-dark", file: { name: "brand-v3-dark.png", mimeType: "image/png", buffer: png } },
+    });
+    expect(secondUpload.status()).toBe(201);
+    const secondId = (await secondUpload.json()).id as string;
+    const activate = (id: string) => page.request.patch("/api/admin/brand-assets/" + id, {
+      headers: { origin: "http://localhost:3000" },
+      data: { action: "publish" },
+    });
+    expect((await activate(secondId)).ok()).toBe(true);
+    expect((await activate(first!.id)).ok()).toBe(true);
+    items = await page.request.get("/api/admin/brand-assets");
+    rows = (await items.json()).assets;
+    expect(rows.filter((asset) => asset.variant === "primary-dark" && asset.active).map((asset) => asset.id))
+      .toEqual([first!.id]);
+
+    const guest = await browser.newContext();
+    try {
+      expect((await guest.request.get("http://localhost:3000/api/admin/brand-assets")).status()).toBe(401);
+      expect((await guest.request.get("http://localhost:3000/api/admin/brand-assets/" + first!.id + "/image")).status()).toBe(401);
+      expect((await guest.request.get("http://localhost:3000/api/brand/assets/primary-dark")).status()).toBe(200);
+    } finally {
+      await guest.close();
+    }
+    await page.screenshot({ path: "test-results/brand-v2-authenticated/brand-assets-admin-upload.png", fullPage: true });
+  });
   });
 });
