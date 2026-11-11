@@ -11,8 +11,9 @@ import {
 } from "react";
 
 import { BrandLogo } from "@/components/brand/brand-logo";
-import { DrvoLoading } from "@/components/ui/drvo-loading";
+import { InboxCrmPanel } from "@/components/dashboard/crm/inbox-crm-panel";
 import { useInboxChrome } from "@/components/dashboard/inbox-chrome";
+import { DrvoLoading } from "@/components/ui/drvo-loading";
 import { messageBodyDisplay } from "@/lib/ui/labels";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
 import type { AiReplyHealth, AiReplyHealthReason } from "@/types/domain";
@@ -1584,6 +1585,9 @@ export function InboxPanel({
               {selected.aiMode !== "AUTO" && (
                 <button type="button" onClick={() => void resumeAi()} disabled={resuming} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-3 text-xs font-bold text-primary-foreground disabled:opacity-50"><Glyph name="spark" size={17} />رجّع الرد التلقائي</button>
               )}
+              <div className="border-t border-border pt-5">
+                <InboxCrmPanel conversationId={selected.conversationId} />
+              </div>
             </div>
           </aside>
         </div>
