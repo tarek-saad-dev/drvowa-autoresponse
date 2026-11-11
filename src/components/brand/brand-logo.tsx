@@ -4,8 +4,9 @@ import { APP_NAME } from "@/constants/app";
 import { cn } from "@/lib/utils/cn";
 
 const LOGOS = {
-  light: { src: "/brand/logo-on-light.png", width: 790, height: 129 },
-  dark: { src: "/brand/logo-on-dark.png", width: 779, height: 126 },
+  // Bundled originals remain our no-DB / no-upload fallbacks.
+  light: { fallback: "/brand/logo-on-light.png", src: "/api/brand/assets/primary-light", width: 790, height: 129 },
+  dark: { fallback: "/brand/logo-on-dark.png", src: "/api/brand/assets/primary-dark", width: 779, height: 126 },
 } as const;
 
 type Surface = keyof typeof LOGOS;
@@ -23,6 +24,7 @@ function LogoImage({
   return (
     <Image
       src={logo.src}
+      unoptimized
       width={logo.width}
       height={logo.height}
       alt={APP_NAME}
