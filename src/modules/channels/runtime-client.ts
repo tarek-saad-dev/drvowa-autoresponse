@@ -184,7 +184,7 @@ async function runtimeFetch<T>(
 
 export async function startAccount(
   accountKey: string,
-  options?: { runtimeEngine?: "BAILEYS_V6" | "BAILEYS_V7" },
+  options?: { runtimeEngine?: "BAILEYS_V6" | "BAILEYS_V7"; rePair?: boolean },
 ): Promise<RuntimeAccountStatus> {
   const result = await runtimeFetch<{ status: RuntimeAccountStatus }>(
     "POST",
@@ -192,6 +192,7 @@ export async function startAccount(
     {
       body: {
         runtimeEngine: options?.runtimeEngine === "BAILEYS_V7" ? "BAILEYS_V7" : "BAILEYS_V6",
+        rePair: options?.rePair === true,
       },
     },
   );

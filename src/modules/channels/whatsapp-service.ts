@@ -602,6 +602,8 @@ export async function startWhatsAppPairing(params: {
   try {
     const runtime = await startAccount(accountKey, {
       runtimeEngine: connection.runtimeEngine,
+      // This route is invoked only by the authenticated user's Connect action.
+      rePair: true,
     });
     const synced = await syncConnectionFromRuntime({
       businessId: params.businessId,

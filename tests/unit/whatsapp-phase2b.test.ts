@@ -162,7 +162,7 @@ describe("Phase 2B WhatsApp control plane", () => {
     expect(repoMocks.createChannelConnectionShell).not.toHaveBeenCalled();
     expect(runtimeMocks.startAccount).toHaveBeenCalledWith(
       existing.externalAccountKey,
-      { runtimeEngine: "BAILEYS_V6" },
+      { runtimeEngine: "BAILEYS_V6", rePair: true },
     );
     expect(runtimeMocks.startAccount).toHaveBeenCalledTimes(2);
   });
@@ -188,7 +188,7 @@ describe("Phase 2B WhatsApp control plane", () => {
     await startWhatsAppPairing({ businessId: existing.businessId });
     expect(runtimeMocks.startAccount).toHaveBeenCalledWith(
       "wa_dbowneddbowneddbowneddb01",
-      { runtimeEngine: "BAILEYS_V6" },
+      { runtimeEngine: "BAILEYS_V6", rePair: true },
     );
   });
 
