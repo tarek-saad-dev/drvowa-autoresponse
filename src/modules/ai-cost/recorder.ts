@@ -28,7 +28,8 @@ export type AiCostPurpose =
   | "KNOWLEDGE_EXTRACT"
   | "KNOWLEDGE_DEDUP"
   | "PULSE_SHADOW"
-  | "VOICE_TRANSCRIBE";
+  | "VOICE_TRANSCRIBE"
+  | "CRM_CAMPAIGN_AI";
 
 const count = (value: unknown): number | null =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0
