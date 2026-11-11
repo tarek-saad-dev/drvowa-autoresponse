@@ -113,7 +113,7 @@ jobs:
           import { networkInterfaces } from 'node:os';
           const server = process.env.DB_SERVER;
           if (!server) { console.log('SQL endpoint is on VPS: unknown'); process.exit(0); }
-          const host = server.replace(/^\\[|\\]$/g, '').split('\\\\')[0].trim();
+          const host = server.replace(/^\[|\]$/g, '').split('\\')[0].trim();
           const own = new Set(['127.0.0.1','::1','localhost']);
           for (const items of Object.values(networkInterfaces())) for (const item of items ?? []) own.add(item.address);
           try {
