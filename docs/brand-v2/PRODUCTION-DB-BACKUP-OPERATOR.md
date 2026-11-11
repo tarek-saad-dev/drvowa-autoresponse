@@ -49,12 +49,12 @@ The [read-only release preflight](https://github.com/tarek-saad-dev/drvowa-autor
 
 ## One-time full backup + proof
 
-Run in SSMS / sqlcmd connected **as the authorized operator** to the production SQL instance. Substitute the two placeholders with the exact database name and a **unique, fully qualified backup filename on the SQL Server host**, never a public/web directory. Do not paste the substituted script or output containing paths or credentials in GitHub.
+Run in SSMS / sqlcmd connected **as the authorized operator** to the production SQL instance. Substitute the database placeholder and update the unique backup filename with the exact database name and a **unique, fully qualified Linux backup filename on the SQL Server host**, never a public/web directory. Do not paste the substituted script or output containing paths or credentials in GitHub.
 
 ```sql
 SET NOCOUNT ON;
 DECLARE @DatabaseName sysname = N'<PRODUCTION_DATABASE_NAME>';
-DECLARE @BackupFile nvarchar(4000) = N'<PRIVATE_SQL_HOST_BACKUP_DIRECTORY>\drvo-full-YYYYMMDD-HHMMSS.bak';
+DECLARE @BackupFile nvarchar(4000) = N'/var/opt/mssql/backups/drvo-full-YYYYMMDD-HHMMSS.bak';
 
 IF @DatabaseName LIKE N'%<%' OR @BackupFile LIKE N'%<%'
   THROW 51000, 'Operator must replace all placeholders before execution.', 1;
