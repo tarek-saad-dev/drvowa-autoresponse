@@ -163,6 +163,8 @@ export function WhatsAppConnectionPanel({
   const [view, setView] = useState<ConnectionPayload>(initial);
   const [qrImageDataUrl, setQrImageDataUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pairingActive, setPairingActive] = useState(false);
+  const pairingDeadline = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const mounted = useRef(true);
@@ -196,6 +198,7 @@ export function WhatsAppConnectionPanel({
       setView(data);
       if (data.uiState === "READY") {
         setQrImageDataUrl(null);
+        setPairingActive(false);
       }
     }
     return data;
@@ -217,15 +220,17 @@ export function WhatsAppConnectionPanel({
     if (!mounted.current) return data;
     if (data.uiState === "READY") {
       setQrImageDataUrl(null);
+      setPairingActive(false);
       setView((prev) => ({ ...prev, uiState: "READY" }));
       return data;
     }
     if (data.qrImageDataUrl) {
       setQrImageDataUrl(data.qrImageDataUrl);
+      setPairingActive(false);
     }
     setView((prev) => ({
       ...prev,
-      uiState: data.uiState,
+      uiState: data.qrImageDataUrl ? "QR_REQUIRED" : data.uiState,
       message: data.message ?? prev.message,
     }));
     return data;
@@ -256,30 +261,34 @@ export function WhatsAppConnectionPanel({
   }, [view.uiState, refreshStatus]);
 
   useEffect(() => {
-    if (!ACTIVE_POLL_STATES.includes(view.uiState)) {
-      return;
-    }
+    if (!pairingActive && !ACTIVE_POLL_STATES.includes(view.uiState)) return;
     const id = window.setInterval(() => {
+      if (pairingActive && Date.now() >= pairingDeadline.current) {
+        setPairingActive(false);
+        setError("رمز QR ما ظهرش خلال دقيقة. جرّب إعادة الربط، ولو المشكلة مستمرة راجع حالة خدمة واتساب.");
+        return;
+      }
       void (async () => {
         try {
           const status = await refreshStatus();
-          if (status.uiState === "QR_REQUIRED") {
+          if (pairingActive || status.uiState === "QR_REQUIRED") {
             await refreshQr();
           }
-          if (status.uiState === "READY") {
-            setQrImageDataUrl(null);
-          }
+          if (status.uiState === "READY") setQrImageDataUrl(null);
         } catch {
-          // Keep UI stable; next poll retries.
+          // Temporary runtime delay: keep checking until the deadline.
         }
       })();
     }, 1500);
     return () => window.clearInterval(id);
-  }, [view.uiState, refreshStatus, refreshQr]);
+  }, [view.uiState, pairingActive, refreshStatus, refreshQr]);
 
   async function connect() {
     setBusy(true);
     setError(null);
+    setQrImageDataUrl(null);
+    pairingDeadline.current = Date.now() + 60_000;
+    setPairingActive(true);
     try {
       const res = await fetch("/api/channels/whatsapp/connect", {
         method: "POST",
@@ -288,14 +297,22 @@ export function WhatsAppConnectionPanel({
         error?: string;
         code?: string;
       };
-      if (!res.ok && !data.uiState) {
+      if (!res.ok || !data.uiState) {
         throw new Error(mapUserFacingError(data, "تعذر بدء الربط."));
       }
-      setView(data.uiState ? data : { ...view, ...data });
-      if (data.uiState === "QR_REQUIRED" || data.runtime?.qrAvailable) {
-        await refreshQr();
+      setView(data);
+      if (data.uiState === "READY") {
+        setPairingActive(false);
+      } else if (data.uiState === "ERROR" || data.uiState === "RUNTIME_DISABLED") {
+        setPairingActive(false);
+        setError(mapUserFacingError(data, "تعذر بدء الربط. جرّب مرة تانية."));
+      } else {
+        // Always probe QR after Connect, including a transient DISCONNECTED
+        // runtime response; polling continues for up to one minute.
+        void refreshQr().catch(() => undefined);
       }
     } catch (err) {
+      setPairingActive(false);
       setError(
         err instanceof Error
           ? mapUserFacingError({ error: err.message }, "تعذر بدء الربط.")
@@ -436,16 +453,22 @@ export function WhatsAppConnectionPanel({
               size="lg"
               className="mt-5 w-full sm:w-auto sm:min-w-44"
               onClick={() => void connect()}
-              disabled={busy}
+              disabled={busy || pairingActive}
             >
-              {busy
-                ? "بنجهز الربط..."
+              {busy || pairingActive
+                ? "جاري تجهيز الربط..."
                 : state === "DISCONNECTED"
                   ? "اربط واتساب تاني"
                   : "ابدأ ربط واتساب"}
             </Button>
           </CardContent>
         </Card>
+      ) : null}
+
+      {pairingActive && (state === "NOT_CONNECTED" || state === "DISCONNECTED" || state === "LOGGED_OUT") ? (
+        <Alert variant="info" aria-live="polite">
+          بنعيد تشغيل اتصال واتساب وبنستنى QR يظهر. لو مظهرش خلال دقيقة هتقدر تعيد المحاولة.
+        </Alert>
       ) : null}
 
       {state === "STARTING" || state === "CONNECTING" ? (
@@ -474,14 +497,16 @@ export function WhatsAppConnectionPanel({
               <p className="mt-4 text-xs leading-5 text-muted-foreground">
                 لو الكود انتهت صلاحيته هيتجدد تلقائيًا. متقفلش الصفحة أثناء المسح.
               </p>
-              <Button
-                variant="ghost"
-                className="mt-4"
-                onClick={() => void disconnect()}
-                disabled={busy}
-              >
-                إلغاء الربط
-              </Button>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button variant="ghost" onClick={() => void disconnect()} disabled={busy}>
+                  إلغاء الربط
+                </Button>
+                {error && !qrImageDataUrl ? (
+                  <Button variant="outline" onClick={() => void connect()} disabled={busy}>
+                    إعادة محاولة QR
+                  </Button>
+                ) : null}
+              </div>
             </div>
 
             <div className="rounded-[26px] border border-border bg-white p-4 shadow-lg">
