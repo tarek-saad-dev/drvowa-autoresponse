@@ -43,6 +43,8 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
       if (!res.ok || !data.uiState) throw new Error(mapUserFacingError(data, "تعذر التحقق من اتصال واتساب."));
       if (alive.current) {
         setView(data);
+        // QR is tied to a live socket generation; discard it when reconnecting.
+        if (data.uiState !== "QR_REQUIRED") setQr(null);
         if (!pairingTimedOut.current || data.uiState === "READY") setError(null);
         if (data.uiState === "READY") {
           pairingTimedOut.current = false;
@@ -80,6 +82,8 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
       // The QR endpoint is authoritative for available pairing codes, even if
       // a preceding status request returned a transient DISCONNECTED state.
       setView((previous) => previous ? { ...previous, uiState: "QR_REQUIRED" } : { uiState: "QR_REQUIRED" });
+    } else {
+      setQr(null);
     }
   }, [refresh]);
 
