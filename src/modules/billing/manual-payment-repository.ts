@@ -402,7 +402,7 @@ export async function markPaymentApproved(
     `UPDATE TblManualPaymentRequest
      SET Status = N'APPROVED',
          ReviewedByUserID = @reviewedByUserId,
-         ReviewedAtUtc = @reviewedAtUtc,
+         ReviewedAtUtc = CONVERT(datetime2(3), @reviewedAtUtc),
          ReviewNote = @reviewNote,
          ApprovedSubscriptionID = @approvedSubscriptionId,
          UpdatedAtUtc = @updatedAtUtc
@@ -450,7 +450,7 @@ export async function markPaymentRejected(
     `UPDATE TblManualPaymentRequest
      SET Status = N'REJECTED',
          ReviewedByUserID = @reviewedByUserId,
-         ReviewedAtUtc = @reviewedAtUtc,
+         ReviewedAtUtc = CONVERT(datetime2(3), @reviewedAtUtc),
          ReviewNote = @reviewNote,
          UpdatedAtUtc = @updatedAtUtc
      WHERE PaymentRequestID = @paymentRequestId
