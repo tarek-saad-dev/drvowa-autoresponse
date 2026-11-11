@@ -2,6 +2,43 @@
 
 **Scope:** `drvowa-autoresponse` production SQL Server. This checklist is for an authorized SQL Server/VPS operator. **Do not run it using the application database login.** A new full backup plus proof of restore usability is required **before** merging Brand V2 release PR #121.
 
+## Confirmed Linux VPS route — 2026-11-11 23:18 UTC
+
+The [read-only release preflight](https://github.com/tarek-saad-dev/drvowa-autoresponse/actions/runs/43118838860) confirmed that the SQL Server instance is **local to the production VPS**, its SSH operator has root, the SQL client is installed, and the SQL Server systemd unit is configured. **Linux root is not the same as SQL Server sysadmin**. The application's SQL login lacks BACKUP DATABASE; do not elevate this runtime login. The last full backup record is ~1192.7 hours old.
+
+**Operator-only sequence on the existing VPS, using a separately authorized SQL backup login:**
+
+1. Access the VPS over your approved secure SSH connection. Confirm free space and prepare a restricted **non-web** directory only if approved. Do not touch existing backups:
+
+   ```bash
+   sudo systemctl is-active mssql-server
+   sudo install -d -o mssql -g mssql -m 0700 /var/opt/mssql/backups
+   df -h /var/opt/mssql/backups
+   ```
+
+2. Start the SQL client interactively under an **existing authorized backup/DBA login** (not DB_USER), for example:
+
+   ```bash
+   /opt/mssql-tools18/bin/sqlcmd -S localhost -U '<AUTHORIZED_SQL_BACKUP_LOGIN>' -C -b
+   ```
+
+   Use the installed sqlcmd binary path if different; this form prompts for a password without putting it in shell history. Use `-C` only for the verified local SQL endpoint. **Never** put a password in `-P`, GitHub secrets/logs output, screenshots, or chat. If no separately authorized SQL backup login is available, **stop**: don't reset sa, grant app user backup rights, restart SQL Server into special modes or copy live MDF/LDF files as a purported usable backup.
+
+3. Check privilege on the **correct private production DB name** before any write; issue `GO`:
+
+   ```sql
+   DECLARE @Db sysname = N'<PRIVATE_PRODUCTION_DB_NAME>';
+   SELECT HAS_PERMS_BY_NAME(@Db, 'DATABASE', 'BACKUP DATABASE') AS CanBackupTargetDb,
+          IS_SRVROLEMEMBER('sysadmin') AS IsSqlSysadmin;
+   GO
+   ```
+
+4. Follow the **full backup + RESTORE VERIFYONLY** SQL below, substituting a unique non-existing **Linux path** such as `/var/opt/mssql/backups/drvo-full-YYYYMMDD-HHMMSS.bak`. Use COPY_ONLY and CHECKSUM; the SQL service account must have filesystem write access. The ~0.20-GiB allocation is NOT a guarantee of backup size. Check real disk capacity and offsite destination. Do not put files under the app or web root.
+
+5. Test a full restore into an isolated temporary DB (never overwrite production); independently retain an encrypted off-VPS copy, then configure daily backups, retention, alerts, and restore drills. `RESTORE VERIFYONLY` and the <=24h GitHub metadata gate do not prove a real isolated restore.
+
+6. On success, rerun the failed Brand V2 preflight on the **latest release PR #121 head SHA**. Until backup, restore evidence, offsite retention and live app/WhatsApp/billing smoke are verified, **keep PR #121 Draft**.
+
 ## Mandatory environment checks
 
 1. Identify the **production SQL Server host and database** from the authorized operator's private configuration (not from GitHub issue comments).
@@ -12,12 +49,12 @@
 
 ## One-time full backup + proof
 
-Run in SSMS / sqlcmd connected **as the authorized operator** to the production SQL instance. Substitute the two placeholders with the exact database name and a **unique, fully qualified backup filename on the SQL Server host**, never a public/web directory. Do not paste the substituted script or output containing paths or credentials in GitHub.
+Run in SSMS / sqlcmd connected **as the authorized operator** to the production SQL instance. Substitute the database placeholder and update the unique backup filename with the exact database name and a **unique, fully qualified Linux backup filename on the SQL Server host**, never a public/web directory. Do not paste the substituted script or output containing paths or credentials in GitHub.
 
 ```sql
 SET NOCOUNT ON;
 DECLARE @DatabaseName sysname = N'<PRODUCTION_DATABASE_NAME>';
-DECLARE @BackupFile nvarchar(4000) = N'<PRIVATE_SQL_HOST_BACKUP_DIRECTORY>\drvo-full-YYYYMMDD-HHMMSS.bak';
+DECLARE @BackupFile nvarchar(4000) = N'/var/opt/mssql/backups/drvo-full-YYYYMMDD-HHMMSS.bak';
 
 IF @DatabaseName LIKE N'%<%' OR @BackupFile LIKE N'%<%'
   THROW 51000, 'Operator must replace all placeholders before execution.', 1;
