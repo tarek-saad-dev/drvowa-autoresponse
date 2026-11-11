@@ -12,6 +12,12 @@ Workflow `.github/workflows/brand-v2-production-preflight.yml` targets only PR #
 
 The workflow performs no modifications to the remote database, app or services. If SQL backup history is invisible to the app account, or backup is too old, this is a **release blocker** — do not override it based on CI build success. A full backup-history record is evidence of a backup operation, not proof that restore works.
 
+## Production deployment protection (defense-in-depth)
+
+The production deployment also enforces a read-only SQL full-backup freshness check **before** git checkout, changes to Pricing/Campaign environment flags, database migrations or service restarts. It fails closed if recent (<=24h) non-damaged full-backup metadata is missing. This prevents release PR preflight from becoming stale between approval and the actual deploy. It does **not** prove a restore succeeded.
+
+The operator runbook is [PRODUCTION-DB-BACKUP-OPERATOR.md](./PRODUCTION-DB-BACKUP-OPERATOR.md); the separate privileged SQL backup, VERIFYONLY / isolated restore, encrypted offsite retention, daily scheduling and release signoff remain mandatory.
+
 ## Additional mandatory operational checks (manual)
 - Verify actual restorable SQL backup and most recent successful restore/VERIFYONLY (record operator confirmation with date, without attaching customer data).
 - Check WhatsApp session backup with the runtime operator (keep session tokens off GitHub).
