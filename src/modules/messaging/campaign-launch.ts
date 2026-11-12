@@ -100,18 +100,27 @@ function mapRun(row: RunRow): CampaignDeliveryStatus {
   };
 }
 const summarySelect = `
- SELECT TOP (1) run.RunID, run.Status, run.EligibleCount, run.CreatedAtUtc,
-        SUM(CASE WHEN item.Status=N'PENDING' THEN 1 ELSE 0 END) AS Pending,
-        SUM(CASE WHEN item.Status=N'IN_FLIGHT' THEN 1 ELSE 0 END) AS InFlight,
-        SUM(CASE WHEN item.Status=N'SENT' THEN 1 ELSE 0 END) AS Sent,
-        SUM(CASE WHEN item.Status=N'FAILED' THEN 1 ELSE 0 END) AS Failed,
-        SUM(CASE WHEN item.Status=N'UNKNOWN' THEN 1 ELSE 0 END) AS Unknown,
-        SUM(CASE WHEN item.Status=N'SKIPPED' THEN 1 ELSE 0 END) AS Skipped
+ SELECT run.RunID,run.Status,run.EligibleCount,run.CreatedAtUtc,
+        COALESCE(items.Pending,0) AS Pending,
+        COALESCE(items.InFlight,0) AS InFlight,
+        COALESCE(items.Sent,0) AS Sent,
+        COALESCE(items.Failed,0) AS Failed,
+        COALESCE(items.Unknown,0) AS Unknown,
+        COALESCE(items.Skipped,0) AS Skipped
  FROM dbo.TblWhatsAppCampaignRun run
- JOIN dbo.TblWhatsAppCampaignRunItem item ON item.RunID=run.RunID
+ OUTER APPLY (
+   SELECT
+     SUM(CASE WHEN item.Status=N'PENDING' THEN 1 ELSE 0 END) AS Pending,
+     SUM(CASE WHEN item.Status=N'IN_FLIGHT' THEN 1 ELSE 0 END) AS InFlight,
+     SUM(CASE WHEN item.Status=N'SENT' THEN 1 ELSE 0 END) AS Sent,
+     SUM(CASE WHEN item.Status=N'FAILED' THEN 1 ELSE 0 END) AS Failed,
+     SUM(CASE WHEN item.Status=N'UNKNOWN' THEN 1 ELSE 0 END) AS Unknown,
+     SUM(CASE WHEN item.Status=N'SKIPPED' THEN 1 ELSE 0 END) AS Skipped
+   FROM dbo.TblWhatsAppCampaignRunItem item
+   WHERE item.RunID=run.RunID AND item.BusinessID=run.BusinessID
+ ) items
  WHERE run.BusinessID=@businessId AND run.CampaignDraftID=@draftId
    AND run.PreflightID=@preflightId
- GROUP BY run.RunID,run.Status,run.EligibleCount,run.CreatedAtUtc
 `;
 export async function getCampaignRunStatus(
   params: {businessId: string; draftId: string; preflightId: string},
@@ -125,8 +134,18 @@ export async function previewCampaignLaunch(
   const inputs = scope(params.businessId, params.draftId, params.preflightId);
   const meta = (await query<Meta>(metaQuery, inputs)).recordset[0];
   if (!meta) throw new NotFoundError("خطة مراجعة الجمهور غير موجودة.");
-  const currentCopy = isValid(meta);
   const existingRun = await getCampaignRunStatus(params);
+  // The persisted run is authoritative, even if its draft/channel/plan later changes.
+  // Never make a launched campaign's status depend on an unrelated quota lookup.
+  if (existingRun) return {
+    eligible: existingRun.total, hasQuota: true, canLaunch: false,
+    enabled: campaignsSendingEnabled(), labelActive: isValid(meta),
+    alreadyLaunched: true, businessName: meta.BusinessName,
+    optInText: `أوافق على استقبال عروض ${meta.BusinessName} على واتساب`,
+    sendRate: "رسالة كل 60 ثانية، بحد أقصى 60 خلال 24 ساعة لكل رقم عمل",
+    run: existingRun, coverage: "EVENT_DRIVEN_PARTIAL" as const,
+  };
+  const currentCopy = isValid(meta);
   const count = currentCopy
     ? Number((await query<{Total: number}>(candidateQuery, candidateInputs(meta, params.businessId)))
       .recordset[0]?.Total ?? 0)
@@ -158,6 +177,10 @@ export async function launchCampaign(params: {
   businessId: string; draftId: string; preflightId: string;
   userId: string; expectedEligible: number; expectedMessage: string;
 }): Promise<CampaignDeliveryStatus> {
+  // Idempotent retry: the first POST may have committed but its HTTP
+  // response was lost. Return the existing status, never enqueue again.
+  const persisted = await getCampaignRunStatus(params);
+  if (persisted) return persisted;
   if (!campaignsSendingEnabled()) {
     throw new ConflictError("تشغيل حملات واتساب غير مفعل على السيرفر حتى الآن.");
   }
@@ -200,7 +223,8 @@ export async function launchCampaign(params: {
       bound,
     );
     if (existing.recordset.length) {
-      throw new ConflictError("الحملة اتجهزت للإرسال قبل كده. مش هنبعتها مرتين.");
+      // Resolve this concurrent retry after the transaction releases its lock.
+      return;
     }
     const c = candidateInputs(locked, params.businessId);
     const eligible = Number((await trx.query<{Total:number}>(candidateQuery, c))
@@ -273,9 +297,13 @@ export async function launchCampaign(params: {
       c,
     );
   });
+  // A concurrent POST can win the unique preflight constraint. Its run is
+  // the one to show, without a second queue or a misleading failure message.
   const run = await getCampaignRunStatus(params);
-  if (!run || run.runId !== runId) throw new ConflictError("الحملة اتحفظت لكن تعذر تحميل حالتها.");
-  return run;
+  if (run) return run;
+  // A committed run must not be reported as a failed send. The client can
+  // safely reload its status rather than creating another campaign.
+  throw new ConflictError("الحملة محفوظة؛ تعذر قراءة حالتها حاليًا. افتح الحملة السابقة وحدّث النتائج.");
 }
 
 export async function changeCampaignRun(params: {
