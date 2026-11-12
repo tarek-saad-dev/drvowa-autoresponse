@@ -57,7 +57,17 @@ npm run db:migrate
 npm run db:status
 ```
 
+Migration `104` note: `TblCrmAudienceQueryAudit.MatchedRowCount` (not `RowCount`) — `RowCount` is a SQL Server reserved keyword and caused `Incorrect syntax near 'ACTION'` during CI apply.
+
 Rollback plan: stop using CRM routes/APIs; leave tables in place (additive). Do not delete mirrored ERP rows without a backup. Historical migrations must not be edited.
+
+## Release fixes (PR follow-up)
+
+- Audience preview is paginated (`AUDIENCE_PREVIEW_PAGE_SIZE`); freeze materializes up to `AUDIENCE_SNAPSHOT_MAX_ROWS` (2000) and fails closed if larger.
+- Campaign builder freezes + revalidates channel-scoped eligibility before creating WhatsApp lists/drafts.
+- ERP `isValidSale` requires invoice type `مبيعات` and non-cancelled legacy `isActive`.
+- ERP sync reports `PARTIAL` (not `SUCCESS`) when page caps stop a resumable run mid-cursor.
+- Inbox CRM panel respects MEMBER assignment restrictions for notes/ERP/financial data.
 
 ## Deploy steps (safe)
 

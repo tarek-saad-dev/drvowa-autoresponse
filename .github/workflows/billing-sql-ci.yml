@@ -74,6 +74,8 @@ jobs:
         run: npm run db:migrate
       - name: Verify migrations are repeatable
         run: npm run db:migrate
+      - name: CRM Phase 1 SQL integration (isolation, ERP mirrors, audience, migration repeatability)
+        run: npx vitest run tests/integration/crm-phase1.test.ts tests/unit/crm-phone.test.ts tests/unit/crm-audience-ast.test.ts tests/unit/crm-audience-compiler.test.ts tests/unit/crm-audience-merge.test.ts tests/unit/crm-erp-sale-validity.test.ts
       - name: Verify refund safety and amount unit tests
         run: npx vitest run tests/refund-policy.test.ts
       - name: Exercise payment, receipt, annual, grace, downgrade and refund transactions

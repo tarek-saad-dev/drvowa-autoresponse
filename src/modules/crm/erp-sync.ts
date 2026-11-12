@@ -51,14 +51,34 @@ function num(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+const ERP_SALE_INV_TYPE = "مبيعات";
+
 function isInvoiceCancelled(payload: Record<string, unknown>): boolean {
   if (payload.isDeleted === true || payload.deleted === true) return true;
   const isActive = str(payload.isActive)?.toLowerCase();
-  // Legacy Cut Salon: isActive='yes' means cancelled.
+  // Legacy Cut Salon: isActive='yes' means cancelled/voided.
   if (isActive === "yes") return true;
   const status = str(payload.status)?.toLowerCase();
   if (status === "deleted" || status === "cancelled" || status === "canceled") return true;
   return false;
+}
+
+/** Valid CRM sales require Cashier sale type + non-cancelled status. */
+export function isValidErpSaleInvoice(payload: Record<string, unknown>): boolean {
+  const invType = str(payload.invType ?? payload.InvType);
+  if (invType !== ERP_SALE_INV_TYPE) return false;
+  if (isInvoiceCancelled(payload)) return false;
+  const status = str(payload.status)?.toLowerCase();
+  if (status && status !== "active") return false;
+  return true;
+}
+
+/** Stable mirror identity: Cashier invoice keys are (invID, invType). */
+export function erpInvoiceExternalKey(payload: Record<string, unknown>): string | null {
+  const invId = str(payload.invId ?? payload.InvID ?? payload.externalInvId);
+  if (!invId) return null;
+  const invType = str(payload.invType ?? payload.InvType) ?? ERP_SALE_INV_TYPE;
+  return `${invType}:${invId}`;
 }
 
 async function loadManifest(integration: {
@@ -216,15 +236,18 @@ async function syncCustomers(params: {
       if (customers.length < 200) break;
     }
 
+    const incomplete = pages >= 20;
     await repo.upsertErpSyncState({
       businessId: params.businessId,
       integrationId: params.integration.integrationId,
       resource: RESOURCE_CUSTOMERS,
       cursorJson: JSON.stringify(cursor),
-      status: "SUCCESS",
-      markSuccess: true,
-      lastErrorCode: null,
-      lastErrorMessage: null,
+      status: incomplete ? "PARTIAL" : "SUCCESS",
+      markSuccess: !incomplete,
+      lastErrorCode: incomplete ? "SYNC_INCOMPLETE" : null,
+      lastErrorMessage: incomplete
+        ? "تمت مزامنة جزء من العملاء — أعد المزامنة لاستكمال الصفحات التالية"
+        : null,
     });
     return { synced, skipped: false };
   } catch (error) {
@@ -289,12 +312,14 @@ async function syncInvoices(params: {
       for (const item of invoices) {
         const row = asRecord(item);
         if (!row) continue;
-        const invId = str(row.invId ?? row.InvID ?? row.externalInvId);
-        if (!invId) continue;
+        const externalInvId = erpInvoiceExternalKey(row);
+        if (!externalInvId) continue;
+        const invId = str(row.invId ?? row.InvID) ?? externalInvId;
         const clientId = str(row.clientId ?? row.ClientID);
         const customerName = str(row.clientName ?? row.customerName);
         const mobile = str(row.mobile ?? row.Mobile);
         const cancelled = isInvoiceCancelled(row);
+        const validSale = isValidErpSaleInvoice(row);
 
         const customerId = await ensureCrmCustomerFromErp({
           businessId: params.businessId,
@@ -327,7 +352,7 @@ async function syncInvoices(params: {
         await repo.upsertErpInvoiceMirror({
           businessId: params.businessId,
           invoice: {
-            externalInvId: invId,
+            externalInvId,
             externalClientId: clientId,
             customerId,
             invType: str(row.invType ?? row.InvType),
@@ -338,21 +363,25 @@ async function syncInvoices(params: {
             grandTotal: num(row.grandTotal ?? row.GrandTotal) ?? 0,
             subTotal: num(row.subTotal ?? row.SubTotal) ?? 0,
             discountValue: num(row.disVal ?? row.discountValue ?? row.DisVal) ?? 0,
-            isValidSale: !cancelled,
+            isValidSale: validSale,
             isDeleted: cancelled,
-            rawStatus: cancelled ? "CANCELLED" : str(row.status) ?? "ACTIVE",
+            rawStatus: cancelled
+              ? "CANCELLED"
+              : validSale
+                ? "ACTIVE"
+                : str(row.status) ?? "INVALID",
             lines,
           },
         });
 
-        if (customerId && !cancelled) {
+        if (customerId && validSale) {
           await repo.insertActivity({
             businessId: params.businessId,
             customerId,
             activityType: "ERP_INVOICE",
             title: `فاتورة ERP #${invId}`,
             relatedEntityType: "ERP_INVOICE",
-            relatedEntityId: invId,
+            relatedEntityId: externalInvId,
           });
         }
         synced += 1;
@@ -372,15 +401,18 @@ async function syncInvoices(params: {
       if (invoices.length < 100) break;
     }
 
+    const incomplete = pages >= 20;
     await repo.upsertErpSyncState({
       businessId: params.businessId,
       integrationId: params.integration.integrationId,
       resource: RESOURCE_INVOICES,
       cursorJson: JSON.stringify(cursor),
-      status: "SUCCESS",
-      markSuccess: true,
-      lastErrorCode: null,
-      lastErrorMessage: null,
+      status: incomplete ? "PARTIAL" : "SUCCESS",
+      markSuccess: !incomplete,
+      lastErrorCode: incomplete ? "SYNC_INCOMPLETE" : null,
+      lastErrorMessage: incomplete
+        ? "تمت مزامنة جزء من الفواتير — أعد المزامنة لاستكمال الصفحات التالية"
+        : null,
     });
     return { synced, skipped: false };
   } catch (error) {
@@ -414,45 +446,76 @@ async function syncCatalog(params: {
   });
 
   try {
-    const result = await callIntegrationTool({
-      integration: params.integration,
-      tool: "catalog.list_services",
-      input: { limit: 500 },
-      requestId: randomUUID(),
+    const state = await repo.getErpSyncState({
+      businessId: params.businessId,
+      resource: RESOURCE_CATALOG,
     });
-    if (!result.ok) {
-      throw new ValidationError(result.error?.message ?? "فشل مزامنة كتالوج الخدمات");
-    }
-    const data = asRecord(result.data);
-    const services = asArray(data?.services ?? data?.items);
+    let cursor = parseCursor(state?.cursorJson);
     let synced = 0;
-    for (const item of services) {
-      const row = asRecord(item);
-      if (!row) continue;
-      const proId = str(row.proId ?? row.externalProId ?? row.ProID);
-      const proName = str(row.proName ?? row.name ?? row.ProName);
-      if (!proId || !proName) continue;
-      await repo.upsertErpServiceCatalog({
-        businessId: params.businessId,
-        externalProId: proId,
-        proType: str(row.proType ?? row.ProType),
-        proName,
-        proNameAr: str(row.proNameAr ?? row.ProNameAr),
-        categoryName: str(row.categoryName ?? row.category),
-        isDeleted: row.isDeleted === true,
+    let pages = 0;
+
+    while (pages < 20) {
+      pages += 1;
+      const result = await callIntegrationTool({
+        integration: params.integration,
+        tool: "catalog.list_services",
+        input: {
+          sinceProId: cursor.sinceProId ?? 0,
+          limit: 200,
+        },
+        requestId: randomUUID(),
       });
-      synced += 1;
+      if (!result.ok) {
+        throw new ValidationError(result.error?.message ?? "فشل مزامنة كتالوج الخدمات");
+      }
+      const data = asRecord(result.data);
+      const services = asArray(data?.services ?? data?.items);
+      if (!services.length) break;
+
+      for (const item of services) {
+        const row = asRecord(item);
+        if (!row) continue;
+        const proId = str(row.proId ?? row.externalProId ?? row.ProID);
+        const proName = str(row.proName ?? row.name ?? row.ProName);
+        if (!proId || !proName) continue;
+        await repo.upsertErpServiceCatalog({
+          businessId: params.businessId,
+          externalProId: proId,
+          proType: str(row.proType ?? row.ProType),
+          proName,
+          proNameAr: str(row.proNameAr ?? row.ProNameAr),
+          categoryName: str(row.categoryName ?? row.category),
+          isDeleted: row.isDeleted === true,
+        });
+        synced += 1;
+      }
+
+      const next = asRecord(data?.nextCursor) ?? {};
+      const nextId = num(next.sinceProId ?? next.proId);
+      if (nextId == null || nextId === Number(cursor.sinceProId ?? -1)) break;
+      cursor = { ...cursor, ...next, sinceProId: nextId };
+      await repo.upsertErpSyncState({
+        businessId: params.businessId,
+        integrationId: params.integration.integrationId,
+        resource: RESOURCE_CATALOG,
+        cursorJson: JSON.stringify(cursor),
+        status: "RUNNING",
+      });
+      if (services.length < 200) break;
     }
 
+    const incomplete = pages >= 20;
     await repo.upsertErpSyncState({
       businessId: params.businessId,
       integrationId: params.integration.integrationId,
       resource: RESOURCE_CATALOG,
-      cursorJson: JSON.stringify({ syncedAt: new Date().toISOString() }),
-      status: "SUCCESS",
-      markSuccess: true,
-      lastErrorCode: null,
-      lastErrorMessage: null,
+      cursorJson: JSON.stringify({ ...cursor, syncedAt: new Date().toISOString() }),
+      status: incomplete ? "PARTIAL" : "SUCCESS",
+      markSuccess: !incomplete,
+      lastErrorCode: incomplete ? "SYNC_INCOMPLETE" : null,
+      lastErrorMessage: incomplete
+        ? "تمت مزامنة جزء من الكتالوج — أعد المزامنة لاستكمال الصفحات التالية"
+        : null,
     });
     return { synced, skipped: false };
   } catch (error) {

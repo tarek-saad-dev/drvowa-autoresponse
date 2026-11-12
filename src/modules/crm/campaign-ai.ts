@@ -6,6 +6,7 @@ import { recordAiProviderCall } from "@/modules/ai-cost/recorder";
 import { getBusinessById } from "@/modules/businesses/service";
 
 import {
+  AudienceComplexityError,
   explainAudienceFilterAr,
   mergeAudienceFilters,
   parseAudienceFilterAst,
@@ -274,7 +275,10 @@ export async function runCampaignAiTurn(
       mode === "refine" && params.priorFilter
         ? mergeAudienceFilters(parseAudienceFilterAst(params.priorFilter), parsed)
         : parsed;
-  } catch {
+  } catch (error) {
+    if (error instanceof AudienceComplexityError) {
+      throw new ValidationError(error.message);
+    }
     throw new ValidationError("الذكاء الاصطناعي أرجع فلترًا غير صالح — أعد صياغة الطلب");
   }
 

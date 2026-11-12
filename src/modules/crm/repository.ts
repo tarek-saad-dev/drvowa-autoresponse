@@ -1768,7 +1768,7 @@ export async function insertAudienceQueryAudit(params: {
   await query(
     `INSERT INTO dbo.TblCrmAudienceQueryAudit (
        AuditID, BusinessID, UserID, NaturalLanguage, FilterJson, CompiledSqlHash,
-       RowCount, DurationMs, Status, ErrorCode
+       MatchedRowCount, DurationMs, Status, ErrorCode
      ) VALUES (
        @id, @businessId, @userId, @nl, @filterJson, @hash,
        @rowCount, @durationMs, @status, @errorCode
@@ -1794,7 +1794,7 @@ export type ErpSyncState = {
   integrationId: string;
   resource: string;
   cursorJson: string | null;
-  status: "IDLE" | "RUNNING" | "SUCCESS" | "ERROR";
+  status: "IDLE" | "RUNNING" | "SUCCESS" | "PARTIAL" | "ERROR";
   lastSuccessAtUtc: string | null;
   lastAttemptAtUtc: string | null;
   lastErrorCode: string | null;
@@ -2425,9 +2425,28 @@ export type AudienceMatchRow = {
   LastVisitAt: Date | string | null;
 };
 
+export async function getActiveWhatsAppChannelId(params: {
+  businessId: string;
+}): Promise<string | null> {
+  const result = await query<{ ChannelConnectionID: string }>(
+    `SELECT TOP (2) ChannelConnectionID
+     FROM dbo.TblChannelConnection
+     WHERE BusinessID = @businessId
+       AND Channel = N'WHATSAPP'
+       AND IsActive = 1
+       AND Status = N'ACTIVE'
+     ORDER BY CreatedAtUtc DESC`,
+    [{ name: "businessId", type: sql.UniqueIdentifier, value: params.businessId }],
+  );
+  if (result.recordset.length !== 1) return null;
+  return normalizeUuid(result.recordset[0].ChannelConnectionID);
+}
+
 export async function enrichAudienceMarketingEligibility(params: {
   businessId: string;
   rows: AudienceMatchRow[];
+  /** When set, permission/opt-out are scoped to this WhatsApp channel. */
+  channelConnectionId?: string | null;
 }): Promise<CrmAudiencePreview["customers"]> {
   if (!params.rows.length) return [];
   const phones = [
@@ -2449,15 +2468,29 @@ export async function enrichAudienceMarketingEligibility(params: {
       placeholders.push(`@${name}`);
       inputs.push({ name, type: sql.NVarChar(32), value: phone });
     });
+    const channelClause = params.channelConnectionId
+      ? "AND ChannelConnectionID = @channelId"
+      : "";
+    if (params.channelConnectionId) {
+      inputs.push({
+        name: "channelId",
+        type: sql.UniqueIdentifier,
+        value: params.channelConnectionId,
+      });
+    }
     const perm = await query<{ PhoneNormalized: string }>(
-      `SELECT PhoneNormalized FROM dbo.TblWhatsAppCampaignPermission
-       WHERE BusinessID = @businessId AND PhoneNormalized IN (${placeholders.join(", ")})`,
+      `SELECT DISTINCT PhoneNormalized FROM dbo.TblWhatsAppCampaignPermission
+       WHERE BusinessID = @businessId
+         AND PhoneNormalized IN (${placeholders.join(", ")})
+         ${channelClause}`,
       inputs,
     );
     for (const row of perm.recordset) permitted.add(row.PhoneNormalized);
     const out = await query<{ PhoneNormalized: string }>(
-      `SELECT PhoneNormalized FROM dbo.TblWhatsAppCampaignOptOut
-       WHERE BusinessID = @businessId AND PhoneNormalized IN (${placeholders.join(", ")})`,
+      `SELECT DISTINCT PhoneNormalized FROM dbo.TblWhatsAppCampaignOptOut
+       WHERE BusinessID = @businessId
+         AND PhoneNormalized IN (${placeholders.join(", ")})
+         ${channelClause}`,
       inputs,
     );
     for (const row of out.recordset) optedOut.add(row.PhoneNormalized);

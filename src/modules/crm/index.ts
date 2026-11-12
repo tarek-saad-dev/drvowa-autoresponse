@@ -31,6 +31,7 @@ export {
   mergeAudienceFilters,
   explainAudienceFilterAr,
   audienceFilterAstSchema,
+  AudienceComplexityError,
 } from "./audience-ast";
 
 export {
@@ -38,6 +39,11 @@ export {
   AUDIENCE_MAX_ROWS,
   AUDIENCE_QUERY_TIMEOUT_MS,
 } from "./audience-compiler";
+
+export {
+  isValidErpSaleInvoice,
+  erpInvoiceExternalKey,
+} from "./erp-sync";
 
 export {
   createCustomer,
@@ -66,9 +72,13 @@ export { syncErpForBusiness, getErpSyncStatus } from "./erp-sync";
 
 export {
   previewAudience,
+  materializeAudience,
   freezeAudienceSnapshot,
+  revalidateSnapshotEligibility,
   saveSegment,
   listSegments,
+  AUDIENCE_PREVIEW_PAGE_SIZE,
+  AUDIENCE_SNAPSHOT_MAX_ROWS,
 } from "./audience-service";
 
 export { runCampaignAiTurn } from "./campaign-ai";

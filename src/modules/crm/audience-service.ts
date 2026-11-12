@@ -6,12 +6,17 @@ import {
   parseAudienceFilterAst,
 } from "./audience-ast";
 import {
+  AUDIENCE_MAX_ROWS,
   AUDIENCE_QUERY_TIMEOUT_MS,
   compileAudienceFilter,
 } from "./audience-compiler";
 import * as repo from "./repository";
 import { requireCrmWriteAccess } from "./service";
 import type { AudienceFilterAst, CrmAudiencePreview, CrmSegment } from "./types";
+
+/** UI preview page size — not used for snapshot materialization. */
+export const AUDIENCE_PREVIEW_PAGE_SIZE = 100;
+export const AUDIENCE_SNAPSHOT_MAX_ROWS = AUDIENCE_MAX_ROWS;
 
 async function queryWithTimeout<T extends Record<string, unknown>>(
   text: string,
@@ -37,45 +42,58 @@ async function queryWithTimeout<T extends Record<string, unknown>>(
 
 function isTimeoutError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
-  const e = error as { code?: string; message?: string; name?: string };
+  const e = error as { code?: string; message?: string };
   if (e.code === "ETIMEOUT") return true;
   return /timeout|timed out/i.test(e.message ?? "");
 }
 
-export async function previewAudience(params: {
+function summarizeCustomers(
+  customers: CrmAudiencePreview["customers"],
+): Pick<
+  CrmAudiencePreview,
+  "withPhone" | "eligibleMarketing" | "withoutPermission" | "duplicatesRemoved"
+> {
+  const withPhone = customers.filter((c) => c.primaryPhoneNormalized).length;
+  const eligibleMarketing = customers.filter((c) => c.marketingEligible).length;
+  const withoutPermission = customers.filter(
+    (c) => c.exclusionReason === "NO_PERMISSION" || c.exclusionReason === "OPTED_OUT",
+  ).length;
+  const uniquePhones = new Set(
+    customers
+      .map((c) => c.primaryPhoneNormalized)
+      .filter((p): p is string => Boolean(p)),
+  );
+  return {
+    withPhone,
+    eligibleMarketing,
+    withoutPermission,
+    duplicatesRemoved: Math.max(0, withPhone - uniquePhones.size),
+  };
+}
+
+async function resolveAudienceChannelId(businessId: string): Promise<string | null> {
+  return repo.getActiveWhatsAppChannelId({ businessId });
+}
+
+async function runAudienceQuery(params: {
   businessId: string;
   userId: string;
-  filter: unknown;
+  filter: AudienceFilterAst;
+  rowLimit: number;
   naturalLanguage?: string | null;
-  previewLimit?: number;
-}): Promise<CrmAudiencePreview> {
-  await requireCrmWriteAccess(params);
+  channelConnectionId?: string | null;
+}): Promise<{
+  filter: AudienceFilterAst;
+  totalMatched: number;
+  customers: CrmAudiencePreview["customers"];
+  truncated: boolean;
+  audienceCap: number;
+}> {
   const started = Date.now();
-  let filter: AudienceFilterAst;
-  try {
-    filter = parseAudienceFilterAst(params.filter);
-  } catch {
-    await repo.insertAudienceQueryAudit({
-      businessId: params.businessId,
-      userId: params.userId,
-      naturalLanguage: params.naturalLanguage,
-      filterJson: JSON.stringify(params.filter ?? {}),
-      status: "REJECTED",
-      errorCode: "INVALID_FILTER",
-      durationMs: Date.now() - started,
-    });
-    throw new ValidationError("فلتر الجمهور غير صالح");
-  }
-
+  const rowLimit = Math.min(Math.max(1, params.rowLimit), AUDIENCE_SNAPSHOT_MAX_ROWS);
   const compiled = compileAudienceFilter({
     businessId: params.businessId,
-    filter: {
-      ...filter,
-      limit: Math.min(
-        params.previewLimit ?? filter.limit ?? 100,
-        200,
-      ),
-    },
+    filter: { ...params.filter, limit: rowLimit },
   });
 
   try {
@@ -94,29 +112,18 @@ export async function previewAudience(params: {
       ),
     ]);
 
+    const totalMatched = Number(countRows[0]?.TotalCount ?? rows.length);
     const customers = await repo.enrichAudienceMarketingEligibility({
       businessId: params.businessId,
+      channelConnectionId: params.channelConnectionId ?? null,
       rows,
     });
-
-    const withPhone = customers.filter((c) => c.primaryPhoneNormalized).length;
-    const eligibleMarketing = customers.filter((c) => c.marketingEligible).length;
-    const withoutPermission = customers.filter(
-      (c) => c.exclusionReason === "NO_PERMISSION" || c.exclusionReason === "OPTED_OUT",
-    ).length;
-    const uniquePhones = new Set(
-      customers
-        .map((c) => c.primaryPhoneNormalized)
-        .filter((p): p is string => Boolean(p)),
-    );
-    const duplicatesRemoved = Math.max(0, withPhone - uniquePhones.size);
-    const totalMatched = Number(countRows[0]?.TotalCount ?? customers.length);
 
     await repo.insertAudienceQueryAudit({
       businessId: params.businessId,
       userId: params.userId,
       naturalLanguage: params.naturalLanguage,
-      filterJson: JSON.stringify(filter),
+      filterJson: JSON.stringify(params.filter),
       compiledSqlHash: compiled.sqlHash,
       rowCount: totalMatched,
       durationMs: Date.now() - started,
@@ -124,15 +131,11 @@ export async function previewAudience(params: {
     });
 
     return {
-      name: filter.name ?? "معاينة الجمهور",
-      filter,
-      explanationAr: explainAudienceFilterAr(filter),
+      filter: params.filter,
       totalMatched,
-      withPhone,
-      eligibleMarketing,
-      withoutPermission,
-      duplicatesRemoved,
       customers,
+      truncated: totalMatched > rowLimit,
+      audienceCap: AUDIENCE_SNAPSHOT_MAX_ROWS,
     };
   } catch (error) {
     const timedOut = isTimeoutError(error);
@@ -140,7 +143,7 @@ export async function previewAudience(params: {
       businessId: params.businessId,
       userId: params.userId,
       naturalLanguage: params.naturalLanguage,
-      filterJson: JSON.stringify(filter),
+      filterJson: JSON.stringify(params.filter),
       compiledSqlHash: compiled.sqlHash,
       durationMs: Date.now() - started,
       status: timedOut ? "TIMEOUT" : "ERROR",
@@ -153,6 +156,108 @@ export async function previewAudience(params: {
   }
 }
 
+export async function previewAudience(params: {
+  businessId: string;
+  userId: string;
+  filter: unknown;
+  naturalLanguage?: string | null;
+  previewLimit?: number;
+  channelConnectionId?: string | null;
+}): Promise<CrmAudiencePreview & { truncated: boolean; audienceCap: number; previewLimit: number }> {
+  await requireCrmWriteAccess(params);
+  let filter: AudienceFilterAst;
+  try {
+    filter = parseAudienceFilterAst(params.filter);
+  } catch {
+    await repo.insertAudienceQueryAudit({
+      businessId: params.businessId,
+      userId: params.userId,
+      naturalLanguage: params.naturalLanguage,
+      filterJson: JSON.stringify(params.filter ?? {}),
+      status: "REJECTED",
+      errorCode: "INVALID_FILTER",
+    });
+    throw new ValidationError("فلتر الجمهور غير صالح");
+  }
+
+  const previewLimit = Math.min(
+    params.previewLimit ?? AUDIENCE_PREVIEW_PAGE_SIZE,
+    AUDIENCE_PREVIEW_PAGE_SIZE,
+  );
+  const channelConnectionId =
+    params.channelConnectionId
+    ?? await resolveAudienceChannelId(params.businessId);
+
+  const result = await runAudienceQuery({
+    businessId: params.businessId,
+    userId: params.userId,
+    filter,
+    rowLimit: previewLimit,
+    naturalLanguage: params.naturalLanguage,
+    channelConnectionId,
+  });
+
+  // Preview counts for eligibility are page-scoped; totalMatched is the full set.
+  const pageStats = summarizeCustomers(result.customers);
+
+  return {
+    name: filter.name ?? "معاينة الجمهور",
+    filter,
+    explanationAr: explainAudienceFilterAr(filter),
+    totalMatched: result.totalMatched,
+    ...pageStats,
+    customers: result.customers,
+    truncated: result.totalMatched > previewLimit,
+    audienceCap: AUDIENCE_SNAPSHOT_MAX_ROWS,
+    previewLimit,
+  };
+}
+
+/**
+ * Materializes the complete audience up to AUDIENCE_SNAPSHOT_MAX_ROWS.
+ * Throws if the matched set exceeds the hard cap (never silently truncate a snapshot).
+ */
+export async function materializeAudience(params: {
+  businessId: string;
+  userId: string;
+  filter: unknown;
+  naturalLanguage?: string | null;
+  channelConnectionId?: string | null;
+}): Promise<CrmAudiencePreview & { truncated: false; audienceCap: number }> {
+  await requireCrmWriteAccess(params);
+  const filter = parseAudienceFilterAst(params.filter);
+  const channelConnectionId =
+    params.channelConnectionId
+    ?? await resolveAudienceChannelId(params.businessId);
+
+  const result = await runAudienceQuery({
+    businessId: params.businessId,
+    userId: params.userId,
+    filter,
+    rowLimit: AUDIENCE_SNAPSHOT_MAX_ROWS,
+    naturalLanguage: params.naturalLanguage,
+    channelConnectionId,
+  });
+
+  if (result.totalMatched > AUDIENCE_SNAPSHOT_MAX_ROWS) {
+    throw new ValidationError(
+      `الجمهور أكبر من الحد الأقصى (${AUDIENCE_SNAPSHOT_MAX_ROWS}). أضف فلاتر لتضييق النتائج قبل التثبيت.`,
+    );
+  }
+
+  const stats = summarizeCustomers(result.customers);
+  return {
+    name: filter.name ?? "جمهور الحملة",
+    filter,
+    explanationAr: explainAudienceFilterAr(filter),
+    totalMatched: result.totalMatched,
+    ...stats,
+    customers: result.customers,
+    truncated: false,
+    audienceCap: AUDIENCE_SNAPSHOT_MAX_ROWS,
+  };
+}
+
 export async function freezeAudienceSnapshot(params: {
   businessId: string;
   userId: string;
@@ -160,13 +265,14 @@ export async function freezeAudienceSnapshot(params: {
   name?: string | null;
   segmentId?: string | null;
   naturalLanguage?: string | null;
+  channelConnectionId?: string | null;
 }): Promise<{ snapshotId: string; preview: CrmAudiencePreview }> {
-  const preview = await previewAudience({
+  const preview = await materializeAudience({
     businessId: params.businessId,
     userId: params.userId,
     filter: params.filter,
     naturalLanguage: params.naturalLanguage,
-    previewLimit: 2000,
+    channelConnectionId: params.channelConnectionId,
   });
 
   const { snapshotId } = await repo.createAudienceSnapshot({
@@ -188,6 +294,63 @@ export async function freezeAudienceSnapshot(params: {
   });
 
   return { snapshotId, preview };
+}
+
+/** Re-check permission/opt-out for an already frozen snapshot against the active channel. */
+export async function revalidateSnapshotEligibility(params: {
+  businessId: string;
+  snapshotId: string;
+  channelConnectionId?: string | null;
+}): Promise<{
+  eligiblePhones: string[];
+  members: Array<{
+    customerId: string;
+    phoneNormalized: string | null;
+    marketingEligible: boolean;
+    exclusionReason: string | null;
+  }>;
+  eligibleMarketing: number;
+  withoutPermission: number;
+}> {
+  const channelConnectionId =
+    params.channelConnectionId
+    ?? await resolveAudienceChannelId(params.businessId);
+  const members = await repo.listAudienceSnapshotMembers({
+    businessId: params.businessId,
+    snapshotId: params.snapshotId,
+  });
+  const rows = members.map((m) => ({
+    CustomerID: m.customerId,
+    FullName: "",
+    PrimaryPhoneNormalized: m.phoneNormalized,
+    TotalSpend: null,
+    LastVisitAt: null,
+  }));
+  const enriched = await repo.enrichAudienceMarketingEligibility({
+    businessId: params.businessId,
+    channelConnectionId,
+    rows,
+  });
+  const eligiblePhones = [
+    ...new Set(
+      enriched
+        .filter((c) => c.marketingEligible && c.primaryPhoneNormalized)
+        .map((c) => c.primaryPhoneNormalized!),
+    ),
+  ];
+  return {
+    eligiblePhones,
+    members: enriched.map((c) => ({
+      customerId: c.customerId,
+      phoneNormalized: c.primaryPhoneNormalized,
+      marketingEligible: c.marketingEligible,
+      exclusionReason: c.exclusionReason,
+    })),
+    eligibleMarketing: eligiblePhones.length,
+    withoutPermission: enriched.filter(
+      (c) => c.exclusionReason === "NO_PERMISSION" || c.exclusionReason === "OPTED_OUT",
+    ).length,
+  };
 }
 
 export async function saveSegment(params: {

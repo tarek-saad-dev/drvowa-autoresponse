@@ -183,6 +183,43 @@ export function CampaignBuilderPanel() {
     setNotice(null);
     try {
       const listName = (confirmName.trim() || preview.name || "حملة CRM").slice(0, 80);
+
+      // 1) Freeze + materialize the complete audience first (never from preview page).
+      const freezeRes = await fetch("/api/crm/audience/freeze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filter,
+          name: listName,
+          naturalLanguage: messages.filter((m) => m.role === "user").at(-1)?.text ?? null,
+        }),
+      });
+      const freezeData = await readApiJson<{
+        snapshotId?: string;
+        preview?: CrmAudiencePreview;
+      }>(freezeRes);
+      if (!freezeRes.ok || !freezeData.snapshotId || !freezeData.preview) {
+        throw new Error(mapUserFacingError(freezeData, "تعذر تثبيت لقطة الجمهور قبل إنشاء المسودة."));
+      }
+
+      // 2) Revalidate eligibility for the frozen snapshot on the active channel.
+      const revalidateRes = await fetch("/api/crm/audience/revalidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ snapshotId: freezeData.snapshotId }),
+      });
+      const revalidateData = await readApiJson<{
+        eligiblePhones?: string[];
+        eligibleMarketing?: number;
+      }>(revalidateRes);
+      if (!revalidateRes.ok || !Array.isArray(revalidateData.eligiblePhones)) {
+        throw new Error(mapUserFacingError(revalidateData, "تعذر إعادة التحقق من أهلية التسويق قبل الإنشاء."));
+      }
+      if (revalidateData.eligiblePhones.length === 0) {
+        throw new Error("لا يوجد مستلمون مؤهلون بعد إعادة التحقق من الإذن/الإيقاف. احفظ الشريحة بدون إرسال.");
+      }
+
+      // 3) Create WhatsApp list from the revalidated snapshot phones only.
       const listRes = await fetch("/api/whatsapp/lists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -195,11 +232,7 @@ export function CampaignBuilderPanel() {
         throw new Error(mapUserFacingError(listData, "تعذر إنشاء قائمة DRVO."));
       }
 
-      const phones = preview.customers
-        .filter((customer) => customer.marketingEligible && customer.primaryPhoneNormalized)
-        .map((customer) => customer.primaryPhoneNormalized!)
-        .slice(0, 5000);
-
+      const phones = revalidateData.eligiblePhones.slice(0, 5000);
       for (const batch of chunk(phones, 50)) {
         const membersRes = await fetch(`/api/whatsapp/lists/${encodeURIComponent(listData.list.id)}/members`, {
           method: "POST",
@@ -208,10 +241,11 @@ export function CampaignBuilderPanel() {
         });
         const membersData = await readApiJson(membersRes);
         if (!membersRes.ok) {
-          throw new Error(mapUserFacingError(membersData, "تعذر إضافة أرقام القائمة."));
+          throw new Error(mapUserFacingError(membersData, "تعذر إضافة أرقام القائمة من لقطة الجمهور."));
         }
       }
 
+      // 4) Create campaign draft from that exact list (still never auto-sends).
       const draftRes = await fetch("/api/whatsapp/label-campaigns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -229,20 +263,13 @@ export function CampaignBuilderPanel() {
         throw new Error(mapUserFacingError(draftData, "تعذر إنشاء مسودة حملة واتساب."));
       }
 
+      setPreview(freezeData.preview);
       setCreatedListId(listData.list.id);
       setCreatedDraftId(draftData.drafts[0].draftId);
       setStep("done");
-      setNotice("تم إنشاء قائمة DRVO ومسودة حملة فقط — لم يتم إرسال أي رسالة.");
-
-      await fetch("/api/crm/audience/freeze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filter,
-          name: listName,
-          naturalLanguage: messages.filter((m) => m.role === "user").at(-1)?.text ?? null,
-        }),
-      }).catch(() => null);
+      setNotice(
+        `تم تثبيت الجمهور (${freezeData.snapshotId.slice(0, 8)}…) وإنشاء قائمة/مسودة فقط — لم يتم إرسال أي رسالة. المؤهلون بعد إعادة التحقق: ${revalidateData.eligiblePhones.length}.`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تجهيز مسودة الحملة.");
       setStep("confirm");

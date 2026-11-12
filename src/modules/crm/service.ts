@@ -535,11 +535,38 @@ export async function getInboxCrmPanel(params: {
   userId: string;
   conversationId: string;
 }) {
-  await requireCrmMembership(params);
+  const membership = await requireCrmMembership(params);
   const panel = await repo.getInboxPanelByConversationId({
     businessId: params.businessId,
     conversationId: normalizeUuid(params.conversationId),
   });
   if (!panel) throw new NotFoundError("المحادثة غير موجودة");
-  return panel;
+
+  // Align with CRM customer access: MEMBERs only see assigned customers' CRM data.
+  if (panel.customer) {
+    try {
+      assertMemberCanAccessCustomer({
+        role: membership.role,
+        userId: params.userId,
+        customer: panel.customer,
+      });
+    } catch {
+      return {
+        conversationId: panel.conversationId,
+        contactId: panel.contactId,
+        customer: {
+          ...panel.customer,
+          // Strip restricted profile fields for unauthorized members.
+          email: null,
+          tags: [],
+        },
+        openFollowUps: [],
+        latestNote: null,
+        erp: null,
+        restricted: true as const,
+      };
+    }
+  }
+
+  return { ...panel, restricted: false as const };
 }

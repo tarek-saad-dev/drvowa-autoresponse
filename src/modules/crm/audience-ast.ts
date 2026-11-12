@@ -122,17 +122,46 @@ export function parseAudienceFilterAst(input: unknown): AudienceFilterAst {
   return audienceFilterAstSchema.parse(input);
 }
 
+const MAX_PREDICATES_PER_GROUP = 25;
+const MAX_PREDICATES_TOTAL = 40;
+
+export class AudienceComplexityError extends Error {
+  readonly code = "AUDIENCE_COMPLEXITY_LIMIT";
+  constructor(message: string) {
+    super(message);
+    this.name = "AudienceComplexityError";
+  }
+}
+
+/**
+ * Merges refinement predicates into the base audience.
+ * Never silently drops predicates — throws if complexity limits would be exceeded.
+ */
 export function mergeAudienceFilters(
   base: AudienceFilterAst | null | undefined,
   refinement: AudienceFilterAst,
 ): AudienceFilterAst {
   if (!base) return refinement;
+  const all = [...(base.all ?? []), ...(refinement.all ?? [])];
+  const exclude = [...(base.exclude ?? []), ...(refinement.exclude ?? [])];
+  const any = refinement.any?.length ? refinement.any : base.any;
+  if (all.length > MAX_PREDICATES_PER_GROUP || exclude.length > MAX_PREDICATES_PER_GROUP) {
+    throw new AudienceComplexityError(
+      "Audience filter group exceeds the maximum predicate limit",
+    );
+  }
+  const total = all.length + exclude.length + (any?.length ?? 0);
+  if (total > MAX_PREDICATES_TOTAL) {
+    throw new AudienceComplexityError(
+      "Audience filter exceeds complexity limit; simplify or start a new audience",
+    );
+  }
   return {
     version: 1,
     name: refinement.name ?? base.name,
-    all: [...(base.all ?? []), ...(refinement.all ?? [])].slice(0, 25),
-    any: refinement.any?.length ? refinement.any : base.any,
-    exclude: [...(base.exclude ?? []), ...(refinement.exclude ?? [])].slice(0, 25),
+    all: all.length ? all : undefined,
+    any,
+    exclude: exclude.length ? exclude : undefined,
     limit: refinement.limit ?? base.limit,
     orderBy: refinement.orderBy ?? base.orderBy,
   };

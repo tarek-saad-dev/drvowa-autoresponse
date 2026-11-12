@@ -367,7 +367,7 @@ BEGIN
     CONSTRAINT PK_TblErpSyncState PRIMARY KEY (SyncStateID),
     CONSTRAINT UQ_TblErpSyncState_Business_Resource UNIQUE (BusinessID, Resource),
     CONSTRAINT CK_TblErpSyncState_Status CHECK (
-      Status IN (N'IDLE', N'RUNNING', N'SUCCESS', N'ERROR')
+      Status IN (N'IDLE', N'RUNNING', N'SUCCESS', N'PARTIAL', N'ERROR')
     ),
     CONSTRAINT FK_TblErpSyncState_Business FOREIGN KEY (BusinessID)
       REFERENCES dbo.TblBusiness (BusinessID) ON DELETE NO ACTION,
@@ -493,7 +493,8 @@ BEGIN
     NaturalLanguage NVARCHAR(2000) NULL,
     FilterJson NVARCHAR(MAX) NOT NULL,
     CompiledSqlHash NVARCHAR(128) NULL,
-    RowCount INT NULL,
+    -- RowCount is a SQL Server reserved keyword; use MatchedRowCount.
+    MatchedRowCount INT NULL,
     DurationMs INT NULL,
     Status NVARCHAR(32) NOT NULL,
     ErrorCode NVARCHAR(128) NULL,
