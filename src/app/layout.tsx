@@ -31,6 +31,8 @@ export const metadata: Metadata = {
   },
   description: appConfig.description,
   applicationName: appConfig.name,
+  // Selected icon can be changed from Super Admin; fallback remains the bundled favicon.
+  icons: { icon: [{ url: "/api/brand/assets/icon" }] },
   openGraph: {
     type: "website",
     siteName: appConfig.name,

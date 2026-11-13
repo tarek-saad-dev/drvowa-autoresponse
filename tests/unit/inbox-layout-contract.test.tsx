@@ -111,7 +111,7 @@ describe("inbox viewport and UX layout contract", () => {
     expect(html).toContain("bg-background");
     expect(html).toContain("bg-card");
     expect(html).toContain("bg-primary");
-    expect(html).toContain("/brand/logo-on-light.png");
+    expect(html).toContain("/api/brand/assets/primary-light");
     expect(html).not.toContain('aria-label="التنقل السريع"');
     expect(html).not.toContain(">D</a>");
     expect(html).not.toContain("bg-[#f7f9f7]");

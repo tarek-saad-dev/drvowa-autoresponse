@@ -14,7 +14,8 @@ describe("DRVO Brand V2 visual-only deployment invariants", () => {
     }
     expect(logo).toContain("/brand/logo-on-dark.png");
     expect(logo).toContain("/brand/logo-on-light.png");
-    expect(logo).not.toContain("/api/brand/assets/");
+    expect(logo).toContain("/api/brand/assets/primary-dark");
+    expect(logo).toContain("/api/brand/assets/primary-light");
   });
 
   it("requires an explicit one-commit visual scope verified against deployed SHA", () => {
@@ -28,7 +29,7 @@ describe("DRVO Brand V2 visual-only deployment invariants", () => {
   });
 
   it("never migrates data, rewrites feature flags, or restarts the worker in visual mode", () => {
-    expect(deploy).toContain('if [ "$VISUAL_ONLY" != 1 ]; then');
+    expect(deploy).toContain('if [ "$VISUAL_ONLY" != 1 ] && [ "$BRAND_ASSETS_ONLY" != 1 ]; then');
     expect(deploy).toContain('echo "==> UI-only release: SQL migrations explicitly skipped"');
     expect(deploy).toContain("preserving all existing production secrets and feature flags");
     expect(deploy).toContain("AI worker stays running without restart");
