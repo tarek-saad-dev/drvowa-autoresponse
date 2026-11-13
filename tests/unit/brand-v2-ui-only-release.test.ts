@@ -29,7 +29,7 @@ describe("DRVO Brand V2 visual-only deployment invariants", () => {
   });
 
   it("never migrates data, rewrites feature flags, or restarts the worker in visual mode", () => {
-    expect(deploy).toContain('if [ "$VISUAL_ONLY" != 1 ]; then');
+    expect(deploy).toContain('if [ "$VISUAL_ONLY" != 1 ] && [ "$BRAND_ASSETS_ONLY" != 1 ]; then');
     expect(deploy).toContain('echo "==> UI-only release: SQL migrations explicitly skipped"');
     expect(deploy).toContain("preserving all existing production secrets and feature flags");
     expect(deploy).toContain("AI worker stays running without restart");
