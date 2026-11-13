@@ -150,10 +150,33 @@ jobs:
           }
           BACKUP_GATE
             fi
+            # A failed UI-only build or health check must restore the last running app SHA.
+            # This rollback affects app code only: no DB, env, or WhatsApp auth changes.
+            UI_CHECKED_OUT=0
+            rollback_visual_release() {
+              rc="$?"
+              trap - EXIT
+              if [ "$rc" -ne 0 ] && [ "$VISUAL_ONLY" = 1 ] && [ "$UI_CHECKED_OUT" = 1 ]; then
+                echo "==> Visual-only release failed: restoring previous deployed app SHA"
+                set +e
+                git checkout --detach "$CURRENT_SHA"
+                npm ci && npm run build && systemctl restart drvowa.service
+                rollback_rc="$?"
+                if [ "$rollback_rc" -eq 0 ] && systemctl is-active --quiet drvowa.service; then
+                  echo "==> Rollback app service active; check /api/health"
+                  curl --fail --silent --show-error --max-time 15 'http://127.0.0.1:3100/api/health?ready=1' >/dev/null || true
+                else
+                  echo "ERROR: app rollback failed; restore manually from recorded SHA"
+                fi
+              fi
+              exit "$rc"
+            }
+            trap rollback_visual_release EXIT
             echo "==> Checking out the exact commit verified by billing SQL CI"
             git fetch origin main
             git checkout --detach "$DEPLOY_SHA"
             test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+            UI_CHECKED_OUT=$VISUAL_ONLY
             echo "Deploying verified commit $DEPLOY_SHA"
 
             if [ "$VISUAL_ONLY" != 1 ]; then
