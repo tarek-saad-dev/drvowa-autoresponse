@@ -13,6 +13,7 @@ const schema = z
   })
   .strict();
 
+/** Revalidates frozen snapshot eligibility for an explicit WhatsApp channel. */
 export async function POST(request: Request) {
   try {
     const { user, businessId } = await requireApiBusiness();

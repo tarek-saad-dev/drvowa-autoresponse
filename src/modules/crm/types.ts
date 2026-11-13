@@ -164,10 +164,17 @@ export type CrmAudiencePreview = {
   filter: AudienceFilterAst;
   explanationAr: string;
   totalMatched: number;
+  /** Full-audience counts when countsScope=full_audience; otherwise preview-page scoped. */
   withPhone: number;
   eligibleMarketing: number;
   withoutPermission: number;
   duplicatesRemoved: number;
+  countsScope: "preview_page" | "full_audience";
+  previewLimit?: number;
+  truncated?: boolean;
+  audienceCap?: number;
+  channelConnectionId: string;
+  channelDisplayName?: string | null;
   customers: Array<{
     customerId: string;
     fullName: string;

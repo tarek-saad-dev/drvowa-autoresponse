@@ -6,7 +6,12 @@ import { assertRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
 import { requireLabelCampaignOwner } from "@/modules/messaging/label-campaign-drafts";
 import { createDrvoList } from "@/modules/messaging/local-whatsapp-lists";
 
-const schema = z.object({ name: z.string().trim().min(2).max(80) }).strict();
+const schema = z
+  .object({
+    name: z.string().trim().min(2).max(80),
+    channelConnectionId: z.string().uuid().optional(),
+  })
+  .strict();
 
 /** Creates an internal DRVO audience, not a remote WhatsApp Business label. */
 export async function POST(request: Request) {
@@ -15,7 +20,11 @@ export async function POST(request: Request) {
     await requireLabelCampaignOwner({ businessId, userId: user.userId });
     assertRateLimit("drvo-lists-create:" + businessId, RATE_LIMITS.labelCampaignDraft);
     const input = schema.parse(await parseJsonBody(request));
-    const list = await createDrvoList({ businessId, name: input.name });
+    const list = await createDrvoList({
+      businessId,
+      name: input.name,
+      channelConnectionId: input.channelConnectionId,
+    });
     return jsonOk({ list, source: "DRVO", remoteWhatsAppLabel: false }, { status: 201 });
   } catch (error) { return handleApiError(error); }
 }

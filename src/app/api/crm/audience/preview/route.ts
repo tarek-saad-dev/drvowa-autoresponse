@@ -10,6 +10,7 @@ const schema = z
     filter: z.unknown(),
     naturalLanguage: z.string().trim().max(2000).nullable().optional(),
     previewLimit: z.number().int().min(1).max(200).optional(),
+    channelConnectionId: z.string().uuid().nullable().optional(),
   })
   .strict();
 
@@ -24,6 +25,7 @@ export async function POST(request: Request) {
       filter: input.filter,
       naturalLanguage: input.naturalLanguage,
       previewLimit: input.previewLimit,
+      channelConnectionId: input.channelConnectionId,
     });
     return jsonOk({ preview });
   } catch (error) {

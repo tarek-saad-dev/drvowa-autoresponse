@@ -28,10 +28,36 @@ type ChatMessage = {
 
 type LaunchStep = "compose" | "confirm" | "done";
 
+type CrmChannelOption = {
+  channelConnectionId: string;
+  displayName: string | null;
+  externalAccountKey: string | null;
+  status: string;
+  isActive: boolean;
+};
+
+type FinalAudienceReady = {
+  snapshotId: string;
+  channelConnectionId: string;
+  channelDisplayName: string | null;
+  eligibleMarketing: number;
+  withoutPermission: number;
+  totalMatched: number;
+  preview: CrmAudiencePreview;
+};
+
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
   return out;
+}
+
+function channelLabel(channel: CrmChannelOption): string {
+  return (
+    channel.displayName?.trim() ||
+    channel.externalAccountKey?.trim() ||
+    channel.channelConnectionId.slice(0, 8)
+  );
 }
 
 export function CampaignBuilderPanel() {
@@ -39,7 +65,7 @@ export function CampaignBuilderPanel() {
     {
       id: "welcome",
       role: "assistant",
-      text: "صف الجمهور المطلوب بالعربي (مثلاً: عملاء زاروا الفرع آخر 30 يوم وأنفقوا أكثر من 500). لن يتم إرسال أي رسالة تلقائياً.",
+      text: "اختر قناة واتساب أولاً، ثم صف الجمهور بالعربي. لن يتم إرسال أي رسالة تلقائياً.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -54,35 +80,110 @@ export function CampaignBuilderPanel() {
   const [confirmName, setConfirmName] = useState("");
   const [createdDraftId, setCreatedDraftId] = useState<string | null>(null);
   const [createdListId, setCreatedListId] = useState<string | null>(null);
+  const [channels, setChannels] = useState<CrmChannelOption[]>([]);
+  const [requiresExplicitSelection, setRequiresExplicitSelection] = useState(false);
+  const [channelConnectionId, setChannelConnectionId] = useState<string>("");
+  const [channelsLoaded, setChannelsLoaded] = useState(false);
+  const [finalAudience, setFinalAudience] = useState<FinalAudienceReady | null>(null);
+  const [confirmedFinalCount, setConfirmedFinalCount] = useState(false);
+  const [confirmedChannel, setConfirmedChannel] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, busy]);
 
-  const eligible = preview?.eligibleMarketing ?? 0;
-  const canLaunch = Boolean(filter && preview && messageDraft.trim().length >= 4 && eligible > 0);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/crm/channels");
+        const data = await readApiJson<{
+          activeChannels?: CrmChannelOption[];
+          channels?: CrmChannelOption[];
+          requiresExplicitSelection?: boolean;
+        }>(response);
+        if (!response.ok) {
+          throw new Error(mapUserFacingError(data, "تعذر تحميل قنوات واتساب."));
+        }
+        if (cancelled) return;
+        const active = (data.activeChannels ?? []).filter(
+          (c) => c.isActive && c.status === "ACTIVE",
+        );
+        setChannels(active);
+        setRequiresExplicitSelection(Boolean(data.requiresExplicitSelection) || active.length !== 1);
+        if (active.length === 1) {
+          setChannelConnectionId(active[0].channelConnectionId);
+        }
+        setChannelsLoaded(true);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "تعذر تحميل قنوات واتساب.");
+        setChannelsLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectedChannel = useMemo(
+    () => channels.find((c) => c.channelConnectionId === channelConnectionId) ?? null,
+    [channels, channelConnectionId],
+  );
+
+  const previewPageEligible = preview?.countsScope === "preview_page" ? preview.eligibleMarketing : null;
+  const canPrepareFinal =
+    Boolean(filter && preview && messageDraft.trim().length >= 4 && channelConnectionId) &&
+    channels.length > 0;
+
+  const canCreateDraft =
+    Boolean(finalAudience) &&
+    confirmedFinalCount &&
+    confirmedChannel &&
+    (finalAudience?.eligibleMarketing ?? 0) > 0 &&
+    finalAudience?.channelConnectionId === channelConnectionId;
 
   const previewCounts = useMemo(() => {
     if (!preview) return null;
+    const scopeLabel =
+      preview.countsScope === "full_audience" ? "الجمهور الكامل" : "صفحة المعاينة";
     return [
-      { label: "مطابق", value: preview.totalMatched },
-      { label: "برقم", value: preview.withPhone },
-      { label: "مؤهل", value: preview.eligibleMarketing },
-      { label: "بدون إذن", value: preview.withoutPermission },
+      { label: "مطابق (كامل)", value: preview.totalMatched },
+      { label: `برقم (${scopeLabel})`, value: preview.withPhone },
+      { label: `مؤهل (${scopeLabel})`, value: preview.eligibleMarketing },
+      { label: `بدون إذن (${scopeLabel})`, value: preview.withoutPermission },
       { label: "مكرر محذوف", value: preview.duplicatesRemoved },
     ];
   }, [preview]);
+
+  function resetFinalConfirmation() {
+    setFinalAudience(null);
+    setConfirmedFinalCount(false);
+    setConfirmedChannel(false);
+    if (step === "confirm") setStep("compose");
+  }
+
+  function onChannelChange(nextId: string) {
+    setChannelConnectionId(nextId);
+    setPreview(null);
+    resetFinalConfirmation();
+  }
 
   async function sendTurn(event: FormEvent) {
     event.preventDefault();
     const text = input.trim();
     if (busy || text.length < 2) return;
+    if (!channelConnectionId) {
+      setError("اختر قناة واتساب نشطة قبل بناء الجمهور.");
+      return;
+    }
     setBusy(true);
     setError(null);
     setNotice(null);
     setInput("");
     setMessages((prev) => [...prev, { id: `u-${Date.now()}`, role: "user", text }]);
+    resetFinalConfirmation();
 
     try {
       const mode = messageDraft && filter ? "refine" : filter ? "refine" : "filter";
@@ -94,6 +195,7 @@ export function CampaignBuilderPanel() {
           mode: mode === "refine" && /رسالة|اكتب|صياغة|draft/i.test(text) ? "draft_message" : mode,
           priorFilter: filter ?? undefined,
           sessionId,
+          channelConnectionId,
         }),
       });
       const data = await readApiJson<{ turn?: CampaignAiTurnResult; autoLaunch?: boolean }>(response);
@@ -108,6 +210,9 @@ export function CampaignBuilderPanel() {
       if (turn.filter) setFilter(turn.filter);
       if (turn.preview) {
         setPreview(turn.preview);
+        if (turn.preview.channelConnectionId && turn.preview.channelConnectionId !== channelConnectionId) {
+          throw new Error("تغيرت قناة الأهلية. أعد اختيار القناة ثم أعد المعاينة.");
+        }
         if (!confirmName.trim()) setConfirmName(turn.preview.name || "حملة CRM");
       }
       if (turn.messageDraftAr) setMessageDraft(turn.messageDraftAr);
@@ -133,6 +238,7 @@ export function CampaignBuilderPanel() {
           mode: "draft_message",
           priorFilter: filter,
           sessionId,
+          channelConnectionId: channelConnectionId || undefined,
         }),
       });
       const data = await readApiJson<{ turn?: CampaignAiTurnResult; autoLaunch?: boolean }>(response);
@@ -176,15 +282,17 @@ export function CampaignBuilderPanel() {
     }
   }
 
-  async function confirmCreateDraftCampaign() {
-    if (!canLaunch || !preview || !filter) return;
+  /** Freeze + revalidate full audience, then show final eligible count for confirmation. */
+  async function prepareFinalAudience() {
+    if (!canPrepareFinal || !preview || !filter || !channelConnectionId) return;
     setBusy(true);
     setError(null);
     setNotice(null);
+    setConfirmedFinalCount(false);
+    setConfirmedChannel(false);
     try {
       const listName = (confirmName.trim() || preview.name || "حملة CRM").slice(0, 80);
 
-      // 1) Freeze + materialize the complete audience first (never from preview page).
       const freezeRes = await fetch("/api/crm/audience/freeze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -192,6 +300,7 @@ export function CampaignBuilderPanel() {
           filter,
           name: listName,
           naturalLanguage: messages.filter((m) => m.role === "user").at(-1)?.text ?? null,
+          channelConnectionId,
         }),
       });
       const freezeData = await readApiJson<{
@@ -199,37 +308,116 @@ export function CampaignBuilderPanel() {
         preview?: CrmAudiencePreview;
       }>(freezeRes);
       if (!freezeRes.ok || !freezeData.snapshotId || !freezeData.preview) {
-        throw new Error(mapUserFacingError(freezeData, "تعذر تثبيت لقطة الجمهور قبل إنشاء المسودة."));
+        throw new Error(mapUserFacingError(freezeData, "تعذر تثبيت لقطة الجمهور قبل التأكيد."));
+      }
+      if (freezeData.preview.channelConnectionId !== channelConnectionId) {
+        throw new Error("قناة التثبيت لا تطابق القناة المختارة. أعد المحاولة.");
       }
 
-      // 2) Revalidate eligibility for the frozen snapshot on the active channel.
       const revalidateRes = await fetch("/api/crm/audience/revalidate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ snapshotId: freezeData.snapshotId }),
+        body: JSON.stringify({
+          snapshotId: freezeData.snapshotId,
+          channelConnectionId,
+        }),
       });
       const revalidateData = await readApiJson<{
+        channelConnectionId?: string;
         eligiblePhones?: string[];
         eligibleMarketing?: number;
+        withoutPermission?: number;
       }>(revalidateRes);
-      if (!revalidateRes.ok || !Array.isArray(revalidateData.eligiblePhones)) {
-        throw new Error(mapUserFacingError(revalidateData, "تعذر إعادة التحقق من أهلية التسويق قبل الإنشاء."));
+      if (
+        !revalidateRes.ok ||
+        !Array.isArray(revalidateData.eligiblePhones) ||
+        revalidateData.channelConnectionId !== channelConnectionId
+      ) {
+        throw new Error(mapUserFacingError(revalidateData, "تعذر إعادة التحقق من أهلية التسويق."));
+      }
+
+      const eligibleMarketing = revalidateData.eligiblePhones.length;
+      setPreview(freezeData.preview);
+      setFinalAudience({
+        snapshotId: freezeData.snapshotId,
+        channelConnectionId,
+        channelDisplayName: selectedChannel ? channelLabel(selectedChannel) : freezeData.preview.channelDisplayName,
+        eligibleMarketing,
+        withoutPermission: revalidateData.withoutPermission ?? 0,
+        totalMatched: freezeData.preview.totalMatched,
+        preview: freezeData.preview,
+      });
+      setStep("confirm");
+      if (eligibleMarketing === 0) {
+        setNotice("لا يوجد مستلمون مؤهلون بعد إعادة التحقق على هذه القناة. احفظ الشريحة بدون إنشاء مسودة إرسال.");
+      }
+    } catch (err) {
+      setFinalAudience(null);
+      setError(err instanceof Error ? err.message : "تعذر تجهيز العدد النهائي للجمهور.");
+      setStep("compose");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmCreateDraftCampaign() {
+    if (!canCreateDraft || !finalAudience || !filter) return;
+    if (finalAudience.channelConnectionId !== channelConnectionId) {
+      setError("تغيرت القناة بعد التثبيت. أعد تثبيت الجمهور على القناة الحالية.");
+      resetFinalConfirmation();
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const listName = (confirmName.trim() || finalAudience.preview.name || "حملة CRM").slice(0, 80);
+
+      // Re-revalidate immediately before list/draft so channel/consent cannot drift.
+      const revalidateRes = await fetch("/api/crm/audience/revalidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          snapshotId: finalAudience.snapshotId,
+          channelConnectionId: finalAudience.channelConnectionId,
+        }),
+      });
+      const revalidateData = await readApiJson<{
+        channelConnectionId?: string;
+        eligiblePhones?: string[];
+      }>(revalidateRes);
+      if (
+        !revalidateRes.ok ||
+        !Array.isArray(revalidateData.eligiblePhones) ||
+        revalidateData.channelConnectionId !== finalAudience.channelConnectionId
+      ) {
+        throw new Error(mapUserFacingError(revalidateData, "تعذر إعادة التحقق النهائية قبل إنشاء المسودة."));
       }
       if (revalidateData.eligiblePhones.length === 0) {
         throw new Error("لا يوجد مستلمون مؤهلون بعد إعادة التحقق من الإذن/الإيقاف. احفظ الشريحة بدون إرسال.");
       }
+      if (revalidateData.eligiblePhones.length !== finalAudience.eligibleMarketing) {
+        throw new Error(
+          `تغير العدد النهائي من ${finalAudience.eligibleMarketing} إلى ${revalidateData.eligiblePhones.length}. أعد التأكيد على العدد الجديد.`,
+        );
+      }
 
-      // 3) Create WhatsApp list from the revalidated snapshot phones only.
       const listRes = await fetch("/api/whatsapp/lists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: listName }),
+        body: JSON.stringify({
+          name: listName,
+          channelConnectionId: finalAudience.channelConnectionId,
+        }),
       });
       const listData = await readApiJson<{
         list?: { id: string; name: string; channelConnectionId: string };
       }>(listRes);
       if (!listRes.ok || !listData.list) {
         throw new Error(mapUserFacingError(listData, "تعذر إنشاء قائمة DRVO."));
+      }
+      if (listData.list.channelConnectionId !== finalAudience.channelConnectionId) {
+        throw new Error("قائمة واتساب أُنشئت على قناة مختلفة. تم إيقاف الإنشاء.");
       }
 
       const phones = revalidateData.eligiblePhones.slice(0, 5000);
@@ -245,12 +433,11 @@ export function CampaignBuilderPanel() {
         }
       }
 
-      // 4) Create campaign draft from that exact list (still never auto-sends).
       const draftRes = await fetch("/api/whatsapp/label-campaigns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          channelConnectionId: listData.list.channelConnectionId,
+          channelConnectionId: finalAudience.channelConnectionId,
           labelId: listData.list.id,
           messageText: messageDraft.trim(),
         }),
@@ -263,12 +450,11 @@ export function CampaignBuilderPanel() {
         throw new Error(mapUserFacingError(draftData, "تعذر إنشاء مسودة حملة واتساب."));
       }
 
-      setPreview(freezeData.preview);
       setCreatedListId(listData.list.id);
       setCreatedDraftId(draftData.drafts[0].draftId);
       setStep("done");
       setNotice(
-        `تم تثبيت الجمهور (${freezeData.snapshotId.slice(0, 8)}…) وإنشاء قائمة/مسودة فقط — لم يتم إرسال أي رسالة. المؤهلون بعد إعادة التحقق: ${revalidateData.eligiblePhones.length}.`,
+        `تم إنشاء قائمة/مسودة فقط على القناة المحددة — لم يُرسل شيء. المستلمون المؤهلون: ${revalidateData.eligiblePhones.length}.`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تجهيز مسودة الحملة.");
@@ -285,7 +471,7 @@ export function CampaignBuilderPanel() {
           <p className="text-xs font-black text-primary">الحملات</p>
           <h1 className="mt-1 text-3xl font-black tracking-[-0.035em]">منشئ الحملات بالذكاء الاصطناعي</h1>
           <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
-            حدّد الجمهور وصِغ الرسالة، ثم أكّد إنشاء مسودة فقط. لا يوجد إرسال تلقائي مطلقاً.
+            الأهلية مربوطة بقناة واتساب واحدة. حدّد الجمهور وصِغ الرسالة، ثم أكّد العدد النهائي والقناة قبل إنشاء المسودة فقط.
           </p>
         </div>
         <Link href="/dashboard/campaigns">
@@ -295,6 +481,44 @@ export function CampaignBuilderPanel() {
 
       {error ? <Alert variant="error">{error}</Alert> : null}
       {notice ? <Alert variant="success">{notice}</Alert> : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-black">قناة واتساب للحملة</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!channelsLoaded ? (
+            <DrvoLoading variant="inline" label="جاري تحميل القنوات…" />
+          ) : channels.length === 0 ? (
+            <Alert variant="error">
+              لا توجد قناة واتساب نشطة. اربط رقماً نشطاً قبل معاينة الجمهور أو إنشاء المسودة.
+            </Alert>
+          ) : (
+            <>
+              <Label htmlFor="crm-campaign-channel">القناة المستخدمة للأهلية والقائمة والمسودة</Label>
+              <select
+                id="crm-campaign-channel"
+                className="flex h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
+                value={channelConnectionId}
+                disabled={busy || step === "done"}
+                onChange={(event) => onChannelChange(event.target.value)}
+              >
+                {requiresExplicitSelection ? (
+                  <option value="">— اختر قناة صراحة —</option>
+                ) : null}
+                {channels.map((channel) => (
+                  <option key={channel.channelConnectionId} value={channel.channelConnectionId}>
+                    {channelLabel(channel)}
+                  </option>
+                ))}
+              </select>
+              {requiresExplicitSelection && !channelConnectionId ? (
+                <Alert variant="warning">يوجد أكثر من قناة نشطة — يجب الاختيار صراحة. لا يوجد اختيار افتراضي.</Alert>
+              ) : null}
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,.9fr)]">
         <Card className="overflow-hidden">
@@ -327,12 +551,15 @@ export function CampaignBuilderPanel() {
                 rows={3}
                 maxLength={2000}
                 value={input}
-                disabled={busy || step === "done"}
+                disabled={busy || step === "done" || !channelConnectionId}
                 onChange={(event) => setInput(event.target.value)}
-                placeholder="مثال: عملاء آخر 30 يوم أنفقوا أكثر من 1000 جنيه"
+                placeholder="مثال: هات العملاء اللي عملوا بروتين آخر 30 يوم"
               />
               <div className="flex flex-wrap gap-2">
-                <Button type="submit" disabled={busy || input.trim().length < 2 || step === "done"}>
+                <Button
+                  type="submit"
+                  disabled={busy || input.trim().length < 2 || step === "done" || !channelConnectionId}
+                >
                   إرسال
                 </Button>
                 <Button
@@ -354,7 +581,10 @@ export function CampaignBuilderPanel() {
                 maxLength={3000}
                 value={messageDraft}
                 disabled={step === "done"}
-                onChange={(event) => setMessageDraft(event.target.value)}
+                onChange={(event) => {
+                  setMessageDraft(event.target.value);
+                  if (finalAudience) resetFinalConfirmation();
+                }}
                 placeholder="ستظهر هنا مسودة الرسالة قبل أي إرسال…"
               />
             </div>
@@ -370,10 +600,21 @@ export function CampaignBuilderPanel() {
               {!preview ? (
                 <EmptyState
                   title="لا توجد معاينة بعد"
-                  description="اكتب وصفاً للجمهور في المحادثة لعرض الأعداد والأهلية."
+                  description="اختر القناة ثم صف الجمهور في المحادثة. أعداد الأهلية هنا لصفحة المعاينة فقط حتى التثبيت."
                 />
               ) : (
                 <div className="space-y-4">
+                  {preview.countsScope === "preview_page" ? (
+                    <Alert variant="warning">
+                      أعداد «مؤهل / بدون إذن» أدناه من صفحة المعاينة فقط
+                      {previewPageEligible != null
+                        ? ` (${previewPageEligible.toLocaleString("ar-EG")} من ${preview.customers.length.toLocaleString("ar-EG")} ظاهرين)`
+                        : ""}
+                      . العدد النهائي للمستلمين يظهر بعد تثبيت الجمهور الكامل وإعادة التحقق على القناة.
+                    </Alert>
+                  ) : (
+                    <Alert variant="success">أعداد الأهلية أدناه للجمهور الكامل المثبّت على القناة المحددة.</Alert>
+                  )}
                   <p className="text-sm leading-7 text-muted-foreground">{preview.explanationAr}</p>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {previewCounts?.map((item) => (
@@ -383,11 +624,6 @@ export function CampaignBuilderPanel() {
                       </div>
                     ))}
                   </div>
-                  {eligible === 0 ? (
-                    <Alert variant="warning">
-                      لا يوجد مستلمون مؤهلون للتسويق حالياً. يمكنك حفظ الشريحة كمسودة فقط — بدون إنشاء حملة إرسال.
-                    </Alert>
-                  ) : null}
                   <div className="max-h-64 space-y-2 overflow-y-auto">
                     {preview.customers.slice(0, 50).map((customer) => (
                       <div
@@ -437,10 +673,10 @@ export function CampaignBuilderPanel() {
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
-                    disabled={busy || !canLaunch}
-                    onClick={() => setStep("confirm")}
+                    disabled={busy || !canPrepareFinal}
+                    onClick={() => void prepareFinalAudience()}
                   >
-                    مراجعة قبل إنشاء المسودة
+                    {busy ? "جاري التثبيت…" : "تثبيت الجمهور وعرض العدد النهائي"}
                   </Button>
                   <Button
                     type="button"
@@ -453,18 +689,62 @@ export function CampaignBuilderPanel() {
                 </div>
               ) : null}
 
-              {step === "confirm" ? (
+              {step === "confirm" && finalAudience ? (
                 <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/[0.04] p-4">
                   <p className="text-sm leading-7">
-                    سيتم إنشاء قائمة DRVO ومسودة حملة واتساب لـ{" "}
-                    <strong>{eligible.toLocaleString("ar-EG")}</strong> مستلم مؤهل.
-                    لن يتم إرسال أي رسالة الآن.
+                    العدد النهائي للمستلمين المؤهلين بعد تثبيت الجمهور الكامل وإعادة التحقق على القناة{" "}
+                    <strong>{finalAudience.channelDisplayName || finalAudience.channelConnectionId.slice(0, 8)}</strong>
+                    :{" "}
+                    <strong>{finalAudience.eligibleMarketing.toLocaleString("ar-EG")}</strong>
+                    {" "}من أصل{" "}
+                    <strong>{finalAudience.totalMatched.toLocaleString("ar-EG")}</strong>
+                    {" "}مطابق.
+                    لن يتم إرسال أي رسالة الآن. الإذن والإيقاف يُراجعان مجدداً عند الإطلاق الفعلي.
                   </p>
+                  <label className="flex items-start gap-2 text-sm leading-6">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={confirmedFinalCount}
+                      disabled={busy || finalAudience.eligibleMarketing === 0}
+                      onChange={(event) => setConfirmedFinalCount(event.target.checked)}
+                    />
+                    <span>
+                      أؤكد أن العدد النهائي للمستلمين المؤهلين هو{" "}
+                      {finalAudience.eligibleMarketing.toLocaleString("ar-EG")}
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 text-sm leading-6">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={confirmedChannel}
+                      disabled={busy || finalAudience.eligibleMarketing === 0}
+                      onChange={(event) => setConfirmedChannel(event.target.checked)}
+                    />
+                    <span>
+                      أؤكد إرسال المسودة عبر القناة{" "}
+                      {finalAudience.channelDisplayName || finalAudience.channelConnectionId.slice(0, 8)}
+                      {" "}فقط (بدون تبديل قناة)
+                    </span>
+                  </label>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" disabled={busy} onClick={() => void confirmCreateDraftCampaign()}>
+                    <Button
+                      type="button"
+                      disabled={busy || !canCreateDraft}
+                      onClick={() => void confirmCreateDraftCampaign()}
+                    >
                       {busy ? "جاري الإنشاء…" : "تأكيد إنشاء المسودة"}
                     </Button>
-                    <Button type="button" variant="outline" disabled={busy} onClick={() => setStep("compose")}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => {
+                        resetFinalConfirmation();
+                        setStep("compose");
+                      }}
+                    >
                       رجوع
                     </Button>
                   </div>
@@ -486,9 +766,9 @@ export function CampaignBuilderPanel() {
                 </div>
               ) : null}
 
-              {!canLaunch && eligible === 0 && filter ? (
+              {!channelConnectionId && channelsLoaded ? (
                 <p className="text-xs leading-6 text-muted-foreground">
-                  لأن عدد المؤهلين = 0، خيار إنشاء مسودة الإرسال متوقف. احفظ الشريحة فقط أو عدّل شروط الجمهور.
+                  اختر قناة واتساب صالحة قبل المعاينة أو التثبيت. لا يُسمح بالتحقق عبر قنوات متعددة.
                 </p>
               ) : null}
             </CardContent>

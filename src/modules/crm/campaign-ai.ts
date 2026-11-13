@@ -26,6 +26,7 @@ export type CampaignAiTurnInput = {
   mode?: "filter" | "refine" | "draft_message";
   priorFilter?: unknown;
   sessionId?: string | null;
+  channelConnectionId?: string | null;
 };
 
 export type CampaignAiTurnResult = {
@@ -302,11 +303,17 @@ export async function runCampaignAiTurn(
     userId: params.userId,
     filter,
     naturalLanguage: message,
+    channelConnectionId: params.channelConnectionId,
   });
+
+  const pageEligibleNote =
+    preview.countsScope === "preview_page"
+      ? ` (مؤهلو صفحة المعاينة ${preview.eligibleMarketing} من ${preview.customers.length} ظاهرين — العدد النهائي يتأكد بعد تثبيت الجمهور)`
+      : "";
 
   return {
     kind: "filter",
-    assistantMessage: `وجدت حوالي ${preview.totalMatched} عميل مطابقين. الجاهزون للتسويق: ${preview.eligibleMarketing}.`,
+    assistantMessage: `وجدت حوالي ${preview.totalMatched} عميل مطابقين.${pageEligibleNote}`,
     filter: preview.filter,
     explanationAr: preview.explanationAr,
     clarificationNeeded: false,

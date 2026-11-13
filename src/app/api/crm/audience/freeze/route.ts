@@ -11,6 +11,7 @@ const schema = z
     name: z.string().trim().min(2).max(160).nullable().optional(),
     segmentId: z.string().uuid().nullable().optional(),
     naturalLanguage: z.string().trim().max(2000).nullable().optional(),
+    channelConnectionId: z.string().uuid().nullable().optional(),
   })
   .strict();
 
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
       name: input.name,
       segmentId: input.segmentId,
       naturalLanguage: input.naturalLanguage,
+      channelConnectionId: input.channelConnectionId,
     });
     return jsonOk(result, { status: 201 });
   } catch (error) {

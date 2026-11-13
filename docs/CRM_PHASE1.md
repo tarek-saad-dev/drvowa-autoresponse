@@ -34,12 +34,20 @@ Key tables: `TblCrmCustomer`, phones, tags, contact links, notes, activities, fo
 
 ERP history or a phone number is **not** consent. Recipients must pass existing `TblWhatsAppCampaignPermission` and must not be in `TblWhatsAppCampaignOptOut`. Launch always requires an explicit final UI confirmation. AI never auto-sends.
 
+### Channel binding (fail-closed)
+
+- Every audience eligibility check, freeze snapshot, WhatsApp list, and campaign draft must use the **same** `ChannelConnectionID`.
+- Zero active WhatsApp channels → reject. Multiple active channels → require explicit UI selection (no silent default).
+- Never fall back to cross-channel permission/opt-out checks.
+- Preview `eligibleMarketing` is **preview_page** scoped; the builder freezes + revalidates the full audience and requires confirmation of the **final** eligible count and selected channel before creating a draft.
+- Delivery-time permission/opt-out checks remain in the existing campaign launch/worker path.
+
 ## ERP sync
 
 Tools expected on Cashier (implemented in Cashier repo):
 
 - `customer.list_changes`
-- `invoice.list_changes`
+- `invoice.list_changes` (append `sinceInvId` + rotating `statusSweep` so late cancellations are not permanently missed)
 - `catalog.list_services`
 
 Valid sale rule: `invType = N'مبيعات'` and legacy `isActive <> 'yes'`. Sync does not overwrite CRM notes, tags, or assignments.

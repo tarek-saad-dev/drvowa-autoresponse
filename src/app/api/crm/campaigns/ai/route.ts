@@ -13,6 +13,7 @@ const schema = z
     mode: z.enum(["filter", "refine", "draft_message"]).optional(),
     priorFilter: z.unknown().optional(),
     sessionId: z.string().uuid().nullable().optional(),
+    channelConnectionId: z.string().uuid().nullable().optional(),
   })
   .strict();
 
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
       mode: input.mode,
       priorFilter: input.priorFilter,
       sessionId: input.sessionId,
+      channelConnectionId: input.channelConnectionId,
     });
     return jsonOk({ turn, autoLaunch: false });
   } catch (error) {

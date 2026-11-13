@@ -289,26 +289,7 @@ async function syncInvoices(params: {
     let synced = 0;
     let pages = 0;
 
-    while (pages < 20) {
-      pages += 1;
-      const result = await callIntegrationTool({
-        integration: params.integration,
-        tool: "invoice.list_changes",
-        input: {
-          sinceInvId: cursor.sinceInvId ?? 0,
-          dateFrom: cursor.dateFrom ?? null,
-          includeInactive: true,
-          limit: 100,
-        },
-        requestId: randomUUID(),
-      });
-      if (!result.ok) {
-        throw new ValidationError(result.error?.message ?? "فشل مزامنة الفواتير من ERP");
-      }
-      const data = asRecord(result.data);
-      const invoices = asArray(data?.invoices);
-      if (!invoices.length) break;
-
+    const applyInvoicePage = async (invoices: unknown[], opts: { recordActivity: boolean }) => {
       for (const item of invoices) {
         const row = asRecord(item);
         if (!row) continue;
@@ -374,7 +355,7 @@ async function syncInvoices(params: {
           },
         });
 
-        if (customerId && validSale) {
+        if (opts.recordActivity && customerId && validSale) {
           await repo.insertActivity({
             businessId: params.businessId,
             customerId,
@@ -386,11 +367,41 @@ async function syncInvoices(params: {
         }
         synced += 1;
       }
+    };
+
+    // 1) Append-only stream for new invoice IDs (includes newly inserted cancelled rows).
+    while (pages < 16) {
+      pages += 1;
+      const result = await callIntegrationTool({
+        integration: params.integration,
+        tool: "invoice.list_changes",
+        input: {
+          sinceInvId: cursor.sinceInvId ?? 0,
+          statusSweepSinceInvId: cursor.statusSweepSinceInvId ?? 0,
+          includeInactive: true,
+          statusSweep: false,
+          limit: 100,
+        },
+        requestId: randomUUID(),
+      });
+      if (!result.ok) {
+        throw new ValidationError(result.error?.message ?? "فشل مزامنة الفواتير من ERP");
+      }
+      const data = asRecord(result.data);
+      const invoices = asArray(data?.invoices);
+      if (!invoices.length) break;
+
+      await applyInvoicePage(invoices, { recordActivity: true });
 
       const next = asRecord(data?.nextCursor) ?? {};
       const nextId = num(next.sinceInvId ?? next.invId);
       if (nextId == null || nextId === Number(cursor.sinceInvId ?? -1)) break;
-      cursor = { ...cursor, ...next, sinceInvId: nextId };
+      cursor = {
+        ...cursor,
+        ...next,
+        sinceInvId: nextId,
+        statusSweepSinceInvId: num(next.statusSweepSinceInvId) ?? cursor.statusSweepSinceInvId ?? 0,
+      };
       await repo.upsertErpSyncState({
         businessId: params.businessId,
         integrationId: params.integration.integrationId,
@@ -399,6 +410,50 @@ async function syncInvoices(params: {
         status: "RUNNING",
       });
       if (invoices.length < 100) break;
+    }
+
+    // 2) Rotating status sweep so late cancellations of already-synced IDs are not missed.
+    while (pages < 20) {
+      pages += 1;
+      const result = await callIntegrationTool({
+        integration: params.integration,
+        tool: "invoice.list_changes",
+        input: {
+          sinceInvId: cursor.sinceInvId ?? 0,
+          statusSweepSinceInvId: cursor.statusSweepSinceInvId ?? 0,
+          statusSweep: true,
+          includeInactive: true,
+          limit: 100,
+        },
+        requestId: randomUUID(),
+      });
+      if (!result.ok) {
+        throw new ValidationError(result.error?.message ?? "فشل إعادة تحقق حالة فواتير ERP");
+      }
+      const data = asRecord(result.data);
+      const invoices = asArray(data?.invoices);
+      if (!invoices.length) {
+        cursor = { ...cursor, statusSweepSinceInvId: 0 };
+        break;
+      }
+
+      await applyInvoicePage(invoices, { recordActivity: false });
+
+      const next = asRecord(data?.nextCursor) ?? {};
+      const nextSweep = num(next.statusSweepSinceInvId);
+      cursor = {
+        ...cursor,
+        statusSweepSinceInvId: nextSweep ?? 0,
+      };
+      await repo.upsertErpSyncState({
+        businessId: params.businessId,
+        integrationId: params.integration.integrationId,
+        resource: RESOURCE_INVOICES,
+        cursorJson: JSON.stringify(cursor),
+        status: "RUNNING",
+      });
+      // One reconcile page per sync run keeps the job bounded; cursor resumes next run.
+      break;
     }
 
     const incomplete = pages >= 20;

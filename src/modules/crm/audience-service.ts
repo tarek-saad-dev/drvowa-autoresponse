@@ -10,6 +10,7 @@ import {
   AUDIENCE_QUERY_TIMEOUT_MS,
   compileAudienceFilter,
 } from "./audience-compiler";
+import { requireCampaignWhatsAppChannel } from "./channel";
 import * as repo from "./repository";
 import { requireCrmWriteAccess } from "./service";
 import type { AudienceFilterAst, CrmAudiencePreview, CrmSegment } from "./types";
@@ -71,17 +72,13 @@ function summarizeCustomers(
   };
 }
 
-async function resolveAudienceChannelId(businessId: string): Promise<string | null> {
-  return repo.getActiveWhatsAppChannelId({ businessId });
-}
-
 async function runAudienceQuery(params: {
   businessId: string;
   userId: string;
   filter: AudienceFilterAst;
   rowLimit: number;
   naturalLanguage?: string | null;
-  channelConnectionId?: string | null;
+  channelConnectionId: string;
 }): Promise<{
   filter: AudienceFilterAst;
   totalMatched: number;
@@ -115,7 +112,7 @@ async function runAudienceQuery(params: {
     const totalMatched = Number(countRows[0]?.TotalCount ?? rows.length);
     const customers = await repo.enrichAudienceMarketingEligibility({
       businessId: params.businessId,
-      channelConnectionId: params.channelConnectionId ?? null,
+      channelConnectionId: params.channelConnectionId,
       rows,
     });
 
@@ -163,7 +160,7 @@ export async function previewAudience(params: {
   naturalLanguage?: string | null;
   previewLimit?: number;
   channelConnectionId?: string | null;
-}): Promise<CrmAudiencePreview & { truncated: boolean; audienceCap: number; previewLimit: number }> {
+}): Promise<CrmAudiencePreview> {
   await requireCrmWriteAccess(params);
   let filter: AudienceFilterAst;
   try {
@@ -180,13 +177,15 @@ export async function previewAudience(params: {
     throw new ValidationError("فلتر الجمهور غير صالح");
   }
 
+  const channel = await requireCampaignWhatsAppChannel({
+    businessId: params.businessId,
+    channelConnectionId: params.channelConnectionId,
+  });
+
   const previewLimit = Math.min(
     params.previewLimit ?? AUDIENCE_PREVIEW_PAGE_SIZE,
     AUDIENCE_PREVIEW_PAGE_SIZE,
   );
-  const channelConnectionId =
-    params.channelConnectionId
-    ?? await resolveAudienceChannelId(params.businessId);
 
   const result = await runAudienceQuery({
     businessId: params.businessId,
@@ -194,10 +193,10 @@ export async function previewAudience(params: {
     filter,
     rowLimit: previewLimit,
     naturalLanguage: params.naturalLanguage,
-    channelConnectionId,
+    channelConnectionId: channel.channelConnectionId,
   });
 
-  // Preview counts for eligibility are page-scoped; totalMatched is the full set.
+  // Eligibility/withPhone here are PREVIEW-PAGE scoped only.
   const pageStats = summarizeCustomers(result.customers);
 
   return {
@@ -206,10 +205,13 @@ export async function previewAudience(params: {
     explanationAr: explainAudienceFilterAr(filter),
     totalMatched: result.totalMatched,
     ...pageStats,
+    countsScope: "preview_page",
     customers: result.customers,
     truncated: result.totalMatched > previewLimit,
     audienceCap: AUDIENCE_SNAPSHOT_MAX_ROWS,
     previewLimit,
+    channelConnectionId: channel.channelConnectionId,
+    channelDisplayName: channel.displayName,
   };
 }
 
@@ -223,12 +225,13 @@ export async function materializeAudience(params: {
   filter: unknown;
   naturalLanguage?: string | null;
   channelConnectionId?: string | null;
-}): Promise<CrmAudiencePreview & { truncated: false; audienceCap: number }> {
+}): Promise<CrmAudiencePreview> {
   await requireCrmWriteAccess(params);
   const filter = parseAudienceFilterAst(params.filter);
-  const channelConnectionId =
-    params.channelConnectionId
-    ?? await resolveAudienceChannelId(params.businessId);
+  const channel = await requireCampaignWhatsAppChannel({
+    businessId: params.businessId,
+    channelConnectionId: params.channelConnectionId,
+  });
 
   const result = await runAudienceQuery({
     businessId: params.businessId,
@@ -236,7 +239,7 @@ export async function materializeAudience(params: {
     filter,
     rowLimit: AUDIENCE_SNAPSHOT_MAX_ROWS,
     naturalLanguage: params.naturalLanguage,
-    channelConnectionId,
+    channelConnectionId: channel.channelConnectionId,
   });
 
   if (result.totalMatched > AUDIENCE_SNAPSHOT_MAX_ROWS) {
@@ -252,9 +255,12 @@ export async function materializeAudience(params: {
     explanationAr: explainAudienceFilterAr(filter),
     totalMatched: result.totalMatched,
     ...stats,
+    countsScope: "full_audience",
     customers: result.customers,
     truncated: false,
     audienceCap: AUDIENCE_SNAPSHOT_MAX_ROWS,
+    channelConnectionId: channel.channelConnectionId,
+    channelDisplayName: channel.displayName,
   };
 }
 
@@ -278,7 +284,10 @@ export async function freezeAudienceSnapshot(params: {
   const { snapshotId } = await repo.createAudienceSnapshot({
     businessId: params.businessId,
     name: params.name?.trim() || preview.name,
-    filterJson: JSON.stringify(preview.filter),
+    filterJson: JSON.stringify({
+      ...preview.filter,
+      channelConnectionId: preview.channelConnectionId,
+    }),
     segmentId: params.segmentId ?? null,
     createdByUserId: params.userId,
     totalMatched: preview.totalMatched,
@@ -296,12 +305,13 @@ export async function freezeAudienceSnapshot(params: {
   return { snapshotId, preview };
 }
 
-/** Re-check permission/opt-out for an already frozen snapshot against the active channel. */
+/** Re-check permission/opt-out for an already frozen snapshot against an explicit channel. */
 export async function revalidateSnapshotEligibility(params: {
   businessId: string;
   snapshotId: string;
   channelConnectionId?: string | null;
 }): Promise<{
+  channelConnectionId: string;
   eligiblePhones: string[];
   members: Array<{
     customerId: string;
@@ -312,9 +322,10 @@ export async function revalidateSnapshotEligibility(params: {
   eligibleMarketing: number;
   withoutPermission: number;
 }> {
-  const channelConnectionId =
-    params.channelConnectionId
-    ?? await resolveAudienceChannelId(params.businessId);
+  const channel = await requireCampaignWhatsAppChannel({
+    businessId: params.businessId,
+    channelConnectionId: params.channelConnectionId,
+  });
   const members = await repo.listAudienceSnapshotMembers({
     businessId: params.businessId,
     snapshotId: params.snapshotId,
@@ -328,7 +339,7 @@ export async function revalidateSnapshotEligibility(params: {
   }));
   const enriched = await repo.enrichAudienceMarketingEligibility({
     businessId: params.businessId,
-    channelConnectionId,
+    channelConnectionId: channel.channelConnectionId,
     rows,
   });
   const eligiblePhones = [
@@ -339,6 +350,7 @@ export async function revalidateSnapshotEligibility(params: {
     ),
   ];
   return {
+    channelConnectionId: channel.channelConnectionId,
     eligiblePhones,
     members: enriched.map((c) => ({
       customerId: c.customerId,

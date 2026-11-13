@@ -27,6 +27,12 @@ export {
 } from "./phone";
 
 export {
+  requireCampaignWhatsAppChannel,
+  listCampaignWhatsAppChannels,
+} from "./channel";
+export type { CrmWhatsAppChannel } from "./channel";
+
+export {
   parseAudienceFilterAst,
   mergeAudienceFilters,
   explainAudienceFilterAr,

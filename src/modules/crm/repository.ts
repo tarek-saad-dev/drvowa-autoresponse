@@ -2445,9 +2445,12 @@ export async function getActiveWhatsAppChannelId(params: {
 export async function enrichAudienceMarketingEligibility(params: {
   businessId: string;
   rows: AudienceMatchRow[];
-  /** When set, permission/opt-out are scoped to this WhatsApp channel. */
-  channelConnectionId?: string | null;
+  /** Required: permission/opt-out are always scoped to this WhatsApp channel. */
+  channelConnectionId: string;
 }): Promise<CrmAudiencePreview["customers"]> {
+  if (!params.channelConnectionId) {
+    throw new Error("channelConnectionId is required for marketing eligibility");
+  }
   if (!params.rows.length) return [];
   const phones = [
     ...new Set(
@@ -2461,6 +2464,11 @@ export async function enrichAudienceMarketingEligibility(params: {
   if (phones.length) {
     const inputs: QueryInput[] = [
       { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+      {
+        name: "channelId",
+        type: sql.UniqueIdentifier,
+        value: params.channelConnectionId,
+      },
     ];
     const placeholders: string[] = [];
     phones.forEach((phone, i) => {
@@ -2468,29 +2476,20 @@ export async function enrichAudienceMarketingEligibility(params: {
       placeholders.push(`@${name}`);
       inputs.push({ name, type: sql.NVarChar(32), value: phone });
     });
-    const channelClause = params.channelConnectionId
-      ? "AND ChannelConnectionID = @channelId"
-      : "";
-    if (params.channelConnectionId) {
-      inputs.push({
-        name: "channelId",
-        type: sql.UniqueIdentifier,
-        value: params.channelConnectionId,
-      });
-    }
+    // Never fall back to cross-channel permission checks.
     const perm = await query<{ PhoneNormalized: string }>(
       `SELECT DISTINCT PhoneNormalized FROM dbo.TblWhatsAppCampaignPermission
        WHERE BusinessID = @businessId
-         AND PhoneNormalized IN (${placeholders.join(", ")})
-         ${channelClause}`,
+         AND ChannelConnectionID = @channelId
+         AND PhoneNormalized IN (${placeholders.join(", ")})`,
       inputs,
     );
     for (const row of perm.recordset) permitted.add(row.PhoneNormalized);
     const out = await query<{ PhoneNormalized: string }>(
       `SELECT DISTINCT PhoneNormalized FROM dbo.TblWhatsAppCampaignOptOut
        WHERE BusinessID = @businessId
-         AND PhoneNormalized IN (${placeholders.join(", ")})
-         ${channelClause}`,
+         AND ChannelConnectionID = @channelId
+         AND PhoneNormalized IN (${placeholders.join(", ")})`,
       inputs,
     );
     for (const row of out.recordset) optedOut.add(row.PhoneNormalized);

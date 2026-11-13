@@ -61,27 +61,47 @@ const localListSelect = `
 `;
 
 export async function createDrvoList(params: {
-  businessId: string; name: string;
+  businessId: string;
+  name: string;
+  /** Required when multiple WhatsApp channels exist; must be an active channel for this business. */
+  channelConnectionId?: string | null;
 }): Promise<{ id: string; name: string; channelConnectionId: string }> {
   const name = params.name.trim().replace(/\s+/gu, " ");
   if (name.length < 2 || name.length > 80) {
     throw new ValidationError("اسم القائمة لازم يكون من 2 إلى 80 حرف.");
   }
   return withTransaction(async trx => {
-    const channels = await trx.query<ChannelRow>(
-      `SELECT TOP(2) ChannelConnectionID FROM dbo.TblChannelConnection
-       WHERE BusinessID=@businessId AND Channel=N'WHATSAPP'
-         AND IsActive=1 AND Status=N'ACTIVE'
-       ORDER BY CreatedAtUtc DESC`,
-      [{ name: "businessId", type: sql.UniqueIdentifier, value: params.businessId }],
-    );
-    if (!channels.recordset.length) {
-      throw new ConflictError("لازم توصل رقم واتساب أولًا عشان تعمل قائمة عملاء.");
+    let channelConnectionId = params.channelConnectionId?.trim() || null;
+    if (channelConnectionId) {
+      const chosen = await trx.query<ChannelRow>(
+        `SELECT ChannelConnectionID FROM dbo.TblChannelConnection
+         WHERE BusinessID=@businessId AND ChannelConnectionID=@channelId
+           AND Channel=N'WHATSAPP' AND IsActive=1 AND Status=N'ACTIVE'`,
+        [
+          { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+          { name: "channelId", type: sql.UniqueIdentifier, value: channelConnectionId },
+        ],
+      );
+      if (!chosen.recordset.length) {
+        throw new ConflictError("قناة واتساب المحددة غير نشطة أو غير موجودة.");
+      }
+      channelConnectionId = chosen.recordset[0].ChannelConnectionID;
+    } else {
+      const channels = await trx.query<ChannelRow>(
+        `SELECT TOP(2) ChannelConnectionID FROM dbo.TblChannelConnection
+         WHERE BusinessID=@businessId AND Channel=N'WHATSAPP'
+           AND IsActive=1 AND Status=N'ACTIVE'
+         ORDER BY CreatedAtUtc DESC`,
+        [{ name: "businessId", type: sql.UniqueIdentifier, value: params.businessId }],
+      );
+      if (!channels.recordset.length) {
+        throw new ConflictError("لازم توصل رقم واتساب أولًا عشان تعمل قائمة عملاء.");
+      }
+      if (channels.recordset.length > 1) {
+        throw new ConflictError("في أكتر من رقم واتساب نشط؛ حدد الرقم قبل إنشاء قائمة.");
+      }
+      channelConnectionId = channels.recordset[0].ChannelConnectionID;
     }
-    if (channels.recordset.length > 1) {
-      throw new ConflictError("في أكتر من رقم واتساب نشط؛ حدد الرقم قبل إنشاء قائمة.");
-    }
-    const channelConnectionId = channels.recordset[0].ChannelConnectionID;
     const id = DRVO_LIST_PREFIX + randomUUID();
     const inputs = [
       { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
