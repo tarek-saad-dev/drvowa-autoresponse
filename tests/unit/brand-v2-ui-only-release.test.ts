@@ -14,7 +14,8 @@ describe("DRVO Brand V2 visual-only deployment invariants", () => {
     }
     expect(logo).toContain("/brand/logo-on-dark.png");
     expect(logo).toContain("/brand/logo-on-light.png");
-    expect(logo).not.toContain("/api/brand/assets/");
+    expect(logo).toContain("/api/brand/assets/primary-dark");
+    expect(logo).toContain("/api/brand/assets/primary-light");
   });
 
   it("requires an explicit one-commit visual scope verified against deployed SHA", () => {
