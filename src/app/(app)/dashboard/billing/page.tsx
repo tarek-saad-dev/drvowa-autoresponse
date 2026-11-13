@@ -61,7 +61,7 @@ function UsageMeter({
     <article className="space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
       <div className="space-y-1">
         <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
-        <p className="text-2xl font-black tabular-nums sm:text-[26px]" dir="ltr">
+        <p className="text-2xl font-bold tabular-nums sm:text-[26px]" dir="ltr">
           {formatNumber(used)}
           <span className="text-sm font-medium text-muted-foreground">
             {safeLimit !== null ? ` / ${formatNumber(safeLimit)}` : " · بلا حد"}
@@ -172,7 +172,7 @@ export default async function BillingPage() {
   return (
     <main className="mx-auto w-full max-w-5xl space-y-6 pb-12">
       <header className="space-y-1">
-        <h1 className="text-2xl font-black tracking-tight sm:text-3xl">
+        <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
           الاشتراك والاستخدام
         </h1>
         <p className="text-sm text-muted-foreground">
@@ -183,7 +183,7 @@ export default async function BillingPage() {
       {addonBalance.activeLots > 0 ? (
         <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
           <h2 className="text-base font-bold">رصيد الردود الإضافية</h2>
-          <p className="mt-2 text-2xl font-black tabular-nums">{formatNumber(addonBalance.availableReplies)}</p>
+          <p className="mt-2 text-2xl font-bold tabular-nums">{formatNumber(addonBalance.availableReplies)}</p>
           <p className="mt-1 text-xs text-muted-foreground">
             الرصيد المسجل وغير المنتهي · أقرب انتهاء: {formatDate(addonBalance.nearestExpiryUtc)}
           </p>
@@ -218,12 +218,12 @@ export default async function BillingPage() {
         </div>
       ) : null}
 
-      <section className="rounded-[24px] border border-border bg-card p-5 shadow-sm sm:p-6">
+      <section className="rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-1.5">
             <p className="text-xs text-muted-foreground">باقتك الحالية</p>
             <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-2xl font-black">{plan?.displayName ?? "غير محددة"}</h2>
+              <h2 className="font-display text-2xl font-bold">{plan?.displayName ?? "غير محددة"}</h2>
               <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${statusTone}`}>
                 {statusText}
               </span>
@@ -241,7 +241,7 @@ export default async function BillingPage() {
           </div>
           <div className="space-y-1 sm:text-end">
             <p className="text-xs text-muted-foreground">السعر الأساسي للباقة</p>
-            <p className="text-xl font-black tabular-nums">{priceText}</p>
+            <p className="text-xl font-bold tabular-nums">{priceText}</p>
             {catalogPrice != null && catalogPrice > 0 ? (
               <p className="text-xs text-muted-foreground">
                 السعر الشهري المعلن، وقد يختلف المدفوع حسب الخصومات ودورة الفوترة
@@ -305,7 +305,7 @@ export default async function BillingPage() {
 
       <section className="space-y-3" aria-labelledby="usage-heading">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 id="usage-heading" className="text-lg font-black">استخدامك هذا الشهر</h2>
+          <h2 id="usage-heading" className="font-display text-lg font-bold">استخدامك هذا الشهر</h2>
           <p className="text-xs text-muted-foreground">
             تتجدد حدود الرسائل والردود في {formatDate(overview.usagePeriod.usagePeriodEndUtc)}
           </p>
@@ -317,7 +317,7 @@ export default async function BillingPage() {
         {process.env.DRVO_PRICING_V1_ADDON_DRAFTS === "true" ? <AddonPurchasesClient /> : null}
 
       <details className="group rounded-2xl border border-border bg-card">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 [&::-webkit-details-marker]:hidden">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
             <span className="text-sm font-bold">باقي حدود الباقة</span>
             <span aria-hidden="true" className="text-muted-foreground transition-transform group-open:rotate-90">‹</span>
           </summary>
@@ -339,8 +339,8 @@ export default async function BillingPage() {
 
       <section className="space-y-3" aria-labelledby="payment-heading">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 id="payment-heading" className="text-lg font-black">المدفوعات والفواتير</h2>
-          <Link href="/dashboard/billing/documents" className="text-sm font-bold text-primary hover:underline">
+          <h2 id="payment-heading" className="font-display text-lg font-bold">المدفوعات والفواتير</h2>
+          <Link href="/dashboard/billing/documents" className="rounded-md text-sm font-bold text-primary underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             الفواتير والإيصالات ←
           </Link>
         </div>
@@ -400,7 +400,7 @@ export default async function BillingPage() {
       />
 
       <details className="group rounded-2xl border border-border bg-card">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 [&::-webkit-details-marker]:hidden">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
           <span className="text-sm font-bold">سجل الاستخدام</span>
           <span aria-hidden="true" className="text-muted-foreground transition-transform group-open:rotate-90">‹</span>
         </summary>

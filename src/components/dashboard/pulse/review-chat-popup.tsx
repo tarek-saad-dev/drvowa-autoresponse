@@ -214,7 +214,7 @@ export function ReviewChatPopup({
       <div className="pointer-events-auto absolute inset-0 bg-black/45 sm:hidden"
         onClick={() => setConfirmClose(true)} aria-hidden="true" />
       <section role="dialog" aria-modal="false" aria-label={"محادثة " + item.name}
-        className="pointer-events-auto absolute inset-x-0 bottom-0 top-0 flex flex-col overflow-hidden border border-border bg-card shadow-[0_24px_80px_-20px_rgba(0,0,0,.42)] sm:inset-x-auto sm:top-auto sm:bottom-5 sm:left-5 sm:h-[min(670px,calc(100dvh-45px))] sm:w-[410px] sm:rounded-[22px]">
+        className="pointer-events-auto absolute inset-x-0 bottom-0 top-0 flex flex-col overflow-hidden border border-border bg-card shadow-md sm:inset-x-auto sm:top-auto sm:bottom-5 sm:left-5 sm:h-[min(670px,calc(100dvh-45px))] sm:w-[410px] sm:rounded-[22px]">
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
             <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/10 text-base font-black text-primary">
@@ -272,11 +272,11 @@ export function ReviewChatPopup({
                 }
               }}
               placeholder="اكتب ردك للعميل..." aria-label="اكتب ردك للعميل"
-              className="min-h-[48px] max-h-32 min-w-0 flex-1 resize-none rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
+              className="min-h-[48px] max-h-32 min-w-0 flex-1 resize-none rounded-xl border border-input bg-surface px-3 py-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"
             />
             <button type="button" disabled={sending || !draft.trim() || uncertain}
               onClick={() => void sendReply()}
-              className="min-h-11 shrink-0 rounded-xl bg-primary px-4 text-xs font-black text-primary-foreground disabled:opacity-50">
+              className="min-h-11 shrink-0 rounded-xl bg-primary px-4 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50">
               {sending ? "جارٍ الإرسال..." : "إرسال"}
             </button>
           </div>

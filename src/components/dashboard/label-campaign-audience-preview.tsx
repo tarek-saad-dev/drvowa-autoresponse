@@ -50,8 +50,8 @@ export function LabelCampaignAudiencePreview({ draftId }: { draftId: string }) {
   if (!preview) return <p role="status" className="text-xs text-muted-foreground">بنراجع الجمهور المرصود…</p>;
 
   return (
-    <div className="space-y-2 rounded-xl border border-border bg-surface/60 p-3">
-      <p className="text-xs font-black">معاينة الجمهور المرصود — بدون إرسال</p>
+    <div className="space-y-2 rounded-xl border border-border bg-surface/60 p-3 sm:p-4">
+      <p className="text-xs font-bold">معاينة الجمهور المرصود — بدون إرسال</p>
       <p className="text-xs leading-6 text-muted-foreground">
         {preview.uniquePhones.toLocaleString("ar-EG")} رقم مختلف مرصود حاليًا
         {preview.duplicatePhoneRows > 0 ? ` • ${preview.duplicatePhoneRows.toLocaleString("ar-EG")} مكرر` : ""}
@@ -72,7 +72,7 @@ export function LabelCampaignAudiencePreview({ draftId }: { draftId: string }) {
               <span className="min-w-0 truncate text-foreground">
                 {contact.displayName || "عميل"}
               </span>
-              <span className="shrink-0 font-mono text-muted-foreground" dir="ltr">
+              <span className="min-w-0 shrink-0 font-mono text-muted-foreground" dir="ltr">
                 {contact.maskedPhone}
               </span>
             </li>

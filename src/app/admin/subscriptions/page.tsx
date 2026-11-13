@@ -78,24 +78,24 @@ export default async function AdminSubscriptionsPage({
 
   return (
     <div className="space-y-6 pb-8">
-      <section className="relative overflow-hidden rounded-[28px] border border-border bg-card p-6 shadow-sm sm:p-8">
+      <section className="relative overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
         <div className="pointer-events-none absolute -left-20 -top-28 h-72 w-72 rounded-full bg-primary/10 blur-3xl" />
         <div className="relative flex flex-wrap items-start justify-between gap-5">
           <div className="space-y-2">
-            <p className="text-xs font-black tracking-wide text-primary">SUBSCRIPTION OPERATIONS</p>
-            <h1 className="text-2xl font-black tracking-tight sm:text-3xl">العملاء والاشتراكات</h1>
+            <p className="text-xs font-bold tracking-wide text-primary">SUBSCRIPTION OPERATIONS</p>
+            <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">العملاء والاشتراكات</h1>
             <p className="max-w-xl text-sm leading-7 text-muted-foreground">
               كل مساحات العمل وباقاتها وتواريخ تجديدها في مكان واحد. بيانات مباشرة للمتابعة، وأي تغيير في اشتراك العميل يتم من نظام الدفع المعتمد.
             </p>
           </div>
           <div className="rounded-2xl bg-surface p-4 text-center">
             <p className="text-xs text-muted-foreground">نتائج البحث والتصفية</p>
-            <p className="mt-1 text-3xl font-black tabular-nums">{fmt.format(result.total)}</p>
+            <p className="mt-1 text-3xl font-bold tabular-nums">{fmt.format(result.total)}</p>
           </div>
         </div>
       </section>
 
-      <section className="rounded-[22px] border border-border bg-card p-4 shadow-sm sm:p-5">
+      <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
         <form method="GET" action="/admin/subscriptions" className="flex flex-col gap-3 sm:flex-row">
           {status !== "ALL" ? <input type="hidden" name="status" value={status} /> : null}
           <label htmlFor="subscription-search" className="sr-only">ابحث عن اسم النشاط أو رابطه</label>
@@ -105,13 +105,13 @@ export default async function AdminSubscriptionsPage({
             defaultValue={result.search}
             placeholder="ابحث باسم النشاط أو الرابط..."
             maxLength={80}
-            className="min-h-11 min-w-0 flex-1 rounded-xl border border-input bg-background px-4 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+            className="min-h-11 min-w-0 flex-1 rounded-xl border border-input bg-card px-4 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"
           />
-          <button type="submit" className="min-h-11 rounded-xl bg-primary px-6 text-sm font-bold text-primary-foreground transition hover:bg-primary-hover">
+          <button type="submit" className="min-h-11 rounded-xl bg-primary px-6 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             بحث
           </button>
           {(result.search || status !== "ALL") ? (
-            <Link href="/admin/subscriptions" className="flex min-h-11 items-center justify-center rounded-xl border border-border px-4 text-sm font-bold hover:bg-surface">مسح التصفية</Link>
+            <Link href="/admin/subscriptions" className="flex min-h-11 items-center justify-center rounded-xl border border-input bg-card px-4 text-sm font-bold transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">مسح التصفية</Link>
           ) : null}
         </form>
         <div className="mt-4 flex flex-wrap gap-2" aria-label="تصفية حالات الاشتراك">
@@ -121,8 +121,8 @@ export default async function AdminSubscriptionsPage({
               href={queryUrl(result.search, value)}
               aria-current={value === status ? "page" : undefined}
               className={value === status
-                ? "rounded-full bg-primary px-3.5 py-2 text-xs font-bold text-primary-foreground"
-                : "rounded-full border border-border bg-surface px-3.5 py-2 text-xs font-semibold text-muted-foreground transition hover:border-primary/40 hover:text-foreground"}
+                ? "inline-flex min-h-10 items-center rounded-full bg-primary px-3.5 py-2 text-xs font-bold text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                 : "inline-flex min-h-10 items-center rounded-full border border-input bg-card px-3.5 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"}
             >
               {label}
             </Link>
@@ -130,17 +130,17 @@ export default async function AdminSubscriptionsPage({
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[24px] border border-border bg-card shadow-sm">
+      <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border p-5">
           <div>
-            <h2 className="text-lg font-black">سجل العملاء والاشتراكات</h2>
+            <h2 className="text-lg font-bold">سجل العملاء والاشتراكات</h2>
             <p className="mt-1 text-xs text-muted-foreground">عرض 25 عميل في كل صفحة · قراءة فقط</p>
           </div>
           <Link href="/admin/payments" className="text-sm font-bold text-primary hover:underline">مراجعة المدفوعات ←</Link>
         </div>
         {result.items.length === 0 ? (
           <div className="p-12 text-center">
-            <p className="text-base font-black">مفيش نتائج مطابقة</p>
+            <p className="text-base font-bold">مفيش نتائج مطابقة</p>
             <p className="mt-2 text-sm text-muted-foreground">غيّر البحث أو حالة الاشتراك وجرب تاني.</p>
           </div>
         ) : (
@@ -162,7 +162,7 @@ export default async function AdminSubscriptionsPage({
                   return (
                     <tr key={item.businessId} className="transition-colors hover:bg-surface/50">
                       <td className="max-w-64 px-5 py-4">
-                        <p className="truncate font-black">{item.name}</p>
+                        <p className="truncate font-bold">{item.name}</p>
                         <p className="mt-1 truncate text-xs text-muted-foreground" dir="ltr">{item.slug}</p>
                         {item.businessStatus !== "ACTIVE" ? <span className="mt-1 inline-block text-xs text-warning">النشاط: {item.businessStatus}</span> : null}
                       </td>

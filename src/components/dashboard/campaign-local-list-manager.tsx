@@ -158,7 +158,7 @@ export function CampaignLocalListManager({
       aria-label="إدارة قوائم عملاء DRVO">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-base font-black">قوائم DRVO</p>
+          <p className="text-base font-bold">قوائم DRVO</p>
           <p className="mt-1 text-xs text-muted-foreground">
             اعمل قائمة مستقلة ونظّم عملاءك بدون انتظار مزامنة واتساب.
           </p>
@@ -173,7 +173,7 @@ export function CampaignLocalListManager({
           <input aria-label="اسم قائمة DRVO" value={newName} maxLength={80}
             placeholder="مثال: عملاء البروتين"
             onChange={event => setNewName(event.target.value)}
-            className="min-h-10 min-w-0 flex-1 rounded-lg border border-border bg-card px-3 text-sm outline-none focus:border-primary"/>
+            className="min-h-11 min-w-0 flex-1 rounded-lg border border-input bg-card px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"/>
           <Button size="sm" type="submit" disabled={busy || newName.trim().length < 2}>
             {busy ? "بنحفظ…" : "إنشاء"}
           </Button>
@@ -198,9 +198,9 @@ export function CampaignLocalListManager({
         <section aria-label={"إدارة " + selectedList.name}
           className="space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-black">{selectedList.name}</h3>
+            <h3 className="text-sm font-bold">{selectedList.name}</h3>
             <button type="button" onClick={() => void deleteList()} disabled={busy}
-              className="text-xs text-muted-foreground hover:text-foreground">
+              className="min-h-10 rounded-lg px-2 text-xs text-destructive transition-colors hover:bg-destructive-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               حذف القائمة
             </button>
           </div>
@@ -227,7 +227,7 @@ export function CampaignLocalListManager({
                   maxLength={3000} rows={3}
                   onChange={event => setPhones(event.target.value)}
                   placeholder={"01012345678\n01112345678\n+201212345678"}
-                  className="w-full resize-y rounded-xl border border-border bg-surface px-3 py-3 text-sm outline-none focus:border-primary"/>
+                  className="w-full resize-y rounded-xl border border-input bg-card px-3 py-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"/>
                 <div className="flex justify-end">
                   <Button size="sm" type="submit" disabled={busy || !phones.trim()}>
                     {busy ? "بنضيف…" : "إضافة للقائمة"}
@@ -245,7 +245,7 @@ export function CampaignLocalListManager({
                         <span className="truncate">{member.name || member.phone}</span>
                         <button type="button" onClick={() => void remove(member.phone)}
                           disabled={busy} aria-label={"إزالة " + member.phone}
-                          className="shrink-0 text-muted-foreground underline hover:text-foreground">
+                          className="min-h-10 shrink-0 rounded-lg px-2 text-destructive underline transition-colors hover:bg-destructive-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                           إزالة
                         </button>
                       </div>
@@ -263,7 +263,7 @@ export function CampaignLocalListManager({
                 <input aria-label="رقم واتساب التجريبي" value={testPhone}
                   onChange={event => {setTestPhone(event.target.value);setTestResult(null);}}
                   placeholder="01012345678" inputMode="tel" maxLength={32}
-                  className="min-h-10 min-w-0 flex-1 rounded-xl border border-border bg-surface px-3 text-sm outline-none focus:border-primary"/>
+                  className="min-h-11 min-w-0 flex-1 rounded-xl border border-input bg-card px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"/>
                 <Button type="submit" size="sm" disabled={busy || testing || !testPhone.trim()}>
                   {testing ? "بنتحقق…" : "تحقق"}
                 </Button>

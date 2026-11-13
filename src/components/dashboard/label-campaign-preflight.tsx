@@ -74,16 +74,16 @@ export function LabelCampaignPreflight({
   }, [loadPlan, retry]);
 
   if (busy) return (
-    <div role="status" className="rounded-xl bg-surface p-4 text-sm text-muted-foreground">
+    <div role="status" className="rounded-xl border border-border bg-surface p-4 text-sm text-muted-foreground">
       بنجهّز الإرسال ونراجع المستلمين تلقائيًا…
     </div>
   );
 
   if (error || !plan) return (
-    <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface px-4 py-3">
+    <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning/30 bg-warning-soft px-4 py-3">
       <p className="text-sm text-warning">{error || "تعذر تجهيز الحملة."}</p>
       <button type="button" onClick={() => setRetry(value => value + 1)}
-        className="text-xs font-bold text-primary underline underline-offset-2">
+        className="min-h-10 rounded-lg px-3 text-xs font-bold text-primary underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
         إعادة المحاولة
       </button>
     </div>

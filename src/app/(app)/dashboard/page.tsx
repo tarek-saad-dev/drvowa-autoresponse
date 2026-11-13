@@ -23,7 +23,7 @@ import { listInboxConversations } from "@/modules/messaging";
 import { getPulseSnapshot } from "@/modules/pulse/report";
 import type { PulsePeriod } from "@/modules/pulse/time";
 
-const panel="min-w-0 rounded-[24px] border border-border bg-card p-5 shadow-[0_14px_42px_-34px_rgba(5,43,58,.46)] sm:p-6";
+const panel="min-w-0 rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6";
 export default async function DashboardOverviewPage({searchParams}:{
  searchParams:Promise<{period?:string;view?:string}>;
 }) {
@@ -81,7 +81,7 @@ export default async function DashboardOverviewPage({searchParams}:{
   statusLabel:c.hasOpenEscalation?"متابعة مفتوحة":c.aiMode==="HUMAN_PAUSED"?"مع الفريق":null,
   statusTone:c.hasOpenEscalation?"attention":"neutral",
  }));
- return <div className="mx-auto w-full max-w-[1420px] space-y-5 pb-6 sm:space-y-6">
+ return <div className="mx-auto w-full max-w-[1360px] space-y-4 pb-6 sm:space-y-5">
   <BillingHealthNotice alert={billingAlert}/>
   <ConnectionHealthStrip initialUiState={health.whatsappLiveState}
    initialInboundHealth={health.inboundHealth} initialInboundIssue={health.inboundIssue} status={status}/>
@@ -92,15 +92,15 @@ export default async function DashboardOverviewPage({searchParams}:{
    <RecentConversations conversations={recent} whatsappConnected={health.whatsappLiveState==="READY"}/>
    <div className={panel+" flex flex-col"}>
     <div className="flex items-center justify-between gap-2">
-     <h2 className="text-lg font-black">الموظف الذكي</h2>
+     <h2 className="font-display text-lg font-bold">الموظف الذكي</h2>
      <span aria-hidden className="rounded-full bg-primary/10 p-2 text-primary">✦</span>
     </div>
-    <p className="mt-5 text-base font-black">{activeAgent?.name||"موظفك الذكي"}</p>
+    <p className="mt-5 text-base font-bold">{activeAgent?.name||"موظفك الذكي"}</p>
     <p className="mt-1 text-xs text-muted-foreground">{activeAgent?.roleTitle||"مساعد العملاء"} • {activeKnowledge.toLocaleString("en-US")} معلومة نشطة</p>
     <p className="mt-4 text-xs leading-6 text-muted-foreground">{billingAlert && ["subscription_inactive","paid_expired","free_trial_ended","quota_exhausted"].includes(billingAlert.kind)
       ?"الردود التلقائية الجديدة قد تتعطل بسبب الاشتراك أو حدود الاستخدام. راجع الباقة من التنبيه أعلى الصفحة."
       :status.kind==="working"?"جاهز للرد على العملاء بالمعلومات اللي اتعلمها.":status.detail}</p>
-    <Link href="/dashboard/agent" className="mt-auto block rounded-xl bg-primary px-4 py-3 text-center text-xs font-black text-primary-foreground">إدارة الموظف ←</Link>
+    <Link href="/dashboard/agent" className="mt-auto flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 py-3 text-center text-xs font-bold text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none">إدارة الموظف ←</Link>
    </div>
   </section>
  </div>;

@@ -44,7 +44,7 @@ export default async function AdminRefundsPage() {
   return <div className="space-y-5">
     <div>
       <p className="text-xs font-bold text-primary">إدارة المدفوعات</p>
-      <h1 className="mt-2 text-3xl font-black">طلبات الاسترداد (Refunds)</h1>
+      <h1 className="mt-2 font-display text-3xl font-bold">طلبات الاسترداد (Refunds)</h1>
       <p className="mt-2 text-sm text-muted-foreground">طلبات العملاء تظهر أولًا. راجع السبب، جهّز الاسترداد، ولا تسجّل نجاحه إلا بعد تنفيذ التحويل الفعلي.</p>
     </div>
     {!enabled ? <div role="alert" className="rounded-xl border border-warning/40 bg-warning-soft p-4 text-sm font-bold text-warning">إجراءات الاسترداد معطّلة لحين اكتمال إعداد الربط المالي. يمكنك مراجعة الطلبات، لكن لن يتم تسجيل استرداد قبل تفعيل شروط الأمان.</div> : null}

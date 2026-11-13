@@ -112,7 +112,17 @@ export function AdminPaymentsPanel({
             {initialItems.map((item) => (
               <tr
                 key={item.paymentRequestId}
-                className="cursor-pointer border-t border-border hover:bg-card/80"
+                className="cursor-pointer border-t border-border transition-colors hover:bg-surface/80 focus-visible:bg-primary/5 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
+                role="button"
+                tabIndex={0}
+                aria-label={"مراجعة طلب دفع " + item.paymentReference}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setSelected(item);
+                    setReviewNote("");
+                  }
+                }}
                 onClick={() => {
                   setSelected(item);
                   setReviewNote("");
@@ -143,8 +153,8 @@ export function AdminPaymentsPanel({
       </div>
 
       {selected ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-xl">
+        <div role="dialog" aria-modal="true" aria-label="مراجعة طلب دفع" className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 sm:items-center sm:p-4">
+          <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-card p-4 shadow-xl sm:p-6">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-lg font-semibold">مراجعة الدفع</h3>
@@ -211,12 +221,12 @@ export function AdminPaymentsPanel({
             {selected.status === "PENDING" ? (
               <div className="mt-5 space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  تحقق يدوياً من حساب InstaPay خارج DRVOWA قبل الاعتماد.
+                  تحقق يدويًا من وصول التحويل لحساب InstaPay خارج DRVO قبل الاعتماد.
                 </p>
                 <label className="block text-sm">
                   سبب للعميل (اختياري عند الرفض)
                   <textarea
-                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                    className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"
                     rows={3}
                     value={reviewNote}
                     onChange={(e) => setReviewNote(e.target.value)}

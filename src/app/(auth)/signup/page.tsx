@@ -54,8 +54,8 @@ export default function SignupPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>إنشاء حساب</CardTitle>
-        <CardDescription>ابدأ بإعداد موظف الاستقبال لنشاطك</CardDescription>
+        <CardTitle className="text-xl sm:text-2xl">إنشاء حساب</CardTitle>
+        <CardDescription className="leading-6">ابدأ بإعداد موظف الاستقبال لنشاطك</CardDescription>
       </CardHeader>
       <CardContent>
         <form className="space-y-4" onSubmit={onSubmit}>
@@ -110,7 +110,7 @@ export default function SignupPage() {
             </Link>
             .
           </p>
-          <Button type="submit" className="w-full" disabled={pending}>
+          <Button type="submit" className="w-full text-base" disabled={pending} loading={pending}>
             {pending ? "جارٍ الإنشاء..." : "إنشاء الحساب"}
           </Button>
         </form>

@@ -48,9 +48,9 @@ export function LandingConversationFlow() {
     resize();
 
     const draw = (time: number) => {
-      const primary = cssVar("--brand-teal", "#00759a");
-      const bright = cssVar("--accent", "#0b8bb5");
-      const foreground = cssVar("--foreground", "#08171e");
+      const primary = cssVar("--brand-signal", "#7bf36a");
+      const bright = cssVar("--brand-deep-green", "#1f9d55");
+      const foreground = cssVar("--brand-white", "#f7f9fc");
 
       ctx.clearRect(0, 0, width, height);
 
@@ -129,9 +129,9 @@ export function LandingConversationFlow() {
       ctx.scale(pulse, pulse);
 
       const core = ctx.createRadialGradient(-12, -16, 4, 0, 0, 62);
-      core.addColorStop(0, "#42c5eb");
+      core.addColorStop(0, primary);
       core.addColorStop(0.48, primary);
-      core.addColorStop(1, "#004a66");
+      core.addColorStop(1, cssVar("--brand-carbon", "#151b23"));
       ctx.fillStyle = core;
       ctx.shadowColor = primary;
       ctx.shadowBlur = 32;
@@ -149,7 +149,7 @@ export function LandingConversationFlow() {
       ctx.arc(0, 0, 25, 1.8, 4.8);
       ctx.stroke();
 
-      ctx.fillStyle = "#ffffff";
+      ctx.fillStyle = cssVar("--brand-ink", "#0b0f14");
       ctx.font = "700 14px system-ui";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -182,7 +182,7 @@ export function LandingConversationFlow() {
   }, []);
 
   return (
-    <div className="relative min-h-[300px] overflow-hidden rounded-[26px] border border-border/70 bg-card/70 shadow-[0_26px_70px_rgba(0,74,102,.16)] backdrop-blur-xl sm:min-h-[430px] sm:rounded-[30px] sm:shadow-[0_30px_90px_rgba(0,74,102,.18)] lg:min-h-[500px] xl:min-h-[560px] 2xl:min-h-[610px]">
+    <div className="relative min-h-[300px] overflow-hidden rounded-[26px] border border-border/70 bg-card/70 shadow-md backdrop-blur-xl sm:min-h-[430px] sm:rounded-[30px] sm:shadow-lg lg:min-h-[500px] xl:min-h-[560px] 2xl:min-h-[610px]">
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
 
       <div className="pointer-events-none absolute inset-0">

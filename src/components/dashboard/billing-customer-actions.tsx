@@ -81,7 +81,7 @@ export function BillingCustomerActions(props: Props) {
       <div className="mt-4 border-t border-border pt-4" aria-label="إدارة الاشتراك">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-black">إدارة اشتراكك</p>
+            <p className="text-sm font-bold">إدارة اشتراكك</p>
             <p className="mt-1 text-xs leading-6 text-muted-foreground">
               لا يتم تحصيل رسوم تلقائيًا عبر InstaPay. إلغاء الاشتراك لا يُعيد أي مبالغ تم دفعها.
             </p>
@@ -133,12 +133,12 @@ export function BillingCustomerActions(props: Props) {
     <section className="rounded-2xl border border-border bg-card p-4 sm:p-5" aria-label="طلبات الاسترداد">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-black">المدفوعات وطلبات الاسترداد</h3>
+          <h3 className="font-display text-base font-bold">المدفوعات وطلبات الاسترداد</h3>
           <p className="mt-1 text-xs leading-6 text-muted-foreground">
             تقدر تطلب استرداد دفعة معتمدة. تقديم الطلب لا يضمن الموافقة ولا يحوّل المبلغ تلقائيًا.
           </p>
         </div>
-        <a href="/dashboard/billing/documents" className="text-xs font-bold text-primary hover:underline">
+        <a href="/dashboard/billing/documents" className="rounded-md text-xs font-bold text-primary underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           الفواتير والإيصالات
         </a>
       </div>
@@ -182,13 +182,13 @@ export function BillingCustomerActions(props: Props) {
                 </div>
               ) : null}
               {openPayment === p.paymentRequestId && p.status === "NONE" ? (
-                <form className="space-y-3 rounded-xl border border-border bg-surface p-4" onSubmit={e => {
+                <form className="space-y-3 rounded-xl border border-warning/25 bg-surface p-4" onSubmit={e => {
                   e.preventDefault();
                   void run({
                     action: "request_refund", paymentRequestId: p.paymentRequestId, reason: reason.trim(),
                   }, "استلمنا طلب الاسترداد، وهو الآن بانتظار مراجعة الإدارة.");
                 }}>
-                  <p className="text-sm font-black">طلب استرداد كامل — {money(p.amount, p.currency)}</p>
+                  <p className="text-sm font-bold">طلب استرداد كامل — {money(p.amount, p.currency)}</p>
                   <p className="text-xs leading-6 text-muted-foreground">
                     حدد سبب طلب الاسترداد. الإدارة ستراجع الفاتورة والدفع وشروط الاسترداد.
                     اشتراكك لن يُلغى بمجرد إرسال هذا الطلب.

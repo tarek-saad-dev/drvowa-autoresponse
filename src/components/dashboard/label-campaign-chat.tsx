@@ -158,7 +158,7 @@ export function LabelCampaignChat() {
     <section aria-label="محادثة حملات القوائم" className="mx-auto w-full max-w-[780px] pb-10">
       <div className="flex flex-wrap items-center justify-between gap-3 pb-5">
         <div>
-          <h2 className="text-lg font-black tracking-tight sm:text-xl">
+          <h2 className="font-display text-lg font-bold tracking-tight sm:text-xl">
             {view === "manage" ? "إدارة القوائم" : view === "history" ? "الحملات السابقة"
               : view === "review" ? "مراجعة الحملة" : "حملة جديدة"}
           </h2>
@@ -171,27 +171,28 @@ export function LabelCampaignChat() {
         </div>
         {view === "compose" ? (
           <button type="button" onClick={() => navigate("history")}
-            className="rounded-xl border border-border px-3 py-2 text-xs font-bold text-muted-foreground hover:bg-card hover:text-foreground">
+            className="min-h-10 rounded-xl border border-input bg-card px-3 py-2 text-xs font-bold text-foreground transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             الحملات السابقة {drafts.filter(draft => draft.status !== "CANCELLED").length
               ? "(" + drafts.filter(draft => draft.status !== "CANCELLED").length.toLocaleString("ar-EG") + ")" : ""}
           </button>
         ) : (
           <button type="button" onClick={newCampaign}
-            className="rounded-xl border border-border px-3 py-2 text-xs font-bold hover:bg-card">
+            className="min-h-10 rounded-xl border border-input bg-card px-3 py-2 text-xs font-bold transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             + حملة جديدة
           </button>
         )}
       </div>
 
       {view === "compose" || view === "review" ? (
-        <div className="mb-5 grid grid-cols-3 gap-2" aria-label="خطوات الحملة">
+        <div className="mb-5 grid grid-cols-3 gap-1.5" role="group" aria-label="مراحل تحضير الحملة">
           {[
             {name:"١ · الجمهور", active: view === "compose" && !selectedLabel, done: Boolean(selectedLabel) || view === "review"},
             {name:"٢ · الرسالة", active: view === "compose" && Boolean(selectedLabel), done: view === "review"},
             {name:"٣ · المراجعة", active: view === "review", done: false},
           ].map(step => (
             <div key={step.name}
-              className={"rounded-lg px-2 py-2 text-center text-[11px] font-bold sm:text-xs " +
+              aria-current={step.active ? "step" : undefined}
+              className={"rounded-lg px-2 py-2 text-center text-[11px] font-semibold sm:text-xs " +
                 (step.active ? "bg-primary/10 text-primary" :
                   step.done ? "bg-surface text-foreground" : "bg-surface/55 text-muted-foreground")}>
               {step.name}
@@ -227,7 +228,7 @@ export function LabelCampaignChat() {
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-5">
                 <div>
                   <p className="text-[11px] font-bold text-muted-foreground">إلى قائمة</p>
-                  <p className="mt-1 text-base font-black">{selectedLabel.name}</p>
+                  <p className="mt-1 text-base font-bold">{selectedLabel.name}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {selectedLabel.observedContacts.toLocaleString("ar-EG")} عميل{selectedLabel.source === "WHATSAPP" ? " مرصود" : ""} · {selectedLabel.source === "DRVO" ? "قائمة DRVO" : "قائمة واتساب"}
                   </p>
@@ -238,12 +239,12 @@ export function LabelCampaignChat() {
                 </button>
               </div>
               <form onSubmit={event => void submit(event)} className="space-y-3">
-                <label htmlFor="campaign-composer" className="block text-sm font-black">رسالتك للعملاء</label>
+                <label htmlFor="campaign-composer" className="block text-sm font-bold">رسالتك للعملاء</label>
                 <textarea id="campaign-composer" ref={composerRef} aria-label="اكتب رسالة القائمة"
                   value={input} maxLength={3000} rows={5}
                   placeholder="مثال: عندنا عرض جديد الأسبوع ده، للحجز ابعتلنا رسالة…"
                   onChange={event => setInput(event.target.value)}
-                  className="min-h-36 w-full resize-y rounded-xl border border-border bg-surface/40 px-4 py-3 text-sm leading-7 outline-none focus:border-primary" />
+                  className="min-h-36 w-full resize-y rounded-xl border border-input bg-card px-4 py-3 text-sm leading-7 text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25" />
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <span className="text-[11px] text-muted-foreground">مش هيتم إرسال أي رسالة دلوقتي.</span>
                   <Button type="submit" disabled={busy || input.trim().length < 4}>
@@ -262,7 +263,7 @@ export function LabelCampaignChat() {
                 <textarea aria-label="اكتب طلب الحملة" value={input} maxLength={4000} rows={3}
                   placeholder="ابعت للناس اللي في VIP إن عندنا عرض جديد…"
                   onChange={event => setInput(event.target.value)}
-                  className="w-full rounded-xl border border-border bg-surface/40 p-3 text-sm leading-7 outline-none focus:border-primary"/>
+                  className="w-full rounded-xl border border-input bg-card p-3 text-sm leading-7 text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"/>
                 <div className="flex justify-end">
                   <Button type="submit" disabled={busy || input.trim().length < 12}>
                     {busy ? "بنجهز…" : "تجهيز الطلب"}
@@ -280,7 +281,7 @@ export function LabelCampaignChat() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs text-muted-foreground">الجمهور</p>
-                <h3 className="mt-1 text-base font-black">{activeDraft.labelName}</h3>
+                <h3 className="mt-1 text-base font-bold">{activeDraft.labelName}</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {activeDraft.observedContacts.toLocaleString("ar-EG")} رقم مرصود
                 </p>
@@ -296,7 +297,7 @@ export function LabelCampaignChat() {
                 <textarea aria-label={"تعديل رسالة " + activeDraft.labelName}
                   value={editText} maxLength={3000} rows={5}
                   onChange={event => setEditText(event.target.value)}
-                  className="min-h-32 w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-7 outline-none focus:border-primary" />
+                  className="min-h-32 w-full rounded-xl border border-input bg-card px-4 py-3 text-sm leading-7 text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25" />
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" disabled={busy || editText.trim().length < 4}
                     onClick={() => void updateDraft(activeDraft, "update")}>حفظ الرسالة</Button>
@@ -307,7 +308,7 @@ export function LabelCampaignChat() {
             ) : (
               <div className="space-y-3">
                 <p className="text-xs font-bold text-muted-foreground">نص الرسالة</p>
-                <div dir="auto" className="whitespace-pre-wrap break-words rounded-2xl rounded-tr-md bg-primary/10 p-4 text-sm leading-7">
+                <div dir="auto" className="whitespace-pre-wrap break-words rounded-2xl rounded-tr-md border border-primary/20 bg-primary/5 p-4 text-sm leading-7 text-foreground">
                   {activeDraft.messageText}
                 </div>
                 <div className="flex flex-wrap gap-3">
@@ -342,7 +343,7 @@ export function LabelCampaignChat() {
           </div>
           {activeDraft.status === "COPY_APPROVED" && editId !== activeDraft.draftId ? (
             <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6">
-              <h3 className="mb-3 text-sm font-black">إرسال الحملة</h3>
+              <h3 className="mb-3 text-sm font-bold">إرسال الحملة</h3>
               <LabelCampaignPreflight
                 key={activeDraft.draftId} openByDefault draftId={activeDraft.draftId}
                 messageText={activeDraft.messageText} />
@@ -367,7 +368,7 @@ export function LabelCampaignChat() {
           ) : null}
           {drafts.filter(draft => draft.status !== "CANCELLED").map(draft => (
             <button key={draft.draftId} type="button" onClick={() => openDraft(draft)}
-              className="flex w-full items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-4 text-start transition hover:border-primary/40 hover:bg-primary/5">
+              className="flex min-h-14 w-full items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-4 text-start transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none">
               <span className="min-w-0">
                 <span className="block truncate text-sm font-bold">{draft.labelName}</span>
                 <span className="mt-1 block truncate text-xs text-muted-foreground">{draft.messageText}</span>
