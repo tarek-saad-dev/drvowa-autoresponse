@@ -91,17 +91,17 @@ export function CampaignLabelPicker({
       <section aria-label="إدارة قوائم عملاء DRVO" className="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-black">قوائم العملاء</h2>
+            <h2 className="text-xl font-bold">قوائم العملاء</h2>
             <p className="mt-1 text-sm text-muted-foreground">اعمل قائمة، واضف عملاءها، وارجع للحملة.</p>
           </div>
           <button type="button" onClick={onBack}
-            className="rounded-xl border border-border px-4 py-2 text-sm font-bold hover:bg-surface">
+            className="min-h-11 rounded-xl border border-input bg-card px-4 py-2 text-sm font-bold text-foreground transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             رجوع للحملة
           </button>
         </div>
         <CampaignLocalListManager labels={active} onChanged={refresh} />
         <details className="rounded-xl border border-border px-4 py-3">
-          <summary className="cursor-pointer text-sm font-semibold">عندك Labels على WhatsApp Business؟</summary>
+          <summary className="cursor-pointer text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">عندك Labels على WhatsApp Business؟</summary>
           <div className="space-y-2 pt-3 text-xs leading-6 text-muted-foreground">
             <p>Android: من WhatsApp Business افتح قائمة Labels وأضف العملاء.</p>
             <p>iPhone: من WhatsApp Business افتح Tools ثم Lists.</p>
@@ -120,18 +120,18 @@ export function CampaignLabelPicker({
     <section aria-label="قوائم العملاء في واتساب" className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-black">اختار القائمة اللي هتبعت لها</h2>
+          <h2 className="text-base font-bold">اختار القائمة اللي هتبعت لها</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             {loaded ? active.length.toLocaleString("ar-EG") + " قوائم متاحة" : "قوائمك من واتساب وDRVO"}
           </p>
         </div>
         <div className="flex items-center gap-3">
           <button type="button" aria-label="تحديث القوائم" onClick={() => void refresh()} disabled={loading}
-            className="text-xs font-bold text-muted-foreground hover:text-foreground disabled:opacity-50">
+            className="min-h-10 rounded-lg px-2 text-xs font-bold text-muted-foreground transition-colors hover:bg-surface hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50">
             {loading ? "بنحدّث…" : "تحديث"}
           </button>
           <button type="button" onClick={onManage}
-            className="rounded-xl border border-primary/25 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/5">
+            className="min-h-10 rounded-xl border border-primary/25 bg-primary/5 px-3 py-2 text-xs font-bold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             + إدارة القوائم
           </button>
         </div>
@@ -150,7 +150,7 @@ export function CampaignLabelPicker({
             <input aria-label="ابحث عن قائمة" value={search}
               onChange={event => setSearch(event.target.value)}
               placeholder="ابحث باسم القائمة…"
-              className="h-11 w-full rounded-xl border border-border bg-card px-4 text-sm outline-none focus:border-primary" />
+              className="h-11 w-full rounded-xl border border-input bg-card px-4 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25" />
           ) : null}
           <div className="max-h-72 overflow-y-auto pr-0.5">
             <CampaignLabelChoices labels={filtered} onPick={onPick} />
@@ -169,7 +169,7 @@ export function CampaignLabelPicker({
             اعمل أول قائمة في DRVO وأضف أرقام عملائك، وبعدها اختارها للحملة.
           </p>
           <button type="button" onClick={onManage}
-            className="mt-4 rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground">
+            className="mt-4 min-h-11 rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             + إنشاء أول قائمة
           </button>
         </div>

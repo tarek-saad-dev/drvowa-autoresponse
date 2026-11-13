@@ -36,7 +36,7 @@ export function DrvoLoading({
       <div className={cn("flex flex-col items-center", styles.appear)}>
         <div
           className={cn(
-            "relative grid shrink-0 place-items-center rounded-[22px] border border-primary/15 bg-card text-primary shadow-[0_18px_48px_-26px_rgba(0,117,154,.55)]",
+            "relative grid shrink-0 place-items-center rounded-[22px] border border-primary/20 bg-card text-primary shadow-md",
             isPage ? "h-[72px] w-[72px]" : "h-14 w-14 rounded-[18px]",
             styles.mark,
           )}
@@ -68,7 +68,7 @@ export function DrvoLoading({
           </span>
         </div>
 
-        <p className={cn("font-black", isPage ? "mt-6 text-base" : "mt-4 text-sm")}>
+        <p className={cn("font-bold", isPage ? "mt-6 text-base" : "mt-4 text-sm")}>
           {label}
         </p>
         {hint ? (

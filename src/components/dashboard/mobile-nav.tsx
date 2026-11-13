@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { AppIcon } from "@/components/ui/app-icon";
 
 import {
   DASHBOARD_NAV_GROUPS,
@@ -20,7 +21,7 @@ export function MobileNav({
   return (
     <nav
       aria-label="التنقل الرئيسي"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 px-1.5 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-10px_35px_rgba(15,28,36,.08)] backdrop-blur-xl md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 px-1.5 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-1.5 shadow-md backdrop-blur-xl md:hidden"
     >
       <div
         className={cn(
@@ -36,6 +37,7 @@ export function MobileNav({
             <Link
               key={item.id}
               href={item.href}
+              aria-current={active ? "page" : undefined}
               className={cn(
                 "relative flex min-w-0 flex-col items-center gap-1 rounded-2xl px-0.5 py-2 text-center transition active:scale-[.97] motion-reduce:transition-none motion-reduce:active:scale-100",
                 isInbox && "-mt-0.5",
@@ -46,13 +48,13 @@ export function MobileNav({
             >
               <span
                 className={cn(
-                  "grid h-7 w-7 place-items-center text-base font-black transition",
+                  "grid h-7 w-7 place-items-center transition",
                   isInbox
-                    && "h-9 w-9 rounded-2xl bg-primary text-lg text-primary-foreground shadow-[0_8px_22px_rgba(0,117,154,.28)]",
+                    && "h-9 w-9 rounded-2xl bg-primary text-primary-foreground shadow-md",
                   isInbox && active && "ring-4 ring-primary/10",
                 )}
               >
-                {item.icon}
+                <AppIcon name={item.id} className="h-5 w-5" />
               </span>
               <span className="max-w-full truncate text-[10px] font-black leading-none">
                 {item.mobileLabel}

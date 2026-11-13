@@ -62,44 +62,44 @@ export function AdminDiscountCodes(){
       <div><h2 className="text-lg font-bold">إنشاء كود خصم</h2>
       <p className="mt-1 text-xs text-muted-foreground">خصم على الاشتراكات المدفوعة فقط، وليس رصيد الردود الإضافي.</p></div>
       <label className="block text-sm font-semibold">الكود
-        <input className="mt-1 w-full rounded-lg border border-border bg-background p-2 font-mono uppercase"
+        <input className="mt-1 min-h-11 w-full rounded-lg border border-input bg-card p-2 font-mono uppercase text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"
           dir="ltr" required minLength={3} maxLength={32} pattern="[A-Za-z0-9_-]{3,32}"
           value={form.code} placeholder="DRVO20" onChange={e=>setForm({...form,code:e.target.value.toUpperCase()})}/>
       </label>
       <label className="block text-sm font-semibold">اسم المؤثر أو صاحب الرابط (اختياري)
-        <input className="mt-1 w-full rounded-lg border border-border bg-background p-2"
+        <input className="mt-1 min-h-11 w-full rounded-lg border border-input bg-card p-2 text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"
           maxLength={80} value={form.partnerDisplayName} placeholder="مثال: عرض خاص مع أحمد"
           onChange={e=>setForm({...form,partnerDisplayName:e.target.value})}/>
       </label>
       <p className="text-xs text-muted-foreground">هيظهر الاسم في صفحة العرض الخاصة بالكود.</p>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="block text-sm">نوع الخصم
-          <select className="mt-1 w-full rounded-lg border border-border bg-background p-2"
+          <select className="mt-1 min-h-11 w-full rounded-lg border border-input bg-card p-2 text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"
             value={form.kind} onChange={e=>setForm({...form,kind:e.target.value as FormData["kind"]})}>
             <option value="PERCENT">نسبة %</option><option value="FIXED">مبلغ بالجنيه</option>
           </select>
         </label>
         <label className="block text-sm">القيمة
-          <input className="mt-1 w-full rounded-lg border border-border bg-background p-2"
+          <input className="mt-1 min-h-11 w-full rounded-lg border border-input bg-card p-2 text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"
             type="number" required min={0.01} max={form.kind==="PERCENT"?90:100000}
             step={0.01} value={form.value} onChange={e=>setForm({...form,value:e.target.value})}/>
         </label>
       </div>
       <label className="block text-sm">عدد الاستخدامات (اتركها فاضية بدون حد إجمالي)
-        <input className="mt-1 w-full rounded-lg border border-border bg-background p-2"
+        <input className="mt-1 min-h-11 w-full rounded-lg border border-input bg-card p-2 text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"
           type="number" min={1} max={100000} value={form.maxRedemptions}
           onChange={e=>setForm({...form,maxRedemptions:e.target.value})}/>
       </label>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="block text-sm">الباقة
-          <select className="mt-1 w-full rounded-lg border border-border bg-background p-2"
+          <select className="mt-1 min-h-11 w-full rounded-lg border border-input bg-card p-2 text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"
             value={form.planCode} onChange={e=>setForm({...form,planCode:e.target.value})}>
             <option value="">كل الباقات</option><option value="STARTER">Starter</option>
             <option value="PRO">Pro</option><option value="BUSINESS">Business</option>
           </select>
         </label>
         <label className="block text-sm">المدة
-          <select className="mt-1 w-full rounded-lg border border-border bg-background p-2"
+          <select className="mt-1 min-h-11 w-full rounded-lg border border-input bg-card p-2 text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"
             value={form.billingInterval} onChange={e=>setForm({...form,billingInterval:e.target.value})}>
             <option value="">شهري وسنوي</option><option value="MONTHLY">شهري فقط</option>
             <option value="ANNUAL">سنوي فقط</option>
@@ -107,11 +107,11 @@ export function AdminDiscountCodes(){
         </label>
       </div>
       <label className="block text-sm">ينتهي في (اختياري)
-        <input className="mt-1 w-full rounded-lg border border-border bg-background p-2"
+        <input className="mt-1 min-h-11 w-full rounded-lg border border-input bg-card p-2 text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25"
           type="datetime-local" value={form.expiresAt} onChange={e=>setForm({...form,expiresAt:e.target.value})}/>
       </label>
       <p className="text-xs leading-6 text-muted-foreground">الكود مرة واحدة لكل نشاط. الاستخدامات المحجوزة في طلبات الدفع المفتوحة تتحسب ضمن الحد، والإلغاء بيرجّع المكان تلقائيًا. الخصم لا يقلل المبلغ النهائي لأقل من جنيه واحد.</p>
-      <button disabled={busy} type="submit" className="w-full rounded-xl bg-primary px-4 py-3 font-bold text-primary-foreground disabled:opacity-50">
+      <button disabled={busy} type="submit" className="min-h-11 w-full rounded-xl bg-primary px-4 py-3 font-bold text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50">
         {busy?"جاري الحفظ…":"إنشاء الكود"}
       </button>
     </form>
@@ -120,7 +120,7 @@ export function AdminDiscountCodes(){
         <div><h2 className="text-lg font-bold">الأكواد الحالية</h2>
         <p className="text-xs text-muted-foreground">تقدر توقف الكود في أي لحظة، بدون التأثير على المدفوعات السابقة.</p></div>
         <button onClick={()=>void reload().catch(e=>setError(String(e)))} type="button"
-          className="rounded-lg border border-border px-3 py-2 text-sm">تحديث</button>
+          className="min-h-10 rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">تحديث</button>
       </div>
       {error?<p role="alert" className="text-sm text-destructive">{error}</p>:null}
       {notice?<p role="status" className="text-sm text-primary">{notice}</p>:null}
@@ -141,10 +141,10 @@ export function AdminDiscountCodes(){
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <a href={`/promo/${encodeURIComponent(item.Code)}`} target="_blank" rel="noopener noreferrer"
-              className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-bold text-primary">
+              className="inline-flex min-h-10 items-center rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-bold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               معاينة صفحة العرض
             </a>
-            <button type="button" className="rounded-lg border border-border px-3 py-2 text-sm font-semibold"
+            <button type="button" className="min-h-10 rounded-lg border border-input bg-card px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               onClick={()=>void navigator.clipboard.writeText(
                 `https://drvoautorespond.com/promo/${encodeURIComponent(item.Code)}`
               ).then(()=>setNotice("تم نسخ الرابط الخاص بالكود")).catch(()=>setError("تعذر نسخ الرابط"))}>
@@ -152,7 +152,7 @@ export function AdminDiscountCodes(){
             </button>
           </div>
           <button type="button" disabled={busy}
-            className="rounded-lg border border-border px-3 py-2 text-sm font-semibold disabled:opacity-50"
+            className="min-h-10 rounded-lg border border-input bg-card px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
             onClick={()=>void call({action:"toggle",code:item.Code,active:!item.IsActive})}>
             {item.IsActive?"إيقاف الكود":"إعادة تفعيل"}
           </button>

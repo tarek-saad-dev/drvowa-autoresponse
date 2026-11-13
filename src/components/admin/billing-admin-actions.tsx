@@ -23,20 +23,20 @@ export function BillingAdminActions({ paymentRequestId, status, onCompleted }: {
     } catch (error) { setMessage(error instanceof Error ? error.message : "تعذر تنفيذ الإجراء"); }
     finally { setBusy(false); }
   }
-  return <section className="space-y-3 rounded-xl border border-border bg-card p-4 text-foreground">
-    <h3 className="font-bold">إدارة الفوترة — {paymentRequestId.slice(0, 8)}</h3>
-    <label className="block">سبب الإجراء<input className="mt-1 w-full rounded border border-border bg-background p-2 text-foreground" value={reason} onChange={e => setReason(e.target.value)} maxLength={1000} /></label>
-    {status === "AWAITING_TRANSFER" ? <div className="flex gap-2"><input aria-label="نسبة الخصم" className="w-24 rounded border border-border bg-background p-2" type="number" min="0" max="100" step="0.01" value={percent} onChange={e => setPercent(e.target.value)} /><Button disabled={busy} onClick={() => act("discount")}>تطبيق الخصم %</Button></div> : null}
+  return <section className="space-y-3 rounded-2xl border border-border bg-card p-4 text-foreground shadow-sm">
+    <h3 className="font-display font-bold">إدارة الفوترة — {paymentRequestId.slice(0, 8)}</h3>
+    <label className="block">سبب الإجراء<input className="mt-1 min-h-11 w-full rounded-lg border border-input bg-card p-2 text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25" value={reason} onChange={e => setReason(e.target.value)} maxLength={1000} /></label>
+    {status === "AWAITING_TRANSFER" ? <div className="flex gap-2"><input aria-label="نسبة الخصم" className="min-h-11 w-24 rounded-lg border border-input bg-card p-2 text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25" type="number" min="0" max="100" step="0.01" value={percent} onChange={e => setPercent(e.target.value)} /><Button disabled={busy} onClick={() => act("discount")}>تطبيق الخصم %</Button></div> : null}
     {status === "APPROVED" ? <div className="flex flex-wrap gap-2">
       <Button variant="outline" disabled={busy} onClick={() => act("cancel_at_end")}>إلغاء بنهاية الفترة بدون استرداد</Button>
       <Button variant="outline" disabled={busy} onClick={() => act("cancel_now")}>إلغاء الاشتراك الحالي فورًا بدون استرداد</Button>
       <Button variant="outline" disabled={busy} onClick={() => act("cancel_scheduled")}>التراجع عن الإلغاء المجدول</Button>
     </div> : null}
     {status === "APPROVED" ? <div className="space-y-2">
-      <p className="text-sm text-muted-foreground">الاسترداد كامل قيمة الدفع. طلب الاسترداد لا يعني تحويل المبلغ؛ التأكيد التالي يُستخدم بعد التحويل الفعلي ويلغي الاشتراك المرتبط أو التخفيض المجدول.</p>
+      <p className="rounded-xl border border-warning/30 bg-warning-soft p-3 text-sm leading-6 text-warning">الاسترداد كامل قيمة الدفع. طلب الاسترداد لا يعني تحويل المبلغ؛ التأكيد التالي يُستخدم بعد التحويل الفعلي ويلغي الاشتراك المرتبط أو التخفيض المجدول.</p>
       <Button variant="outline" disabled={busy} onClick={() => act("request_refund")}>طلب استرداد وإلغاء</Button>
-      <label className="block">مرجع تحويل الاسترداد<input className="mt-1 w-full rounded border border-border bg-background p-2" value={reference} onChange={e => setReference(e.target.value)} maxLength={160} /></label>
-      <div className="flex gap-2"><Button disabled={busy} onClick={() => act("confirm_refund")}>تأكيد التحويل والاسترداد</Button><Button variant="outline" disabled={busy} onClick={() => act("fail_refund")}>تسجيل فشل الاسترداد</Button></div>
+      <label className="block">مرجع تحويل الاسترداد<input className="mt-1 min-h-11 w-full rounded-lg border border-input bg-card p-2 text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25" value={reference} onChange={e => setReference(e.target.value)} maxLength={160} /></label>
+      <div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={() => act("confirm_refund")}>تأكيد التحويل والاسترداد</Button><Button variant="outline" disabled={busy} onClick={() => act("fail_refund")}>تسجيل فشل الاسترداد</Button></div>
     </div> : null}
     {message ? <p role="status">{message}</p> : null}
   </section>;

@@ -107,10 +107,10 @@ export function PulseReviewCenter({
 
   return (
     <section aria-label="مركز الطلبات"
-      className="min-w-0 overflow-hidden rounded-[24px] border border-border bg-card shadow-[0_14px_40px_-32px_rgba(5,43,58,.36)]">
+      className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border/65 p-4 sm:p-5">
         <div className="min-w-0">
-          <h2 className="text-base font-black sm:text-lg">الطلبات اللي تحتاج مراجعة</h2>
+          <h2 className="font-display text-base font-bold sm:text-lg">الطلبات اللي تحتاج مراجعة</h2>
           <p className="mt-1 text-xs leading-6 text-muted-foreground">
             محتاجة رد من الفريق خلال {periodLabel}
           </p>
@@ -140,7 +140,7 @@ export function PulseReviewCenter({
         </div>}
       {showMore ? <div className="border-t border-border/65 px-4 py-3">
         <button type="button" onClick={()=>setOpen(true)}
-          className="w-full rounded-xl bg-surface px-3 py-2.5 text-xs font-black text-primary hover:bg-primary/10">
+          className="w-full rounded-xl bg-surface px-3 py-2.5 text-xs font-bold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           عرض كل الطلبات ({actionable.toLocaleString("ar-EG")})
         </button>
       </div>:null}

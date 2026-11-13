@@ -10,11 +10,11 @@ export default async function DocumentsPage() {
   const documents = await listBillingDocuments(businessId);
   const labels: Record<string, string> = { OPEN: "غير مدفوعة", PAID: "مدفوعة", WAIVED: "معفاة بالكامل", VOID: "ملغاة" };
   return <main className="mx-auto max-w-4xl space-y-5">
-    <h1 className="text-2xl font-bold">الفواتير والإيصالات</h1>
+    <h1 className="font-display text-2xl font-bold">الفواتير والإيصالات</h1>
     <p className="text-muted-foreground">يمكنك طباعة الصفحة أو حفظها PDF من قائمة المتصفح. الفاتورة طلب سداد، والإيصال إثبات اعتماد الدفع.</p>
     {!documents.length ? <p>لا توجد مستندات صادرة حتى الآن.</p> : null}
-    {documents.map(d => <article key={d.InvoiceID} className="break-inside-avoid space-y-3 rounded-xl border border-border bg-card p-6 text-foreground">
-      <h2 className="text-xl font-bold">فاتورة INV-{d.InvoiceNumber}</h2>
+    {documents.map(d => <article key={d.InvoiceID} className="break-inside-avoid space-y-3 rounded-2xl border border-border bg-card p-4 text-foreground shadow-sm sm:p-6">
+      <h2 className="font-display text-xl font-bold">فاتورة INV-{d.InvoiceNumber}</h2>
       <p>{d.PlanDisplayName} — {d.BillingInterval === "ANNUAL" ? "سنوي" : "شهري"} — {labels[d.Status] ?? d.Status}</p>
       <p>تاريخ الإصدار: {new Date(d.IssuedAtUtc).toLocaleDateString("ar-EG", { timeZone: "Africa/Cairo" })}</p>
       <dl className="grid grid-cols-2 gap-2"><dt>قبل الخصم</dt><dd>{Number(d.SubtotalMinor) / 100} {d.CurrencyCode}</dd><dt>الخصم</dt><dd>{Number(d.DiscountMinor) / 100} {d.CurrencyCode}</dd><dt>الإجمالي</dt><dd className="font-bold">{Number(d.TotalMinor) / 100} {d.CurrencyCode}</dd></dl>

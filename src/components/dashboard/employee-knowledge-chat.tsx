@@ -306,12 +306,12 @@ export function EmployeeKnowledgeChat({
   }
 
   return (
-    <section aria-label="محادثة تعليم الموظف" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+    <section aria-label="محادثة تعليم الموظف" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-3 py-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-3">
           <span aria-hidden="true" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/10 text-xl text-primary">✦</span>
           <div className="min-w-0">
-            <h2 className="text-sm font-black">علّم موظفك</h2>
+            <h2 className="text-sm font-bold">علّم موظفك</h2>
             <p className="text-xs text-muted-foreground">اتكلم بطريقتك، وأنا هفهمك</p>
           </div>
         </div>
@@ -322,7 +322,7 @@ export function EmployeeKnowledgeChat({
       </header>
 
       <div ref={logRef} role="log" aria-label="رسائل تعليم الموظف" aria-live="polite"
-        className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain bg-surface/30 px-3 py-5 sm:px-6">
+        className="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto overscroll-contain bg-surface/30 px-3 py-5 sm:px-6">
         {turns.map((turn, index) => (
           <div key={index} className={turn.role === "assistant" ? "flex justify-start" : "flex justify-end"}>
             {turn.role === "user" && turn.text.length > 420 ? (
@@ -349,9 +349,9 @@ export function EmployeeKnowledgeChat({
         {busy ? (
           <div className="flex justify-start" role="status" aria-label="الموظف بيفكر">
             <span className="inline-flex items-center gap-1 rounded-2xl border border-border bg-card px-4 py-3 text-muted-foreground">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:150ms]" />
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:300ms]" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary motion-reduce:animate-none" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:150ms] motion-reduce:animate-none" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:300ms] motion-reduce:animate-none" />
               <span className="sr-only">بيفهم كلامك...</span>
             </span>
           </div>
@@ -363,7 +363,7 @@ export function EmployeeKnowledgeChat({
               {actionable.length ? (
                 <>
                   <div>
-                    <p className="text-sm font-black">ده اللي فهمته من كلامك</p>
+                    <p className="text-sm font-bold">ده اللي فهمته من كلامك</p>
                     <p className="mt-1 text-xs leading-6 text-muted-foreground">
                       راجع التفاصيل لو حابب، ومش هيتحفظ أي تغيير قبل موافقتك.
                     </p>
@@ -452,7 +452,7 @@ export function EmployeeKnowledgeChat({
           title={recording ? "إنهاء التسجيل" : "رسالة صوتية"}
           disabled={busy || transcribing}
           onClick={() => void (recording ? stopRecording() : startRecording())}
-          className={"grid h-11 w-11 shrink-0 place-items-center rounded-full border border-border text-lg transition hover:bg-primary/5 disabled:opacity-40 " +
+          className={"grid h-11 w-11 shrink-0 place-items-center rounded-full border border-input text-lg transition-colors hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-40 motion-reduce:transition-none " +
             (recording ? "border-destructive bg-destructive-soft text-destructive" : "bg-card text-primary")}>
           {recording ? "■" : "🎙"}
         </button>
