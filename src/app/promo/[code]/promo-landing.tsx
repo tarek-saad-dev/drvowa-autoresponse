@@ -24,7 +24,7 @@ export function PromoLanding({code,kind,value,partnerName,planCode,billingInterv
  const hint=kind==="PERCENT"?`${egp(value)}%`:`${egp(value)} ج`;
  return <main dir="rtl" className={styles.page}>
    <header className={styles.header}>
-     <Link className={styles.wordmark} href="/" aria-label="DRVO AutoResponse الرئيسية">DRVO<span>AutoResponse</span></Link>
+     <Link className={styles.wordmark} href="/" aria-label="DRVO AutoRespond الرئيسية">DRVO<span>AutoRespond</span></Link>
      <span className={styles.headerLabel}>INVITATION ONLY <span aria-hidden="true">✦</span></span>
    </header>
    <section className={styles.hero}>
@@ -84,6 +84,6 @@ export function PromoLanding({code,kind,value,partnerName,planCode,billingInterv
      {planCode?<p className={styles.scope}>الكود مخصص لباقة {planCode} فقط.</p>:null}
      <div className={styles.disclaimer}>الخصم على طلب اشتراك واحد لكل نشاط، وغير قابل للجمع مع خصم إداري. بعد انتهاء الاشتراك يكون التجديد بالسعر الساري وقتها ما لم يتوفر عرض جديد. صلاحية الكود وتوافره بيتم التحقق منهم عند تجهيز طلب الدفع، ومفيش تحويل مطلوب قبل مراجعة المبلغ النهائي.</div>
    </section>
-   <footer className={styles.footer}><Link href="/">DRVO AutoResponse</Link><span>ذكاء بيرد نيابة عنك. والتحكم يفضل في إيدك.</span></footer>
+   <footer className={styles.footer}><Link href="/">DRVO AutoRespond</Link><span>ذكاء بيرد نيابة عنك. والتحكم يفضل في إيدك.</span></footer>
  </main>;
 }

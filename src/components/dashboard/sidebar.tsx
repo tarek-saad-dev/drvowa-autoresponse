@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { BrandLogo } from "@/components/brand/brand-logo";
+import { AppIcon } from "@/components/ui/app-icon";
 import {
   DASHBOARD_NAV_GROUPS,
   getNavGroupChildren,
@@ -31,16 +32,16 @@ export function DashboardSidebar({
 
   const itemClass = (active: boolean) =>
     cn(
-      "group flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-bold transition-all duration-200 motion-reduce:transition-none",
+      "group flex min-h-11 items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-semibold transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary motion-reduce:transition-none",
       active
-        ? "bg-primary text-primary-foreground shadow-[0_10px_28px_rgba(0,117,154,.24)]"
+        ? "bg-primary text-primary-foreground shadow-md"
         : "text-sidebar-muted hover:bg-white/5 hover:text-sidebar-foreground",
     );
 
   return (
     <aside className="sticky top-0 flex h-dvh w-[16.5rem] shrink-0 flex-col border-e border-white/10 bg-sidebar px-3 py-4 text-sidebar-foreground">
       <div className="px-3 pb-5 pt-1">
-        <Link href="/dashboard" aria-label={APP_NAME} className="block">
+        <Link href="/dashboard" aria-label={APP_NAME} className="block rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
           <BrandLogo surface="dark" priority className="h-auto w-full max-w-[12.5rem]" />
         </Link>
       </div>
@@ -65,10 +66,10 @@ export function DashboardSidebar({
                   <span
                     className={cn(
                       "grid h-8 w-8 shrink-0 place-items-center rounded-xl text-base transition",
-                      groupActive ? "bg-white/15 text-white" : "bg-white/6",
+                      groupActive ? "bg-black/10 text-current" : "bg-white/6",
                     )}
                   >
-                    {group.icon}
+                    <AppIcon name={group.id} className="h-5 w-5" />
                   </span>
                   <span className="min-w-0 flex-1 truncate">{group.label}</span>
                 </Link>
@@ -80,21 +81,22 @@ export function DashboardSidebar({
                 <div className={cn(itemClass(groupActive), "gap-1 pe-1")}>
                   <Link
                     href={group.href}
-                    className="flex min-w-0 flex-1 items-center gap-3 rounded-xl py-0.5"
+                    aria-current={isNavHrefActive(pathname, group.href) ? "page" : undefined}
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-xl py-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                   >
                     <span
                       className={cn(
                         "grid h-8 w-8 shrink-0 place-items-center rounded-xl text-base",
-                        groupActive ? "bg-white/15 text-white" : "bg-white/6",
+                        groupActive ? "bg-black/10 text-current" : "bg-white/6",
                       )}
                     >
-                      {group.icon}
+                      <AppIcon name={group.id} className="h-5 w-5" />
                     </span>
                     <span className="min-w-0 flex-1 truncate">{group.label}</span>
                   </Link>
                   <button
                     type="button"
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-xs opacity-70 transition hover:bg-white/10 hover:opacity-100"
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-xs opacity-70 transition hover:bg-white/10 hover:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
                     aria-expanded={expanded}
                     aria-label={expanded ? `طي ${group.label}` : `فتح ${group.label}`}
                     onClick={() =>
@@ -111,7 +113,7 @@ export function DashboardSidebar({
                       )}
                       aria-hidden
                     >
-                      ◂
+                      <AppIcon name="chevron" className="h-4 w-4" />
                     </span>
                   </button>
                 </div>
@@ -124,14 +126,15 @@ export function DashboardSidebar({
                         <Link
                           key={child.href + child.key}
                           href={child.href}
+                          aria-current={active ? "page" : undefined}
                           className={cn(
-                            "flex items-center gap-2 rounded-xl px-2.5 py-2 text-[13px] font-bold transition motion-reduce:transition-none",
+                            "flex min-h-10 items-center gap-2 rounded-xl px-2.5 py-2 text-[13px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary motion-reduce:transition-none",
                             active
-                              ? "bg-white/10 text-white"
+                              ? "bg-white/10 text-sidebar-foreground"
                               : "text-sidebar-muted hover:bg-white/5 hover:text-sidebar-foreground",
                           )}
                         >
-                          <span className="opacity-70">{child.icon}</span>
+                          <span className="opacity-70"><AppIcon name={child.key === "Billing" ? "billing" : child.key === "Integrations" ? "integrations" : "settings"} className="h-4 w-4" /></span>
                           <span className="truncate">{child.label}</span>
                         </Link>
                       );
@@ -146,9 +149,9 @@ export function DashboardSidebar({
         {showPlatformAdminLink ? (
           <Link
             href="/admin"
-            className="mt-5 flex items-center gap-3 rounded-2xl border border-primary/35 px-3 py-3 text-sm font-bold text-primary transition hover:bg-primary/10"
+            className="mt-5 flex min-h-11 items-center gap-3 rounded-2xl border border-primary/35 px-3 py-3 text-sm font-bold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
-            <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary/15">◆</span>
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary/15"><AppIcon name="admin" className="h-5 w-5" /></span>
             <span>إدارة المنصة</span>
           </Link>
         ) : null}
@@ -161,7 +164,7 @@ export function DashboardSidebar({
           className="group flex min-w-0 items-center gap-3 rounded-2xl px-2.5 py-3 transition-colors hover:bg-white/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           <span
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/20 text-base font-bold text-white ring-1 ring-primary/35"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/15 text-base font-bold text-primary ring-1 ring-primary/35"
             aria-hidden="true"
           >
             {avatarInitial}

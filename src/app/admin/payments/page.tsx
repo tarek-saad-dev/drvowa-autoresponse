@@ -21,7 +21,7 @@ export default async function AdminPaymentsPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-2xl font-bold">طلبات الدفع</h2>
+        <h2 className="font-display text-2xl font-bold">طلبات الدفع</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           راجع التحويلات يدوياً في InstaPay ثم اعتمد أو ارفض الطلب.
         </p>
@@ -39,7 +39,8 @@ export default async function AdminPaymentsPage({ searchParams }: PageProps) {
           <Link
             key={value}
             href={`/admin/payments?status=${value}`}
-            className={`rounded-md px-3 py-1.5 ${
+            aria-current={(params.status ?? "PENDING").toUpperCase() === value ? "page" : undefined}
+            className={`inline-flex min-h-10 items-center rounded-lg px-3 py-1.5 font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
               (params.status ?? "PENDING").toUpperCase() === value
                 ? "bg-primary text-primary-foreground"
                 : "bg-surface text-foreground hover:bg-border"

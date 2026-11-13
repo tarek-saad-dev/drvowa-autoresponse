@@ -12,10 +12,10 @@ export async function generateMetadata({params}:Params):Promise<Metadata>{
  const {code}=await params;
  const promo=await getPublicPromo(code);
  return promo?{
-  title:"عرض خاص | DRVO AutoResponse",
+  title:"عرض خاص | DRVO AutoRespond",
   description:"دعوة خاصة لاستخدام مساعد واتساب الذكي بسعر أقل عند الاشتراك، باستخدام كود خصم صالح.",
   robots:{index:false,follow:false},
- }: {title:"العرض غير متاح | DRVO AutoResponse",robots:{index:false,follow:false}};
+ }: {title:"العرض غير متاح | DRVO AutoRespond",robots:{index:false,follow:false}};
 }
 
 export default async function PromoPage({params}:Params){

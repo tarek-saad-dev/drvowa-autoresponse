@@ -27,15 +27,15 @@ export default async function PricingPreviewPage() {
   return (
     <main className="mx-auto w-full max-w-5xl space-y-7 pb-14" dir="rtl">
       <header className="space-y-2">
-        <Link href="/dashboard/billing" className="text-sm text-primary hover:underline">العودة للاشتراك والاستخدام</Link>
-        <h1 className="text-2xl font-black sm:text-3xl">الباقات الجديدة</h1>
+        <Link href="/dashboard/billing" className="rounded-md text-sm text-primary underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">العودة للاشتراك والاستخدام</Link>
+        <h1 className="font-display text-2xl font-bold sm:text-3xl">الباقات الجديدة</h1>
         <p className="text-sm text-muted-foreground">معاينة فقط — الأسعار المعروضة هنا غير مفعّلة للدفع. اشتراكك الحالي وشروطه لم تتغير.</p>
       </header>
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="الباقات المقترحة">
         {PRICING_V1_PLANS.map((plan) => (
-          <article key={plan.code} className={`rounded-2xl border bg-card p-5 space-y-3 ${plan.code === "PRO" ? "border-primary" : "border-border"}`}>
+          <article key={plan.code} className={`min-w-0 space-y-3 rounded-2xl border bg-card p-5 shadow-sm ${plan.code === "PRO" ? "border-primary" : "border-border"}`}>
             <div className="text-sm font-bold">{plan.nameAr}</div>
-            <div className="text-2xl font-black">{format(plan.monthlyEgp)} <span className="text-xs font-normal text-muted-foreground">ج / شهر</span></div>
+            <div className="text-2xl font-bold">{format(plan.monthlyEgp)} <span className="text-xs font-normal text-muted-foreground">ج / شهر</span></div>
             {plan.code === "FREE" ? (
               <p className="text-sm text-muted-foreground">30 رد لمرة واحدة أو 7 أيام، أيهما أسبق</p>
             ) : (

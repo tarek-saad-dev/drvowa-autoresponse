@@ -1,0 +1,44 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, it } from "vitest";
+
+const read = (file: string) => readFileSync(resolve(process.cwd(), file), "utf8");
+const deploy = read(".github/workflows/deploy-production.yml");
+const styles = read("src/app/globals.css");
+const logo = read("src/components/brand/brand-logo.tsx");
+
+describe("DRVO Brand V2 visual-only deployment invariants", () => {
+  it("uses the approved theme palette with the current original logos", () => {
+    for (const hex of ["#0b0f14", "#151b23", "#f7f9fc", "#7bf36a"]) {
+      expect(styles.toLowerCase()).toContain(hex);
+    }
+    expect(logo).toContain("/brand/logo-on-dark.png");
+    expect(logo).toContain("/brand/logo-on-light.png");
+    expect(logo).not.toContain("/api/brand/assets/");
+  });
+
+  it("requires an explicit one-commit visual scope verified against deployed SHA", () => {
+    expect(deploy).toContain('case "$DEPLOY_TITLE" in');
+    expect(deploy).toContain('"release(visual-only):"*');
+    expect(deploy).toContain('test "$CURRENT_SHA" = "$DEPLOY_BEFORE"');
+    expect(deploy).toContain('git rev-list --count "$DEPLOY_BEFORE..$DEPLOY_SHA"');
+    expect(deploy).toContain('git diff --name-only "$DEPLOY_BEFORE" "$DEPLOY_SHA"');
+    expect(deploy).toContain("src/app/api/*|src/app/admin/brand-assets/*|src/modules/*");
+    expect(deploy).toContain("BLOCKED: non-visual file in UI-only release");
+  });
+
+  it("never migrates data, rewrites feature flags, or restarts the worker in visual mode", () => {
+    expect(deploy).toContain('if [ "$VISUAL_ONLY" != 1 ]; then');
+    expect(deploy).toContain('echo "==> UI-only release: SQL migrations explicitly skipped"');
+    expect(deploy).toContain("preserving all existing production secrets and feature flags");
+    expect(deploy).toContain("AI worker stays running without restart");
+    expect(deploy).toContain("no SQL or billing scheduler modifications");
+  });
+
+  it("retains SQL backup gate for all other releases and app rollback for UI failures", () => {
+    expect(deploy).toContain("recent production SQL full-backup metadata");
+    expect(deploy).toContain("BLOCKED: recent SQL full-backup evidence unavailable");
+    expect(deploy).toContain("rollback_visual_release");
+    expect(deploy).toContain('git checkout --detach "$CURRENT_SHA"');
+  });
+});

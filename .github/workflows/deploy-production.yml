@@ -54,19 +54,132 @@ jobs:
           VPS_HOST: ${{ secrets.DRVOWA_VPS_HOST }}
           VPS_USER: ${{ secrets.DRVOWA_VPS_USER }}
           DEPLOY_SHA: ${{ github.sha }}
+          DEPLOY_BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" "DEPLOY_SHA=$DEPLOY_SHA bash -se" <<'REMOTE'
+          ssh -i ~/.ssh/id_ed25519 "$VPS_USER@$VPS_HOST" "DEPLOY_SHA=$DEPLOY_SHA DEPLOY_BEFORE=$DEPLOY_BEFORE bash -se" <<'REMOTE'
             set -euo pipefail
 
             cd /home/drvowa/app
 
+            # The owner authorized a one-time UI-only release without a fresh SQL backup.
+            # This exception cannot be used for schema, API, configuration or worker changes.
+            # Full releases MUST pass the fresh full-backup gate below.
+            VISUAL_ONLY=0
+            CURRENT_SHA="$(git rev-parse HEAD)"
+            git fetch origin main
+            DEPLOY_TITLE="$(git show -s --format=%s "$DEPLOY_SHA")"
+            case "$DEPLOY_TITLE" in
+              "release(visual-only):"*)
+                test -n "$DEPLOY_BEFORE" && test "$CURRENT_SHA" = "$DEPLOY_BEFORE" || {
+                  echo "BLOCKED: UI-only release must deploy directly from the verified current main SHA"
+                  exit 1
+                }
+                test "$(git rev-list --count "$DEPLOY_BEFORE..$DEPLOY_SHA")" = 1 || {
+                  echo "BLOCKED: UI-only release must be a single reviewed commit"
+                  exit 1
+                }
+                CHANGED_FILES="$(git diff --name-only "$DEPLOY_BEFORE" "$DEPLOY_SHA")"
+                test -n "$CHANGED_FILES" || { echo "BLOCKED: no changed UI files"; exit 1; }
+                while IFS= read -r file; do
+                  case "$file" in
+                    src/app/api/*|src/app/admin/brand-assets/*|src/modules/*)
+                      echo "BLOCKED: UI-only release contains a route/API/module change: $file"; exit 1 ;;
+                    src/app/*|src/components/*|.github/workflows/deploy-production.yml|tests/unit/brand-v2-ui-only-release.test.ts|tests/unit/theme-contrast.test.ts)
+                      ;;
+                    *) echo "BLOCKED: non-visual file in UI-only release: $file"; exit 1 ;;
+                  esac
+                done <<< "$CHANGED_FILES"
+                test -r .env.production.local || { echo "BLOCKED: production environment not available"; exit 1; }
+                VISUAL_ONLY=1
+                echo "PASS: UI-only scope verified; no migrations, no environment changes, no worker restart"
+                ;;
+            esac
+
+            if [ "$VISUAL_ONLY" != 1 ]; then
+            # Fail closed before git checkout, env flag edits, migrations, or restarts.
+            # This is evidence of a recent backup record, NOT a restore proof.
+            echo "==> Checking recent production SQL full-backup metadata (read-only)"
+            test -r .env.production.local || { echo "BLOCKED: production DB configuration unavailable"; exit 1; }
+            node --env-file=.env.production.local --input-type=module <<'BACKUP_GATE'
+          import sql from "mssql";
+          const required = ["DB_SERVER", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD"];
+          if (required.some((key) => !process.env[key])) {
+            console.error("BLOCKED: DB configuration incomplete");
+            process.exit(1);
+          }
+          const parseBool = (value, fallback) =>
+            value == null ? fallback : ["true", "1", "yes"].includes(value.toLowerCase());
+          let pool;
+          try {
+            pool = await new sql.ConnectionPool({
+              server: process.env.DB_SERVER,
+              port: Number(process.env.DB_PORT),
+              database: process.env.DB_NAME,
+              user: process.env.DB_USER,
+              password: process.env.DB_PASSWORD,
+              options: {
+                encrypt: parseBool(process.env.DB_ENCRYPT, true),
+                trustServerCertificate: parseBool(process.env.DB_TRUST_SERVER_CERTIFICATE, false),
+              },
+              connectionTimeout: 15000,
+              requestTimeout: 20000,
+            }).connect();
+            const records = await pool.request().query(`
+              SELECT TOP (1)
+                backup_finish_date AS finished,
+                backup_size AS bytes,
+                is_damaged AS damaged
+              FROM msdb.dbo.backupset
+              WHERE database_name = DB_NAME() AND type = N'D'
+              ORDER BY backup_finish_date DESC
+            `);
+            const last = records.recordset[0];
+            const ageHours = last ? (Date.now() - new Date(last.finished).getTime()) / 3600000 : Infinity;
+            const recent = Number.isFinite(ageHours) && ageHours >= 0 && ageHours <= 24;
+            if (!last || !recent || !(Number(last.bytes) > 0) || Boolean(last.damaged)) {
+              throw new Error("backup freshness or metadata validation failed");
+            }
+            console.log("PASS: production SQL full-backup record is <=24 hours old and not damaged");
+            console.log("NOTE: restore/VERIFYONLY proof is still an independent release prerequisite");
+          } catch {
+            console.error("BLOCKED: recent SQL full-backup evidence unavailable; no deployment mutations performed");
+            process.exitCode = 1;
+          } finally {
+            if (pool) await pool.close();
+          }
+          BACKUP_GATE
+            fi
+            # A failed UI-only build or health check must restore the last running app SHA.
+            # This rollback affects app code only: no DB, env, or WhatsApp auth changes.
+            UI_CHECKED_OUT=0
+            rollback_visual_release() {
+              rc="$?"
+              trap - EXIT
+              if [ "$rc" -ne 0 ] && [ "$VISUAL_ONLY" = 1 ] && [ "$UI_CHECKED_OUT" = 1 ]; then
+                echo "==> Visual-only release failed: restoring previous deployed app SHA"
+                set +e
+                git checkout --detach "$CURRENT_SHA"
+                npm ci && npm run build && systemctl restart drvowa.service
+                rollback_rc="$?"
+                if [ "$rollback_rc" -eq 0 ] && systemctl is-active --quiet drvowa.service; then
+                  echo "==> Rollback app service active; check /api/health"
+                  curl --fail --silent --show-error --max-time 15 'http://127.0.0.1:3100/api/health?ready=1' >/dev/null || true
+                else
+                  echo "ERROR: app rollback failed; restore manually from recorded SHA"
+                fi
+              fi
+              exit "$rc"
+            }
+            trap rollback_visual_release EXIT
             echo "==> Checking out the exact commit verified by billing SQL CI"
             git fetch origin main
             git checkout --detach "$DEPLOY_SHA"
             test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+            UI_CHECKED_OUT=$VISUAL_ONLY
             echo "Deploying verified commit $DEPLOY_SHA"
 
+            if [ "$VISUAL_ONLY" != 1 ]; then
             echo "==> Ensuring integration encryption secret"
             ENV_FILE=".env.production.local"
             touch "$ENV_FILE"
@@ -91,6 +204,9 @@ jobs:
               printf '%s\n' 'DRVO_LABEL_CAMPAIGNS_SEND_ENABLED=true' >> "$ENV_FILE"
             fi
             chmod 600 "$ENV_FILE"
+            else
+              echo "==> UI-only release: preserving all existing production secrets and feature flags"
+            fi
 
             echo "==> Installing locked dependencies"
             npm ci
@@ -104,8 +220,12 @@ jobs:
             echo "==> AI worker boot check"
             npm run ai:worker:check
 
-            echo "==> Applying database migrations"
-            npm run db:migrate
+            if [ "$VISUAL_ONLY" != 1 ]; then
+              echo "==> Applying database migrations"
+              npm run db:migrate
+            else
+              echo "==> UI-only release: SQL migrations explicitly skipped"
+            fi
 
             echo "==> Verifying WhatsApp campaign schema and queue (read-only)"
             node --env-file-if-exists=.env.production.local --import tsx scripts/campaign-production-smoke.ts
@@ -123,6 +243,7 @@ jobs:
             echo "==> Restarting app service"
             systemctl restart drvowa.service
 
+            if [ "$VISUAL_ONLY" != 1 ]; then
             echo "==> Restarting AI worker for integration-aware replies"
             systemctl restart drvowa-ai-worker.service
             sleep 2
@@ -136,6 +257,10 @@ jobs:
               exit 1
             fi
             echo "AI worker is running"
+            else
+              systemctl is-active --quiet drvowa-ai-worker.service || { echo "BLOCKED: AI worker not healthy"; exit 1; }
+              echo "==> UI-only release: AI worker stays running without restart"
+            fi
 
             echo "==> Waiting for app"
             HEALTHY=0
@@ -148,6 +273,10 @@ jobs:
             done
             if [ "$HEALTHY" = 1 ]; then
               echo "DRVOWA production health check passed"
+              if [ "$VISUAL_ONLY" = 1 ]; then
+                echo "PASS: UI-only release completed, no SQL or billing scheduler modifications"
+                exit 0
+              fi
               echo "==> Installing hourly billing maintenance timer"
               printf '%s\n' '[Unit]' 'Description=DRVO billing subscription and renewal maintenance' \
                 'After=network-online.target' 'Wants=network-online.target' '' '[Service]' \

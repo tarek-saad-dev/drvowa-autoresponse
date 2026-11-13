@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  type KeyboardEvent,
   type ReactNode,
   useId,
   useState,
@@ -38,7 +37,7 @@ function Chevron({ open }: { open: boolean }) {
       strokeLinecap="round"
       strokeLinejoin="round"
       className={cn(
-        "mt-0.5 shrink-0 text-muted-foreground transition-transform duration-300 ease-out",
+        "mt-0.5 shrink-0 text-muted-foreground transition-transform duration-300 ease-out motion-reduce:transition-none",
         open && "rotate-180",
       )}
       aria-hidden
@@ -72,13 +71,6 @@ export function Accordion({
     onOpenChange?.(next);
   }
 
-  function onHeaderKeyDown(event: KeyboardEvent<HTMLButtonElement>, id: string) {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      toggle(id);
-    }
-  }
-
   return (
     <div className={cn("space-y-2", className)} dir="rtl">
       {items.map((item) => {
@@ -97,10 +89,9 @@ export function Accordion({
                 aria-expanded={open}
                 aria-controls={panelId}
                 onClick={() => toggle(item.id)}
-                onKeyDown={(event) => onHeaderKeyDown(event, item.id)}
                 className={cn(
                   "flex w-full items-start gap-3 px-4 py-3.5 text-start transition-colors",
-                  "hover:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35",
+                  "hover:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   open && "bg-surface/35",
                 )}
               >
@@ -120,7 +111,7 @@ export function Accordion({
               role="region"
               aria-labelledby={headerId}
               className={cn(
-                "grid transition-[grid-template-rows] duration-300 ease-out",
+                "grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none",
                 open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
               )}
             >

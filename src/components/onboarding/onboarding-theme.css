@@ -1,44 +1,53 @@
-@import "@dawod/thmanyah-font-web/sans.css";
-
+/*
+ * DRVO AutoRespond — onboarding inherits the shared Brand V2 palette.
+ * All custom properties are scoped to the conversational onboarding shell.
+ * Accent colors change with theme; status colors retain their meaning.
+ */
 .drvo-onboarding {
-  --ob-neon: #3de7ff;
-  --ob-neon-soft: rgb(61 231 255 / 0.16);
-  --ob-neon-glow: rgb(61 231 255 / 0.22);
-  --ob-ink: #eef8fb;
-  --ob-muted: #8fa6b2;
-  --ob-glass: rgb(10 18 24 / 0.72);
-  --ob-glass-border: rgb(61 231 255 / 0.16);
+  --ob-neon: var(--brand-signal, #7bf36a);
+  --ob-on-accent: var(--brand-ink, #0b0f14);
+  --ob-neon-soft: color-mix(in srgb, var(--ob-neon) 14%, transparent);
+  --ob-neon-glow: color-mix(in srgb, var(--ob-neon) 22%, transparent);
+  --ob-ink: var(--brand-white, #f7f9fc);
+  --ob-muted: #bac5d0;
+  --ob-glass: rgb(21 27 35 / 0.88);
+  --ob-glass-border: #35404a;
+  --ob-input-border: #64717f;
   --ob-glass-highlight: rgb(255 255 255 / 0.08);
-  --ob-surface: rgb(14 24 31 / 0.78);
-  --ob-fog: rgb(0 180 220 / 0.18);
-  font-family: "Thmanyah Sans", var(--font-ibm-plex-arabic), "Segoe UI", Tahoma, sans-serif;
+  --ob-surface: rgb(27 36 46 / 0.86);
+  --ob-fog: rgb(123 243 106 / 0.10);
+  font-family: var(--font-ui-arabic), "Segoe UI", Tahoma, sans-serif;
   color: var(--ob-ink);
   background:
-    radial-gradient(ellipse 70% 45% at 100% -8%, rgb(0 170 210 / 0.2), transparent 58%),
-    radial-gradient(ellipse 50% 35% at 0% 100%, rgb(0 90 120 / 0.18), transparent 55%),
-    linear-gradient(180deg, #05090c 0%, #071117 100%);
+    radial-gradient(ellipse 70% 45% at 100% -8%, rgb(123 243 106 / 0.09), transparent 58%),
+    radial-gradient(ellipse 50% 35% at 0% 100%, rgb(31 157 85 / 0.07), transparent 55%),
+    linear-gradient(180deg, #0b0f14 0%, #151b23 100%);
+  color-scheme: dark;
 }
 
 html[data-theme="light"] .drvo-onboarding {
-  --ob-neon: #0496bd;
-  --ob-neon-soft: rgb(4 150 189 / 0.12);
-  --ob-neon-glow: rgb(4 150 189 / 0.18);
-  --ob-ink: #071319;
-  --ob-muted: #5b7380;
-  --ob-glass: rgb(255 255 255 / 0.72);
-  --ob-glass-border: rgb(4 150 189 / 0.18);
-  --ob-glass-highlight: rgb(255 255 255 / 0.85);
-  --ob-surface: rgb(244 249 251 / 0.82);
-  --ob-fog: rgb(0 117 154 / 0.14);
+  --ob-neon: #188342;
+  --ob-on-accent: #ffffff;
+  --ob-neon-soft: color-mix(in srgb, var(--ob-neon) 11%, transparent);
+  --ob-neon-glow: color-mix(in srgb, var(--ob-neon) 16%, transparent);
+  --ob-ink: var(--brand-ink, #0b0f14);
+  --ob-muted: #4d5966;
+  --ob-glass: rgb(255 255 255 / 0.94);
+  --ob-glass-border: #dce3ea;
+  --ob-input-border: #8895a1;
+  --ob-glass-highlight: rgb(255 255 255 / 0.84);
+  --ob-surface: rgb(247 249 252 / 0.94);
+  --ob-fog: rgb(31 157 85 / 0.07);
   background:
-    radial-gradient(ellipse 70% 45% at 100% -8%, rgb(0 150 198 / 0.14), transparent 58%),
-    radial-gradient(ellipse 50% 35% at 0% 100%, rgb(0 95 128 / 0.08), transparent 55%),
-    linear-gradient(180deg, #f7fbfc 0%, #eef5f8 100%);
+    radial-gradient(ellipse 70% 45% at 100% -8%, rgb(31 157 85 / 0.06), transparent 58%),
+    radial-gradient(ellipse 50% 35% at 0% 100%, rgb(123 243 106 / 0.04), transparent 55%),
+    linear-gradient(180deg, #f7f9fc 0%, #edf2f5 100%);
+  color-scheme: light;
 }
 
 .drvo-onboarding .font-mono,
 .drvo-onboarding [data-tech="true"] {
-  font-family: var(--font-space-grotesk), "Space Grotesk", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-data), ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: 0.02em;
 }
 
@@ -46,9 +55,9 @@ html[data-theme="light"] .drvo-onboarding {
 .drvo-onboarding h2,
 .drvo-onboarding h3,
 .drvo-onboarding .drvo-ob-display {
-  font-family: "Thmanyah Sans", var(--font-ibm-plex-arabic), sans-serif;
-  font-weight: 900;
-  letter-spacing: -0.04em;
+  font-family: var(--font-display-arabic), var(--font-ui-arabic), sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.03em;
   line-height: 1.15;
 }
 
@@ -69,15 +78,15 @@ html[data-theme="light"] .drvo-onboarding {
   border: 1px solid var(--ob-glass-border);
   box-shadow:
     0 24px 80px rgb(0 0 0 / 0.28),
-    0 0 0 1px rgb(61 231 255 / 0.04),
+    0 0 0 1px color-mix(in srgb, var(--ob-neon) 4%, transparent),
     inset 0 1px 0 var(--ob-glass-highlight);
   backdrop-filter: blur(22px) saturate(1.15);
 }
 
 html[data-theme="light"] .drvo-ob-glass {
   box-shadow:
-    0 24px 70px rgb(7 34 46 / 0.1),
-    0 0 0 1px rgb(4 150 189 / 0.05),
+    0 24px 70px rgb(11 15 20 / 0.1),
+    0 0 0 1px color-mix(in srgb, var(--ob-neon) 5%, transparent),
     inset 0 1px 0 var(--ob-glass-highlight);
 }
 
@@ -124,7 +133,7 @@ html[data-theme="light"] .drvo-ob-glass {
 
 .drvo-onboarding .bg-primary {
   background-color: var(--ob-neon) !important;
-  color: #041018 !important;
+  color: var(--ob-on-accent) !important;
   box-shadow: 0 0 28px var(--ob-neon-glow);
 }
 
@@ -144,7 +153,7 @@ html[data-theme="light"] .drvo-ob-glass {
 .drvo-onboarding textarea {
   font-family: inherit;
   background: var(--ob-surface) !important;
-  border-color: var(--ob-glass-border) !important;
+  border-color: var(--ob-input-border) !important;
   color: var(--ob-ink) !important;
   box-shadow: inset 0 1px 0 var(--ob-glass-highlight);
 }
@@ -175,7 +184,7 @@ html[data-theme="light"] .drvo-ob-glass {
 }
 
 html[data-theme="light"] .drvo-ob-learn-track {
-  background: rgb(7 19 25 / 0.08);
+  background: rgb(11 15 20 / 0.08);
 }
 
 .drvo-ob-learn-fill.is-low {
@@ -189,8 +198,8 @@ html[data-theme="light"] .drvo-ob-learn-track {
 }
 
 .drvo-ob-learn-fill.is-high {
-  background: linear-gradient(90deg, #10b981, #34d399);
-  box-shadow: 0 0 16px rgb(52 211 153 / 0.3);
+  background: linear-gradient(90deg, var(--brand-deep-green, #1f9d55), var(--brand-signal, #7bf36a));
+  box-shadow: 0 0 16px var(--ob-neon-glow);
 }
 
 .drvo-ob-chat-thread {
@@ -228,20 +237,20 @@ html[data-theme="light"] .drvo-ob-chat-thread {
 
 html[data-theme="light"] .drvo-ob-bubble-in {
   box-shadow:
-    0 6px 16px rgb(7 34 46 / 0.05),
+    0 6px 16px rgb(11 15 20 / 0.05),
     inset 0 1px 0 var(--ob-glass-highlight);
 }
 
 .drvo-ob-bubble-out {
-  background: color-mix(in oklab, var(--ob-neon) 78%, #0a1a22);
-  color: #041018;
+  background: var(--ob-neon);
+  color: var(--ob-on-accent);
   border: 1px solid color-mix(in oklab, var(--ob-neon) 40%, transparent);
   box-shadow: 0 6px 16px rgb(0 0 0 / 0.12);
 }
 
 html[data-theme="light"] .drvo-ob-bubble-out {
-  background: color-mix(in oklab, var(--ob-neon) 88%, white);
-  color: #042430;
+  background: var(--ob-neon);
+  color: var(--ob-on-accent);
 }
 
 .drvo-ob-typing {

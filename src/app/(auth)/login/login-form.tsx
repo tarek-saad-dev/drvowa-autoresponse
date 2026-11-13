@@ -63,8 +63,8 @@ export default function LoginForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>تسجيل الدخول</CardTitle>
-        <CardDescription>ادخل إلى مساحة عملك في DRVO AutoRespond</CardDescription>
+        <CardTitle className="text-xl sm:text-2xl">تسجيل الدخول</CardTitle>
+        <CardDescription className="leading-6">ادخل إلى مساحة عملك في DRVO AutoRespond</CardDescription>
       </CardHeader>
       <CardContent>
         <form className="space-y-4" onSubmit={onSubmit}>
@@ -99,7 +99,7 @@ export default function LoginForm() {
                 id="rememberMe"
                 name="rememberMe"
                 type="checkbox"
-                className="h-4 w-4 cursor-pointer accent-primary"
+                className="h-4 w-4 cursor-pointer rounded-sm accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               />
               تذكرني
             </label>
@@ -107,7 +107,7 @@ export default function LoginForm() {
               نسيت كلمة المرور؟
             </Link>
           </div>
-          <Button type="submit" className="w-full" disabled={pending}>
+          <Button type="submit" className="w-full text-base" disabled={pending} loading={pending}>
             {pending ? "جارٍ الدخول..." : "دخول"}
           </Button>
         </form>

@@ -2,110 +2,125 @@
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, .dark, .dark *));
 
+/*
+ * DRVO AutoRespond — Brand V2 foundation.
+ * Approved core palette: Ink, Carbon, Soft White, Mist Gray,
+ * Signal Green and Deep Green. Semantic derivatives are UI roles,
+ * not additional official brand colors. Keep functional/status
+ * colors and 3rd-party branding independent of marketing accents.
+ */
 :root,
 html[data-theme="light"] {
   color-scheme: light;
 
-  /* DRVO AutoRespond brand */
-  --brand-teal: #00759a;
-  --brand-teal-strong: #005f80;
-  --brand-teal-deep: #004a66;
-  --brand-ink: #071319;
-  --brand-white: #f8fbfc;
+  /* Brand foundations: fixed across light and dark themes */
+  --brand-ink: #0b0f14;
+  --brand-carbon: #151b23;
+  --brand-white: #f7f9fc;
+  --brand-mist: #dce3ea;
+  --brand-signal: #7bf36a;
+  --brand-deep-green: #1f9d55;
 
-  --background: #f4f8fa;
-  --foreground: #08171e;
-  --muted: #5b6f79;
-  --muted-foreground: #586d77;
+  /* Deprecated compatibility aliases; remove after landing P03 migrates. */
+  --brand-teal: var(--primary);
+  --brand-teal-strong: var(--primary-hover);
+  --brand-teal-deep: var(--brand-deep-green);
+
+  /* Readable application typography until official lettering is licensed. */
+  --font-ui-arabic: var(--font-ibm-plex-arabic), "Segoe UI", Tahoma, sans-serif;
+  --font-display-arabic: var(--font-ibm-plex-arabic), "Segoe UI", Tahoma, sans-serif;
+  --font-display-latin: var(--font-space-grotesk), Arial, sans-serif;
+  --font-data: var(--font-space-grotesk), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Light theme: use accessible deep green instead of neon on white. */
+  --background: #f7f9fc;
+  --foreground: #0b0f14;
+  --muted: #687582;
+  --muted-foreground: #4d5966;
   --card: #ffffff;
-  --card-foreground: #08171e;
-  --border: #d9e6eb;
-  --input: #d6e4e9;
-  --ring: var(--brand-teal);
-  --primary: var(--brand-teal);
+  --card-foreground: #0b0f14;
+  --border: #dce3ea;
+  --input: #8895a1;
+  --ring: #188342;
+  --primary: #188342;
   --primary-foreground: #ffffff;
-  --primary-hover: var(--brand-teal-strong);
-  --secondary: #e9f2f5;
-  --secondary-foreground: #17323e;
-  --accent: #007b9f;
+  --primary-hover: #116833;
+  --secondary: #edf2f5;
+  --secondary-foreground: #22303d;
+  --accent: #188342;
   --accent-foreground: #ffffff;
-  --accent-soft: #dff3f9;
-  --destructive: #c73535;
+  --accent-soft: #e7f6e9;
+  --destructive: #b42335;
   --destructive-foreground: #ffffff;
-  --destructive-soft: #fdeaea;
-  --success: #0a7552;
+  --destructive-soft: #fce8eb;
+  --success: #13764e;
   --success-foreground: #ffffff;
-  --success-soft: #dcf7ed;
-  --warning: #94570e;
-  --warning-soft: #fff2d9;
-  --info: #096784;
-  --info-soft: #dff4fb;
-  --surface: #edf5f7;
-  --whatsapp-bubble: #dcf8c6;
-  --whatsapp-bubble-text: #17331f;
-  --sidebar: #071a22;
-  --sidebar-foreground: #f4f9fb;
-  --sidebar-muted: #8ba7b3;
-  --sidebar-active: #0a4f68;
+  --success-soft: #e3f6ec;
+  --warning: #976100;
+  --warning-soft: #fff4db;
+  --info: #1869aa;
+  --info-soft: #e7f2ff;
+  --surface: #eef2f5;
+  /* WhatsApp conversation bubbles use a separate communication color. */
+  --whatsapp-bubble: #e4f9dc;
+  --whatsapp-bubble-text: #173b24;
+  --sidebar: #0b0f14;
+  --sidebar-foreground: #f7f9fc;
+  --sidebar-muted: #bac5d0;
+  --sidebar-active: #243728;
   --radius: 0.75rem;
-  --shadow-sm: 0 1px 2px rgb(7 19 25 / 0.06);
-  --shadow-md: 0 12px 32px rgb(7 34 46 / 0.10);
+  --elevation-sm: 0 1px 2px rgb(11 15 20 / 0.06);
+  --elevation-md: 0 12px 32px rgb(11 15 20 / 0.10);
   --atmosphere:
-    radial-gradient(ellipse 76% 48% at 100% -10%, rgb(0 117 154 / 0.13), transparent 58%),
-    radial-gradient(ellipse 55% 34% at 0% 100%, rgb(0 95 128 / 0.08), transparent 55%),
-    linear-gradient(180deg, #f8fbfc 0%, #eef5f7 100%);
+    radial-gradient(ellipse 76% 48% at 100% -10%, rgb(31 157 85 / 0.045), transparent 58%),
+    radial-gradient(ellipse 55% 34% at 0% 100%, rgb(123 243 106 / 0.04), transparent 55%),
+    linear-gradient(180deg, #f7f9fc 0%, #f2f5f7 100%);
 }
 
 html[data-theme="dark"],
 .dark {
   color-scheme: dark;
 
-  --brand-teal: #0b8bb5;
-  --brand-teal-strong: #149bc7;
-  --brand-teal-deep: #006b8f;
-  --brand-ink: #05090b;
-  --brand-white: #f7fbfc;
-
-  --background: #05090b;
-  --foreground: #f5f9fa;
-  --muted: #8ca0aa;
-  --muted-foreground: #8fa4ae;
-  --card: #0a1115;
-  --card-foreground: #f5f9fa;
-  --border: #1c2c34;
-  --input: #23343c;
-  --ring: #0b8bb5;
-  --primary: #0b8bb5;
-  --primary-foreground: #061319;
-  --primary-hover: #149bc7;
-  --secondary: #101b20;
-  --secondary-foreground: #dce8ec;
-  --accent: #149bc7;
-  --accent-foreground: #061319;
-  --accent-soft: #0c2c38;
-  --destructive: #ef5b5b;
-  --destructive-foreground: #061319;
-  --destructive-soft: #321416;
-  --success: #35b98a;
-  --success-foreground: #061319;
-  --success-soft: #0b2a21;
-  --warning: #d99a41;
-  --warning-soft: #2f2412;
-  --info: #35acd2;
-  --info-soft: #0b2b36;
-  --surface: #0d171c;
-  --whatsapp-bubble: #005c4b;
-  --whatsapp-bubble-text: #f2fbf7;
-  --sidebar: #020607;
-  --sidebar-foreground: #f7fbfc;
-  --sidebar-muted: #78929d;
-  --sidebar-active: #07394b;
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.28);
-  --shadow-md: 0 16px 44px rgb(0 0 0 / 0.34);
+  --background: #0b0f14;
+  --foreground: #f7f9fc;
+  --muted: #a8b3be;
+  --muted-foreground: #a8b3be;
+  --card: #151b23;
+  --card-foreground: #f7f9fc;
+  --border: #35404a;
+  --input: #64717f;
+  --ring: #7bf36a;
+  --primary: #7bf36a;
+  --primary-foreground: #0b0f14;
+  --primary-hover: #a3f78d;
+  --secondary: #252f3a;
+  --secondary-foreground: #f7f9fc;
+  --accent: #7bf36a;
+  --accent-foreground: #0b0f14;
+  --accent-soft: #1b3423;
+  --destructive: #ff6a6a;
+  --destructive-foreground: #0b0f14;
+  --destructive-soft: #3b2028;
+  --success: #53d3a0;
+  --success-foreground: #0b0f14;
+  --success-soft: #153628;
+  --warning: #f6b73c;
+  --warning-soft: #3c2b16;
+  --info: #4ea7ff;
+  --info-soft: #162d49;
+  --surface: #1b242e;
+  --whatsapp-bubble: #27442b;
+  --whatsapp-bubble-text: #f7f9fc;
+  --sidebar: #080b10;
+  --sidebar-foreground: #f7f9fc;
+  --sidebar-muted: #bac5d0;
+  --sidebar-active: #243728;
+  --elevation-sm: 0 1px 2px rgb(0 0 0 / 0.28);
+  --elevation-md: 0 16px 44px rgb(0 0 0 / 0.34);
   --atmosphere:
-    radial-gradient(ellipse 78% 48% at 100% -10%, rgb(0 117 154 / 0.18), transparent 58%),
-    radial-gradient(ellipse 55% 36% at 0% 100%, rgb(0 71 96 / 0.16), transparent 55%),
-    linear-gradient(180deg, #05090b 0%, #071116 100%);
+    radial-gradient(ellipse 78% 48% at 100% -10%, rgb(123 243 106 / 0.07), transparent 58%),
+    radial-gradient(ellipse 55% 36% at 0% 100%, rgb(31 157 85 / 0.05), transparent 55%),
+    linear-gradient(180deg, #0b0f14 0%, #10171d 100%);
 }
 
 @theme inline {
@@ -144,14 +159,20 @@ html[data-theme="dark"],
   --color-sidebar-active: var(--sidebar-active);
   --color-whatsapp-bubble: var(--whatsapp-bubble);
   --color-whatsapp-bubble-text: var(--whatsapp-bubble-text);
-  --font-sans: var(--font-ibm-plex-arabic);
-  --font-mono: var(--font-space-grotesk), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-carbon: var(--brand-carbon);
+  --color-brand-signal: var(--brand-signal);
+  --color-brand-deep-green: var(--brand-deep-green);
+  --font-sans: var(--font-ui-arabic);
+  --font-display: var(--font-display-arabic);
+  --font-numeric: var(--font-data);
+  --font-mono: var(--font-data);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --shadow-sm: var(--shadow-sm);
-  --shadow-md: var(--shadow-md);
+  --shadow-sm: var(--elevation-sm);
+  --shadow-md: var(--elevation-md);
 }
 
 /*
@@ -180,7 +201,7 @@ body {
   background: var(--atmosphere);
   background-attachment: fixed;
   color: var(--foreground);
-  font-family: var(--font-ibm-plex-arabic), "Segoe UI", Tahoma, sans-serif;
+  font-family: var(--font-ui-arabic);
   min-height: 100%;
   transition: background-color 180ms ease, color 180ms ease;
 }
@@ -195,6 +216,25 @@ body {
   outline-offset: 2px;
 }
 
+
+/* Brand V2 type roles. Editorial brand lettering is a separate asset. */
+.drvo-display {
+  font-family: var(--font-display-arabic);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.drvo-display:lang(en),
+.drvo-display[lang="en"] {
+  font-family: var(--font-display-latin);
+  letter-spacing: -0.045em;
+}
+
+.drvo-data {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+}
 
 /* Landing presentation story */
 .story-row {
@@ -239,17 +279,17 @@ body {
 
 .story-3d-card:hover {
   border-color: color-mix(in srgb, var(--primary) 38%, transparent);
-  box-shadow: 0 40px 110px rgb(0 74 102 / 0.32);
+  box-shadow: 0 40px 110px color-mix(in srgb, var(--brand-ink) 32%, transparent);
 }
 
 .story-3d-glow {
   background:
     radial-gradient(
       circle at var(--glow-x) var(--glow-y),
-      rgb(66 197 235 / 0.18),
+      color-mix(in srgb, var(--primary) 18%, transparent),
       transparent 28%
     ),
-    radial-gradient(circle at 50% 50%, rgb(0 117 154 / 0.12), transparent 52%);
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--primary) 12%, transparent), transparent 52%);
 }
 
 .story-3d-stage {
@@ -323,7 +363,7 @@ body {
 
 .cinema-shield {
   animation: cinema-shield 5.4s ease-in-out infinite;
-  filter: drop-shadow(0 20px 60px rgb(11 139 181 / .18));
+  filter: drop-shadow(0 20px 60px color-mix(in srgb, var(--primary) 18%, transparent));
 }
 
 @keyframes cinema-copy-in {
@@ -352,10 +392,10 @@ body {
 @keyframes cinema-orb-pulse {
   0%,
   100% {
-    box-shadow: 0 0 68px rgb(11 139 181 / .52);
+    box-shadow: 0 0 68px color-mix(in srgb, var(--primary) 52%, transparent);
   }
   50% {
-    box-shadow: 0 0 108px rgb(11 139 181 / .78);
+    box-shadow: 0 0 108px color-mix(in srgb, var(--primary) 78%, transparent);
   }
 }
 

@@ -256,7 +256,7 @@ export function KnowledgeCopilot() {
   return (
     <div className="space-y-4">
       <div className="mx-auto max-w-3xl rounded-2xl border border-primary/10 bg-primary/5 px-4 py-3">
-        <p className="text-sm font-black">اكتبها بطريقتك، مش لازم ترتب حاجة</p>
+        <p className="text-sm font-bold">اكتبها بطريقتك، مش لازم ترتب حاجة</p>
         <p className="mt-1 text-xs leading-6 text-muted-foreground">
           مثال: الأسعار، المواعيد، الخدمات، الفروع، سياسة الحجز أو أي معلومة الموظف لازم يعرفها.
         </p>
@@ -309,10 +309,10 @@ export function KnowledgeCopilot() {
 
       <form
         onSubmit={analyze}
-        className="mx-auto max-w-3xl space-y-4 rounded-[24px] border border-border bg-card p-4 shadow-sm sm:p-6"
+        className="mx-auto max-w-3xl space-y-4 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6"
       >
         <div>
-          <p className="text-xs font-black text-muted-foreground">ابدأ بحاجة جاهزة أو اكتب بطريقتك</p>
+          <p className="text-xs font-bold text-muted-foreground">ابدأ بحاجة جاهزة أو اكتب بطريقتك</p>
           <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
             {QUICK_STARTS.map((item) => (
               <button
@@ -325,7 +325,7 @@ export function KnowledgeCopilot() {
                       : item.text,
                   )
                 }
-                className="shrink-0 rounded-full border border-border bg-surface px-3 py-2 text-[11px] font-black text-foreground transition hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+                className="min-h-10 shrink-0 rounded-full border border-input bg-surface px-3 py-2 text-[11px] font-semibold text-foreground transition-colors hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none"
               >
                 {item.label}
               </button>
@@ -369,10 +369,10 @@ export function KnowledgeCopilot() {
                 ["مراجعة", session.summary.conflict, "bg-warning-soft text-warning"],
               ].map(([label, value, tone]) => (
                 <div key={String(label)} className="rounded-2xl border border-border bg-surface/40 p-3">
-                  <div className={`inline-flex rounded-full px-2 py-1 text-[10px] font-black ${tone}`}>
+                  <div className={`inline-flex rounded-full px-2 py-1 text-[10px] font-bold ${tone}`}>
                     {label}
                   </div>
-                  <div className="mt-2 text-2xl font-black tabular-nums">{value}</div>
+                  <div className="mt-2 text-2xl font-bold tabular-nums">{value}</div>
                 </div>
               ))}
             </div>
@@ -382,8 +382,8 @@ export function KnowledgeCopilot() {
 
       {proposals.length > 0 ? (
         <div className="mx-auto max-w-3xl space-y-4">
-          <div className="rounded-[26px] border border-border bg-card p-4 shadow-sm sm:p-5">
-            <h3 className="text-sm font-black">راجع المعلومات قبل الاعتماد</h3>
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+            <h3 className="text-sm font-bold">راجع المعلومات قبل الاعتماد</h3>
             <p className="mt-1 text-xs leading-6 text-muted-foreground">
               كل معلومة تظهر مرة واحدة. افتح أي كارت لمراجعة محتواه والتغيير المقترح قبل الحفظ.
             </p>
@@ -400,13 +400,13 @@ export function KnowledgeCopilot() {
                       : "border-border";
                 return (
                   <details key={p.proposalId} className={`group rounded-2xl border bg-card ${tone}`}>
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl p-4 marker:hidden [&::-webkit-details-marker]:hidden">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl p-4 marker:hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
                       <div className="min-w-0 flex-1">
                         <div className="mb-2 flex flex-wrap items-center gap-2">
                           <Badge variant={actionVariant(p.action)}>{actionLabel(p.action)}</Badge>
                           <span className="text-[11px] text-muted-foreground">{knowledgeCategoryLabel(p.category)}</span>
                         </div>
-                        <h4 className="text-sm font-black leading-6 text-foreground">{p.proposedTitle}</h4>
+                        <h4 className="text-sm font-bold leading-6 text-foreground">{p.proposedTitle}</h4>
                       </div>
                       <span aria-hidden="true" className="shrink-0 text-lg text-muted-foreground transition-transform group-open:rotate-180">⌄</span>
                     </summary>
@@ -464,10 +464,10 @@ export function KnowledgeCopilot() {
             </p>
           </div>
 
-          <div className="sticky bottom-20 z-10 rounded-[22px] border border-border bg-card/95 p-3 shadow-[0_16px_50px_rgba(7,19,25,.14)] backdrop-blur md:bottom-4">
+          <div className="sticky bottom-20 z-10 rounded-2xl border border-border bg-card/95 p-3 shadow-md backdrop-blur md:bottom-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm font-black">
+                <p className="text-sm font-bold">
                   {selectedCount > 0
                     ? `${selectedCount} تغيير جاهز للاعتماد`
                     : "اختار التغييرات اللي عايز تعتمدها"}

@@ -95,11 +95,11 @@ export function KnowledgePageClient({
 
   return (
     <div className="space-y-6">
-      <section className={`rounded-[26px] border p-5 shadow-sm sm:p-6 ${health.tone}`}>
+      <section className={`rounded-2xl border p-5 shadow-sm sm:p-6 ${health.tone}`}>
         <div className="grid gap-5 md:grid-cols-[1fr_auto] md:items-center">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-card/90 px-3 py-1 text-[11px] font-black text-primary shadow-sm">
+              <span className="rounded-full bg-card/90 px-3 py-1 text-[11px] font-bold text-primary shadow-sm">
                 ذاكرة موظف الاستقبال
               </span>
               <span className="text-xs font-bold text-muted-foreground">
@@ -107,7 +107,7 @@ export function KnowledgePageClient({
                 {activeLimit != null ? ` من ${activeLimit}` : ""} معلومة نشطة
               </span>
             </div>
-            <h2 className="mt-3 text-2xl font-black tracking-[-0.03em]">{health.label}</h2>
+            <h2 className="mt-3 font-display text-2xl font-bold tracking-tight">{health.label}</h2>
             <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
               {health.description}
             </p>
@@ -117,14 +117,14 @@ export function KnowledgePageClient({
             <button
               type="button"
               onClick={() => setMode("ai")}
-              className={`rounded-xl px-3 py-3 text-xs font-black transition ${mode === "ai" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-surface"}`}
+              className={`min-h-11 rounded-xl px-3 py-3 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none ${mode === "ai" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-surface"}`}
             >
               ✦ علّمه بالذكاء
             </button>
             <button
               type="button"
               onClick={() => setMode("manual")}
-              className={`rounded-xl px-3 py-3 text-xs font-black transition ${mode === "manual" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-surface"}`}
+              className={`min-h-11 rounded-xl px-3 py-3 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none ${mode === "manual" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-surface"}`}
             >
               ✎ إدارة المعرفة
             </button>
@@ -138,13 +138,13 @@ export function KnowledgePageClient({
             key={item.category}
             type="button"
             onClick={() => setMode("manual")}
-            className="rounded-2xl border border-border bg-card p-4 text-start shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
+            className="rounded-2xl border border-border bg-card p-4 text-start shadow-sm transition-colors hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none"
           >
             <div className="flex items-center justify-between gap-3">
-              <span className="text-[11px] font-black text-muted-foreground">
+              <span className="text-[11px] font-bold text-muted-foreground">
                 {item.label}
               </span>
-              <span className={`grid h-7 min-w-7 place-items-center rounded-full px-2 text-xs font-black ${
+              <span className={`grid h-7 min-w-7 place-items-center rounded-full px-2 text-xs font-bold ${
                 item.count > 0
                   ? "bg-success-soft text-success"
                   : "bg-secondary text-muted-foreground"
@@ -152,7 +152,7 @@ export function KnowledgePageClient({
                 {item.count}
               </span>
             </div>
-            <p className="mt-3 text-sm font-black">
+            <p className="mt-3 text-sm font-bold">
               {item.count > 0 ? "موجودة" : "لسه ناقصة"}
             </p>
           </button>
@@ -162,7 +162,7 @@ export function KnowledgePageClient({
       {missingSuggestions.length > 0 && mode === "ai" ? (
         <section className="rounded-[24px] border border-dashed border-primary/20 bg-primary/5 p-4 sm:p-5">
           <div>
-            <p className="text-xs font-black text-primary">إيه اللي ممكن تعلمه بعد كده؟</p>
+            <p className="text-xs font-bold text-primary">إيه اللي ممكن تعلمه بعد كده؟</p>
             <p className="mt-1 text-sm text-muted-foreground">
               دي أكتر معلومات هتخلي الردود أكمل وأدق.
             </p>
@@ -170,7 +170,7 @@ export function KnowledgePageClient({
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             {missingSuggestions.map((suggestion) => (
               <div key={suggestion.title} className="rounded-2xl border border-border bg-card/90 p-4 shadow-sm">
-                <p className="text-sm font-black">{suggestion.title}</p>
+                <p className="text-sm font-bold">{suggestion.title}</p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   {suggestion.description}
                 </p>
@@ -184,8 +184,8 @@ export function KnowledgePageClient({
         <div className="rounded-[26px] border border-border bg-card p-4 shadow-sm sm:p-6">
           <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-border pb-5">
             <div>
-              <p className="text-xs font-black text-primary">الطريقة الأسهل</p>
-              <h3 className="mt-1 text-lg font-black">قول له اللي محتاج يعرفه</h3>
+              <p className="text-xs font-bold text-primary">الطريقة الأسهل</p>
+              <h3 className="mt-1 text-lg font-bold">قول له اللي محتاج يعرفه</h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 الصق أسعار، خدمات، سياسات أو أي كلام غير مرتب — وهو هينظمه قبل الحفظ.
               </p>
@@ -200,8 +200,8 @@ export function KnowledgePageClient({
         <div className="rounded-[26px] border border-border bg-card p-4 shadow-sm sm:p-6">
           <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-border pb-5">
             <div>
-              <p className="text-xs font-black text-primary">تحكم كامل</p>
-              <h3 className="mt-1 text-lg font-black">راجع وعدّل اللي الموظف عارفه</h3>
+              <p className="text-xs font-bold text-primary">تحكم كامل</p>
+              <h3 className="mt-1 text-lg font-bold">راجع وعدّل اللي الموظف عارفه</h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 ابحث، عدّل، فعّل أو عطّل أي معلومة من مكان واحد.
               </p>

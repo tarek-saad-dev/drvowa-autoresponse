@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { BrandLogo } from "@/components/brand/brand-logo";
+import { AppIcon } from "@/components/ui/app-icon";
 import { WorkspaceSwitcher } from "@/components/dashboard/workspace-switcher";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -51,17 +52,17 @@ export function DashboardTopbar({
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b border-border bg-card/92 px-3 backdrop-blur-xl sm:h-16 sm:gap-3 sm:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b border-border bg-card/95 px-3 backdrop-blur-xl sm:h-16 sm:gap-3 sm:px-6">
       <div className="min-w-0">
         <div className="min-w-0 sm:hidden">
           <BrandLogo className="h-5" />
-          <p className="mt-1 truncate text-xs font-black text-foreground">
+          <p className="mt-1 truncate text-xs font-bold text-foreground">
             {activeBusiness?.name ?? currentLabel}
           </p>
         </div>
 
         <div className="hidden sm:block">
-          <p className="truncate text-sm font-black text-foreground">
+          <p className="truncate text-sm font-bold text-foreground">
             {activeBusiness?.name ?? `أهلاً، ${userName}`}
           </p>
           <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
@@ -80,21 +81,22 @@ export function DashboardTopbar({
         <ThemeToggle />
         <Link
           href="/dashboard/settings?tab=account"
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-border bg-card text-sm text-muted-foreground transition hover:bg-surface hover:text-foreground"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-input bg-card text-muted-foreground transition-colors hover:bg-surface hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none"
           aria-label="الحساب"
         >
-          ◎
+          <AppIcon name="user" className="h-[18px] w-[18px]" />
         </Link>
         <Button
           variant="ghost"
           size="sm"
           onClick={logout}
           disabled={loggingOut}
-          className="h-9 shrink-0 rounded-xl px-2 text-xs sm:px-3"
+          loading={loggingOut}
+          className="min-h-10 shrink-0 rounded-xl px-2 text-xs sm:px-3"
           aria-label="تسجيل الخروج"
         >
-          <span className="sm:hidden">{loggingOut ? "…" : "↪"}</span>
-          <span className="hidden sm:inline">{loggingOut ? "..." : "خروج"}</span>
+          <span className="sm:hidden"><AppIcon name="log-out" className="h-[18px] w-[18px]" /></span>
+          <span className="hidden sm:inline">{loggingOut ? "جارٍ الخروج..." : "خروج"}</span>
         </Button>
       </div>
     </header>
