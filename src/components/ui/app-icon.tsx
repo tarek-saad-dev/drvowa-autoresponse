@@ -7,6 +7,8 @@ import type { ReactNode, SVGProps } from "react";
 export type AppIconName =
   | "home"
   | "inbox"
+  | "crm"
+  | "campaigns"
   | "employee"
   | "settings"
   | "billing"
@@ -30,6 +32,12 @@ export function AppIcon({
       break;
     case "inbox":
       content = <><path d="M4 4h16v13H4z" /><path d="M4 13h5l2 3h2l2-3h5" /><path d="M4 20h16" /></>;
+      break;
+    case "crm":
+      content = <><circle cx="9" cy="8" r="3.2" /><circle cx="16.5" cy="9.5" r="2.4" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><path d="M13.5 19a4 4 0 0 1 7 0" /></>;
+      break;
+    case "campaigns":
+      content = <><path d="M4 5h11l5 7-5 7H4V5Z" /><path d="M8 9v6M11 9v6" /></>;
       break;
     case "employee":
       content = <><path d="M12 3 9.6 9.6 3 12l6.6 2.4L12 21l2.4-6.6L21 12l-6.6-2.4L12 3Z" /><path d="M19.5 3.5v4M17.5 5.5h4" /></>;

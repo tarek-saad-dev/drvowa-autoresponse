@@ -341,7 +341,9 @@ export function CampaignBuilderPanel() {
       setFinalAudience({
         snapshotId: freezeData.snapshotId,
         channelConnectionId,
-        channelDisplayName: selectedChannel ? channelLabel(selectedChannel) : freezeData.preview.channelDisplayName,
+        channelDisplayName: selectedChannel
+          ? channelLabel(selectedChannel)
+          : freezeData.preview.channelDisplayName ?? null,
         eligibleMarketing,
         withoutPermission: revalidateData.withoutPermission ?? 0,
         totalMatched: freezeData.preview.totalMatched,
