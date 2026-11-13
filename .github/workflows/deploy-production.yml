@@ -106,7 +106,7 @@ jobs:
                 test -n "$CHANGED_FILES" || { echo "BLOCKED: empty brand assets release"; exit 1; }
                 while IFS= read -r file; do
                   case "$file" in
-                    .github/workflows/deploy-production.yml|docs/brand-v2/ADMIN-BRAND-ASSETS.md|tests/unit/brand-admin-assets.test.ts|tests/unit/brand-v2-ui-only-release.test.ts|src/app/layout.tsx|src/app/admin/layout.tsx|src/app/admin/brand-assets/page.tsx|src/app/api/admin/brand-assets/route.ts|src/app/api/admin/brand-assets/\[id\]/route.ts|src/app/api/admin/brand-assets/\[id\]/image/route.ts|src/app/api/brand/assets/\[variant\]/route.ts|src/components/admin/admin-brand-assets.tsx|src/components/admin/admin-navigation.tsx|src/components/brand/brand-logo.tsx|src/modules/brand/assets.ts)
+                    .github/workflows/deploy-production.yml|docs/brand-v2/ADMIN-BRAND-ASSETS.md|tests/unit/brand-admin-assets.test.ts|tests/unit/brand-v2-ui-only-release.test.ts|tests/unit/inbox-layout-contract.test.tsx|src/app/favicon.ico|public/favicon.ico|src/app/layout.tsx|src/app/admin/layout.tsx|src/app/admin/brand-assets/page.tsx|src/app/api/admin/brand-assets/route.ts|src/app/api/admin/brand-assets/\[id\]/route.ts|src/app/api/admin/brand-assets/\[id\]/image/route.ts|src/app/api/brand/assets/\[variant\]/route.ts|src/components/admin/admin-brand-assets.tsx|src/components/admin/admin-navigation.tsx|src/components/brand/brand-logo.tsx|src/modules/brand/assets.ts)
                       ;;
                     *) echo "BLOCKED: unauthorized file in no-DB Brand Assets release: $file"; exit 1 ;;
                   esac
