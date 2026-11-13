@@ -85,7 +85,7 @@ jobs:
                   case "$file" in
                     src/app/api/*|src/app/admin/brand-assets/*|src/modules/*)
                       echo "BLOCKED: UI-only release contains a route/API/module change: $file"; exit 1 ;;
-                    src/app/*|src/components/*|.github/workflows/deploy-production.yml|tests/unit/brand-v2-ui-only-release.test.ts)
+                    src/app/*|src/components/*|.github/workflows/deploy-production.yml|tests/unit/brand-v2-ui-only-release.test.ts|tests/unit/theme-contrast.test.ts)
                       ;;
                     *) echo "BLOCKED: non-visual file in UI-only release: $file"; exit 1 ;;
                   esac
