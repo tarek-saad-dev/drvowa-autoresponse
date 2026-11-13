@@ -66,6 +66,7 @@ jobs:
             # This exception cannot be used for schema, API, configuration or worker changes.
             # Full releases MUST pass the fresh full-backup gate below.
             VISUAL_ONLY=0
+            BRAND_ASSETS_ONLY=0
             CURRENT_SHA="$(git rev-parse HEAD)"
             git fetch origin main
             DEPLOY_TITLE="$(git show -s --format=%s "$DEPLOY_SHA")"
@@ -94,9 +95,34 @@ jobs:
                 VISUAL_ONLY=1
                 echo "PASS: UI-only scope verified; no migrations, no environment changes, no worker restart"
                 ;;
+              "release(brand-assets-no-db):"*)
+                test -n "$DEPLOY_BEFORE" && test "$CURRENT_SHA" = "$DEPLOY_BEFORE" || {
+                  echo "BLOCKED: brand assets release must start from exact running main SHA"; exit 1;
+                }
+                test "$(git rev-list --count "$DEPLOY_BEFORE..$DEPLOY_SHA")" = 1 || {
+                  echo "BLOCKED: brand assets release must be exactly one reviewed commit"; exit 1;
+                }
+                CHANGED_FILES="$(git diff --name-only "$DEPLOY_BEFORE" "$DEPLOY_SHA")"
+                test -n "$CHANGED_FILES" || { echo "BLOCKED: empty brand assets release"; exit 1; }
+                while IFS= read -r file; do
+                  case "$file" in
+                    .github/workflows/deploy-production.yml|docs/brand-v2/ADMIN-BRAND-ASSETS.md|tests/unit/brand-admin-assets.test.ts|tests/unit/brand-v2-ui-only-release.test.ts|src/app/layout.tsx|src/app/admin/layout.tsx|src/app/admin/brand-assets/page.tsx|src/app/api/admin/brand-assets/route.ts|src/app/api/admin/brand-assets/\[id\]/route.ts|src/app/api/admin/brand-assets/\[id\]/image/route.ts|src/app/api/brand/assets/\[variant\]/route.ts|src/components/admin/admin-brand-assets.tsx|src/components/admin/admin-navigation.tsx|src/components/brand/brand-logo.tsx|src/modules/brand/assets.ts)
+                      ;;
+                    *) echo "BLOCKED: unauthorized file in no-DB Brand Assets release: $file"; exit 1 ;;
+                  esac
+                done <<< "$CHANGED_FILES"
+                git show "$DEPLOY_SHA:src/modules/brand/assets.ts" | grep -Fq 'from "node:fs/promises"' || {
+                  echo "BLOCKED: expected isolated filesystem-backed brand module missing"; exit 1;
+                }
+                if git show "$DEPLOY_SHA:src/modules/brand/assets.ts" | grep -Eq '@/lib/db|TblBrandAsset'; then
+                  echo "BLOCKED: brand module must not access SQL"; exit 1;
+                fi
+                BRAND_ASSETS_ONLY=1
+                echo "PASS: isolated Brand Assets filesystem release, no schema migration"
+                ;;
             esac
 
-            if [ "$VISUAL_ONLY" != 1 ]; then
+            if [ "$VISUAL_ONLY" != 1 ] && [ "$BRAND_ASSETS_ONLY" != 1 ]; then
             # Fail closed before git checkout, env flag edits, migrations, or restarts.
             # This is evidence of a recent backup record, NOT a restore proof.
             echo "==> Checking recent production SQL full-backup metadata (read-only)"
@@ -156,7 +182,7 @@ jobs:
             rollback_visual_release() {
               rc="$?"
               trap - EXIT
-              if [ "$rc" -ne 0 ] && [ "$VISUAL_ONLY" = 1 ] && [ "$UI_CHECKED_OUT" = 1 ]; then
+              if [ "$rc" -ne 0 ] && [ "$UI_CHECKED_OUT" = 1 ] && { [ "$VISUAL_ONLY" = 1 ] || [ "$BRAND_ASSETS_ONLY" = 1 ]; }; then
                 echo "==> Visual-only release failed: restoring previous deployed app SHA"
                 set +e
                 git checkout --detach "$CURRENT_SHA"
@@ -176,10 +202,10 @@ jobs:
             git fetch origin main
             git checkout --detach "$DEPLOY_SHA"
             test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
-            UI_CHECKED_OUT=$VISUAL_ONLY
+            if [ "$VISUAL_ONLY" = 1 ] || [ "$BRAND_ASSETS_ONLY" = 1 ]; then UI_CHECKED_OUT=1; fi
             echo "Deploying verified commit $DEPLOY_SHA"
 
-            if [ "$VISUAL_ONLY" != 1 ]; then
+            if [ "$VISUAL_ONLY" != 1 ] && [ "$BRAND_ASSETS_ONLY" != 1 ]; then
             echo "==> Ensuring integration encryption secret"
             ENV_FILE=".env.production.local"
             touch "$ENV_FILE"
@@ -205,9 +231,22 @@ jobs:
             fi
             chmod 600 "$ENV_FILE"
             else
-              echo "==> UI-only release: preserving all existing production secrets and feature flags"
+              echo "==> isolated no-DB release: preserving all existing production secrets and feature flags"
             fi
 
+            if [ "$BRAND_ASSETS_ONLY" = 1 ]; then
+              echo "==> Provisioning private durable Brand Asset storage outside app checkout"
+              BRAND_SERVICE_USER="$(systemctl show drvowa.service -p User --value)"
+              BRAND_SERVICE_USER="${BRAND_SERVICE_USER:-root}"
+              id "$BRAND_SERVICE_USER" >/dev/null
+              BRAND_SERVICE_GROUP="$(id -gn "$BRAND_SERVICE_USER")"
+              for folder in /var/lib/drvowa/brand-assets /var/lib/drvowa/brand-assets/assets /var/lib/drvowa/brand-assets/images /var/lib/drvowa/brand-assets/published /var/lib/drvowa/brand-assets/locks; do
+                install -d -m 0700 -o "$BRAND_SERVICE_USER" -g "$BRAND_SERVICE_GROUP" "$folder"
+              done
+              test "$(stat -c %a /var/lib/drvowa/brand-assets)" = 700 || { echo "BLOCKED: brand directory insecure"; exit 1; }
+              test "$(stat -c %U /var/lib/drvowa/brand-assets)" = "$BRAND_SERVICE_USER" || { echo "BLOCKED: incorrect Brand Assets owner"; exit 1; }
+              echo "PASS: private Brand Assets storage is owned by app systemd service account"
+            fi
             echo "==> Installing locked dependencies"
             npm ci
 
@@ -220,7 +259,7 @@ jobs:
             echo "==> AI worker boot check"
             npm run ai:worker:check
 
-            if [ "$VISUAL_ONLY" != 1 ]; then
+            if [ "$VISUAL_ONLY" != 1 ] && [ "$BRAND_ASSETS_ONLY" != 1 ]; then
               echo "==> Applying database migrations"
               npm run db:migrate
             else
@@ -243,7 +282,7 @@ jobs:
             echo "==> Restarting app service"
             systemctl restart drvowa.service
 
-            if [ "$VISUAL_ONLY" != 1 ]; then
+            if [ "$VISUAL_ONLY" != 1 ] && [ "$BRAND_ASSETS_ONLY" != 1 ]; then
             echo "==> Restarting AI worker for integration-aware replies"
             systemctl restart drvowa-ai-worker.service
             sleep 2
@@ -275,6 +314,15 @@ jobs:
               echo "DRVOWA production health check passed"
               if [ "$VISUAL_ONLY" = 1 ]; then
                 echo "PASS: UI-only release completed, no SQL or billing scheduler modifications"
+                exit 0
+              fi
+              if [ "$BRAND_ASSETS_ONLY" = 1 ]; then
+                echo "==> Checking no-SQL Brand Assets routes and unauthenticated access protection"
+                PUBLIC_CODE="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 http://127.0.0.1:3100/api/brand/assets/primary-dark)"
+                case "$PUBLIC_CODE" in 200|307) ;; *) echo "BLOCKED: public Brand Assets fallback endpoint failed: $PUBLIC_CODE"; exit 1 ;; esac
+                ADMIN_CODE="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 http://127.0.0.1:3100/api/admin/brand-assets)"
+                case "$ADMIN_CODE" in 401|403) ;; *) echo "BLOCKED: protected brand upload API incorrectly exposed: $ADMIN_CODE"; exit 1 ;; esac
+                echo "PASS: Brand Assets production routes, auth boundary, health and no-schema deployment"
                 exit 0
               fi
               echo "==> Installing hourly billing maintenance timer"
