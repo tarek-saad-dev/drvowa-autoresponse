@@ -12,6 +12,8 @@ import {
   parseAudienceFilterAst,
 } from "./audience-ast";
 import { previewAudience } from "./audience-service";
+import { normalizeCampaignFilterForRequest } from "./campaign-filter-intent";
+import { getErpSyncStatus } from "./erp-sync";
 import * as repo from "./repository";
 import { requireCrmWriteAccess } from "./service";
 import type { AudienceFilterAst, CrmAudiencePreview } from "./types";
@@ -153,6 +155,7 @@ AudiencePredicate types:
 - { "type":"assigned_user","op":"eq"|"is_null","userId"?: uuid }
 - { "type":"has_phone","value": boolean }
 - { "type":"last_interaction"|"erp_last_visit","op":"before_days_ago"|"within_days"|"between","days"?:number,"from"?:YYYY-MM-DD,"to"?:YYYY-MM-DD }
+- { "type":"erp_invoice_date","op":"between","from":YYYY-MM-DD,"to":YYYY-MM-DD } // ANY valid sales invoice in inclusive date range
 - { "type":"erp_spend","op":"gte"|"lte"|"between","amount"?:number,"min"?:number,"max"?:number,"windowDays"?:number }
 - { "type":"erp_visits","op":"gte"|"lte"|"eq","count":number,"windowDays"?:number }
 - { "type":"erp_service","op":"name_contains"|"pro_id_in"|"category_contains","values":[string],"minTimes"?:number,"windowDays"?:number,"from"?:YYYY-MM-DD,"to"?:YYYY-MM-DD }
@@ -254,7 +257,9 @@ export async function runCampaignAiTurn(
       "Output MUST be a single AudienceFilterAst object matching the schema. No markdown.",
       "Never include customer names, phones, emails, or PII lists.",
       "Prefer erp_* predicates for visit/spend/service history.",
-      "Use marketing_permission eligible when the user asks for campaign-ready audience.",
+      "Use marketing_permission eligible ONLY when user explicitly asks for consented / campaign-ready recipients. Simple customer lookup must include unconsented customers.",
+      "Invoices yesterday = erp_invoice_date with FROM and TO both equal to the previous calendar date in the business timezone. Do NOT use erp_last_visit for invoices yesterday.",
+      "Treat a new standalone request as a fresh audience; only combine when mode=refine.",
       "If refining, output only the refinement predicates to merge (still full AST shape).",
       `Business timezone: ${timeZone}. Today: ${today}.`,
       "Schema:",
@@ -271,11 +276,16 @@ export async function runCampaignAiTurn(
 
   let filter: AudienceFilterAst;
   try {
-    const parsed = parseAudienceFilterAst(json);
-    filter =
+    const parsed = normalizeCampaignFilterForRequest({
+      filter: parseAudienceFilterAst(json),
+      message,
+      businessToday: today,
+    });
+    const merged =
       mode === "refine" && params.priorFilter
         ? mergeAudienceFilters(parseAudienceFilterAst(params.priorFilter), parsed)
         : parsed;
+    filter = parseAudienceFilterAst(merged);
   } catch (error) {
     if (error instanceof AudienceComplexityError) {
       throw new ValidationError(error.message);
@@ -310,10 +320,26 @@ export async function runCampaignAiTurn(
     preview.countsScope === "preview_page"
       ? ` (مؤهلو صفحة المعاينة ${preview.eligibleMarketing} من ${preview.customers.length} ظاهرين — العدد النهائي يتأكد بعد تثبيت الجمهور)`
       : "";
+  let erpHint = "";
+  if (preview.totalMatched === 0 && ["all", "any", "exclude"].some((key) =>
+    (filter[key as "all" | "any" | "exclude"] ?? []).some((p) => p.type.startsWith("erp_"))
+  )) {
+    // A zero-result query is not evidence of an empty ERP: first check sync.
+    // Do not fetch or log any raw customer / invoice data here.
+    const status = await getErpSyncStatus({ businessId: params.businessId }).catch(() => null);
+    const invoiceState = status?.resources.find((r) => r.resource === "invoices");
+    if (!status?.connected) {
+      erpHint = " ملحوظة: ربط ERP غير متصل؛ راجع صفحة مزامنة ERP.";
+    } else if (!invoiceState || invoiceState.status !== "SUCCESS") {
+      erpHint = " ملحوظة: مزامنة فواتير ERP لسه مش مكتملة؛ راجع /dashboard/crm/erp وشغّل المزامنة لحد ما تبقى SUCCESS.";
+    } else {
+      erpHint = " تم العثور على صفر بهذا الفلتر، رغم تسجيل اكتمال مزامنة الفواتير؛ جرّب بحث أوسع أو راجع أسماء الخدمات والتواريخ.";
+    }
+  }
 
   return {
     kind: "filter",
-    assistantMessage: `وجدت حوالي ${preview.totalMatched} عميل مطابقين.${pageEligibleNote}`,
+    assistantMessage: `وجدت حوالي ${preview.totalMatched} عميل مطابقين.${pageEligibleNote}${erpHint}`,
     filter: preview.filter,
     explanationAr: preview.explanationAr,
     clarificationNeeded: false,
