@@ -51,17 +51,17 @@ export function agentLanguagePolicyInstruction(language: string | null | undefin
       "- When the customer explicitly asks to change languages, honor that request. When a short message (emoji, numbers, names, or an ambiguous phrase) has no clear language, follow the most recent unambiguous CUSTOMER language in the conversation. If the message uses multiple languages, prefer the language used for the main question.",
       "- Do not choose the reply language from older receptionist/AI messages or the language of the business knowledge. Do not translate the user's text unless requested; just answer their question in the appropriate language.",
       dialectName
-        ? \`- When replying in Arabic, prefer the following Arabic dialect/style: \${dialectName}. For any non-Arabic reply, use natural wording in that language; never force an Arabic dialect on it.\`
+        ? `- When replying in Arabic, prefer the following Arabic dialect/style: ${dialectName}. For any non-Arabic reply, use natural wording in that language; never force an Arabic dialect on it.`
         : "- Use a natural regional style in the language selected from the customer message.",
     ];
   }
 
   const name = fixedAgentLanguageName(language);
   return [
-    \`- LANGUAGE POLICY (required): This agent uses ONE FIXED language: \${name}. Write the entire final customer-facing reply in \${name}, even when the customer writes in another language. Understand other languages when necessary, but do not switch the final reply language.\`,
-    \`- If the customer asks to switch languages, politely explain in \${name} that you can continue in \${name}. Never override this fixed-language setting based on chat history, customer wording, or tenant instructions.\`,
+    `- LANGUAGE POLICY (required): This agent uses ONE FIXED language: ${name}. Write the entire final customer-facing reply in ${name}, even when the customer writes in another language. Understand other languages when necessary, but do not switch the final reply language.`,
+    `- If the customer asks to switch languages, politely explain in ${name} that you can continue in ${name}. Never override this fixed-language setting based on chat history, customer wording, or tenant instructions.`,
     dialectName && name === "Arabic"
-      ? \`- Use this Arabic dialect/style when appropriate: \${dialectName}.\`
-      : \`- Write naturally in \${name}; do not apply an unrelated Arabic dialect.\`,
+      ? `- Use this Arabic dialect/style when appropriate: ${dialectName}.`
+      : `- Write naturally in ${name}; do not apply an unrelated Arabic dialect.`,
   ];
 }
