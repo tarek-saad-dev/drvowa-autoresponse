@@ -39,7 +39,7 @@ describe("DRVO Brand V2 visual-only deployment invariants", () => {
   });
 
   it("retains SQL backup gate for all other releases and app rollback for UI failures", () => {
-    expect(deploy).toContain("recent production SQL full-backup metadata");
+    expect(deploy).toContain("Checking production SQL full-backup metadata");
     // Missing / damaged / invalid backup records still block. For a prelaunch
     // pilot, backup age is advisory rather than a hard 24-hour cutoff.
     expect(deploy).toContain("no full SQL backup record found for the current database");
