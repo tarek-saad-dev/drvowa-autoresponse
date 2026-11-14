@@ -88,13 +88,14 @@ export function EmployeeStudio({
   const roleTitle = draft.identity === "ai" ? "مساعد ذكي" : "موظف استقبال";
   const multilingual = agentUsesCustomerLanguage(draft.language);
   const previewLanguage = multilingual ? "en" : draft.language.trim().toLowerCase().split("-")[0];
-  const languagePreview = {
+  const languagePreviews: Record<string, { customer: string; reply: string }> = {
     ar: { customer: "مساء الخير، ممكن أعرف تفاصيل خدماتكم؟", reply: currentPreset.example },
     en: { customer: "Hi, can you tell me about your services?", reply: "Hi! Of course. Which service would you like to know more about?" },
     fr: { customer: "Bonjour, quels services proposez-vous ?", reply: "Bonjour ! Je peux vous renseigner. Quel service vous intéresse ?" },
     es: { customer: "Hola, ¿qué servicios ofrecen?", reply: "¡Hola! Con gusto te ayudo. ¿Qué servicio te interesa?" },
     de: { customer: "Hallo, welche Dienstleistungen bieten Sie an?", reply: "Hallo! Gerne helfe ich Ihnen. Für welchen Service interessieren Sie sich?" },
-  }[previewLanguage] ?? { customer: "Hi, can you tell me about your services?", reply: "Hello! How can I help you today?" };
+  };
+  const languagePreview = languagePreviews[previewLanguage] ?? { customer: "Hi, can you tell me about your services?", reply: "Hello! How can I help you today?" };
 
   useEffect(() => {
     if (!dirty) return;
