@@ -367,7 +367,25 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
     expect(JSON.parse(stateAfterDelete.recordset[0]?.CursorJson ?? "{}").sinceAuditId).toBe(901);
 
     const replaySync=await postJson(request,"/api/crm/erp/sync",{});
-    expect((replaySync.result as {invoices:{synced:number}}).invoices.synced).toBe(0);
+    // 'synced' includes the ordinary rotating status sweep of other active
+    // invoices, so it need not equal zero. Assert the deletion mirror and
+    // persisted audit cursor did NOT regress or process a second deletion.
+    expect((replaySync.result as {invoices:{synced:number}}).invoices.synced).toBeGreaterThanOrEqual(0);
+    const afterReplay=await query<{
+      IsDeleted:number;IsValidSale:number;RawStatus:string;GrandTotal:number;
+    }>(
+      `SELECT IsDeleted,IsValidSale,RawStatus,GrandTotal
+       FROM dbo.TblErpInvoiceMirror
+       WHERE BusinessID=@business AND ExternalInvId=N'مبيعات:201'`,
+      [{name:"business",type:sql.UniqueIdentifier,value:businessId!}],
+    );
+    expect(afterReplay.recordset[0]).toEqual(afterDelete.recordset[0]);
+    const replayState=await query<{CursorJson:string}>(
+      `SELECT CursorJson FROM dbo.TblErpSyncState
+       WHERE BusinessID=@business AND Resource=N'invoices'`,
+      [{name:"business",type:sql.UniqueIdentifier,value:businessId!}],
+    );
+    expect(JSON.parse(replayState.recordset[0]?.CursorJson ?? "{}").sinceAuditId).toBe(901);
     expect(calls).toContain("invoice.list_deletions:append");
 
     // There is no WhatsApp send or real Cashier connection in this test.
