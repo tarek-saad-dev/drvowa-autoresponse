@@ -50,9 +50,17 @@ node --import tsx scripts/crm-staging-http-smoke.ts --paired
 # Optional staging CRM snapshot (DB write, no campaign send):
 export CRM_STAGING_ENABLE_SNAPSHOT=YES_STAGING_ONLY
 node --import tsx scripts/crm-staging-http-smoke.ts --paired
+
+# OPTIONAL: test draft creation, with one designated explicitly opted-in staging phone.
+# This does not send and does not create a bulk-recipient campaign list.
+# Never set a real customer phone or use a production WhatsApp channel.
+export CRM_STAGING_ENABLE_DRAFT=YES_STAGING_ONLY
+export CRM_STAGING_CONFIRM_DRAFT=I_APPROVE_ONE_TEST_RECIPIENT
+export CRM_STAGING_CONSENTED_TEST_PHONE="<normalized consenting staging test phone>"
+node --import tsx scripts/crm-staging-http-smoke.ts --paired
 ```
 
-The smoke prints **counts and status only**; no customer names, phones, tokens or invoice payloads. It never calls WhatsApp send, launch or campaign execution APIs.
+The smoke prints **counts and status only**; no customer names, phones, tokens or invoice payloads. It never calls WhatsApp send, launch or campaign execution APIs. The optional draft stage requires the designated test phone to remain channel-consented on two successive revalidations, creates a one-number list only, and verifies `sendingEnabled=false`. It does **not** prove that the UI confirmation is displayed correctly; that still requires browser testing.
 
 ## Required *additional* verification before release
 
