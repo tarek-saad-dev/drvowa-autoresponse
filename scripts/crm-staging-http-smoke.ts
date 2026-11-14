@@ -43,6 +43,7 @@ async function callJson(
     headers: {
       Accept: "application/json",
       ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(method === "POST" ? { Origin: origin } : {}),
       ...headers,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
