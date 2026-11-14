@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { NotFoundError, ValidationError } from "@/lib/tenancy/errors";
+import { ConflictError, NotFoundError, ValidationError } from "@/lib/tenancy/errors";
 import { callIntegrationTool } from "@/modules/integrations/connector-client";
 import { refreshExternalIntegrationManifest } from "@/modules/integrations/service";
 import type { IntegrationManifest } from "@/modules/integrations/contracts";
@@ -759,89 +759,107 @@ async function syncCatalog(params: {
   }
 }
 
+export type ErpSyncResource = "customers" | "invoices" | "catalog";
+const activeErpSyncByBusiness = new Set<string>();
+
 export async function syncErpForBusiness(params: {
   businessId: string;
+  resource?: ErpSyncResource;
 }): Promise<{
   customers: { synced: number; skipped: boolean };
   invoices: { synced: number; skipped: boolean };
   catalog: { synced: number; skipped: boolean };
 }> {
-  const integration = await getIntegrationByType({
-    businessId: params.businessId,
-    type: INTEGRATION_TYPE_DRVO_ERP,
-  });
-  if (!integration || integration.status !== "ACTIVE") {
-    throw new NotFoundError("ربط DRVO ERP غير مفعّل");
+  if (activeErpSyncByBusiness.has(params.businessId)) {
+    throw new ConflictError("مزامنة Cashier شغالة بالفعل؛ حدّث الحالة بعد اكتمال الدفعة الحالية.");
   }
-
-  // Source probe reads the LIVE manifest; sync must do the same.
-  // External pairing can leave CapabilitiesJson empty/stale even while its
-  // authenticated READ tools are currently reachable.
-  let manifest: IntegrationManifest;
+  activeErpSyncByBusiness.add(params.businessId);
   try {
-    manifest = await refreshExternalIntegrationManifest({ integration });
-  } catch {
-    throw new ValidationError(
-      "تعذر تحديث أدوات Cashier الفعلية. جرّب «اختبار مصدر Cashier» وتحقق من الاتصال والتصريح.",
-    );
-  }
-  // An ACTIVE connector and cached UI tool names are not proof that a sync
-  // can run. Never report a successful no-op when its manifest lacks tools.
-  for (const requiredTool of [
-    "customer.list_changes",
-    "invoice.list_changes",
-    "catalog.list_services",
-  ]) {
-    if (!hasTool(manifest, requiredTool)) {
+    const integration = await getIntegrationByType({
+      businessId: params.businessId,
+      type: INTEGRATION_TYPE_DRVO_ERP,
+    });
+    if (!integration || integration.status !== "ACTIVE") {
+      throw new NotFoundError("ربط DRVO ERP غير مفعّل");
+    }
+
+    // Source probe reads the LIVE manifest; sync must do the same.
+    // External pairing can leave CapabilitiesJson empty/stale even while its
+    // authenticated READ tools are currently reachable.
+    let manifest: IntegrationManifest;
+    try {
+      manifest = await refreshExternalIntegrationManifest({ integration });
+    } catch {
       throw new ValidationError(
-        "مصدر Cashier الحالي لا يعلن أداة المزامنة المطلوبة (" + requiredTool + "). افحص المصدر ثم راجع إصدار Connector.",
+        "تعذر تحديث أدوات Cashier الفعلية. جرّب «اختبار مصدر Cashier» وتحقق من الاتصال والتصريح.",
       );
     }
-  }
-  const customers = await syncCustomers({
-    businessId: params.businessId,
-    integration,
-    manifest,
-  });
-  const invoices = await syncInvoices({
-    businessId: params.businessId,
-    integration,
-    manifest,
-  });
-  const catalog = await syncCatalog({
-    businessId: params.businessId,
-    integration,
-    manifest,
-  });
-  if (customers.skipped || invoices.skipped || catalog.skipped) {
-    throw new ValidationError("المزامنة لم تنفّذ على كل الموارد؛ افحص مصدر Cashier وإعداد التكامل.");
-  }
+    // An ACTIVE connector and cached UI tool names are not proof that a sync
+    // can run. Never report a successful no-op when its manifest lacks tools.
+    for (const requiredTool of [
+      "customer.list_changes",
+      "invoice.list_changes",
+      "catalog.list_services",
+    ]) {
+      if (!hasTool(manifest, requiredTool)) {
+        throw new ValidationError(
+          "مصدر Cashier الحالي لا يعلن أداة المزامنة المطلوبة (" + requiredTool + "). افحص المصدر ثم راجع إصدار Connector.",
+        );
+      }
+    }
+    const skipped = { synced: 0, skipped: true };
+    const customers = !params.resource || params.resource === "customers"
+      ? await syncCustomers({ businessId: params.businessId, integration, manifest })
+      : skipped;
+    const invoices = !params.resource || params.resource === "invoices"
+      ? await syncInvoices({ businessId: params.businessId, integration, manifest })
+      : skipped;
+    const catalog = !params.resource || params.resource === "catalog"
+      ? await syncCatalog({ businessId: params.businessId, integration, manifest })
+      : skipped;
+    if (
+      (params.resource ? { customers, invoices, catalog }[params.resource].skipped
+        : customers.skipped || invoices.skipped || catalog.skipped)
+    ) {
+      throw new ValidationError("لم يتم تشغيل أداة المزامنة المطلوبة. راجع اتصال Cashier.");
+    }
 
-  // Best-effort phone link for unlinked WhatsApp contacts (no CRM overwrite).
-  const contacts = await repo.listUnlinkedWhatsAppContacts({
-    businessId: params.businessId,
-    limit: 25,
-  });
-  for (const contact of contacts) {
-    if (!contact.phoneNormalized) continue;
-    const match = await repo
-      .getCustomerByPhone({
+    // Do not run dozens of contact lookups on every 25-customer import
+    // chunk. Defer this optional link pass until the customer append completes.
+    if ((!params.resource || params.resource === "customers") &&
+        (await repo.getErpSyncState({
+          businessId: params.businessId,
+          resource: RESOURCE_CUSTOMERS,
+        }))?.status === "SUCCESS") {
+      const contacts = await repo.listUnlinkedWhatsAppContacts({
         businessId: params.businessId,
-        phoneNormalized: contact.phoneNormalized,
-      })
-      .catch(() => null);
-    if (!match) continue;
-    await repo
-      .linkContactToCustomer({
-        businessId: params.businessId,
-        customerId: match.customerId,
-        contactId: contact.contactId,
-        linkSource: "PHONE_MATCH",
-      })
-      .catch(() => null);
-  }
+        limit: 25,
+      });
+      for (const contact of contacts) {
+        if (!contact.phoneNormalized) continue;
+        const match = await repo
+          .getCustomerByPhone({
+            businessId: params.businessId,
+            phoneNormalized: contact.phoneNormalized,
+          })
+          .catch(() => null);
+        if (!match) continue;
+        await repo
+          .linkContactToCustomer({
+            businessId: params.businessId,
+            customerId: match.customerId,
+            contactId: contact.contactId,
+            linkSource: "PHONE_MATCH",
+          })
+          .catch(() => null);
+      }
+    }
 
   return { customers, invoices, catalog };
+  } finally {
+    activeErpSyncByBusiness.delete(params.businessId);
+  }
+
 }
 
 export async function getErpSyncStatus(params: { businessId: string }) {
