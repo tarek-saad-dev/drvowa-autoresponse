@@ -1200,6 +1200,43 @@ export async function insertActivity(
   );
 }
 
+/**
+ * Keep ERP_INVOICE timeline events idempotent across retries, cursor resets,
+ * timeouts and identity sweeps. SQL UPDLOCK + HOLDLOCK protects the absence
+ * check from concurrent inserts; no deletions of existing history are made.
+ * The stable key is BusinessID + ERP invoice external key, independent of
+ * later customer phone/name corrections.
+ */
+export async function insertErpInvoiceActivityOnce(params: {
+  businessId: string;
+  customerId: string;
+  externalInvId: string;
+  title: string;
+}): Promise<void> {
+  await query(
+    `INSERT INTO dbo.TblCrmActivity (
+       ActivityID, BusinessID, CustomerID, ActivityType, Title,
+       RelatedEntityType, RelatedEntityID
+     )
+     SELECT @id, @businessId, @customerId, N'ERP_INVOICE', @title,
+            N'ERP_INVOICE', @invoiceKey
+     WHERE NOT EXISTS (
+       SELECT 1 FROM dbo.TblCrmActivity WITH (UPDLOCK, HOLDLOCK)
+       WHERE BusinessID = @businessId
+         AND ActivityType = N'ERP_INVOICE'
+         AND RelatedEntityType = N'ERP_INVOICE'
+         AND RelatedEntityID = @invoiceKey
+     )`,
+    [
+      { name: "id", type: sql.UniqueIdentifier, value: randomUUID() },
+      { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+      { name: "customerId", type: sql.UniqueIdentifier, value: params.customerId },
+      { name: "title", type: sql.NVarChar(300), value: params.title },
+      { name: "invoiceKey", type: sql.NVarChar(128), value: params.externalInvId },
+    ],
+  );
+}
+
 export async function listActivities(params: {
   businessId: string;
   customerId: string;
