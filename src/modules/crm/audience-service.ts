@@ -90,6 +90,7 @@ async function runAudienceQuery(params: {
   const rowLimit = Math.min(Math.max(1, params.rowLimit), AUDIENCE_SNAPSHOT_MAX_ROWS);
   const compiled = compileAudienceFilter({
     businessId: params.businessId,
+    channelConnectionId: params.channelConnectionId,
     filter: { ...params.filter, limit: rowLimit },
   });
 
