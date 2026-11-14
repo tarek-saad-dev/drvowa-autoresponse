@@ -73,6 +73,7 @@ export function TeamChatDrawer({
   const triggerRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const alive = useRef(true);
+  const savingRef = useRef(false);
 
   const base = "/api/inbox/conversations/" + encodeURIComponent(chat.conversationId);
   const fullChat = "/dashboard/inbox?businessId=" + encodeURIComponent(businessId)
@@ -128,7 +129,7 @@ export function TeamChatDrawer({
       setLoading(false);
     });
     const timer = window.setInterval(() => {
-      if (document.hidden || !alive.current || saving) return;
+      if (document.hidden || !alive.current || savingRef.current) return;
       void fetchMessages().catch(() => undefined);
       void fetchStatus().catch(() => {
         if (alive.current) setStatusReady(false);
@@ -140,7 +141,7 @@ export function TeamChatDrawer({
       document.body.style.overflow = previousOverflow;
       triggerRef.current?.focus();
     };
-  }, [fetchMessages, fetchStatus, saving]);
+  }, [fetchMessages, fetchStatus]);
 
   const dismiss = useCallback(() => {
     if ((draft.trim() || uncertain) && !window.confirm(
@@ -200,6 +201,7 @@ export function TeamChatDrawer({
 
   async function resolveAndReturnToAi() {
     if (saving || sending || !statusReady || handoffDone) return;
+    savingRef.current = true;
     setSaving(true);
     setError("");
     setNotice("");
@@ -247,6 +249,7 @@ export function TeamChatDrawer({
       void fetchStatus().catch(() => setStatusReady(false));
       onChanged();
     } finally {
+      savingRef.current = false;
       if (alive.current) setSaving(false);
     }
   }
