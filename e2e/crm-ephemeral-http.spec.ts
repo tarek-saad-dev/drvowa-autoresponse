@@ -177,6 +177,27 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
     expect(JSON.stringify(probe)).not.toContain("Synthetic Alpha");
     expect(JSON.stringify(probe)).not.toContain("01055551111");
 
+    // Reproduce the production failure: live Cashier probe succeeds but the
+    // stored capabilities list contains no sync tools (e.g. old pairing cache).
+    // This SQL mutation is restricted to the CI-only ephemeral database above.
+    await query(
+      `UPDATE dbo.TblIntegration SET CapabilitiesJson = @stale
+       WHERE BusinessID = @businessId AND IntegrationID = @integrationId`,
+      [
+        { name: "stale", type: sql.NVarChar(sql.MAX), value: JSON.stringify({ ...manifest, tools: [] }) },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessId! },
+        { name: "integrationId", type: sql.UniqueIdentifier, value: paired.integration.integrationId },
+      ],
+    );
+    const staleResponse = await request.get("/api/crm/erp/sync");
+    expect(staleResponse.ok()).toBe(true);
+    const staleData = await staleResponse.json() as {
+      status: { availableTools: { customers: boolean; invoices: boolean; catalog: boolean } };
+    };
+    expect(staleData.status.availableTools).toEqual({
+      customers: false, invoices: false, catalog: false,
+    });
+
     const channelA = randomUUID();
     const channelB = randomUUID();
     await query(
@@ -196,6 +217,9 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
     expect(synced.customers.synced).toBeGreaterThanOrEqual(3);
     expect(synced.invoices.synced).toBeGreaterThanOrEqual(3);
     expect(synced.catalog.synced).toBeGreaterThanOrEqual(1);
+    expect((sync.status as { availableTools: Record<string, boolean> }).availableTools).toEqual({
+      customers: true, invoices: true, catalog: true,
+    });
     const status = sync.status as {
       resources: Array<{resource:string;status:string}>;
       mirrorCounts: {erpCustomers:number;validInvoices:number;invoiceLines:number;catalogServices:number;unlinkedInvoices:number};
