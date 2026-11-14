@@ -9,7 +9,7 @@ export function isNewAudienceRequest(message: string): boolean {
   return /^(?:هات(?:لي)?|جيب(?:لي)?|اعرض(?:لي)?|وريني|طلع(?:لي)?|دور(?:لي)?\s+على|ابحث(?:لي)?\s+عن|find|show|list)(?:\s|$)/iu.test(message.trim());
 }
 
-function asksForMarketingEligibility(message: string): boolean {
+export function asksForMarketingEligibility(message: string): boolean {
   return /حملة|حملات|موافقة\s*(?:التسويق|الواتساب|واتساب)|إذن\s*(?:التسويق|الواتساب|واتساب)|اذن\s*(?:التسويق|الواتساب|واتساب)|مسموح\s*(?:لهم\s*)?(?:بالتسويق|بالرسائل)|مؤهل(?:ين)?\s*(?:للتسويق|للحملة)|ارسال\s*(?:رسالة|واتساب)|إرسال\s*(?:رسالة|واتساب)|ابعت\s*(?:رسالة|واتساب)|ابعث\s*(?:رسالة|واتساب)|opt.?in|consent|marketing|campaign/iu.test(message);
 }
 
@@ -69,12 +69,14 @@ export function normalizeCampaignFilterForRequest(params: {
     const predicates = (items ?? [])
       .filter((p) => shouldRestrictToConsented || p.type !== "marketing_permission")
       // "عمل فواتير امبارح" is not "his LAST visit was yesterday".
-      .filter((p) => !(invoiceYesterday && group === "all" && p.type === "erp_last_visit"))
+      .filter((p) => !(invoiceYesterday && group === "all" && (p.type === "erp_last_visit" || p.type === "erp_invoice_date")))
       .map(expandServiceNames);
     return unique(predicates);
   };
   const all = transform(params.filter.all, "all") ?? [];
-  if (invoiceYesterday && !all.some((p) => p.type === "erp_invoice_date")) {
+  if (invoiceYesterday) {
+    // Calendar boundaries must come from the business date, not a guessed
+    // model output or a rolling 24-hour visit window.
     const day = previousCalendarDay(params.businessToday);
     all.push({ type: "erp_invoice_date", op: "between", from: day, to: day });
   }
