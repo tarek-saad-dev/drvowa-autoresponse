@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { erpInvoiceExternalKey, isValidErpSaleInvoice } from "@/modules/crm/erp-sync";
+import { erpInvoiceExternalKey, isValidErpSaleInvoice, isErpAppendPageExhausted } from "@/modules/crm/erp-sync";
 
 describe("ERP sale validity", () => {
+  it("marks a full append page as potentially incomplete, even before sweep pages", () => {
+    expect(isErpAppendPageExhausted(200, 200)).toBe(false);
+    expect(isErpAppendPageExhausted(100, 100)).toBe(false);
+    expect(isErpAppendPageExhausted(0, 200)).toBe(true);
+    expect(isErpAppendPageExhausted(114, 200)).toBe(true);
+    expect(isErpAppendPageExhausted(40, 100)).toBe(true);
+  });
+
   it("requires مبيعات invoice type and non-cancelled status", () => {
     expect(
       isValidErpSaleInvoice({
