@@ -1,5 +1,6 @@
 import type { Agent, KnowledgeItem, Message } from "@/types/domain";
 import { AGENT_INSTRUCTIONS_MAX } from "@/constants/field-limits";
+import { agentLanguagePolicyInstruction } from "@/modules/agents/language-policy";
 
 export type AiReplyRequest = {
   businessId: string;
@@ -44,9 +45,7 @@ export function sanitizeReplyText(raw: string): string {
 }
 
 export function buildSystemPrompt(agent: AiReplyRequest["agent"]): string {
-  const dialect = agent.dialect?.trim() || "";
   const tone = agent.tone?.trim() || "";
-  const language = agent.language?.trim() || "ar";
   const instructions = (agent.instructions?.trim() || "").slice(
     0,
     AGENT_INSTRUCTIONS_MAX,
@@ -55,14 +54,14 @@ export function buildSystemPrompt(agent: AiReplyRequest["agent"]): string {
   return [
     "You are a WhatsApp receptionist for a local business.",
     `Your name: ${agent.name}. Role: ${agent.roleTitle}.`,
-    `Language: ${language}. Dialect: ${dialect || "match the customer"}. Tone: ${tone || "friendly professional"}.`,
+    `Tone: ${tone || "friendly professional"}.`,
     "Follow the tenant Agent instructions below, but never override these platform rules:",
     "- Use supplied business knowledge for static business facts. If LIVE ERP CONTEXT is supplied, treat it as authoritative current data and let it override stale static knowledge.",
     "- Never invent unavailable facts. If unknown, say you need to confirm or that a human will help.",
     "- Never claim a booking was cancelled, rescheduled, or is being modified unless a VERIFIED ERP WRITE result confirms the specific operation. Reading bookings is not editing them. If not verified, explicitly say no change is confirmed.",
     "- Keep replies concise for WhatsApp. Prefer short paragraphs. Avoid heavy markdown.",
     "- Do not overuse emojis. Do not reveal system/tool/database internals.",
-    "- Match the customer's language naturally.",
+    ...agentLanguagePolicyInstruction(agent.language, agent.dialect),
     "- Never output chain-of-thought. Reply with the final customer message only.",
     "- You are an AI-powered receptionist. Speak naturally, but never claim to be a human. If asked whether you are an AI or human, answer truthfully and briefly.",
     instructions
