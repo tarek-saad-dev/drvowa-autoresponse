@@ -7,7 +7,7 @@ export type DashboardNavLeaf = {
 };
 
 export type DashboardNavGroup = {
-  id: "home" | "inbox" | "employee" | "settings";
+  id: "home" | "inbox" | "crm" | "campaigns" | "employee" | "settings";
   label: string;
   mobileLabel: string;
   icon: string;
@@ -16,7 +16,7 @@ export type DashboardNavGroup = {
   children?: readonly DashboardNavLeaf[];
 };
 
-/** Four clear primary destinations. Legacy URLs remain valid and are not shown as extra navigation. */
+/** Primary destinations. Legacy URLs remain valid and are not shown as extra navigation. */
 export const DASHBOARD_NAV_GROUPS = [
   {
     id: "home", label: "الرئيسية", mobileLabel: "الرئيسية",
@@ -25,6 +25,24 @@ export const DASHBOARD_NAV_GROUPS = [
   {
     id: "inbox", label: "المحادثات", mobileLabel: "المحادثات",
     icon: "◌", href: "/dashboard/inbox", mobilePrimary: true,
+  },
+  {
+    id: "crm", label: "العملاء", mobileLabel: "العملاء",
+    icon: "◎", href: "/dashboard/contacts", mobilePrimary: true,
+    children: [
+      { href: "/dashboard/contacts", label: "قائمة العملاء", mobileLabel: "العملاء", key: "Customers", icon: "◎" },
+      { href: "/dashboard/crm/follow-ups", label: "المتابعات", mobileLabel: "المتابعات", key: "FollowUps", icon: "✓" },
+      { href: "/dashboard/crm/segments", label: "الشرائح", mobileLabel: "الشرائح", key: "Segments", icon: "▤" },
+      { href: "/dashboard/crm/erp", label: "مزامنة ERP", mobileLabel: "ERP", key: "CrmErp", icon: "⇄" },
+    ],
+  },
+  {
+    id: "campaigns", label: "الحملات", mobileLabel: "الحملات",
+    icon: "◈", href: "/dashboard/campaigns", mobilePrimary: false,
+    children: [
+      { href: "/dashboard/campaigns", label: "مركز الحملات", mobileLabel: "الحملات", key: "Campaigns", icon: "◈" },
+      { href: "/dashboard/campaigns/create", label: "منشئ AI", mobileLabel: "منشئ", key: "CampaignCreate", icon: "✦" },
+    ],
   },
   {
     id: "employee", label: "الموظف الذكي", mobileLabel: "الموظف",
@@ -45,8 +63,14 @@ export const DASHBOARD_NAV_GROUPS = [
 export const DASHBOARD_NAV = [
   { href: "/dashboard", label: "الرئيسية", mobileLabel: "الرئيسية", key: "Overview", icon: "⌂", primary: true },
   { href: "/dashboard/inbox", label: "المحادثات", mobileLabel: "المحادثات", key: "Inbox", icon: "◌", primary: true },
+  { href: "/dashboard/contacts", label: "العملاء", mobileLabel: "العملاء", key: "Customers", icon: "◎", primary: true },
+  { href: "/dashboard/campaigns", label: "الحملات", mobileLabel: "الحملات", key: "Campaigns", icon: "◈", primary: false },
+  { href: "/dashboard/campaigns/create", label: "منشئ الحملات", mobileLabel: "منشئ", key: "CampaignCreate", icon: "✦", primary: false },
+  { href: "/dashboard/crm/follow-ups", label: "المتابعات", mobileLabel: "المتابعات", key: "FollowUps", icon: "✓", primary: false },
+  { href: "/dashboard/crm/segments", label: "الشرائح", mobileLabel: "الشرائح", key: "Segments", icon: "▤", primary: false },
+  { href: "/dashboard/crm/erp", label: "مزامنة ERP", mobileLabel: "ERP", key: "CrmErp", icon: "⇄", primary: false },
   { href: "/dashboard/agent", label: "الموظف الذكي", mobileLabel: "الموظف", key: "Receptionist", icon: "✦", primary: true },
-  { href: "/dashboard/knowledge", label: "علّم الموظف", mobileLabel: "التعليم", key: "Knowledge", icon: "＋", primary: false },
+  { href: "/dashboard/knowledge", label: "علّم الموظف", mobileLabel: "العلم", key: "Knowledge", icon: "＋", primary: false },
   { href: "/dashboard/settings", label: "الإعدادات", mobileLabel: "الإعدادات", key: "Settings", icon: "⚙", primary: true },
   { href: "/dashboard/whatsapp", label: "واتساب", mobileLabel: "واتساب", key: "WhatsApp", icon: "◉", primary: false },
   { href: "/dashboard/locations", label: "الفروع والمواقع", mobileLabel: "الفروع", key: "Locations", icon: "⌖", primary: false },
@@ -74,6 +98,13 @@ export function isNavGroupActive(
 ): boolean {
   if (isNavHrefActive(pathname, group.href)) return true;
   if (group.id === "employee" && isNavHrefActive(pathname, "/dashboard/knowledge")) return true;
+  if (group.id === "crm" && [
+    "/dashboard/contacts",
+    "/dashboard/crm/follow-ups",
+    "/dashboard/crm/segments",
+    "/dashboard/crm/erp",
+  ].some((path) => isNavHrefActive(pathname, path))) return true;
+  if (group.id === "campaigns" && isNavHrefActive(pathname, "/dashboard/campaigns")) return true;
   if (group.id === "settings" && [
     "/dashboard/account", "/dashboard/whatsapp", "/dashboard/locations",
     "/dashboard/usage", "/dashboard/reliability", "/dashboard/integrations", "/dashboard/billing",

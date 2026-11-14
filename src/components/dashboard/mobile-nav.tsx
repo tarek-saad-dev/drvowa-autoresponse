@@ -23,7 +23,12 @@ export function MobileNav({
       aria-label="التنقل الرئيسي"
       className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 px-1.5 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-1.5 shadow-md backdrop-blur-xl md:hidden"
     >
-      <div className="mx-auto grid max-w-lg grid-cols-4 gap-0.5">
+      <div
+        className={cn(
+          "mx-auto grid max-w-lg gap-0.5",
+          primary.length >= 5 ? "grid-cols-5" : "grid-cols-4",
+        )}
+      >
         {primary.map((item) => {
           const active = isNavGroupActive(pathname, item);
           const isInbox = item.id === "inbox";
@@ -34,7 +39,7 @@ export function MobileNav({
               href={item.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "relative flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-center transition active:scale-[.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+                "relative flex min-w-0 flex-col items-center gap-1 rounded-2xl px-0.5 py-2 text-center transition active:scale-[.97] motion-reduce:transition-none motion-reduce:active:scale-100",
                 isInbox && "-mt-0.5",
                 active
                   ? "bg-primary/10 text-primary"
