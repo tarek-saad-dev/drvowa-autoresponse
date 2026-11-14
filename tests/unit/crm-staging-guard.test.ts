@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { requireApprovedStagingOrigin } from "@/modules/crm/staging-guard";
+import { requireApprovedStagingOrigin, requireApprovedStagingDbIdentity } from "@/modules/crm/staging-guard";
 
 describe("CRM staging HTTP guard", () => {
   const approved = [
@@ -45,5 +45,31 @@ describe("CRM staging HTTP guard", () => {
     ]) {
       expect(() => requireApprovedStagingOrigin(value, approved)).toThrow();
     }
+  });
+});
+
+describe("staging SQL identity safety", () => {
+  const expected = {
+    actualDatabase: "crm_staging",
+    actualLogin: "staging_reader",
+    expectedDatabase: "crm_staging",
+    expectedLogin: "staging_reader",
+  };
+  it("accepts matching nonproduction db and login", () => {
+    expect(() => requireApprovedStagingDbIdentity(expected)).not.toThrow();
+  });
+  it("refuses production database and wrong staging login/db", () => {
+    expect(() => requireApprovedStagingDbIdentity({
+      ...expected, actualDatabase: "last132",
+    })).toThrow();
+    expect(() => requireApprovedStagingDbIdentity({
+      ...expected, expectedDatabase: "last132", actualDatabase: "last132",
+    })).toThrow();
+    expect(() => requireApprovedStagingDbIdentity({
+      ...expected, actualLogin: "sa",
+    })).toThrow();
+    expect(() => requireApprovedStagingDbIdentity({
+      ...expected, expectedDatabase: "CRM",
+    })).toThrow();
   });
 });
