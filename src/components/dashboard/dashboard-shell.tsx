@@ -34,7 +34,7 @@ function DashboardShellInner({
           : "flex min-h-full min-w-0 flex-1 flex-col bg-background"
       }
     >
-      <div className={isInbox ? "hidden shrink-0 md:block" : "shrink-0"}>{topbar}</div>
+      <div className={isInbox ? "hidden shrink-0 lg:block" : "shrink-0"}>{topbar}</div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <main
           className={
@@ -48,7 +48,7 @@ function DashboardShellInner({
           {children}
         </main>
         {showMobileNav ? (
-          <div className={isInbox ? "md:hidden" : undefined}>{mobileNav}</div>
+          <div className={isInbox ? "lg:hidden" : undefined}>{mobileNav}</div>
         ) : null}
       </div>
     </div>

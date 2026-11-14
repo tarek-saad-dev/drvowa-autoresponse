@@ -40,8 +40,6 @@ const shell = source("src/components/dashboard/dashboard-shell.tsx");
 const layout = source("src/app/(app)/dashboard/layout.tsx");
 
 const topProps = {
-  userName: "Ahmed",
-  planName: "Growth",
   showPlatformAdminLink: true,
   businesses: [{
     businessId: "12345678-1234-4234-8234-123456789abc",
@@ -51,27 +49,47 @@ const topProps = {
 };
 
 describe("Dashboard horizontal top navigation", () => {
-  it("renders all six primary destinations in a horizontal desktop nav and keeps account/plan", () => {
+  it("renders all six destinations in one compact top row, with logo and far-left logout", () => {
     navigation.pathname = "/dashboard/inbox";
     const html = renderToStaticMarkup(createElement(DashboardTopbar, topProps as Parameters<typeof DashboardTopbar>[0]));
     expect(html).toContain('aria-label="التنقل العلوي"');
     for (const label of ["الرئيسية", "المحادثات", "العملاء", "الحملات", "الموظف الذكي", "الإعدادات"]) {
       expect(html).toContain(label);
     }
-    expect(html).toContain("md:flex");
+    expect(html).toContain("lg:flex");
+    expect(html).toContain("flex h-16 min-w-0 items-center");
+    expect(html).not.toContain("border-t border-border/70");
+    expect(html).toContain("mx-1 h-5 w-px bg-border/70");
     expect(html).toContain('href="/dashboard"');
     expect(html).toContain('href="/dashboard/inbox"');
-    expect(html).toContain('href="/admin"');
-    expect(html).toContain("إدارة المنصة");
-    expect(html).toContain("Growth");
-    expect(html).toContain("Ahmed");
+    expect(topbar).toContain('href="/admin"');
+    expect(topbar).toContain("إدارة المنصة");
+    expect(html).not.toContain("Growth");
+    expect(html).not.toContain("Ahmed");
+    expect(html).toContain("خروج");
+    expect(html).toContain('data-icon="log-out"');
     expect(html).toContain('aria-current="page"');
+  });
+
+
+  it("moves optional tools into Settings instead of showing a second header strip", () => {
+    expect(topbar).toContain('group.id === "settings" ? optionControls : null');
+    expect(topbar).toContain('openGroup === "mobile-options"');
+    expect(topbar).toContain("WorkspaceSwitcher");
+    expect(topbar).toContain("ThemeToggle");
+    expect(topbar).not.toContain("avatarInitial");
+    expect(topbar).not.toContain("displayPlan");
+    expect(topbar).not.toContain("activeBusiness?.name");
+    expect(topbar).not.toContain("sm:min-h-16");
+    expect(topbar).not.toContain("min-h-[52px]");
+    expect(topbar).toContain('aria-label="تسجيل الخروج"');
+    expect(topbar).toContain('bg-border/70');
   });
 
   it("keeps submenu navigation accessible with disclosure buttons and correct active state", () => {
     expect(topbar).toContain("getNavGroupChildren(group)");
     expect(topbar).toContain('aria-expanded={expanded}');
-    expect(topbar).toContain('aria-controls={`topnav-${group.id}`}');
+    expect(topbar).toContain('aria-controls={"topnav-" + group.id}');
     expect(topbar).toContain("setOpenGroup(current => current === group.id ? null : group.id)");
     expect(topbar).toContain("if (event.key === \"Escape\") setOpenGroup(null)");
     expect(topbar).toContain('onClick={() => setOpenGroup(null)}');
@@ -86,16 +104,17 @@ describe("Dashboard horizontal top navigation", () => {
       children: createElement("div", null, "messages"),
     }));
     expect(html).toContain("desktop-header");
-    expect(html).toContain("hidden shrink-0 md:block");
+    expect(html).toContain("hidden shrink-0 lg:block");
     expect(html).toContain("mobile-footer");
     expect(html).not.toContain("normal-sidebar");
     expect(shell).not.toContain("sidebar:");
     expect(layout).not.toContain("DashboardSidebar");
-    expect(layout).toContain("planName={planName}");
+    expect(layout).not.toContain("planName={planName}");
+    expect(layout).not.toContain("ensureCurrentSubscriptionEntitlements");
     expect(layout).toContain("showPlatformAdminLink={showPlatformAdminLink}");
     const mobile = renderToStaticMarkup(createElement(MobileNav, { showPlatformAdminLink: true }));
     expect(mobile).toContain("bottom-0");
-    expect(mobile).toContain("md:hidden");
+    expect(mobile).toContain("lg:hidden");
     expect(mobile).toContain("التنقل الرئيسي");
   });
 
@@ -105,6 +124,6 @@ describe("Dashboard horizontal top navigation", () => {
     expect(shell).toContain("fixed inset-0 z-40 flex h-[100dvh]");
     expect(shell).toContain("min-w-0 flex-1 overflow-hidden p-0");
     expect(shell).toContain("!isInbox || !threadOpen");
-    expect(shell).toContain('className={isInbox ? "hidden shrink-0 md:block" : "shrink-0"}');
+    expect(shell).toContain('className={isInbox ? "hidden shrink-0 lg:block" : "shrink-0"}');
   });
 });
