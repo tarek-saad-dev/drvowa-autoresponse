@@ -63,20 +63,20 @@ function needsMonthVsRollingClarification(message: string): boolean {
 }
 
 function todayInTimezone(timeZone: string): string {
+  const formatDate = (zone: string) => {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const get = (part: string) => parts.find((p) => p.type === part)?.value ?? "";
+    return `${get("year")}-${get("month")}-${get("day")}`;
+  };
   try {
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date());
+    return formatDate(timeZone);
   } catch {
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone: DEFAULT_TZ,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date());
+    return formatDate(DEFAULT_TZ);
   }
 }
 
@@ -331,9 +331,13 @@ export async function runCampaignAiTurn(
     if (!status?.connected) {
       erpHint = " ملحوظة: ربط ERP غير متصل؛ راجع صفحة مزامنة ERP.";
     } else if (!invoiceState || invoiceState.status !== "SUCCESS") {
-      erpHint = " ملحوظة: مزامنة فواتير ERP لسه مش مكتملة؛ راجع /dashboard/crm/erp وشغّل المزامنة لحد ما تبقى SUCCESS.";
+      erpHint = " ملحوظة: مزامنة فواتير ERP لسه مش مكتملة؛ راجع صفحة مزامنة ERP وشغّل المزامنة لحد ما تبقى SUCCESS.";
+    } else if (status.mirrorCounts.validInvoices === 0) {
+      erpHint = " ملحوظة: نسخة CRM مفيهاش فواتير بيع متزامنة حاليًا، رغم ظهور حالة نجاح المزامنة؛ راجع مصدر ERP والربط.";
+    } else if (status.mirrorCounts.erpCustomers === 0) {
+      erpHint = " ملحوظة: نسخة CRM مفيهاش عملاء ERP مربوطين؛ راجع مزامنة العملاء وربطهم بالفواتير.";
     } else {
-      erpHint = " تم العثور على صفر بهذا الفلتر، رغم تسجيل اكتمال مزامنة الفواتير؛ جرّب بحث أوسع أو راجع أسماء الخدمات والتواريخ.";
+      erpHint = " تم العثور على صفر بهذا الفلتر رغم وجود بيانات ERP؛ جرّب بحث أوسع أو راجع أسماء الخدمات والتواريخ.";
     }
   }
 
