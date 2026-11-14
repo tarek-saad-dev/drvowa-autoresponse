@@ -26,6 +26,7 @@ type ErpSyncStatus = {
   connected: boolean;
   mirrorCounts?: {
     erpCustomers: number;
+    erpCustomersWithoutPhone: number;
     validInvoices: number;
     unlinkedInvoices: number;
     invoiceLines: number;
@@ -264,6 +265,7 @@ export function ErpSyncPanel() {
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {[
                       { label: "عملاء ERP", value: status.mirrorCounts.erpCustomers },
+                      { label: "عملاء بدون رقم هاتف قابل للاستخدام", value: status.mirrorCounts.erpCustomersWithoutPhone },
                       { label: "فواتير بيع صحيحة", value: status.mirrorCounts.validInvoices },
                       { label: "بنود الفواتير", value: status.mirrorCounts.invoiceLines },
                       { label: "خدمات الكتالوج", value: status.mirrorCounts.catalogServices },
@@ -275,6 +277,11 @@ export function ErpSyncPanel() {
                       </div>
                     ))}
                   </div>
+                  {status.mirrorCounts.erpCustomersWithoutPhone > 0 ? (
+                    <Alert variant="warning">
+                      فيه {status.mirrorCounts.erpCustomersWithoutPhone.toLocaleString("ar-EG")} عميل من Cashier بدون رقم هاتف صالح محفوظ. العملاء دول لسه موجودين في CRM بمعرّف ERP، لكن مش ممكن إرسال واتساب ليهم إلا بعد تصحيح الرقم وموافقة التسويق.
+                    </Alert>
+                  ) : null}
                   {status.mirrorCounts.validInvoices === 0 ? (
                     <Alert variant="warning">
                       مفيش فواتير بيع في نسخة CRM حاليًا. لو Cashier فيه فواتير، اتأكد من الربط واضغط «مزامنة الآن» لحد ما مزامنة الفواتير تبقى SUCCESS.
