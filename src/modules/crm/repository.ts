@@ -2562,6 +2562,7 @@ export async function getCrmErpMirrorCounts(params: { businessId: string }) {
   const result = await query<{
     ErpCustomers: number;
     ErpCustomersWithoutPhone: number;
+    DuplicateInvoiceActivities: number;
     ValidInvoices: number;
     UnlinkedInvoices: number;
     InvoiceLines: number;
@@ -2575,6 +2576,14 @@ export async function getCrmErpMirrorCounts(params: { businessId: string }) {
           AND PrimaryPhoneNormalized IS NULL) AS ErpCustomersWithoutPhone,
       (SELECT COUNT_BIG(1) FROM dbo.TblErpInvoiceMirror
         WHERE BusinessID = @businessId AND IsValidSale = 1 AND IsDeleted = 0) AS ValidInvoices,
+      (SELECT COALESCE(SUM(repeats.ExtraCount), 0) FROM (
+        SELECT COUNT_BIG(1) - 1 AS ExtraCount
+        FROM dbo.TblCrmActivity
+        WHERE BusinessID = @businessId AND ActivityType = N'ERP_INVOICE'
+          AND RelatedEntityType = N'ERP_INVOICE' AND RelatedEntityID IS NOT NULL
+        GROUP BY RelatedEntityID
+        HAVING COUNT_BIG(1) > 1
+      ) AS repeats) AS DuplicateInvoiceActivities,
       (SELECT COUNT_BIG(1) FROM dbo.TblErpInvoiceMirror
         WHERE BusinessID = @businessId AND IsValidSale = 1 AND IsDeleted = 0 AND CustomerID IS NULL) AS UnlinkedInvoices,
       (SELECT COUNT_BIG(1) FROM dbo.TblErpInvoiceLineMirror
@@ -2587,6 +2596,7 @@ export async function getCrmErpMirrorCounts(params: { businessId: string }) {
   return {
     erpCustomers: Number(row?.ErpCustomers ?? 0),
     erpCustomersWithoutPhone: Number(row?.ErpCustomersWithoutPhone ?? 0),
+    duplicateInvoiceActivities: Number(row?.DuplicateInvoiceActivities ?? 0),
     validInvoices: Number(row?.ValidInvoices ?? 0),
     unlinkedInvoices: Number(row?.UnlinkedInvoices ?? 0),
     invoiceLines: Number(row?.InvoiceLines ?? 0),
