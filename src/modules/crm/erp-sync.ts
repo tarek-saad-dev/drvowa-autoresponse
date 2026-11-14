@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { NotFoundError, ValidationError } from "@/lib/tenancy/errors";
 import { callIntegrationTool } from "@/modules/integrations/connector-client";
+import { refreshExternalIntegrationManifest } from "@/modules/integrations/service";
 import type { IntegrationManifest } from "@/modules/integrations/contracts";
 import {
   getIntegrationByType,
@@ -738,7 +739,17 @@ export async function syncErpForBusiness(params: {
     throw new NotFoundError("ربط DRVO ERP غير مفعّل");
   }
 
-  const manifest = await loadManifest(integration);
+  // Source probe reads the LIVE manifest; sync must do the same.
+  // External pairing can leave CapabilitiesJson empty/stale even while its
+  // authenticated READ tools are currently reachable.
+  let manifest: IntegrationManifest;
+  try {
+    manifest = await refreshExternalIntegrationManifest({ integration });
+  } catch {
+    throw new ValidationError(
+      "تعذر تحديث أدوات Cashier الفعلية. جرّب «اختبار مصدر Cashier» وتحقق من الاتصال والتصريح.",
+    );
+  }
   // An ACTIVE connector and cached UI tool names are not proof that a sync
   // can run. Never report a successful no-op when its manifest lacks tools.
   for (const requiredTool of [
@@ -748,7 +759,7 @@ export async function syncErpForBusiness(params: {
   ]) {
     if (!hasTool(manifest, requiredTool)) {
       throw new ValidationError(
-        "ربط Cashier لا يعلن أداة المزامنة المطلوبة (" + requiredTool + "). أعد تهيئة التكامل ثم جرّب فحص المصدر.",
+        "مصدر Cashier الحالي لا يعلن أداة المزامنة المطلوبة (" + requiredTool + "). افحص المصدر ثم راجع إصدار Connector.",
       );
     }
   }
