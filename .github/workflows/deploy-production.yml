@@ -183,13 +183,36 @@ jobs:
             const last = records.recordset[0];
             const ageHours = last ? (Date.now() - new Date(last.finished).getTime()) / 3600000 : Infinity;
             const recent = Number.isFinite(ageHours) && ageHours >= 0 && ageHours <= 24;
-            if (!last || !recent || !(Number(last.bytes) > 0) || Boolean(last.damaged)) {
-              throw new Error("backup freshness or metadata validation failed");
+            // Distinguish absent, expired, invalid, and inaccessible backup evidence
+            // without logging credentials, server addresses, or connection strings.
+            if (!last) {
+              console.error("BLOCKED: no full SQL backup record found for the current database");
+              process.exitCode = 1;
+            } else if (!(Number(last.bytes) > 0) || Boolean(last.damaged)) {
+              console.error("BLOCKED: latest full SQL backup metadata is invalid or damaged");
+              process.exitCode = 1;
+            } else if (!recent) {
+              const ageBand = !Number.isFinite(ageHours) ? "unknown" :
+                ageHours < 0 ? "future timestamp (check SQL Server time zone/clock)" :
+                ageHours > 24 ? "older than 24 hours" : "unknown";
+              console.error("BLOCKED: latest full SQL backup is not recent: " + ageBand);
+              process.exitCode = 1;
+            } else {
+              console.log("PASS: production SQL full-backup record is <=24 hours old and not damaged");
+              console.log("NOTE: restore/VERIFYONLY proof is still an independent release prerequisite");
             }
-            console.log("PASS: production SQL full-backup record is <=24 hours old and not damaged");
-            console.log("NOTE: restore/VERIFYONLY proof is still an independent release prerequisite");
-          } catch {
-            console.error("BLOCKED: recent SQL full-backup evidence unavailable; no deployment mutations performed");
+          } catch (error) {
+            const number = Number(error?.number ?? error?.originalError?.info?.number);
+            const code = String(error?.code ?? "");
+            let reason = "unexpected SQL backup metadata check error (operator review required)";
+            if ([229, 230, 297].includes(number)) {
+              reason = "SQL account lacks permission to read msdb backup metadata";
+            } else if (code === "ELOGIN") {
+              reason = "SQL authentication rejected";
+            } else if (["ETIMEOUT", "ESOCKET", "ECONNCLOSED"].includes(code)) {
+              reason = "SQL connection or timeout error";
+            }
+            console.error("BLOCKED: " + reason + "; no deployment mutations performed");
             process.exitCode = 1;
           } finally {
             if (pool) await pool.close();

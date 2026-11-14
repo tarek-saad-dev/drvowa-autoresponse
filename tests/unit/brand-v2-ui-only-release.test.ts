@@ -40,7 +40,17 @@ describe("DRVO Brand V2 visual-only deployment invariants", () => {
 
   it("retains SQL backup gate for all other releases and app rollback for UI failures", () => {
     expect(deploy).toContain("recent production SQL full-backup metadata");
-    expect(deploy).toContain("BLOCKED: recent SQL full-backup evidence unavailable");
+    // The diagnostic wording is intentionally classified, not one generic error.
+    // Retain the fail-closed gate on missing, invalid, stale, or inaccessible backups.
+    expect(deploy).toContain("no full SQL backup record found for the current database");
+    expect(deploy).toContain("latest full SQL backup metadata is invalid or damaged");
+    expect(deploy).toContain("latest full SQL backup is not recent");
+    expect(deploy).toContain("SQL account lacks permission to read msdb backup metadata");
+    expect(deploy).toContain("ageHours >= 0 && ageHours <= 24");
+    expect(deploy).toContain("process.exitCode = 1");
+    expect(deploy.indexOf("recent production SQL full-backup metadata")).toBeLessThan(
+      deploy.indexOf('git checkout --detach "$DEPLOY_SHA"'),
+    );
     expect(deploy).toContain("rollback_visual_release");
     expect(deploy).toContain('git checkout --detach "$CURRENT_SHA"');
   });
