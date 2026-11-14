@@ -17,11 +17,10 @@ import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { InboxPanel, type ConversationRow } from "@/components/dashboard/inbox-panel";
 
 describe("inbox viewport and UX layout contract", () => {
-  it("pins the inbox to the viewport while keeping the shared sidebar", () => {
+  it("pins the inbox to the viewport with a shared desktop top nav instead of a sidebar", () => {
     navigation.pathname = "/dashboard/inbox";
     /* eslint-disable react/no-children-prop -- createElement test harness */
     const html = renderToStaticMarkup(createElement(DashboardShell, {
-      sidebar: createElement("div", null, "normal-sidebar"),
       topbar: createElement("div", null, "normal-topbar"),
       mobileNav: createElement("div", null, "normal-mobile-nav"),
       children: createElement("div", null, "chat"),
@@ -30,8 +29,9 @@ describe("inbox viewport and UX layout contract", () => {
     expect(html).toContain("fixed inset-0");
     expect(html).toContain("h-[100dvh]");
     expect(html).toContain("flex min-h-0 min-w-0 flex-1 overflow-hidden p-0");
-    expect(html).toContain("normal-sidebar");
-    expect(html).not.toContain("normal-topbar");
+    expect(html).not.toContain("normal-sidebar");
+    expect(html).toContain("normal-topbar");
+    expect(html).toContain("hidden shrink-0 md:block");
     expect(html).toContain("normal-mobile-nav");
   });
 
@@ -39,16 +39,16 @@ describe("inbox viewport and UX layout contract", () => {
     navigation.pathname = "/dashboard";
     /* eslint-disable react/no-children-prop -- createElement test harness */
     const html = renderToStaticMarkup(createElement(DashboardShell, {
-      sidebar: createElement("div", null, "normal-sidebar"),
       topbar: createElement("div", null, "normal-topbar"),
       mobileNav: createElement("div", null, "normal-mobile-nav"),
       children: createElement("div", null, "content"),
     }));
     /* eslint-enable react/no-children-prop */
-    expect(html).toContain("normal-sidebar");
+    expect(html).not.toContain("normal-sidebar");
     expect(html).toContain("normal-topbar");
     expect(html).toContain("normal-mobile-nav");
     expect(html).not.toContain("fixed inset-0");
+    expect(html).toContain("min-h-full min-w-0 flex-1 flex-col");
   });
 
   it("lists an open escalation in the follow-up filter even when the bot is in AUTO mode", () => {

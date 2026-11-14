@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { DashboardSidebar } from "@/components/dashboard/sidebar";
 import { MobileNav } from "@/components/dashboard/mobile-nav";
 import { DashboardTopbar } from "@/components/dashboard/topbar";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
@@ -53,16 +52,11 @@ export default async function DashboardLayout({
 
   return (
     <DashboardShell
-      sidebar={
-        <DashboardSidebar
-          showPlatformAdminLink={showPlatformAdminLink}
-          userName={user.fullName}
-          planName={planName}
-        />
-      }
       topbar={
         <DashboardTopbar
           userName={user.fullName}
+          planName={planName}
+          showPlatformAdminLink={showPlatformAdminLink}
           businesses={businesses}
           activeBusinessId={activeBusinessId}
         />
