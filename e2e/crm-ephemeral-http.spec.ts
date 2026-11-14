@@ -251,12 +251,52 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
     });
     expect((revalidated.eligiblePhones as string[]).length).toBe(1);
     expect((revalidated.eligiblePhones as string[])[0]).toBe(phoneAlpha);
-    // There is no WhatsApp send, campaign draft or real Cashier connection in this test.
+
+    // Test an actual persisted DRAFT through the same API sequence as Campaign Builder,
+    // using ONLY the one synthetic phone revalidated on the selected channel.
+    // This path never calls WhatsApp runtime/launch/send.
+    const testList = await postJson(request, "/api/whatsapp/lists", {
+      name: `Synthetic CRM list ${randomUUID().slice(0, 8)}`,
+      channelConnectionId: channelA,
+    });
+    const listInfo = testList.list as { id: string; channelConnectionId: string };
+    expect(listInfo.channelConnectionId).toBe(channelA);
+    const added = await postJson(
+      request, `/api/whatsapp/lists/${encodeURIComponent(listInfo.id)}/members`,
+      { text: phoneAlpha },
+    );
+    expect(added.sendsMessages).toBe(false);
+    expect(added.total).toBe(1);
+
+    const draft = await postJson(request, "/api/whatsapp/label-campaigns", {
+      channelConnectionId: channelA,
+      labelId: listInfo.id,
+      messageText: "Synthetic CI test draft, do not send.",
+    });
+    expect(draft.sendingEnabled).toBe(false);
+    expect((draft.drafts as Array<{draftId: string; status: string}>).length).toBe(1);
+    expect((draft.drafts as Array<{draftId: string; status: string}>)[0]?.status).toBe("DRAFT");
+    const stored = await query<{ Status: string; PhoneCount: number }>(
+      `SELECT d.Status,
+         (SELECT COUNT(1) FROM dbo.TblWhatsAppContactLabel cl
+          WHERE cl.BusinessID=d.BusinessID
+            AND cl.ChannelConnectionID=d.ChannelConnectionID
+            AND cl.ProviderLabelID=d.ProviderLabelID AND cl.IsActive=1) AS PhoneCount
+       FROM dbo.TblWhatsAppLabelCampaignDraft d
+       WHERE d.BusinessID=@business AND d.CampaignDraftID=@draft`,
+      [
+        { name: "business", type: sql.UniqueIdentifier, value: businessId! },
+        { name: "draft", type: sql.UniqueIdentifier, value: (draft.drafts as Array<{draftId:string}>)[0]!.draftId },
+      ],
+    );
+    expect(stored.recordset[0]?.Status).toBe("DRAFT");
+    expect(Number(stored.recordset[0]?.PhoneCount)).toBe(1);
+    // There is no WhatsApp send or real Cashier connection in this test.
     expect(calls).toContain("manifest");
     expect(calls).toContain("customer.list_changes:append");
     expect(calls).toContain("invoice.list_changes:append");
     expect(calls).toContain("catalog.list_services:append");
-    console.log("CRM_EPHEMERAL_HTTP_PASS synthetic-app-runtime+sql+erp-emulator no-send");
+    console.log("CRM_EPHEMERAL_HTTP_PASS synthetic-app-runtime+sql+erp-emulator+draft no-send");
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await closePool().catch(() => undefined);
