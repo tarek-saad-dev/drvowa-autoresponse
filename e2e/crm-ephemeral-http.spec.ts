@@ -428,6 +428,59 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
     expect(invalidInvoice.recordset[0]?.ExternalClientId).toBe("104");
     expect(invalidInvoice.recordset[0]?.CustomerID).toBeTruthy();
 
+    // Regression for production nginx 504: each HTTP request MUST import just
+    // one bounded page of one requested resource and persist a resumable
+    // PARTIAL cursor. This uses the isolated SQL server above, never production.
+    for (let i = 0; i < 26; i += 1) {
+      SAMPLE.push({
+        clientId: 107 + i,
+        name: "Synthetic Chunk " + i,
+        mobile: "010" + String(70000000 + i),
+        phone: "010" + String(70000000 + i),
+        email: "chunk" + i + "@example.test",
+      });
+    }
+    const firstCustomerBatch = await postJson(request, "/api/crm/erp/sync", { resource: "customers" });
+    const firstCustomers = firstCustomerBatch.result as {
+      customers:{synced:number;skipped:boolean};
+      invoices:{synced:number;skipped:boolean};
+      catalog:{synced:number;skipped:boolean};
+    };
+    expect(firstCustomerBatch.resource).toBe("customers");
+    expect(firstCustomers.customers.synced).toBe(25);
+    expect(firstCustomers.invoices.skipped).toBe(true);
+    expect(firstCustomers.catalog.skipped).toBe(true);
+    expect((firstCustomerBatch.status as {resources:Array<{resource:string;status:string}>}).resources)
+      .toEqual(expect.arrayContaining([expect.objectContaining({resource:"customers",status:"PARTIAL"})]));
+    const secondCustomerBatch = await postJson(request, "/api/crm/erp/sync", { resource: "customers" });
+    expect((secondCustomerBatch.status as { mirrorCounts:{erpCustomers:number} }).mirrorCounts.erpCustomers).toBe(32);
+    expect((secondCustomerBatch.status as { resources:Array<{resource:string;status:string}> }).resources)
+      .toEqual(expect.arrayContaining([expect.objectContaining({resource:"customers",status:"SUCCESS"})]));
+
+    for (let i = 0; i < 11; i += 1) {
+      invoices.push({
+        invId: 205 + i, invType: "مبيعات", clientId: 101,
+        clientName: "Synthetic Alpha", mobile: SAMPLE[0]!.mobile,
+        invDate: TODAY, status: "active", isActive: "no", grandTotal: 25,
+        lines: [{ proId: 15, proType: "serv", proName: "بروتين", qty: 1, sPrice: 25, lineTotal: 25 }],
+      });
+    }
+    const firstInvoiceBatch = await postJson(request, "/api/crm/erp/sync", { resource: "invoices" });
+    expect((firstInvoiceBatch.result as {invoices:{synced:number}}).invoices.synced).toBe(10);
+    expect((firstInvoiceBatch.status as { resources:Array<{resource:string;status:string}> }).resources)
+      .toEqual(expect.arrayContaining([expect.objectContaining({resource:"invoices",status:"PARTIAL"})]));
+    const finalInvoiceBatch = await postJson(request, "/api/crm/erp/sync", { resource: "invoices" });
+    expect((finalInvoiceBatch.status as { mirrorCounts:{validInvoices:number} }).mirrorCounts.validInvoices).toBe(14);
+    expect((finalInvoiceBatch.status as { resources:Array<{resource:string;status:string}> }).resources)
+      .toEqual(expect.arrayContaining([expect.objectContaining({resource:"invoices",status:"SUCCESS"})]));
+
+    // A malformed resource must be rejected before any ERP writes.
+    const invalidResource = await request.post("/api/crm/erp/sync", {
+      data: { resource: "unknown" },
+      headers: { Origin: "http://localhost:3000" },
+    });
+    expect(invalidResource.status()).toBe(400);
+
     // No customer data is dropped just because a phone is bad; no WhatsApp
     // recipients are inferred for phone-less ERP customers.
     // There is no WhatsApp send or real Cashier connection in this test.
