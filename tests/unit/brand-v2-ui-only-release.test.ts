@@ -29,11 +29,13 @@ describe("DRVO Brand V2 visual-only deployment invariants", () => {
   });
 
   it("never migrates data, rewrites feature flags, or restarts the worker in visual mode", () => {
-    expect(deploy).toContain('if [ "$VISUAL_ONLY" != 1 ] && [ "$BRAND_ASSETS_ONLY" != 1 ]; then');
+    expect(deploy).toContain('if [ "$VISUAL_ONLY" != 1 ] && [ "$BRAND_ASSETS_ONLY" != 1 ] && [ "$PULSE_TEAM_ONLY" != 1 ]; then');
     expect(deploy).toContain('echo "==> UI-only release: SQL migrations explicitly skipped"');
     expect(deploy).toContain("preserving all existing production secrets and feature flags");
     expect(deploy).toContain("AI worker stays running without restart");
     expect(deploy).toContain("no SQL or billing scheduler modifications");
+    expect(deploy).toContain('"release(pulse-team-chat-no-db):"*');
+    expect(deploy).toContain("BLOCKED: non-UI file in no-DB Pulse team release");
   });
 
   it("retains SQL backup gate for all other releases and app rollback for UI failures", () => {
