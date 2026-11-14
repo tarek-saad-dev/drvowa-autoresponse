@@ -205,6 +205,7 @@ export type AudiencePredicate =
   | { type: "has_phone"; value: boolean }
   | { type: "last_interaction"; op: "before_days_ago" | "within_days" | "between"; days?: number; from?: string; to?: string }
   | { type: "erp_last_visit"; op: "before_days_ago" | "within_days" | "between"; days?: number; from?: string; to?: string }
+  | { type: "erp_invoice_date"; op: "between"; from: string; to: string }
   | { type: "erp_spend"; op: "gte" | "lte" | "between"; amount?: number; min?: number; max?: number; windowDays?: number }
   | { type: "erp_visits"; op: "gte" | "lte" | "eq"; count: number; windowDays?: number }
   | { type: "erp_service"; op: "name_contains" | "pro_id_in" | "category_contains"; values: string[]; minTimes?: number; windowDays?: number; from?: string; to?: string }
