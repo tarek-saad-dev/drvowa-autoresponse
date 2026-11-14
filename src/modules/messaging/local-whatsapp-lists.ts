@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { query, sql, withTransaction, type QueryInput } from "@/lib/db";
+import { normalizeUuid } from "@/lib/ids/uuid";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/tenancy/errors";
 import { upsertContact } from "./repository";
 
@@ -85,7 +86,7 @@ export async function createDrvoList(params: {
       if (!chosen.recordset.length) {
         throw new ConflictError("قناة واتساب المحددة غير نشطة أو غير موجودة.");
       }
-      channelConnectionId = chosen.recordset[0].ChannelConnectionID;
+      channelConnectionId = normalizeUuid(chosen.recordset[0].ChannelConnectionID);
     } else {
       const channels = await trx.query<ChannelRow>(
         `SELECT TOP(2) ChannelConnectionID FROM dbo.TblChannelConnection
@@ -100,7 +101,7 @@ export async function createDrvoList(params: {
       if (channels.recordset.length > 1) {
         throw new ConflictError("في أكتر من رقم واتساب نشط؛ حدد الرقم قبل إنشاء قائمة.");
       }
-      channelConnectionId = channels.recordset[0].ChannelConnectionID;
+      channelConnectionId = normalizeUuid(channels.recordset[0].ChannelConnectionID);
     }
     const id = DRVO_LIST_PREFIX + randomUUID();
     const inputs = [
