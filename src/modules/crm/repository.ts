@@ -2524,6 +2524,7 @@ export async function enrichAudienceMarketingEligibility(params: {
 export async function getCrmErpMirrorCounts(params: { businessId: string }) {
   const result = await query<{
     ErpCustomers: number;
+    ErpCustomersWithoutPhone: number;
     ValidInvoices: number;
     UnlinkedInvoices: number;
     InvoiceLines: number;
@@ -2532,6 +2533,9 @@ export async function getCrmErpMirrorCounts(params: { businessId: string }) {
     `SELECT
       (SELECT COUNT_BIG(1) FROM dbo.TblCrmCustomer
         WHERE BusinessID = @businessId AND ExternalErpClientId IS NOT NULL AND Status <> N'MERGED') AS ErpCustomers,
+      (SELECT COUNT_BIG(1) FROM dbo.TblCrmCustomer
+        WHERE BusinessID = @businessId AND ExternalErpClientId IS NOT NULL AND Status <> N'MERGED'
+          AND PrimaryPhoneNormalized IS NULL) AS ErpCustomersWithoutPhone,
       (SELECT COUNT_BIG(1) FROM dbo.TblErpInvoiceMirror
         WHERE BusinessID = @businessId AND IsValidSale = 1 AND IsDeleted = 0) AS ValidInvoices,
       (SELECT COUNT_BIG(1) FROM dbo.TblErpInvoiceMirror
@@ -2545,6 +2549,7 @@ export async function getCrmErpMirrorCounts(params: { businessId: string }) {
   const row = result.recordset[0];
   return {
     erpCustomers: Number(row?.ErpCustomers ?? 0),
+    erpCustomersWithoutPhone: Number(row?.ErpCustomersWithoutPhone ?? 0),
     validInvoices: Number(row?.ValidInvoices ?? 0),
     unlinkedInvoices: Number(row?.UnlinkedInvoices ?? 0),
     invoiceLines: Number(row?.InvoiceLines ?? 0),
