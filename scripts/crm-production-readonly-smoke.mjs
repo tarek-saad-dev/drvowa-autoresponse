@@ -4,6 +4,8 @@
  */
 const routes = [
   { name: "AutoRespond public health", url: "https://app.drvotech.com/api/health", kind: "health" },
+  { name: "AutoRespond database readiness", url: "https://app.drvotech.com/api/health?ready=1", kind: "crm-db-ready" },
+  { name: "Cashier app+SQL readiness", url: "https://ops.cutsaloon.com/api/health/ready", kind: "health" },
   { name: "AutoRespond CRM auth boundary", url: "https://app.drvotech.com/api/crm/erp/sync", kind: "protected" },
   { name: "Cashier login page", url: "https://ops.cutsaloon.com/login", kind: "page" },
   { name: "Cashier connector auth boundary", url: "https://ops.cutsaloon.com/api/integrations/drvowa/v1/manifest", kind: "protected" },
@@ -21,6 +23,12 @@ for (const { name, url, kind } of routes) {
     const status = res.status;
     let result = "FAIL";
     if (kind === "health") result = status === 200 ? "LIVE" : "FAIL";
+    if (kind === "crm-db-ready") {
+      if (status === 200) {
+        const body = await res.json().catch(() => ({}));
+        result = body && typeof body === "object" && body.database === "up" ? "DB_UP" : "FAIL_DB_NOT_READY";
+      } else result = "FAIL";
+    }
     if (kind === "page") result = status === 200 || (status >= 300 && status < 400) ? "LIVE" : "FAIL";
     if (kind === "protected") {
       result = [401, 403].includes(status)
