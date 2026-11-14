@@ -39,7 +39,13 @@ node --import tsx scripts/crm-staging-http-smoke.ts --paired
 
 # Phase D — AI preview on staging only; server holds GEMINI_API_KEY.
 export CRM_STAGING_ENABLE_AI=YES_STAGING_ONLY
+# Required if multiple active test WhatsApp channels:
+export CRM_STAGING_CHANNEL_ID="<approved staging ChannelConnectionID>"
 node --import tsx scripts/crm-staging-http-smoke.ts --paired
+
+# To prove positive matching, use a separately verified historical interval
+# on staging and pass the exact Arabic request as CRM_STAGING_AI_REQUEST.
+# Spend refinement is checked against that audience; no WhatsApp send occurs.
 
 # Optional staging CRM snapshot (DB write, no campaign send):
 export CRM_STAGING_ENABLE_SNAPSHOT=YES_STAGING_ONLY
