@@ -194,6 +194,19 @@ async function ensureCrmCustomerFromErp(params: {
   return created.customerId;
 }
 
+/**
+ * Bound each HTTP request to one append page and, only at the end of the
+ * initial append stream, one small reconciliation page. Do not combine
+ * thousands of ERP records in a single nginx request.
+ */
+export const CRM_ERP_SYNC_BATCH = {
+  customers: 25,
+  invoices: 10,
+  catalog: 40,
+} as const;
+const MAX_APPEND_PAGES_PER_REQUEST = 1;
+const MAX_RECONCILE_PAGES_PER_REQUEST = 1;
+
 async function syncCustomers(params: {
   businessId: string;
   integration: Awaited<ReturnType<typeof getIntegrationByType>>;
@@ -238,7 +251,7 @@ async function syncCustomers(params: {
       }
     };
 
-    while (pages < 16) {
+    while (pages < MAX_APPEND_PAGES_PER_REQUEST) {
       pages += 1;
       const result = await callIntegrationTool({
         integration: params.integration,
@@ -247,7 +260,7 @@ async function syncCustomers(params: {
           sinceClientId: cursor.sinceClientId ?? 0,
           identitySweepSinceClientId: cursor.identitySweepSinceClientId ?? 0,
           identitySweep: false,
-          limit: 200,
+          limit: CRM_ERP_SYNC_BATCH.customers,
         },
         requestId: randomUUID(),
       });
@@ -282,14 +295,14 @@ async function syncCustomers(params: {
         cursorJson: JSON.stringify(cursor),
         status: "RUNNING",
       });
-      if (isErpAppendPageExhausted(customers.length, 200)) {
+      if (isErpAppendPageExhausted(customers.length, CRM_ERP_SYNC_BATCH.customers)) {
         appendComplete = true;
         break;
       }
     }
 
     // One rotating identity-sweep page per sync so existing client edits are not missed.
-    while (pages < 20) {
+    while (appendComplete && pages < MAX_APPEND_PAGES_PER_REQUEST + MAX_RECONCILE_PAGES_PER_REQUEST) {
       pages += 1;
       const result = await callIntegrationTool({
         integration: params.integration,
@@ -298,7 +311,7 @@ async function syncCustomers(params: {
           sinceClientId: cursor.sinceClientId ?? 0,
           identitySweepSinceClientId: cursor.identitySweepSinceClientId ?? 0,
           identitySweep: true,
-          limit: 200,
+          limit: CRM_ERP_SYNC_BATCH.customers,
         },
         requestId: randomUUID(),
       });
@@ -462,7 +475,7 @@ async function syncInvoices(params: {
     };
 
     // 1) Append-only stream for new invoice IDs (includes newly inserted cancelled rows).
-    while (pages < 16) {
+    while (pages < MAX_APPEND_PAGES_PER_REQUEST) {
       pages += 1;
       const result = await callIntegrationTool({
         integration: params.integration,
@@ -472,7 +485,7 @@ async function syncInvoices(params: {
           statusSweepSinceInvId: cursor.statusSweepSinceInvId ?? 0,
           includeInactive: true,
           statusSweep: false,
-          limit: 100,
+          limit: CRM_ERP_SYNC_BATCH.invoices,
         },
         requestId: randomUUID(),
       });
@@ -506,14 +519,14 @@ async function syncInvoices(params: {
         cursorJson: JSON.stringify(cursor),
         status: "RUNNING",
       });
-      if (isErpAppendPageExhausted(invoices.length, 100)) {
+      if (isErpAppendPageExhausted(invoices.length, CRM_ERP_SYNC_BATCH.invoices)) {
         appendComplete = true;
         break;
       }
     }
 
     // 2) Rotating status sweep so late cancellations of already-synced IDs are not missed.
-    while (pages < 20) {
+    while (appendComplete && pages < MAX_APPEND_PAGES_PER_REQUEST + MAX_RECONCILE_PAGES_PER_REQUEST) {
       pages += 1;
       const result = await callIntegrationTool({
         integration: params.integration,
@@ -523,7 +536,7 @@ async function syncInvoices(params: {
           statusSweepSinceInvId: cursor.statusSweepSinceInvId ?? 0,
           statusSweep: true,
           includeInactive: true,
-          limit: 100,
+          limit: CRM_ERP_SYNC_BATCH.invoices,
         },
         requestId: randomUUID(),
       });
@@ -630,7 +643,7 @@ async function syncCatalog(params: {
       }
     };
 
-    while (pages < 16) {
+    while (pages < MAX_APPEND_PAGES_PER_REQUEST) {
       pages += 1;
       const result = await callIntegrationTool({
         integration: params.integration,
@@ -639,7 +652,7 @@ async function syncCatalog(params: {
           sinceProId: cursor.sinceProId ?? 0,
           identitySweepSinceProId: cursor.identitySweepSinceProId ?? 0,
           identitySweep: false,
-          limit: 200,
+          limit: CRM_ERP_SYNC_BATCH.catalog,
         },
         requestId: randomUUID(),
       });
@@ -674,13 +687,13 @@ async function syncCatalog(params: {
         cursorJson: JSON.stringify(cursor),
         status: "RUNNING",
       });
-      if (isErpAppendPageExhausted(services.length, 200)) {
+      if (isErpAppendPageExhausted(services.length, CRM_ERP_SYNC_BATCH.catalog)) {
         appendComplete = true;
         break;
       }
     }
 
-    while (pages < 20) {
+    while (appendComplete && pages < MAX_APPEND_PAGES_PER_REQUEST + MAX_RECONCILE_PAGES_PER_REQUEST) {
       pages += 1;
       const result = await callIntegrationTool({
         integration: params.integration,
@@ -689,7 +702,7 @@ async function syncCatalog(params: {
           sinceProId: cursor.sinceProId ?? 0,
           identitySweepSinceProId: cursor.identitySweepSinceProId ?? 0,
           identitySweep: true,
-          limit: 200,
+          limit: CRM_ERP_SYNC_BATCH.catalog,
         },
         requestId: randomUUID(),
       });
