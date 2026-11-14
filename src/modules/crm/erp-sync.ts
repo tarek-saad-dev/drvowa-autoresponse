@@ -15,6 +15,14 @@ const RESOURCE_CUSTOMERS = "customers";
 const RESOURCE_INVOICES = "invoices";
 const RESOURCE_CATALOG = "catalog";
 
+/** A full page may have successors. Only an empty/short append page proves completion.
+ * Rotating history sweeps are bounded separately; they do not complete the append stream.
+ */
+export function isErpAppendPageExhausted(rowsInPage: number, pageSize: number): boolean {
+  return rowsInPage < pageSize;
+}
+
+
 type CursorBag = Record<string, unknown>;
 
 function parseCursor(raw: string | null | undefined): CursorBag {
@@ -188,6 +196,7 @@ async function syncCustomers(params: {
     let cursor = parseCursor(state?.cursorJson);
     let synced = 0;
     let pages = 0;
+    let appendComplete = false;
 
     const applyCustomerPage = async (customers: unknown[]) => {
       for (const item of customers) {
@@ -224,13 +233,18 @@ async function syncCustomers(params: {
       }
       const data = asRecord(result.data);
       const customers = asArray(data?.customers);
-      if (!customers.length) break;
+      if (!customers.length) {
+        appendComplete = true;
+        break;
+      }
 
       await applyCustomerPage(customers);
 
       const next = asRecord(data?.nextCursor) ?? {};
       const nextId = num(next.sinceClientId ?? next.clientId);
-      if (nextId == null || nextId === Number(cursor.sinceClientId ?? -1)) break;
+      if (nextId == null || nextId <= Number(cursor.sinceClientId ?? 0)) {
+        throw new ValidationError("توقفت مزامنة العملاء: المؤشر لم يتقدم");
+      }
       cursor = {
         ...cursor,
         ...next,
@@ -245,7 +259,10 @@ async function syncCustomers(params: {
         cursorJson: JSON.stringify(cursor),
         status: "RUNNING",
       });
-      if (customers.length < 200) break;
+      if (isErpAppendPageExhausted(customers.length, 200)) {
+        appendComplete = true;
+        break;
+      }
     }
 
     // One rotating identity-sweep page per sync so existing client edits are not missed.
@@ -287,7 +304,7 @@ async function syncCustomers(params: {
       break;
     }
 
-    const incomplete = pages >= 20;
+    const incomplete = !appendComplete;
     await repo.upsertErpSyncState({
       businessId: params.businessId,
       integrationId: params.integration.integrationId,
@@ -339,6 +356,7 @@ async function syncInvoices(params: {
     let cursor = parseCursor(state?.cursorJson);
     let synced = 0;
     let pages = 0;
+    let appendComplete = false;
 
     const applyInvoicePage = async (invoices: unknown[], opts: { recordActivity: boolean }) => {
       for (const item of invoices) {
@@ -440,13 +458,18 @@ async function syncInvoices(params: {
       }
       const data = asRecord(result.data);
       const invoices = asArray(data?.invoices);
-      if (!invoices.length) break;
+      if (!invoices.length) {
+        appendComplete = true;
+        break;
+      }
 
       await applyInvoicePage(invoices, { recordActivity: true });
 
       const next = asRecord(data?.nextCursor) ?? {};
       const nextId = num(next.sinceInvId ?? next.invId);
-      if (nextId == null || nextId === Number(cursor.sinceInvId ?? -1)) break;
+      if (nextId == null || nextId <= Number(cursor.sinceInvId ?? 0)) {
+        throw new ValidationError("توقفت مزامنة الفواتير: المؤشر لم يتقدم");
+      }
       cursor = {
         ...cursor,
         ...next,
@@ -460,7 +483,10 @@ async function syncInvoices(params: {
         cursorJson: JSON.stringify(cursor),
         status: "RUNNING",
       });
-      if (invoices.length < 100) break;
+      if (isErpAppendPageExhausted(invoices.length, 100)) {
+        appendComplete = true;
+        break;
+      }
     }
 
     // 2) Rotating status sweep so late cancellations of already-synced IDs are not missed.
@@ -507,7 +533,7 @@ async function syncInvoices(params: {
       break;
     }
 
-    const incomplete = pages >= 20;
+    const incomplete = !appendComplete;
     await repo.upsertErpSyncState({
       businessId: params.businessId,
       integrationId: params.integration.integrationId,
@@ -559,6 +585,7 @@ async function syncCatalog(params: {
     let cursor = parseCursor(state?.cursorJson);
     let synced = 0;
     let pages = 0;
+    let appendComplete = false;
 
     const applyCatalogPage = async (services: unknown[]) => {
       for (const item of services) {
@@ -598,13 +625,18 @@ async function syncCatalog(params: {
       }
       const data = asRecord(result.data);
       const services = asArray(data?.services ?? data?.items);
-      if (!services.length) break;
+      if (!services.length) {
+        appendComplete = true;
+        break;
+      }
 
       await applyCatalogPage(services);
 
       const next = asRecord(data?.nextCursor) ?? {};
       const nextId = num(next.sinceProId ?? next.proId);
-      if (nextId == null || nextId === Number(cursor.sinceProId ?? -1)) break;
+      if (nextId == null || nextId <= Number(cursor.sinceProId ?? 0)) {
+        throw new ValidationError("توقفت مزامنة الكتالوج: المؤشر لم يتقدم");
+      }
       cursor = {
         ...cursor,
         ...next,
@@ -619,7 +651,10 @@ async function syncCatalog(params: {
         cursorJson: JSON.stringify(cursor),
         status: "RUNNING",
       });
-      if (services.length < 200) break;
+      if (isErpAppendPageExhausted(services.length, 200)) {
+        appendComplete = true;
+        break;
+      }
     }
 
     while (pages < 20) {
@@ -660,7 +695,7 @@ async function syncCatalog(params: {
       break;
     }
 
-    const incomplete = pages >= 20;
+    const incomplete = !appendComplete;
     await repo.upsertErpSyncState({
       businessId: params.businessId,
       integrationId: params.integration.integrationId,
