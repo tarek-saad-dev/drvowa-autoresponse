@@ -9,7 +9,7 @@ import {
   INTEGRATION_TYPE_DRVO_ERP,
 } from "@/modules/integrations/repository";
 
-import { normalizeCrmPhone } from "./phone";
+import { normalizeErpCustomerPhone } from "./erp-phone";
 import * as repo from "./repository";
 
 const RESOURCE_CUSTOMERS = "customers";
@@ -109,27 +109,42 @@ async function ensureCrmCustomerFromErp(params: {
   phone: string | null;
   email: string | null;
 }): Promise<string | null> {
+  // Don't trust a source phone just because an initial normalization returned
+  // digits: repository.createCustomer/updateCustomer normalize it AGAIN.
+  // Invalid or ambiguous numbers are not WhatsApp recipients; stable ERP IDs
+  // still allow retaining those customers and attaching later invoices.
+  const phone = normalizeErpCustomerPhone(params.mobile, params.phone);
+
   if (params.clientId) {
     const byErp = await repo.getCustomerByErpClientId({
       businessId: params.businessId,
       externalErpClientId: params.clientId,
     });
     if (byErp) {
-      // Safe ERP identity reconciliation: update name/phone/email from ERP when present.
-      // Never touches notes, tags, or assignments.
-      const phone = normalizeCrmPhone(params.mobile) ?? normalizeCrmPhone(params.phone);
+      // Preserve existing CRM contact/assignment when the incoming ERP phone
+      // is malformed or missing; never re-submit an old invalid phone value.
       const nextName = params.name?.trim() || byErp.fullName;
-      const nextPhone = phone ?? byErp.primaryPhoneNormalized;
       const nextEmail = params.email?.trim() || byErp.email;
-      const changed =
-        nextName !== byErp.fullName
-        || nextPhone !== byErp.primaryPhoneNormalized
-        || nextEmail !== byErp.email;
-      if (changed) {
+      let phoneForUpdate = phone;
+      if (phone && phone !== byErp.primaryPhoneNormalized) {
+        const phoneOwner = await repo.getCustomerByPhone({
+          businessId: params.businessId,
+          phoneNormalized: phone,
+        });
+        // A shared phone must not overwrite a *different* customer's
+        // primary phone on later sync runs; this also keeps sync idempotent.
+        if (phoneOwner && phoneOwner.customerId !== byErp.customerId) {
+          phoneForUpdate = null;
+        }
+      }
+      const phoneChanged = Boolean(
+        phoneForUpdate && phoneForUpdate !== byErp.primaryPhoneNormalized,
+      );
+      if (phoneChanged || nextName !== byErp.fullName || nextEmail !== byErp.email) {
         await repo.updateCustomer({
           businessId: params.businessId,
           customerId: byErp.customerId,
-          primaryPhoneNormalized: nextPhone,
+          ...(phoneChanged ? { primaryPhoneNormalized: phoneForUpdate } : {}),
           email: nextEmail,
           fullName: nextName,
           externalErpClientId: params.clientId,
@@ -139,31 +154,38 @@ async function ensureCrmCustomerFromErp(params: {
     }
   }
 
-  const phone = normalizeCrmPhone(params.mobile) ?? normalizeCrmPhone(params.phone);
+  let phoneForCreation = phone;
   if (phone) {
     const byPhone = await repo.getCustomerByPhone({
       businessId: params.businessId,
       phoneNormalized: phone,
     });
     if (byPhone) {
-      if (!byPhone.externalErpClientId && params.clientId) {
-        await repo.updateCustomer({
-          businessId: params.businessId,
-          customerId: byPhone.customerId,
-          externalErpClientId: params.clientId,
-          email: byPhone.email ?? params.email,
-        });
+      // A reused/duplicate phone is NOT evidence that two different Cashier
+      // client IDs are the same person. Keep their ERP identities separate.
+      if (params.clientId && byPhone.externalErpClientId &&
+        byPhone.externalErpClientId !== params.clientId) {
+        phoneForCreation = null;
+      } else {
+        if (!byPhone.externalErpClientId && params.clientId) {
+          await repo.updateCustomer({
+            businessId: params.businessId,
+            customerId: byPhone.customerId,
+            externalErpClientId: params.clientId,
+            email: byPhone.email ?? params.email,
+          });
+        }
+        return byPhone.customerId;
       }
-      return byPhone.customerId;
     }
   }
 
-  if (!params.clientId && !phone) return null;
+  if (!params.clientId && !phoneForCreation) return null;
 
   const created = await repo.createCustomer({
     businessId: params.businessId,
-    fullName: params.name?.trim() || `عميل ERP ${params.clientId ?? phone ?? ""}`.trim(),
-    primaryPhoneNormalized: phone,
+    fullName: params.name?.trim() || `عميل ERP ${params.clientId ?? phoneForCreation ?? ""}`.trim(),
+    primaryPhoneNormalized: phoneForCreation,
     email: params.email,
     source: "ERP",
     status: "ACTIVE",
