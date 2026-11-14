@@ -20,6 +20,7 @@ export type CompiledAudienceQuery = {
 
 type CompileCtx = {
   businessId: string;
+  channelConnectionId: string | null;
   inputs: QueryInput[];
   paramIndex: number;
 };
@@ -215,15 +216,20 @@ function compilePredicate(pred: AudiencePredicate, ctx: CompileCtx): string {
     }
     case "marketing_permission":
       if (pred.op === "any") return `1=1`;
+      if (!ctx.channelConnectionId) {
+        throw new ValidationError("Marketing permission audience requires an explicit WhatsApp channel");
+      }
       return `c.PrimaryPhoneNormalized IS NOT NULL
         AND EXISTS (
           SELECT 1 FROM dbo.TblWhatsAppCampaignPermission p
           WHERE p.BusinessID = @businessId
+            AND p.ChannelConnectionID = @channelConnectionId
             AND p.PhoneNormalized = c.PrimaryPhoneNormalized
         )
         AND NOT EXISTS (
           SELECT 1 FROM dbo.TblWhatsAppCampaignOptOut o
           WHERE o.BusinessID = @businessId
+            AND o.ChannelConnectionID = @channelConnectionId
             AND o.PhoneNormalized = c.PrimaryPhoneNormalized
         )`;
     default:
@@ -276,13 +282,18 @@ function compileGroup(
 export function compileAudienceFilter(params: {
   businessId: string;
   filter: AudienceFilterAst;
+  channelConnectionId?: string | null;
 }): CompiledAudienceQuery {
   const limit = Math.min(params.filter.limit ?? AUDIENCE_MAX_ROWS, AUDIENCE_MAX_ROWS);
   const ctx: CompileCtx = {
     businessId: params.businessId,
+    channelConnectionId: params.channelConnectionId ?? null,
     inputs: [
       { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
       { name: "limit", type: sql.Int, value: limit },
+      ...(params.channelConnectionId
+        ? [{ name: "channelConnectionId", type: sql.UniqueIdentifier, value: params.channelConnectionId }]
+        : []),
     ],
     paramIndex: 0,
   };
