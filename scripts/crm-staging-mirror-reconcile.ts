@@ -118,8 +118,9 @@ async function main(): Promise<void> {
     .map(([key, number]) => [key, values[key as keyof typeof expected] === number]));
 
   const requiresParity = process.env.CRM_STAGING_REQUIRE_PARITY === "YES_STAGING_ONLY";
+  const sourceBaselineComplete = Object.values(expected).every((count) => count !== null);
   const mismatch = Object.values(comparisons).includes(false);
-  const complete = allAppendComplete && !mismatch;
+  const complete = allAppendComplete && sourceBaselineComplete && !mismatch;
   console.log(JSON.stringify({
     mode: "crm-staging-sql-read-only",
     database: first.DatabaseName,
@@ -127,9 +128,10 @@ async function main(): Promise<void> {
     businessIdPrefix: businessId.slice(0, 8),
     syncStates,
     allAppendComplete,
+    sourceBaselineComplete,
     mirrorCounts: values,
     sourceCountComparisons: comparisons,
-    parity: complete ? "PASS" : "INCOMPLETE_OR_MISMATCH",
+    parity: complete ? "PASS" : "NOT_PROVEN",
   }, null, 2));
 
   if (requiresParity && !complete) {
