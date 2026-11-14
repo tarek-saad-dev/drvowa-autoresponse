@@ -45,7 +45,7 @@ describe("DRVO Agent language preference — multilingual or fixed", () => {
     expect(prompt).toContain("reply naturally in that SAME language");
     expect(prompt).toContain("explicitly asks to change languages");
     expect(prompt).toContain("most recent unambiguous CUSTOMER language");
-    expect(prompt).toContain("do not choose the reply language from older receptionist/AI messages");
+    expect(prompt).toContain("Do not choose the reply language from older receptionist/AI messages");
     expect(prompt).toContain("When replying in Arabic");
     expect(prompt).toContain("For any non-Arabic reply");
     expect(prompt).not.toContain("ONE FIXED language");
