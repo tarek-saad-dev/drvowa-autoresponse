@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Sans_Arabic, Space_Grotesk } from "next/font/google";
+import { Cairo } from "next/font/google";
 import type { ReactNode } from "react";
 
 import { APP_TAGLINE } from "@/constants/app";
@@ -7,17 +7,10 @@ import { appConfig } from "@/lib/config/app";
 
 import "./globals.css";
 
-const ibmPlexArabic = IBM_Plex_Sans_Arabic({
-  variable: "--font-ibm-plex-arabic",
+const cairo = Cairo({
+  variable: "--font-cairo",
   subsets: ["arabic", "latin"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
-
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-space-grotesk",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700", "800"],
   display: "swap",
 });
 
@@ -93,7 +86,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
       lang="ar"
       dir="rtl"
       suppressHydrationWarning
-      className={`${ibmPlexArabic.variable} ${spaceGrotesk.variable} h-full antialiased`}
+      className={`${cairo.variable} h-full antialiased`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
