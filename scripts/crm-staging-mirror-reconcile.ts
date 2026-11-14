@@ -110,6 +110,7 @@ async function main(): Promise<void> {
     linkedCustomers: expectedCount("CRM_STAGING_EXPECT_SOURCE_CUSTOMERS"),
     invoiceMirrors: expectedCount("CRM_STAGING_EXPECT_SOURCE_INVOICES"),
     cancelledInvoices: expectedCount("CRM_STAGING_EXPECT_SOURCE_CANCELLED"),
+    invoiceLines: expectedCount("CRM_STAGING_EXPECT_SOURCE_LINES"),
     catalogTotal: expectedCount("CRM_STAGING_EXPECT_SOURCE_CATALOG"),
     catalogDeleted: expectedCount("CRM_STAGING_EXPECT_SOURCE_CATALOG_DELETED"),
   };
