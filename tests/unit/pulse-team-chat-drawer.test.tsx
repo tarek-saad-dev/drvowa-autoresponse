@@ -63,7 +63,9 @@ describe("Pulse Home team-owned conversation launcher", () => {
     expect(drawer).toContain('setNotice("الرد اتسجل. المحادثة لسه مع الفريق');
     expect(drawer).toContain("setShowResolveConfirmation(true)");
     expect(drawer).toContain("setShowResolveConfirmation(false)");
-    expect(drawer).not.toContain('method: "PATCH", credentials: "same-origin",\n        headers');
+    const sendBlock = drawer.slice(drawer.indexOf("async function send()"), drawer.indexOf("async function resolveAndReturnToAi()"));
+    expect(sendBlock).not.toContain("/ai/resume");
+    expect(sendBlock).not.toContain('"RESOLVED"');
     expect(drawer).toContain("if (!text || sending || saving || uncertain || handoffDone) return");
   });
 
@@ -76,6 +78,8 @@ describe("Pulse Home team-owned conversation launcher", () => {
     expect(drawer).toContain('if (!resume.ok || result.state?.mode !== "AUTO")');
     expect(drawer).toContain("ممكن البوت يرد على رسالة عميل معلّقة");
     expect(drawer).toContain('if (fresh.ai.mode === "SAFETY_PAUSED")');
+    expect(drawer).toContain('const verified = await fetchStatus()');
+    expect(drawer).toContain('verified.ai.mode !== "AUTO" || verified.escalation');
     expect(drawer).toContain('setHandoffDone(true)');
   });
 
