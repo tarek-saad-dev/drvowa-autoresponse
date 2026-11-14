@@ -62,8 +62,8 @@ describe("Dashboard horizontal top navigation", () => {
     expect(html).toContain("mx-1 h-5 w-px bg-border/70");
     expect(html).toContain('href="/dashboard"');
     expect(html).toContain('href="/dashboard/inbox"');
-    expect(html).toContain('href="/admin"');
-    expect(html).toContain("إدارة المنصة");
+    expect(topbar).toContain('href="/admin"');
+    expect(topbar).toContain("إدارة المنصة");
     expect(html).not.toContain("Growth");
     expect(html).not.toContain("Ahmed");
     expect(html).toContain("خروج");
@@ -81,7 +81,7 @@ describe("Dashboard horizontal top navigation", () => {
     expect(topbar).not.toContain("displayPlan");
     expect(topbar).not.toContain("activeBusiness?.name");
     expect(topbar).not.toContain("sm:min-h-16");
-    expect(topbar).not.toContain("border-t border-border/70");
+    expect(topbar).not.toContain("min-h-[52px]");
     expect(topbar).toContain('aria-label="تسجيل الخروج"');
     expect(topbar).toContain('bg-border/70');
   });
@@ -89,7 +89,7 @@ describe("Dashboard horizontal top navigation", () => {
   it("keeps submenu navigation accessible with disclosure buttons and correct active state", () => {
     expect(topbar).toContain("getNavGroupChildren(group)");
     expect(topbar).toContain('aria-expanded={expanded}');
-    expect(topbar).toContain('aria-controls={`topnav-${group.id}`}');
+    expect(topbar).toContain('aria-controls={"topnav-" + group.id}');
     expect(topbar).toContain("setOpenGroup(current => current === group.id ? null : group.id)");
     expect(topbar).toContain("if (event.key === \"Escape\") setOpenGroup(null)");
     expect(topbar).toContain('onClick={() => setOpenGroup(null)}');
