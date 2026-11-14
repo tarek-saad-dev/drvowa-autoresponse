@@ -31,7 +31,7 @@ describe("inbox viewport and UX layout contract", () => {
     expect(html).toContain("flex min-h-0 min-w-0 flex-1 overflow-hidden p-0");
     expect(html).not.toContain("normal-sidebar");
     expect(html).toContain("normal-topbar");
-    expect(html).toContain("hidden shrink-0 md:block");
+    expect(html).toContain("hidden shrink-0 lg:block");
     expect(html).toContain("normal-mobile-nav");
   });
 
