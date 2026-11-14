@@ -187,8 +187,10 @@ export function TeamChatDrawer({
       pendingSend.current = null;
       setDraft("");
       setNotice("الرد اتسجل. المحادثة لسه مع الفريق لحد ما تأكد إن الموضوع اتحل.");
-      await Promise.all([fetchMessages(), fetchStatus()]);
+      // Message delivery is already confirmed. A refresh failure must not
+      // re-label the successfully sent message as a failed send.
       onChanged();
+      void Promise.allSettled([fetchMessages(), fetchStatus()]);
       requestAnimationFrame(() => {
         if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       });
