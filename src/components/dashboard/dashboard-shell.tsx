@@ -61,7 +61,6 @@ export function DashboardShell({
   mobileNav,
 }: {
   children: ReactNode;
-  sidebar: ReactNode;
   topbar: ReactNode;
   mobileNav: ReactNode;
 }) {
