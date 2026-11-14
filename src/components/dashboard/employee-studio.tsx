@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { AGENT_AUTO_LANGUAGE, AGENT_FIXED_LANGUAGES, agentUsesCustomerLanguage } from "@/modules/agents/language-policy";
 import { useRouter } from "next/navigation";
 
 import { EmployeeKnowledgeChat } from "@/components/dashboard/employee-knowledge-chat";
@@ -69,6 +70,10 @@ export function EmployeeStudio({
   const [draft, setDraft] = useState<Draft>(() => draftFromAgent(
     initialAgents.find((agent) => agent.agentId === initialSetting?.agentId) ?? initialAgents[0],
   ));
+  const [lastFixedLanguage, setLastFixedLanguage] = useState(() => {
+    const current = initialAgents.find((agent) => agent.agentId === initialSetting?.agentId) ?? initialAgents[0];
+    return current?.language && !agentUsesCustomerLanguage(current.language) ? current.language : "ar";
+  });
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +86,15 @@ export function EmployeeStudio({
   const isCurrent = Boolean(chosen && setting?.agentId === chosen.agentId);
   const currentPreset = selectedPreset ?? PRESETS[0];
   const roleTitle = draft.identity === "ai" ? "مساعد ذكي" : "موظف استقبال";
+  const multilingual = agentUsesCustomerLanguage(draft.language);
+  const previewLanguage = multilingual ? "en" : draft.language.trim().toLowerCase().split("-")[0];
+  const languagePreview = {
+    ar: { customer: "مساء الخير، ممكن أعرف تفاصيل خدماتكم؟", reply: currentPreset.example },
+    en: { customer: "Hi, can you tell me about your services?", reply: "Hi! Of course. Which service would you like to know more about?" },
+    fr: { customer: "Bonjour, quels services proposez-vous ?", reply: "Bonjour ! Je peux vous renseigner. Quel service vous intéresse ?" },
+    es: { customer: "Hola, ¿qué servicios ofrecen?", reply: "¡Hola! Con gusto te ayudo. ¿Qué servicio te interesa?" },
+    de: { customer: "Hallo, welche Dienstleistungen bieten Sie an?", reply: "Hallo! Gerne helfe ich Ihnen. Für welchen Service interessieren Sie sich?" },
+  }[previewLanguage] ?? { customer: "Hi, can you tell me about your services?", reply: "Hello! How can I help you today?" };
 
   useEffect(() => {
     if (!dirty) return;
@@ -104,6 +118,7 @@ export function EmployeeStudio({
     const nextAgent = agents.find((a) => a.agentId === agentId);
     setSelectedId(agentId);
     setDraft(draftFromAgent(nextAgent));
+    setLastFixedLanguage(nextAgent?.language && !agentUsesCustomerLanguage(nextAgent.language) ? nextAgent.language : "ar");
     setDirty(false);
     setError(null);
     setSuccess(null);
@@ -113,6 +128,7 @@ export function EmployeeStudio({
     if (dirty && !window.confirm("التعديلات الحالية متحفظتش. تبدأ شخصية جديدة؟")) return;
     setSelectedId("");
     setDraft(draftFromAgent());
+    setLastFixedLanguage("ar");
     setDirty(false);
     setSuccess(null);
     setError(null);
@@ -339,27 +355,68 @@ export function EmployeeStudio({
             {!selectedPreset ? <p className="text-xs text-muted-foreground">أسلوب مخصص محفوظ للشخصية الحالية.</p> : null}
           </div>
 
+          <section aria-label="طريقة الرد حسب اللغة" className="space-y-3 rounded-2xl border border-border bg-surface/45 p-4">
+            <div>
+              <h2 className="text-sm font-black">لغة رد الموظف</h2>
+              <p className="mt-1 text-xs leading-6 text-muted-foreground">
+                اختار إذا كان الموظف يرد بلغة كل عميل، أو يلتزم بلغة واحدة في كل المحادثات.
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button type="button" aria-pressed={multilingual}
+                onClick={() => {
+                  if (!multilingual) setLastFixedLanguage(draft.language);
+                  update({ language: AGENT_AUTO_LANGUAGE });
+                }}
+                className={"rounded-xl border p-3 text-start transition " +
+                  (multilingual ? "border-primary bg-primary/10" : "border-border bg-card hover:border-primary/40")}>
+                <span className="text-sm font-black">🌐 متعدد اللغات {multilingual ? "✓" : ""}</span>
+                <p className="mt-1 text-xs leading-6 text-muted-foreground">يرد تلقائيًا بنفس اللغة اللي العميل بيكلمه بيها، ويغيّر اللغة لو العميل غيّرها.</p>
+              </button>
+              <button type="button" aria-pressed={!multilingual}
+                onClick={() => update({ language: lastFixedLanguage || "ar" })}
+                className={"rounded-xl border p-3 text-start transition " +
+                  (!multilingual ? "border-primary bg-primary/10" : "border-border bg-card hover:border-primary/40")}>
+                <span className="text-sm font-black">🔒 لغة واحدة {!multilingual ? "✓" : ""}</span>
+                <p className="mt-1 text-xs leading-6 text-muted-foreground">يلتزم باللغة اللي هتحددها حتى لو العميل كتب بلغة مختلفة.</p>
+              </button>
+            </div>
+            {!multilingual ? (
+              <div>
+                <Label htmlFor="studio-language">اللغة الثابتة للردود</Label>
+                <select id="studio-language" value={draft.language}
+                  onChange={(e) => {
+                    setLastFixedLanguage(e.target.value);
+                    update({ language: e.target.value });
+                  }}
+                  className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm">
+                  {!AGENT_FIXED_LANGUAGES.some(option => option.code === draft.language) ? (
+                    <option value={draft.language}>{draft.language} (محفوظة سابقًا)</option>
+                  ) : null}
+                  {AGENT_FIXED_LANGUAGES.map(option => (
+                    <option key={option.code} value={option.code}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <p className="text-xs leading-6 text-muted-foreground">
+                مثال: لو العميل سأل بالإنجليزي، الموظف يرد بالإنجليزي. ولو سأل بالعربي، يرد بالعربي.
+                اللهجة المختارة بتتطبق على الردود العربية بس.
+              </p>
+            )}
+          </section>
+
           <details className="group border-t border-border pt-4">
             <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-bold [&::-webkit-details-marker]:hidden">
               خصّص طريقة كلامه (اختياري)
               <span aria-hidden="true" className="text-muted-foreground transition group-open:rotate-180">⌄</span>
             </summary>
             <div className="mt-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="studio-language">اللغة</Label>
-                  <select id="studio-language" value={draft.language}
-                    onChange={(e) => update({ language: e.target.value })}
-                    className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm">
-                    <option value="ar">العربية</option>
-                    <option value="en">English</option>
-                  </select>
-                </div>
-                <div>
-                  <Label htmlFor="studio-dialect">اللهجة</Label>
-                  <Input id="studio-dialect" maxLength={64} value={draft.dialect}
-                    onChange={(e) => update({ dialect: e.target.value })} />
-                </div>
+              <div>
+                <Label htmlFor="studio-dialect">اللهجة (للردود بالعربية)</Label>
+                <Input id="studio-dialect" maxLength={64} value={draft.dialect}
+                  onChange={(e) => update({ dialect: e.target.value })} />
+                <p className="mt-1 text-xs text-muted-foreground">اللهجة بتتطبق لما الموظف يرد بالعربي فقط.</p>
               </div>
               <div>
                 <Label htmlFor="studio-instructions">تعليمات إضافية</Label>
@@ -373,12 +430,12 @@ export function EmployeeStudio({
           <div className="rounded-2xl bg-surface/65 p-4">
             <p className="mb-3 text-xs font-bold text-muted-foreground">مثال لطريقة كلامه</p>
             <div className="flex justify-end">
-              <p className="max-w-[85%] rounded-2xl bg-primary/10 px-3 py-2 text-sm">مساء الخير، ممكن أعرف تفاصيل خدماتكم؟</p>
+              <p className="max-w-[85%] rounded-2xl bg-primary/10 px-3 py-2 text-sm">{languagePreview.customer}</p>
             </div>
             <div className="mt-2 flex justify-start">
               <div className="max-w-[88%] rounded-2xl border border-border bg-card px-3 py-2">
                 <p className="mb-1 text-[11px] font-bold text-primary">{draft.name || "موظفك"} • {roleTitle}</p>
-                <p className="text-sm leading-7">{currentPreset.example}</p>
+                <p dir="auto" className="text-sm leading-7">{languagePreview.reply}</p>
               </div>
             </div>
             <p className="mt-3 text-[11px] text-muted-foreground">مثال توضيحي للأسلوب، مش رد مولّد من الـ AI.</p>
