@@ -50,3 +50,27 @@ export function requireApprovedStagingOrigin(
   }
   return parsed.origin;
 }
+
+/**
+ * Hard-stop before any staging SQL reconciliation query.
+ * The caller must supply both the expected database and login; never accept
+ * the legacy production database as a valid staging target.
+ */
+export function requireApprovedStagingDbIdentity(params: {
+  actualDatabase: string;
+  actualLogin: string;
+  expectedDatabase: string;
+  expectedLogin: string;
+}): void {
+  const expectedDb = params.expectedDatabase.trim();
+  const expectedLogin = params.expectedLogin.trim();
+  if (!expectedDb || !expectedLogin
+    || expectedDb.toLowerCase() === "last132"
+    || !/(staging|stage|test|sandbox|agent|ci|dev)/i.test(expectedDb)) {
+    throw new Error("Staging SQL identity must explicitly select an isolated non-production database");
+  }
+  if (params.actualDatabase.toLowerCase() !== expectedDb.toLowerCase()
+    || params.actualLogin.toLowerCase() !== expectedLogin.toLowerCase()) {
+    throw new Error("Staging SQL database or login identity mismatch");
+  }
+}
