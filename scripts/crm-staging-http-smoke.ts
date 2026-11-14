@@ -176,6 +176,7 @@ async function main(): Promise<void> {
   let ai: { matched: number; eligiblePreview: number } | "NOT_RUN" = "NOT_RUN";
   let spendRefinement: { matched: number } | "NOT_RUN" = "NOT_RUN";
   let snapshot: { matched: number; eligible: number } | "NOT_RUN" = "NOT_RUN";
+  let campaignDraft: "NOT_RUN" | "CREATED_TEST_DRAFT_ONLY" = "NOT_RUN";
   if (process.env.CRM_STAGING_ENABLE_AI === "YES_STAGING_ONLY") {
     const channelResult = await callJson(crm, "/api/crm/channels", crmHeaders);
     const activeChannels = list(channelResult.activeChannels)
@@ -259,6 +260,54 @@ async function main(): Promise<void> {
         matched: Number(asRecord(frozen.preview).totalMatched),
         eligible: validated.eligiblePhones.length,
       };
+
+      // Optional one-recipient draft-only test, explicitly gated by an operator.
+      // Never use the entire audience list; never invoke preflight launch/delivery.
+      if (process.env.CRM_STAGING_ENABLE_DRAFT === "YES_STAGING_ONLY") {
+        if (process.env.CRM_STAGING_CONFIRM_DRAFT !== "I_APPROVE_ONE_TEST_RECIPIENT") {
+          throw new Error("One-recipient staging draft requires explicit operator confirmation");
+        }
+        const testPhone = required("CRM_STAGING_CONSENTED_TEST_PHONE");
+        if (!/^\\d{8,15}$/.test(testPhone)) {
+          throw new Error("Test recipient must be a normalized numeric WhatsApp phone");
+        }
+        if (!validated.eligiblePhones.includes(testPhone)) {
+          throw new Error("Designated staging test recipient is not opted-in on the selected channel");
+        }
+        const checkedAgain = await callJson(
+          crm, "/api/crm/audience/revalidate", crmHeaders, "POST",
+          { snapshotId, channelConnectionId }, 60_000,
+        );
+        if (checkedAgain.channelConnectionId !== channelConnectionId
+          || !Array.isArray(checkedAgain.eligiblePhones)
+          || !checkedAgain.eligiblePhones.includes(testPhone)) {
+          throw new Error("Designated test recipient lost consent before draft creation");
+        }
+        const listCreated = await callJson(
+          crm, "/api/whatsapp/lists", crmHeaders, "POST",
+          { name: `CRM STAGING ONE-RECIPIENT ${randomUUID().slice(0, 8)}`, channelConnectionId },
+        );
+        const listInfo = asRecord(listCreated.list);
+        if (typeof listInfo.id !== "string" || listInfo.channelConnectionId !== channelConnectionId) {
+          throw new Error("Test WhatsApp list not bound to the selected channel");
+        }
+        await callJson(
+          crm, `/api/whatsapp/lists/${encodeURIComponent(listInfo.id)}/members`,
+          crmHeaders, "POST", { text: testPhone },
+        );
+        const campaign = await callJson(
+          crm, "/api/whatsapp/label-campaigns", crmHeaders, "POST",
+          {
+            channelConnectionId,
+            labelId: listInfo.id,
+            messageText: "Staging CRM verification: test draft only, not for sending.",
+          },
+        );
+        if (campaign.sendingEnabled !== false || list(campaign.drafts).length === 0) {
+          throw new Error("Expected draft-only campaign; sending status was unexpected");
+        }
+        campaignDraft = "CREATED_TEST_DRAFT_ONLY";
+      }
     }
   }
 
@@ -276,7 +325,7 @@ async function main(): Promise<void> {
     aiAudience: ai,
     snapshot,
     spendRefinement,
-    campaignDraft: "NOT_RUN",
+    campaignDraft,
     bulkSend: "NEVER_CALLED",
   }));
 }
