@@ -77,6 +77,8 @@ export CRM_STAGING_BUSINESS_ID="<staging BusinessID UUID>"
 export CRM_STAGING_EXPECT_SOURCE_CUSTOMERS=3114
 export CRM_STAGING_EXPECT_SOURCE_INVOICES=9509
 export CRM_STAGING_EXPECT_SOURCE_CANCELLED=24
+# Copy the verified sourceSaleLineCount from the latest Cashier CRM staging gate.
+export CRM_STAGING_EXPECT_SOURCE_LINES="<verified staging sales line count>"
 export CRM_STAGING_EXPECT_SOURCE_CATALOG=83
 export CRM_STAGING_EXPECT_SOURCE_CATALOG_DELETED=17
 
@@ -86,7 +88,7 @@ export CRM_STAGING_REQUIRE_PARITY=YES_STAGING_ONLY
 node --import tsx scripts/crm-staging-mirror-reconcile.ts
 ```
 
-A pass requires all three append streams `SUCCESS` and all five independently supplied source totals matching. If any are missing, the output says `NOT_PROVEN`; it never manufactures a passing parity result. This verifies aggregate coverage, not service lines or Customer 360 correctness, which require their own checks below. The rotating historical sweeps remain ongoing even after append status `SUCCESS`.
+A pass requires all three append streams `SUCCESS` and all six independently supplied source totals matching. If any are missing, the output says `NOT_PROVEN`; it never manufactures a passing parity result. This verifies aggregate coverage, not service lines or Customer 360 correctness, which require their own checks below. The rotating historical sweeps remain ongoing even after append status `SUCCESS`.
 
 ## Required *additional* verification before release
 
