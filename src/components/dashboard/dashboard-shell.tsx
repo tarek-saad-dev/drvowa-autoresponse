@@ -10,12 +10,10 @@ import {
 
 function DashboardShellInner({
   children,
-  sidebar,
   topbar,
   mobileNav,
 }: {
   children: ReactNode;
-  sidebar: ReactNode;
   topbar: ReactNode;
   mobileNav: ReactNode;
 }) {
@@ -24,21 +22,20 @@ function DashboardShellInner({
   const isAgent = pathname === "/dashboard/agent";
   const { threadOpen } = useInboxChrome();
 
-  // Mobile: keep global nav on the conversation list; hide it inside an open thread
-  // so the composer isn't covered. Desktop always uses the shared sidebar.
+  // Keep the bottom navigation on mobile conversation lists, not over an open thread.
+  // Desktop Inbox always gets the shared top navigation, without a side rail.
   const showMobileNav = !isInbox || !threadOpen;
 
   return (
     <div
       className={
         (isInbox || isAgent)
-          ? "fixed inset-0 z-40 flex h-[100dvh] w-screen min-h-0 min-w-0 overflow-hidden overscroll-none bg-background"
-          : "flex min-h-full flex-1 bg-background"
+          ? "fixed inset-0 z-40 flex h-[100dvh] w-screen min-h-0 min-w-0 flex-col overflow-hidden overscroll-none bg-background"
+          : "flex min-h-full min-w-0 flex-1 flex-col bg-background"
       }
     >
-      <div className="hidden md:flex">{sidebar}</div>
+      <div className={isInbox ? "hidden shrink-0 md:block" : "shrink-0"}>{topbar}</div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {!isInbox && topbar}
         <main
           className={
             isInbox
@@ -60,7 +57,6 @@ function DashboardShellInner({
 
 export function DashboardShell({
   children,
-  sidebar,
   topbar,
   mobileNav,
 }: {
@@ -72,7 +68,6 @@ export function DashboardShell({
   return (
     <InboxChromeProvider>
       <DashboardShellInner
-        sidebar={sidebar}
         topbar={topbar}
         mobileNav={mobileNav}
       >
