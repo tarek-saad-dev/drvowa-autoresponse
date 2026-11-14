@@ -19,7 +19,10 @@ export function requireApprovedStagingOrigin(
     || (parsed.pathname !== "/" && parsed.pathname !== "")) {
     throw new Error("Staging URL must be an origin without credentials, query or path");
   }
-  const hostname = parsed.hostname.toLowerCase().replace(/^\\[|\\]$/g, "");
+  const rawHostname = parsed.hostname.toLowerCase();
+  const hostname = rawHostname.startsWith("[") && rawHostname.endsWith("]")
+    ? rawHostname.slice(1, -1)
+    : rawHostname;
   const loopback = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
   const stages = /(^|[.-])(staging|stage|preview|sandbox|test|dev)([.-]|$)/i;
   if (!loopback && !stages.test(hostname)) {
@@ -30,7 +33,14 @@ export function requireApprovedStagingOrigin(
   }
   const approved = new Set(approvedOrigins.map((origin) => {
     try {
-      return new URL(origin).origin;
+      const approvedUrl = new URL(origin);
+      if (!["http:", "https:"].includes(approvedUrl.protocol)
+        || approvedUrl.username || approvedUrl.password
+        || approvedUrl.search || approvedUrl.hash
+        || (approvedUrl.pathname !== "/" && approvedUrl.pathname !== "")) {
+        throw new Error("Invalid approved staging origin");
+      }
+      return approvedUrl.origin;
     } catch {
       throw new Error("Invalid approved staging origin");
     }
