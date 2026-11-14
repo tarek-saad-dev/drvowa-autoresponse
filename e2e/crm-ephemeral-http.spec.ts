@@ -26,8 +26,10 @@ const invoices = [
     lines: [{ proId: 15, proType: "serv", proName: "بروتين", qty: 1, sPrice: 2000, lineTotal: 2000 }] },
 ];
 const catalog = [{ proId: 15, proName: "بروتين", proNameAr: "بروتين", proType: "serv", isDeleted: false }];
+const auditedDeletions: Array<{auditId:number;invId:number;invType:string;status:string}> = [];
+let failDeletionPollOnce = false;
 
-const tools = ["customer.list_changes", "invoice.list_changes", "catalog.list_services"];
+const tools = ["customer.list_changes", "invoice.list_changes", "invoice.list_deletions", "catalog.list_services"];
 const manifest = {
   contractVersion: "drvowa-erp-v1",
   provider: "Synthetic Cashier Contract Emulator",
@@ -86,6 +88,21 @@ function startEmulator(token: string): Promise<{ server: Server; url: string; ca
       res.writeHead(200); res.end(JSON.stringify({
         ok: true, tool: name, data: {
           invoices: page.rows, nextCursor: { [key]: page.nextId },
+        },
+      })); return;
+    }
+    if (name === "invoice.list_deletions") {
+      if (failDeletionPollOnce) {
+        failDeletionPollOnce = false;
+        res.writeHead(200); res.end(JSON.stringify({
+          ok:false,tool:name,error:{code:"SYNTHETIC_RETRY",message:"Temporary synthetic error"},
+        })); return;
+      }
+      const page = nextPage(auditedDeletions, Number(input.sinceAuditId ?? 0),"auditId",limit);
+      res.writeHead(200); res.end(JSON.stringify({
+        ok:true,tool:name,data:{
+          deletions:page.rows,nextCursor:{sinceAuditId:page.nextId},
+          hasMore:page.rows.length===limit,
         },
       })); return;
     }
@@ -291,6 +308,86 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
     );
     expect(stored.recordset[0]?.Status).toBe("DRAFT");
     expect(Number(stored.recordset[0]?.PhoneCount)).toBe(1);
+    // New: E2E hard delete (synthetic Cashier HTTP emulator, not production).
+    // The invoice was already mirrored into ERP CRM earlier in this same test.
+    const invoicePos = invoices.findIndex((row) => row.invId === 201);
+    expect(invoicePos).toBeGreaterThanOrEqual(0);
+    invoices.splice(invoicePos, 1); // mock the physically hard-deleted ERP header
+    auditedDeletions.push({ auditId: 901, invId: 201, invType: "مبيعات", status: "cancelled" });
+
+    // Simulate an uncertain provider response: the CRM must keep its old
+    // cursor/mirror until it can successfully read AND apply the audit page.
+    failDeletionPollOnce = true;
+    const failedSync = await request.post("/api/crm/erp/sync", {
+      data: {}, headers: { Origin: "http://localhost:3000" },
+    });
+    expect(failedSync.ok()).toBe(false);
+    const beforeRetry = await query<{
+      IsDeleted:number; IsValidSale:number; RawStatus:string;
+    }>(
+      `SELECT IsDeleted,IsValidSale,RawStatus
+       FROM dbo.TblErpInvoiceMirror
+       WHERE BusinessID=@business AND ExternalInvId=N'مبيعات:201'`,
+      [{name:"business",type:sql.UniqueIdentifier,value:businessId!}],
+    );
+    expect(Number(beforeRetry.recordset[0]?.IsValidSale)).toBe(1);
+    expect(Number(beforeRetry.recordset[0]?.IsDeleted)).toBe(0);
+
+    // Retry the exact same delete event. No Cashier API write or refund.
+    const recoveredSync=await postJson(request,"/api/crm/erp/sync",{});
+    expect((recoveredSync.result as {invoices:{synced:number}}).invoices.synced).toBeGreaterThan(0);
+    const afterDelete = await query<{
+      IsDeleted:number;IsValidSale:number;RawStatus:string;GrandTotal:number;
+    }>(
+      `SELECT IsDeleted,IsValidSale,RawStatus,GrandTotal
+       FROM dbo.TblErpInvoiceMirror
+       WHERE BusinessID=@business AND ExternalInvId=N'مبيعات:201'`,
+      [{name:"business",type:sql.UniqueIdentifier,value:businessId!}],
+    );
+    expect(Number(afterDelete.recordset[0]?.IsValidSale)).toBe(0);
+    expect(Number(afterDelete.recordset[0]?.IsDeleted)).toBe(1);
+    expect(afterDelete.recordset[0]?.RawStatus).toBe("CANCELLED");
+    // Keep original financial history; merely exclude cancelled invoice
+    // from CRM spend/visit analytics.
+    expect(Number(afterDelete.recordset[0]?.GrandTotal)).toBe(1500);
+    const freshProfileResponse=await request.get(`/api/crm/customers/${alpha!.customerId}`);
+    expect(freshProfileResponse.ok()).toBe(true);
+    const freshProfile=await freshProfileResponse.json() as {
+      profile:{erp:{totalVisits:number;totalSpend:number};erpInvoices:unknown[]}
+    };
+    expect(freshProfile.profile.erp.totalVisits).toBe(0);
+    expect(freshProfile.profile.erp.totalSpend).toBe(0);
+    expect(freshProfile.profile.erpInvoices).toHaveLength(0);
+
+    const stateAfterDelete = await query<{CursorJson:string}>(
+      `SELECT CursorJson FROM dbo.TblErpSyncState
+       WHERE BusinessID=@business AND Resource=N'invoices'`,
+      [{name:"business",type:sql.UniqueIdentifier,value:businessId!}],
+    );
+    expect(JSON.parse(stateAfterDelete.recordset[0]?.CursorJson ?? "{}").sinceAuditId).toBe(901);
+
+    const replaySync=await postJson(request,"/api/crm/erp/sync",{});
+    // 'synced' includes the ordinary rotating status sweep of other active
+    // invoices, so it need not equal zero. Assert the deletion mirror and
+    // persisted audit cursor did NOT regress or process a second deletion.
+    expect((replaySync.result as {invoices:{synced:number}}).invoices.synced).toBeGreaterThanOrEqual(0);
+    const afterReplay=await query<{
+      IsDeleted:number;IsValidSale:number;RawStatus:string;GrandTotal:number;
+    }>(
+      `SELECT IsDeleted,IsValidSale,RawStatus,GrandTotal
+       FROM dbo.TblErpInvoiceMirror
+       WHERE BusinessID=@business AND ExternalInvId=N'مبيعات:201'`,
+      [{name:"business",type:sql.UniqueIdentifier,value:businessId!}],
+    );
+    expect(afterReplay.recordset[0]).toEqual(afterDelete.recordset[0]);
+    const replayState=await query<{CursorJson:string}>(
+      `SELECT CursorJson FROM dbo.TblErpSyncState
+       WHERE BusinessID=@business AND Resource=N'invoices'`,
+      [{name:"business",type:sql.UniqueIdentifier,value:businessId!}],
+    );
+    expect(JSON.parse(replayState.recordset[0]?.CursorJson ?? "{}").sinceAuditId).toBe(901);
+    expect(calls).toContain("invoice.list_deletions:append");
+
     // There is no WhatsApp send or real Cashier connection in this test.
     expect(calls).toContain("manifest");
     expect(calls).toContain("customer.list_changes:append");

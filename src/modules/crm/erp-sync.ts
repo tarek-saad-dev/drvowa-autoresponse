@@ -89,6 +89,51 @@ export function erpInvoiceExternalKey(payload: Record<string, unknown>): string 
   return `${invType}:${invId}`;
 }
 
+export type ErpAuditedInvoiceDeletion = {
+  auditId: number;
+  externalInvId: string;
+};
+
+/**
+ * Validate the complete page BEFORE changing any CRM mirror or advancing the
+ * durable audit cursor. A partial/malformed page fails closed and can retry.
+ */
+export function parseErpAuditedInvoiceDeletionPage(
+  raw: unknown,
+  sinceAuditId: number,
+): { events: ErpAuditedInvoiceDeletion[]; nextAuditId: number; hasMore: boolean } {
+  const data = asRecord(raw);
+  if (!data || !Array.isArray(data.deletions)) {
+    throw new ValidationError("فشل مزامنة الفواتير المحذوفة: الصفحة غير صالحة");
+  }
+  const events: ErpAuditedInvoiceDeletion[] = [];
+  let lastAuditId = sinceAuditId;
+  for (const item of data.deletions) {
+    const row = asRecord(item);
+    const auditId = Number(row?.auditId);
+    const invId = Number(row?.invId);
+    if (!row || !Number.isSafeInteger(auditId) ||
+        auditId <= lastAuditId || !Number.isSafeInteger(invId) || invId <= 0 ||
+        str(row.invType) !== ERP_SALE_INV_TYPE ||
+        str(row.status)?.toLowerCase() !== "cancelled") {
+      throw new ValidationError("فشل مزامنة الفواتير المحذوفة: مؤشر أو هوية غير صالحة");
+    }
+    events.push({ auditId, externalInvId: `${ERP_SALE_INV_TYPE}:${invId}` });
+    lastAuditId = auditId;
+  }
+  const next = asRecord(data.nextCursor);
+  const nextAuditId = num(next?.sinceAuditId);
+  if (nextAuditId === null || !Number.isSafeInteger(nextAuditId) ||
+      nextAuditId !== lastAuditId ||
+      data.hasMore != null && typeof data.hasMore !== "boolean") {
+    throw new ValidationError("فشل مزامنة الفواتير المحذوفة: المؤشر التالي غير مطابق");
+  }
+  if (data.hasMore === true && !events.length) {
+    throw new ValidationError("مزامنة الحذف أعادت صفحة ممتلئة بلا أحداث");
+  }
+  return { events, nextAuditId: lastAuditId, hasMore: data.hasMore === true };
+}
+
 async function loadManifest(integration: {
   capabilitiesJson?: string | null;
 }): Promise<IntegrationManifest | null> {
@@ -533,7 +578,55 @@ async function syncInvoices(params: {
       break;
     }
 
-    const incomplete = !appendComplete;
+    // 3) Audited hard-deletes are invisible to both existing-header streams.
+    // This optional capability is forward-compatible with older ERP providers.
+    // Never advance sinceAuditId until EVERY cancellation on a page is applied.
+    let deletionComplete = true;
+    if (hasTool(params.manifest, "invoice.list_deletions")) {
+      let deletionPages = 0;
+      while (deletionPages < 8) {
+        deletionPages += 1;
+        const lastAuditId = Number(cursor.sinceAuditId ?? 0);
+        if (!Number.isSafeInteger(lastAuditId) || lastAuditId < 0) {
+          throw new ValidationError("مؤشر حذف فواتير ERP غير صالح");
+        }
+        const result = await callIntegrationTool({
+          integration: params.integration,
+          tool: "invoice.list_deletions",
+          input: { sinceAuditId: lastAuditId, limit: 100 },
+          requestId: randomUUID(),
+        });
+        if (!result.ok) {
+          throw new ValidationError(result.error?.message ??
+            "فشل قراءة إشعارات حذف الفواتير من ERP");
+        }
+        const page = parseErpAuditedInvoiceDeletionPage(result.data, lastAuditId);
+        for (const event of page.events) {
+          await repo.markErpInvoiceMirrorCancelled({
+            businessId: params.businessId,
+            externalInvId: event.externalInvId,
+          });
+          synced += 1;
+        }
+        // Mirror changes are idempotent; if a crash happens before cursor
+        // save, the same audit events will safely be replayed next run.
+        cursor = { ...cursor, sinceAuditId: page.nextAuditId };
+        await repo.upsertErpSyncState({
+          businessId: params.businessId,
+          integrationId: params.integration.integrationId,
+          resource: RESOURCE_INVOICES,
+          cursorJson: JSON.stringify(cursor),
+          status: "RUNNING",
+        });
+        if (!page.hasMore) break;
+        if (!page.events.length) {
+          throw new ValidationError("مزامنة الحذف أعادت صفحة ممتلئة بلا أحداث");
+        }
+        if (deletionPages === 8) deletionComplete = false;
+      }
+    }
+
+    const incomplete = !appendComplete || !deletionComplete;
     await repo.upsertErpSyncState({
       businessId: params.businessId,
       integrationId: params.integration.integrationId,

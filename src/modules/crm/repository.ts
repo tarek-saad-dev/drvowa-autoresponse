@@ -2084,6 +2084,33 @@ export async function upsertErpInvoiceMirror(params: {
   return invoiceMirrorId;
 }
 
+/**
+ * An audited hard delete has no remaining Cashier invoice header to re-read.
+ * Preserve the CRM mirror for history, but exclude it from active revenue.
+ * This is repeatable, scoped to one BusinessID and never creates a new invoice,
+ * reverses money, deletes lines or changes customer attribution.
+ */
+export async function markErpInvoiceMirrorCancelled(params: {
+  businessId: string;
+  externalInvId: string;
+}): Promise<boolean> {
+  const result = await query(
+    `UPDATE dbo.TblErpInvoiceMirror
+     SET IsDeleted = 1,
+         IsValidSale = 0,
+         RawStatus = N'CANCELLED',
+         SyncedAtUtc = SYSUTCDATETIME(),
+         UpdatedAtUtc = SYSUTCDATETIME()
+     WHERE BusinessID = @businessId AND ExternalInvId = @invId
+       AND (IsDeleted <> 1 OR IsValidSale <> 0 OR ISNULL(RawStatus, N'') <> N'CANCELLED');`,
+    [
+      { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+      { name: "invId", type: sql.NVarChar(64), value: params.externalInvId },
+    ],
+  );
+  return (result.rowsAffected ?? []).some((count) => Number(count) > 0);
+}
+
 export async function upsertErpServiceCatalog(params: {
   businessId: string;
   externalProId: string;
