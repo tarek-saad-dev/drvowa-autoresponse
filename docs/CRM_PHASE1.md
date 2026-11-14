@@ -46,11 +46,13 @@ ERP history or a phone number is **not** consent. Recipients must pass existing 
 
 Tools expected on Cashier (implemented in Cashier repo):
 
-- `customer.list_changes`
+- `customer.list_changes` (append `sinceClientId` + rotating `identitySweep` for name/phone/email updates)
 - `invoice.list_changes` (append `sinceInvId` + rotating `statusSweep` so late cancellations are not permanently missed)
-- `catalog.list_services`
+- `catalog.list_services` (append `sinceProId` + rotating `identitySweep` for renames/deletes)
 
-Valid sale rule: `invType = N'مبيعات'` and legacy `isActive <> 'yes'`. Sync does not overwrite CRM notes, tags, or assignments.
+Valid sale rule: `invType = N'مبيعات'` and legacy `isActive <> 'yes'`. Sync updates ERP-linked identity fields and catalog mirrors; it does not overwrite CRM notes, tags, or assignments.
+
+Cashier staging gate: `.github/workflows/crm-drvowa-staging-gate.yml` (exact PR head SHA, `last132_agent` / `drvo_agent` only).
 
 ## Routes
 

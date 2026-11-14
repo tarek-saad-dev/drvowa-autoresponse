@@ -106,22 +106,23 @@ async function ensureCrmCustomerFromErp(params: {
       externalErpClientId: params.clientId,
     });
     if (byErp) {
-      // Sync must not overwrite CRM notes/tags/assignments — only fill missing identity fields.
+      // Safe ERP identity reconciliation: update name/phone/email from ERP when present.
+      // Never touches notes, tags, or assignments.
       const phone = normalizeCrmPhone(params.mobile) ?? normalizeCrmPhone(params.phone);
-      if (
-        (!byErp.primaryPhoneNormalized && phone)
-        || (!byErp.email && params.email)
-        || (params.name && byErp.fullName.startsWith("عميل"))
-      ) {
+      const nextName = params.name?.trim() || byErp.fullName;
+      const nextPhone = phone ?? byErp.primaryPhoneNormalized;
+      const nextEmail = params.email?.trim() || byErp.email;
+      const changed =
+        nextName !== byErp.fullName
+        || nextPhone !== byErp.primaryPhoneNormalized
+        || nextEmail !== byErp.email;
+      if (changed) {
         await repo.updateCustomer({
           businessId: params.businessId,
           customerId: byErp.customerId,
-          primaryPhoneNormalized: byErp.primaryPhoneNormalized ?? phone,
-          email: byErp.email ?? params.email,
-          fullName:
-            byErp.fullName.startsWith("عميل") && params.name
-              ? params.name
-              : byErp.fullName,
+          primaryPhoneNormalized: nextPhone,
+          email: nextEmail,
+          fullName: nextName,
           externalErpClientId: params.clientId,
         });
       }
@@ -188,25 +189,7 @@ async function syncCustomers(params: {
     let synced = 0;
     let pages = 0;
 
-    while (pages < 20) {
-      pages += 1;
-      const result = await callIntegrationTool({
-        integration: params.integration,
-        tool: "customer.list_changes",
-        input: {
-          sinceClientId: cursor.sinceClientId ?? 0,
-          sinceRegisterDate: cursor.sinceRegisterDate ?? null,
-          limit: 200,
-        },
-        requestId: randomUUID(),
-      });
-      if (!result.ok) {
-        throw new ValidationError(result.error?.message ?? "فشل مزامنة العملاء من ERP");
-      }
-      const data = asRecord(result.data);
-      const customers = asArray(data?.customers);
-      if (!customers.length) break;
-
+    const applyCustomerPage = async (customers: unknown[]) => {
       for (const item of customers) {
         const row = asRecord(item);
         if (!row) continue;
@@ -221,11 +204,40 @@ async function syncCustomers(params: {
         });
         synced += 1;
       }
+    };
+
+    while (pages < 16) {
+      pages += 1;
+      const result = await callIntegrationTool({
+        integration: params.integration,
+        tool: "customer.list_changes",
+        input: {
+          sinceClientId: cursor.sinceClientId ?? 0,
+          identitySweepSinceClientId: cursor.identitySweepSinceClientId ?? 0,
+          identitySweep: false,
+          limit: 200,
+        },
+        requestId: randomUUID(),
+      });
+      if (!result.ok) {
+        throw new ValidationError(result.error?.message ?? "فشل مزامنة العملاء من ERP");
+      }
+      const data = asRecord(result.data);
+      const customers = asArray(data?.customers);
+      if (!customers.length) break;
+
+      await applyCustomerPage(customers);
 
       const next = asRecord(data?.nextCursor) ?? {};
       const nextId = num(next.sinceClientId ?? next.clientId);
       if (nextId == null || nextId === Number(cursor.sinceClientId ?? -1)) break;
-      cursor = { ...cursor, ...next, sinceClientId: nextId };
+      cursor = {
+        ...cursor,
+        ...next,
+        sinceClientId: nextId,
+        identitySweepSinceClientId:
+          num(next.identitySweepSinceClientId) ?? cursor.identitySweepSinceClientId ?? 0,
+      };
       await repo.upsertErpSyncState({
         businessId: params.businessId,
         integrationId: params.integration.integrationId,
@@ -234,6 +246,45 @@ async function syncCustomers(params: {
         status: "RUNNING",
       });
       if (customers.length < 200) break;
+    }
+
+    // One rotating identity-sweep page per sync so existing client edits are not missed.
+    while (pages < 20) {
+      pages += 1;
+      const result = await callIntegrationTool({
+        integration: params.integration,
+        tool: "customer.list_changes",
+        input: {
+          sinceClientId: cursor.sinceClientId ?? 0,
+          identitySweepSinceClientId: cursor.identitySweepSinceClientId ?? 0,
+          identitySweep: true,
+          limit: 200,
+        },
+        requestId: randomUUID(),
+      });
+      if (!result.ok) {
+        throw new ValidationError(result.error?.message ?? "فشل إعادة تحقق هوية عملاء ERP");
+      }
+      const data = asRecord(result.data);
+      const customers = asArray(data?.customers);
+      if (!customers.length) {
+        cursor = { ...cursor, identitySweepSinceClientId: 0 };
+        break;
+      }
+      await applyCustomerPage(customers);
+      const next = asRecord(data?.nextCursor) ?? {};
+      cursor = {
+        ...cursor,
+        identitySweepSinceClientId: num(next.identitySweepSinceClientId) ?? 0,
+      };
+      await repo.upsertErpSyncState({
+        businessId: params.businessId,
+        integrationId: params.integration.integrationId,
+        resource: RESOURCE_CUSTOMERS,
+        cursorJson: JSON.stringify(cursor),
+        status: "RUNNING",
+      });
+      break;
     }
 
     const incomplete = pages >= 20;
@@ -509,24 +560,7 @@ async function syncCatalog(params: {
     let synced = 0;
     let pages = 0;
 
-    while (pages < 20) {
-      pages += 1;
-      const result = await callIntegrationTool({
-        integration: params.integration,
-        tool: "catalog.list_services",
-        input: {
-          sinceProId: cursor.sinceProId ?? 0,
-          limit: 200,
-        },
-        requestId: randomUUID(),
-      });
-      if (!result.ok) {
-        throw new ValidationError(result.error?.message ?? "فشل مزامنة كتالوج الخدمات");
-      }
-      const data = asRecord(result.data);
-      const services = asArray(data?.services ?? data?.items);
-      if (!services.length) break;
-
+    const applyCatalogPage = async (services: unknown[]) => {
       for (const item of services) {
         const row = asRecord(item);
         if (!row) continue;
@@ -544,11 +578,40 @@ async function syncCatalog(params: {
         });
         synced += 1;
       }
+    };
+
+    while (pages < 16) {
+      pages += 1;
+      const result = await callIntegrationTool({
+        integration: params.integration,
+        tool: "catalog.list_services",
+        input: {
+          sinceProId: cursor.sinceProId ?? 0,
+          identitySweepSinceProId: cursor.identitySweepSinceProId ?? 0,
+          identitySweep: false,
+          limit: 200,
+        },
+        requestId: randomUUID(),
+      });
+      if (!result.ok) {
+        throw new ValidationError(result.error?.message ?? "فشل مزامنة كتالوج الخدمات");
+      }
+      const data = asRecord(result.data);
+      const services = asArray(data?.services ?? data?.items);
+      if (!services.length) break;
+
+      await applyCatalogPage(services);
 
       const next = asRecord(data?.nextCursor) ?? {};
       const nextId = num(next.sinceProId ?? next.proId);
       if (nextId == null || nextId === Number(cursor.sinceProId ?? -1)) break;
-      cursor = { ...cursor, ...next, sinceProId: nextId };
+      cursor = {
+        ...cursor,
+        ...next,
+        sinceProId: nextId,
+        identitySweepSinceProId:
+          num(next.identitySweepSinceProId) ?? cursor.identitySweepSinceProId ?? 0,
+      };
       await repo.upsertErpSyncState({
         businessId: params.businessId,
         integrationId: params.integration.integrationId,
@@ -557,6 +620,44 @@ async function syncCatalog(params: {
         status: "RUNNING",
       });
       if (services.length < 200) break;
+    }
+
+    while (pages < 20) {
+      pages += 1;
+      const result = await callIntegrationTool({
+        integration: params.integration,
+        tool: "catalog.list_services",
+        input: {
+          sinceProId: cursor.sinceProId ?? 0,
+          identitySweepSinceProId: cursor.identitySweepSinceProId ?? 0,
+          identitySweep: true,
+          limit: 200,
+        },
+        requestId: randomUUID(),
+      });
+      if (!result.ok) {
+        throw new ValidationError(result.error?.message ?? "فشل إعادة تحقق كتالوج ERP");
+      }
+      const data = asRecord(result.data);
+      const services = asArray(data?.services ?? data?.items);
+      if (!services.length) {
+        cursor = { ...cursor, identitySweepSinceProId: 0 };
+        break;
+      }
+      await applyCatalogPage(services);
+      const next = asRecord(data?.nextCursor) ?? {};
+      cursor = {
+        ...cursor,
+        identitySweepSinceProId: num(next.identitySweepSinceProId) ?? 0,
+      };
+      await repo.upsertErpSyncState({
+        businessId: params.businessId,
+        integrationId: params.integration.integrationId,
+        resource: RESOURCE_CATALOG,
+        cursorJson: JSON.stringify(cursor),
+        status: "RUNNING",
+      });
+      break;
     }
 
     const incomplete = pages >= 20;
