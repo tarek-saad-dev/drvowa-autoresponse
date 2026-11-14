@@ -1,0 +1,35 @@
+name: CRM Production Public Read-Only Smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/crm-production-readonly-smoke.yml"
+      - "scripts/crm-production-readonly-smoke.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-production-canary:
+    name: Public liveness and unauthenticated access protection (NO DEPLOY)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout source branch only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check deployed public endpoints without secrets
+        run: node scripts/crm-production-readonly-smoke.mjs
+      - name: Document limitations
+        if: always()
+        run: |
+          {
+            echo "### Production read-only public canary"
+            echo "- No production secrets, database access, POST requests, mutations or deploy."
+            echo "- Checks the **currently deployed** versions, not PR source."
+            echo "- HTTP 404 for a feature API means **NOT_DEPLOYED**, not success of the new feature."
+            echo "- Does not establish a paired CRM/Cashier E2E, a SQL backup, migration 104 or permission for campaign delivery."
+          } >> "$GITHUB_STEP_SUMMARY"
