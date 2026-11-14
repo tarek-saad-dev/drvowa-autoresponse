@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { EmployeeKnowledgeChat } from "@/components/dashboard/employee-knowledge-chat";
-import { LabelCampaignChat } from "@/components/dashboard/label-campaign-chat";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,10 +59,10 @@ export function EmployeeStudio({
   businessId: string;
   knowledgeCount: number;
   canManageCampaigns?: boolean;
-  initialTab?: "personality" | "knowledge" | "campaigns";
+  initialTab?: "personality" | "knowledge";
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"personality" | "knowledge" | "campaigns">(initialTab);
+  const [tab, setTab] = useState<"personality" | "knowledge">(initialTab);
   const [agents, setAgents] = useState(initialAgents);
   const [setting, setSetting] = useState(initialSetting);
   const [selectedId, setSelectedId] = useState(initialSetting?.agentId ?? initialAgents[0]?.agentId ?? "");
@@ -214,8 +213,8 @@ export function EmployeeStudio({
     <main className="mx-auto flex h-full min-h-0 w-full max-w-4xl flex-col gap-3 overflow-hidden" dir="rtl">
       <div className="flex shrink-0 flex-wrap items-start justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">{tab === "campaigns" ? "حملات واتساب" : "الموظف الذكي"}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{tab === "campaigns" ? "جهّز رسالة لعملائك بخطوات واضحة." : "اختار شخصيته وعلّمه كل حاجة عن شغلك."}</p>
+          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">الموظف الذكي</h1>
+          <p className="mt-1 text-sm text-muted-foreground">اختار شخصيته وعلّمه كل حاجة عن شغلك.</p>
         </div>
         {!whatsappReady ? (
           <Link href="/dashboard/whatsapp"
@@ -240,11 +239,11 @@ export function EmployeeStudio({
           معلومات الموظف
         </button>
         {canManageCampaigns ? (
-          <button type="button" role="tab" aria-selected={tab === "campaigns"} aria-controls="studio-campaigns"
-            onClick={() => setTab("campaigns")}
-            className={"rounded-xl px-3 py-3 text-sm font-black transition " +
-              (tab === "campaigns" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-            حملات واتساب
+          <button type="button" role="tab" disabled aria-disabled="true" aria-selected={false}
+            aria-label="حملات واتساب - قريبًا" title="قريبًا"
+            className="flex min-h-12 cursor-not-allowed flex-wrap items-center justify-center gap-1.5 rounded-xl border border-border/70 bg-muted/40 px-2 py-2.5 text-xs font-bold text-muted-foreground/75 opacity-75 sm:text-sm">
+            <span>حملات واتساب</span>
+            <span className="rounded-full border border-border bg-card/50 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">قريبًا</span>
           </button>
         ) : null}
       </div>
@@ -401,12 +400,6 @@ export function EmployeeStudio({
         className="flex min-h-0 flex-1 flex-col [&[hidden]]:hidden">
         <EmployeeKnowledgeChat businessId={businessId} initialCount={knowledgeCount} />
       </div>
-      {canManageCampaigns ? (
-        <div role="tabpanel" id="studio-campaigns" aria-label="رسائل قوائم واتساب"
-          hidden={tab !== "campaigns"} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-0.5 [&[hidden]]:hidden">
-          {tab === "campaigns" ? <LabelCampaignChat /> : null}
-        </div>
-      ) : null}
     </main>
   );
 }
