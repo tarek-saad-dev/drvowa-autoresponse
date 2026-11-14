@@ -43,9 +43,16 @@ export CRM_STAGING_ENABLE_AI=YES_STAGING_ONLY
 export CRM_STAGING_CHANNEL_ID="<approved staging ChannelConnectionID>"
 node --import tsx scripts/crm-staging-http-smoke.ts --paired
 
-# To prove positive matching, use a separately verified historical interval
-# on staging and pass the exact Arabic request as CRM_STAGING_AI_REQUEST.
-# Spend refinement is checked against that audience; no WhatsApp send occurs.
+# Historical positive baseline from Cashier staging gate 2026-11-14:
+# September 2026, Protein ProIDs 15/16/1077 = 7 distinct clients.
+# All seven have lifetime valid-sale spend >= 1000 EGP.
+# Configure this instead of the default rolling 30 days (which has zero matches).
+# Re-run the source SQL gate before comparison if staging data may have changed.
+export CRM_STAGING_AI_REQUEST="هات العملاء اللي عملوا بروتين في سبتمبر 2026، الخدمات 15 و16 و1077"
+export CRM_STAGING_EXPECT_PROTEIN_MATCHES=7
+node --import tsx scripts/crm-staging-http-smoke.ts --paired
+
+# Spend refinement is tested against the historical audience; no send occurs.
 
 # Optional staging CRM snapshot (DB write, no campaign send):
 export CRM_STAGING_ENABLE_SNAPSHOT=YES_STAGING_ONLY
@@ -74,11 +81,11 @@ export CRM_STAGING_BUSINESS_ID="<staging BusinessID UUID>"
 # Independently verified source counts from the Cashier staging SQL gate.
 # Recompute before use; the example values below were observed 2026-11-14
 # and are NOT guaranteed to remain current.
-export CRM_STAGING_EXPECT_SOURCE_CUSTOMERS=3114
+export CRM_STAGING_EXPECT_SOURCE_CUSTOMERS=3119
 export CRM_STAGING_EXPECT_SOURCE_INVOICES=9509
 export CRM_STAGING_EXPECT_SOURCE_CANCELLED=24
 # Copy the verified sourceSaleLineCount from the latest Cashier CRM staging gate.
-export CRM_STAGING_EXPECT_SOURCE_LINES="<verified staging sales line count>"
+export CRM_STAGING_EXPECT_SOURCE_LINES=11277
 export CRM_STAGING_EXPECT_SOURCE_CATALOG=83
 export CRM_STAGING_EXPECT_SOURCE_CATALOG_DELETED=17
 
