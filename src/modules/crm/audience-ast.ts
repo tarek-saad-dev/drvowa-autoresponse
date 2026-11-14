@@ -47,8 +47,8 @@ const predicateSchema: z.ZodType<AudiencePredicate> = z.discriminatedUnion("type
   z.object({
     type: z.literal("erp_invoice_date"),
     op: z.literal("between"),
-    from: z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/),
-    to: z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/),
+    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   }),
   z.object({
     type: z.literal("erp_spend"),
