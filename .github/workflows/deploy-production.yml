@@ -132,7 +132,7 @@ jobs:
                 test -n "$CHANGED_FILES" || { echo "BLOCKED: empty Pulse team release"; exit 1; }
                 while IFS= read -r file; do
                   case "$file" in
-                    .github/workflows/deploy-production.yml|src/components/dashboard/pulse/live-ownership.tsx|src/components/dashboard/pulse/team-chat-drawer.tsx|tests/unit/pulse-team-chat-drawer.test.tsx)
+                    .github/workflows/deploy-production.yml|src/components/dashboard/pulse/live-ownership.tsx|src/components/dashboard/pulse/team-chat-drawer.tsx|tests/unit/pulse-team-chat-drawer.test.tsx|tests/unit/brand-v2-ui-only-release.test.ts)
                       ;;
                     *) echo "BLOCKED: non-UI file in no-DB Pulse team release: $file"; exit 1 ;;
                   esac
