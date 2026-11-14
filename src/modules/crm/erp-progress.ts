@@ -25,9 +25,9 @@ export function calculateErpProgressRows(input: {
       return { resource, sourceCount, mirroredCount, percent: null, discrepancy: true };
     }
     const discrepancy = mirroredCount > sourceCount;
-    const percent = sourceCount === 0
-      ? (mirroredCount === 0 ? 100 : null)
-      : Math.min(100, Math.round((mirroredCount / sourceCount) * 1000) / 10);
+    const percent = discrepancy ? null : sourceCount === 0
+      ? 100
+      : Math.round((mirroredCount / sourceCount) * 1000) / 10;
     return { resource, sourceCount, mirroredCount, percent, discrepancy };
   });
 }
