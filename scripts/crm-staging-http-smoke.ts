@@ -174,11 +174,30 @@ async function main(): Promise<void> {
   }
 
   let ai: { matched: number; eligiblePreview: number } | "NOT_RUN" = "NOT_RUN";
+  let spendRefinement: { matched: number } | "NOT_RUN" = "NOT_RUN";
   let snapshot: { matched: number; eligible: number } | "NOT_RUN" = "NOT_RUN";
   if (process.env.CRM_STAGING_ENABLE_AI === "YES_STAGING_ONLY") {
+    const channelResult = await callJson(crm, "/api/crm/channels", crmHeaders);
+    const activeChannels = list(channelResult.activeChannels)
+      .map((item) => asRecord(item))
+      .filter((channel) => channel.isActive === true && channel.status === "ACTIVE");
+    const explicitId = process.env.CRM_STAGING_CHANNEL_ID?.trim();
+    const selected = explicitId
+      ? activeChannels.find((item) => item.channelConnectionId === explicitId)
+      : activeChannels.length === 1 ? activeChannels[0] : undefined;
+    if (!selected || typeof selected.channelConnectionId !== "string") {
+      throw new Error("Select an explicitly authorized staging WhatsApp channel before AI/eligibility checks");
+    }
+    const channelConnectionId = selected.channelConnectionId;
+
     const result = await callJson(
       crm, "/api/crm/campaigns/ai", crmHeaders, "POST",
-      { message: "هات العملاء اللي عملوا بروتين آخر 30 يوم", mode: "filter" },
+      {
+        message: process.env.CRM_STAGING_AI_REQUEST?.trim()
+          || "هات العملاء اللي عملوا بروتين آخر 30 يوم",
+        mode: "filter",
+        channelConnectionId,
+      },
       55_000,
     );
     const turn = asRecord(result.turn);
@@ -197,17 +216,40 @@ async function main(): Promise<void> {
     }
     ai = { matched: total, eligiblePreview: eligible };
 
+    const refined = await callJson(
+      crm, "/api/crm/campaigns/ai", crmHeaders, "POST",
+      {
+        message: "هات منهم اللي صرفوا أكثر من 1000 جنيه",
+        mode: "refine",
+        priorFilter: turn.filter,
+        channelConnectionId,
+      },
+      55_000,
+    );
+    const refineTurn = asRecord(refined.turn);
+    const refinedPreview = asRecord(refineTurn.preview);
+    const refinedCount = Number(refinedPreview.totalMatched);
+    if (refineTurn.kind !== "filter" || !refineTurn.filter
+      || !Number.isInteger(refinedCount) || refinedCount < 0 || refinedCount > total) {
+      throw new Error("CRM spend refinement did not preserve the audience intersection");
+    }
+    spendRefinement = { matched: refinedCount };
+
     if (process.env.CRM_STAGING_ENABLE_SNAPSHOT === "YES_STAGING_ONLY") {
       const frozen = await callJson(
         crm, "/api/crm/audience/freeze", crmHeaders, "POST",
-        { filter: turn.filter, name: "Staging verification - no send" },
+        {
+          filter: turn.filter,
+          name: "Staging verification - no send",
+          channelConnectionId,
+        },
         60_000,
       );
       const snapshotId = frozen.snapshotId;
       if (typeof snapshotId !== "string") throw new Error("Audience freeze returned no snapshot");
       const validated = await callJson(
         crm, "/api/crm/audience/revalidate", crmHeaders, "POST",
-        { snapshotId },
+        { snapshotId, channelConnectionId },
         60_000,
       );
       if (!Array.isArray(validated.eligiblePhones)) {
@@ -233,7 +275,7 @@ async function main(): Promise<void> {
     customer360: profileChecked ? "HTTP_SHAPE_PASS" : "NO_CUSTOMER_TO_CHECK",
     aiAudience: ai,
     snapshot,
-    spendRefinement: "NOT_RUN",
+    spendRefinement,
     campaignDraft: "NOT_RUN",
     bulkSend: "NEVER_CALLED",
   }));
