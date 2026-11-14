@@ -233,6 +233,10 @@ export function TeamChatDrawer({
       if (!resume.ok || result.state?.mode !== "AUTO") {
         throw new Error(friendly(result, "تم تحديث المتابعة لكن إرجاع البوت لم يتأكد. راجع حالة الشات."));
       }
+      const verified = await fetchStatus();
+      if (verified.ai.mode !== "AUTO" || verified.escalation) {
+        throw new Error("البوت اتطلب تشغيله لكن ظهر تصعيد جديد أو الحالة اتغيرت. راجع آخر رسالة قبل تسليمه.");
+      }
       setAiState(result.state);
       setHandoffDone(true);
       setShowResolveConfirmation(false);
