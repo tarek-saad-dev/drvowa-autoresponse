@@ -123,7 +123,8 @@ export function parseErpAuditedInvoiceDeletionPage(
   }
   const next = asRecord(data.nextCursor);
   const nextAuditId = num(next?.sinceAuditId);
-  if (!Number.isSafeInteger(nextAuditId) || nextAuditId !== lastAuditId ||
+  if (nextAuditId === null || !Number.isSafeInteger(nextAuditId) ||
+      nextAuditId !== lastAuditId ||
       data.hasMore != null && typeof data.hasMore !== "boolean") {
     throw new ValidationError("فشل مزامنة الفواتير المحذوفة: المؤشر التالي غير مطابق");
   }
