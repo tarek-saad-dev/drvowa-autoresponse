@@ -128,6 +128,9 @@ export function parseErpAuditedInvoiceDeletionPage(
       data.hasMore != null && typeof data.hasMore !== "boolean") {
     throw new ValidationError("فشل مزامنة الفواتير المحذوفة: المؤشر التالي غير مطابق");
   }
+  if (data.hasMore === true && !events.length) {
+    throw new ValidationError("مزامنة الحذف أعادت صفحة ممتلئة بلا أحداث");
+  }
   return { events, nextAuditId: lastAuditId, hasMore: data.hasMore === true };
 }
 
