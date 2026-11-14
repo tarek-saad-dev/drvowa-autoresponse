@@ -81,6 +81,35 @@ describe("crm audience SQL compiler security", () => {
     expect(compiled.inputs.some((i) => String(i.value).includes("DROP TABLE"))).toBe(true);
   });
 
+  it("treats search metacharacters as literal data, not SQL LIKE wildcards", () => {
+    const wildcard = parseAudienceFilterAst({
+      version: 1,
+      all: [{type:"erp_service",op:"name_contains",values:["%_["]}],
+    });
+    const compiled = compileAudienceFilter({businessId:BUSINESS_ID,filter:wildcard});
+    expect(compiled.sqlText).toContain("LIKE @svcName0_");
+    expect(compiled.sqlText).toContain("ESCAPE N'~'");
+    expect(compiled.inputs.some((x) => x.value === "%~%~_~[%")).toBe(true);
+    expect(compiled.sqlText).not.toContain("%_[" );
+  });
+
+  it("includes the entire end date for timestamp interactions and ERP service dates", () => {
+    const filter = parseAudienceFilterAst({
+      version:1,
+      all:[
+        {type:"last_interaction",op:"between",from:"2026-11-01",to:"2026-11-15"},
+        {type:"erp_service",op:"name_contains",values:["بروتين"],from:"2026-11-01",to:"2026-11-15"},
+        {type:"erp_last_visit",op:"between",from:"2026-11-01",to:"2026-11-15"},
+      ],
+    });
+    const compiled = compileAudienceFilter({businessId:BUSINESS_ID,filter});
+    expect(compiled.sqlText).toContain("c.LastInteractionAtUtc >= @liFrom_");
+    expect(compiled.sqlText).toMatch(/c\.LastInteractionAtUtc < DATEADD\(day, 1, @liTo_/);
+    expect(compiled.sqlText).toMatch(/inv\.InvDate < DATEADD\(day, 1, @svcTo_/);
+    expect(compiled.sqlText).toMatch(/DATEADD\(day, 1, @elvTo_/);
+    expect(compiled.sqlText).not.toContain(" BETWEEN @liFrom_");
+  });
+
   it("enforces row limit caps at compile time even when AST allows 5000", () => {
     const filter = parseAudienceFilterAst({
       version: 1,
