@@ -125,12 +125,26 @@ async function ensureCrmCustomerFromErp(params: {
       // is malformed or missing; never re-submit an old invalid phone value.
       const nextName = params.name?.trim() || byErp.fullName;
       const nextEmail = params.email?.trim() || byErp.email;
-      const phoneChanged = Boolean(phone && phone !== byErp.primaryPhoneNormalized);
+      let phoneForUpdate = phone;
+      if (phone && phone !== byErp.primaryPhoneNormalized) {
+        const phoneOwner = await repo.getCustomerByPhone({
+          businessId: params.businessId,
+          phoneNormalized: phone,
+        });
+        // A shared phone must not overwrite a *different* customer's
+        // primary phone on later sync runs; this also keeps sync idempotent.
+        if (phoneOwner && phoneOwner.customerId !== byErp.customerId) {
+          phoneForUpdate = null;
+        }
+      }
+      const phoneChanged = Boolean(
+        phoneForUpdate && phoneForUpdate !== byErp.primaryPhoneNormalized,
+      );
       if (phoneChanged || nextName !== byErp.fullName || nextEmail !== byErp.email) {
         await repo.updateCustomer({
           businessId: params.businessId,
           customerId: byErp.customerId,
-          ...(phoneChanged ? { primaryPhoneNormalized: phone } : {}),
+          ...(phoneChanged ? { primaryPhoneNormalized: phoneForUpdate } : {}),
           email: nextEmail,
           fullName: nextName,
           externalErpClientId: params.clientId,
