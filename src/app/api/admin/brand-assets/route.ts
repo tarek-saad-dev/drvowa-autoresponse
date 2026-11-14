@@ -1,5 +1,6 @@
 import { handleApiError, jsonOk } from "@/lib/api/http";
 import { ValidationError } from "@/lib/tenancy/errors";
+import { assertBrandAdminSameOrigin } from "@/lib/security/brand-origin";
 import { isBrandVariant, listBrandAssets, MAX_BRAND_FILE_BYTES, stageBrandAsset } from "@/modules/brand/assets";
 import { requirePlatformAdmin } from "@/modules/platform-admin/service";
 
@@ -18,10 +19,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const admin = await requirePlatformAdmin({ roles: ["SUPER_ADMIN"] });
-    const origin = request.headers.get("origin");
-    if (!origin || new URL(origin).host !== new URL(request.url).host) {
-      throw new ValidationError("طلب الرفع لازم يكون من نفس موقع الإدارة.");
-    }
+    assertBrandAdminSameOrigin(request);
     const length = Number(request.headers.get("content-length") ?? "0");
     if (length > MAX_BRAND_FILE_BYTES + 64_000) {
       throw new ValidationError("حجم الملف يتجاوز 2 ميجابايت.");
