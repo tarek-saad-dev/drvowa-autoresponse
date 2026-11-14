@@ -62,11 +62,12 @@ jobs:
 
             cd /home/drvowa/app
 
-            # The owner authorized a one-time UI-only release without a fresh SQL backup.
-            # This exception cannot be used for schema, API, configuration or worker changes.
-            # Full releases MUST pass the fresh full-backup gate below.
+            # Only strictly allowlisted no-DB presentation changes may bypass the SQL-backup gate.
+            # All SQL/schema, API/backend, configuration and worker changes remain blocked
+            # by the production backup readiness gate below.
             VISUAL_ONLY=0
             BRAND_ASSETS_ONLY=0
+            PULSE_TEAM_ONLY=0
             CURRENT_SHA="$(git rev-parse HEAD)"
             git fetch origin main
             DEPLOY_TITLE="$(git show -s --format=%s "$DEPLOY_SHA")"
@@ -120,9 +121,28 @@ jobs:
                 BRAND_ASSETS_ONLY=1
                 echo "PASS: isolated Brand Assets filesystem release, no schema migration"
                 ;;
+              "release(pulse-team-chat-no-db):"*)
+                test -n "$DEPLOY_BEFORE" && test "$CURRENT_SHA" = "$DEPLOY_BEFORE" || {
+                  echo "BLOCKED: Pulse team release must start from current production SHA"; exit 1;
+                }
+                test "$(git rev-list --count "$DEPLOY_BEFORE..$DEPLOY_SHA")" = 1 || {
+                  echo "BLOCKED: Pulse team release must be exactly one reviewed commit"; exit 1;
+                }
+                CHANGED_FILES="$(git diff --name-only "$DEPLOY_BEFORE" "$DEPLOY_SHA")"
+                test -n "$CHANGED_FILES" || { echo "BLOCKED: empty Pulse team release"; exit 1; }
+                while IFS= read -r file; do
+                  case "$file" in
+                    .github/workflows/deploy-production.yml|src/components/dashboard/pulse/live-ownership.tsx|src/components/dashboard/pulse/team-chat-drawer.tsx|tests/unit/pulse-team-chat-drawer.test.tsx|tests/unit/brand-v2-ui-only-release.test.ts)
+                      ;;
+                    *) echo "BLOCKED: non-UI file in no-DB Pulse team release: $file"; exit 1 ;;
+                  esac
+                done <<< "$CHANGED_FILES"
+                PULSE_TEAM_ONLY=1
+                echo "PASS: Pulse team chat UI-only release; no SQL migrations, env changes or worker restarts"
+                ;;
             esac
 
-            if [ "$VISUAL_ONLY" != 1 ] && [ "$BRAND_ASSETS_ONLY" != 1 ]; then
+            if [ "$VISUAL_ONLY" != 1 ] && [ "$BRAND_ASSETS_ONLY" != 1 ] && [ "$PULSE_TEAM_ONLY" != 1 ]; then
             # Fail closed before git checkout, env flag edits, migrations, or restarts.
             # This is evidence of a recent backup record, NOT a restore proof.
             echo "==> Checking recent production SQL full-backup metadata (read-only)"
@@ -182,7 +202,7 @@ jobs:
             rollback_visual_release() {
               rc="$?"
               trap - EXIT
-              if [ "$rc" -ne 0 ] && [ "$UI_CHECKED_OUT" = 1 ] && { [ "$VISUAL_ONLY" = 1 ] || [ "$BRAND_ASSETS_ONLY" = 1 ]; }; then
+              if [ "$rc" -ne 0 ] && [ "$UI_CHECKED_OUT" = 1 ] && { [ "$VISUAL_ONLY" = 1 ] || [ "$BRAND_ASSETS_ONLY" = 1 ] || [ "$PULSE_TEAM_ONLY" = 1 ]; }; then
                 echo "==> Visual-only release failed: restoring previous deployed app SHA"
                 set +e
                 git checkout --detach "$CURRENT_SHA"
@@ -202,10 +222,10 @@ jobs:
             git fetch origin main
             git checkout --detach "$DEPLOY_SHA"
             test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
-            if [ "$VISUAL_ONLY" = 1 ] || [ "$BRAND_ASSETS_ONLY" = 1 ]; then UI_CHECKED_OUT=1; fi
+            if [ "$VISUAL_ONLY" = 1 ] || [ "$BRAND_ASSETS_ONLY" = 1 ] || [ "$PULSE_TEAM_ONLY" = 1 ]; then UI_CHECKED_OUT=1; fi
             echo "Deploying verified commit $DEPLOY_SHA"
 
-            if [ "$VISUAL_ONLY" != 1 ] && [ "$BRAND_ASSETS_ONLY" != 1 ]; then
+            if [ "$VISUAL_ONLY" != 1 ] && [ "$BRAND_ASSETS_ONLY" != 1 ] && [ "$PULSE_TEAM_ONLY" != 1 ]; then
             echo "==> Ensuring integration encryption secret"
             ENV_FILE=".env.production.local"
             touch "$ENV_FILE"
@@ -259,7 +279,7 @@ jobs:
             echo "==> AI worker boot check"
             npm run ai:worker:check
 
-            if [ "$VISUAL_ONLY" != 1 ] && [ "$BRAND_ASSETS_ONLY" != 1 ]; then
+            if [ "$VISUAL_ONLY" != 1 ] && [ "$BRAND_ASSETS_ONLY" != 1 ] && [ "$PULSE_TEAM_ONLY" != 1 ]; then
               echo "==> Applying database migrations"
               npm run db:migrate
             else
@@ -282,7 +302,7 @@ jobs:
             echo "==> Restarting app service"
             systemctl restart drvowa.service
 
-            if [ "$VISUAL_ONLY" != 1 ] && [ "$BRAND_ASSETS_ONLY" != 1 ]; then
+            if [ "$VISUAL_ONLY" != 1 ] && [ "$BRAND_ASSETS_ONLY" != 1 ] && [ "$PULSE_TEAM_ONLY" != 1 ]; then
             echo "==> Restarting AI worker for integration-aware replies"
             systemctl restart drvowa-ai-worker.service
             sleep 2
@@ -314,6 +334,10 @@ jobs:
               echo "DRVOWA production health check passed"
               if [ "$VISUAL_ONLY" = 1 ]; then
                 echo "PASS: UI-only release completed, no SQL or billing scheduler modifications"
+                exit 0
+              fi
+              if [ "$PULSE_TEAM_ONLY" = 1 ]; then
+                echo "PASS: Pulse team chat released, authenticated Home UI served by healthy app; no SQL, env, worker or billing timer changes"
                 exit 0
               fi
               if [ "$BRAND_ASSETS_ONLY" = 1 ]; then
