@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { formatCrmDate, readApiJson } from "@/components/dashboard/crm/labels";
 import { Alert } from "@/components/ui/alert";
@@ -75,6 +75,9 @@ export function ErpSyncPanel() {
   const [notice, setNotice] = useState<string | null>(null);
   const [probe, setProbe] = useState<ErpSourceProbe | null>(null);
   const [probeBusy, setProbeBusy] = useState(false);
+  const stopRequested = useRef(false);
+  const [batchProgress, setBatchProgress] = useState<string | null>(null);
+
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -99,42 +102,101 @@ export function ErpSyncPanel() {
   }, [load]);
 
   async function resync() {
+    if (busy || probeBusy || !status?.connected) return;
+    stopRequested.current = false;
     setBusy(true);
     setError(null);
     setNotice(null);
+    setBatchProgress(null);
+    const resources = ["customers", "invoices", "catalog"] as const;
+    const completed = new Set<string>();
+    const syncedTotals = { customers: 0, invoices: 0, catalog: 0 };
+    // A single user click is capped to avoid endless import loops. Clicking
+    // again resumes from persisted SQL cursors; NEVER restart from ID zero.
+    const MAX_REQUESTS_PER_CLICK = 90;
+    let requests = 0;
+    let lastStatus: ErpSyncStatus | null = null;
     try {
-      const response = await fetch("/api/crm/erp/sync", { method: "POST" });
-      const data = await readApiJson<{ status?: ErpSyncStatus; result?: ErpSyncResult }>(response);
-      if (!response.ok || !data.status || !data.result) {
-        throw new Error(mapUserFacingError(data, "تعذر تشغيل المزامنة."));
+      while (completed.size < resources.length && requests < MAX_REQUESTS_PER_CLICK) {
+        for (const resource of resources) {
+          if (completed.has(resource) || stopRequested.current) break;
+          requests += 1;
+          setBatchProgress(
+            "جاري مزامنة " + resourceLabel(resource) +
+            " — الدفعة " + requests.toLocaleString("ar-EG") +
+            " من " + MAX_REQUESTS_PER_CLICK.toLocaleString("ar-EG") +
+            " كحد أقصى. يتم حفظ مؤشر الاستكمال بعد كل دفعة.",
+          );
+          const response = await fetch("/api/crm/erp/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ resource }),
+          });
+          if (response.status === 504) {
+            throw new Error(
+              "انتهت مهلة دفعة " + resourceLabel(resource) +
+              ". ممكن السيرفر يكون لسه بيعالجها؛ اضغط «تحديث الحالة» وتأكد من آخر المؤشرات قبل استكمال المزامنة.",
+            );
+          }
+          const data = await readApiJson<{
+            status?: ErpSyncStatus;
+            result?: ErpSyncResult;
+          }>(response);
+          if (!response.ok || !data.status || !data.result) {
+            throw new Error(mapUserFacingError(data, "تعذر استكمال دفعة " + resourceLabel(resource)));
+          }
+          lastStatus = data.status;
+          setStatus(data.status);
+          if (data.result[resource].skipped) {
+            throw new Error("Cashier لم ينفّذ دفعة " + resourceLabel(resource));
+          }
+          syncedTotals[resource] += data.result[resource].synced;
+          const current = data.status.resources.find((item) => item.resource === resource);
+          if (!current || current.status === "ERROR" || current.status === "IDLE") {
+            throw new Error("لم يتم تأكيد حفظ دفعة " + resourceLabel(resource) + " داخل CRM");
+          }
+          if (current.status === "SUCCESS") completed.add(resource);
+          if (requests >= MAX_REQUESTS_PER_CLICK) break;
+        }
+        if (stopRequested.current) break;
       }
-      setStatus(data.status);
-      const names = ["customers", "invoices", "catalog"] as const;
-      const missing = names.some((name) =>
-        data.result![name].skipped || !data.status!.resources.some(
-          (resource) => resource.resource === name,
-        ),
-      );
-      if (missing) {
-        throw new Error("المزامنة رجعت بدون تنفيذ أو حفظ بعض الموارد. اختبر المصدر؛ لم يتم تأكيد المزامنة.");
-      }
-      const progress = names.map((name) =>
-        resourceLabel(name) + ": " + data.result![name].synced.toLocaleString("ar-EG"),
+      const totals = resources.map((name) =>
+        resourceLabel(name) + ": " + syncedTotals[name].toLocaleString("ar-EG"),
       ).join(" · ");
-      if (data.status.resources.some((resource) => resource.status === "PARTIAL")) {
-        setNotice("المزامنة جزئية: " + progress + ". كرر المحاولة حتى تصبح الموارد SUCCESS.");
-      } else if (data.status.resources.some((resource) => resource.status === "ERROR")) {
-        throw new Error("حدث خطأ في أحد موارد المزامنة. راجع التفاصيل أدناه.");
-      } else if ((data.status.mirrorCounts?.validInvoices ?? 0) === 0) {
-        setNotice("تم تسجيل محاولة المزامنة، لكن CRM ما زال بدون فواتير. " + progress + ". استخدم «اختبار مصدر Cashier» لمعرفة هل المصدر بيرجع سجلات.");
+      if (completed.size === resources.length) {
+        setNotice(
+          (lastStatus?.mirrorCounts?.validInvoices ?? 0) > 0
+            ? "اكتملت صفحات المزامنة المطلوبة وتحدّثت حالات الموارد. " + totals
+            : "انتهت صفحات المزامنة لكن CRM مفيهوش فواتير بيع صحيحة؛ افحص بيانات المصدر وحالة الفواتير. " + totals,
+        );
+      } else if (stopRequested.current) {
+        setNotice("تم إيقاف الاستكمال بعد آخر دفعة؛ البيانات والمؤشرات محفوظة. اضغط «مزامنة الآن» للاستكمال. " + totals);
       } else {
-        setNotice("اكتملت المزامنة وسُجلت حالة الموارد. " + progress + ".");
+        setNotice("المزامنة جزئية وآمنة للاستكمال، لسه فيه صفحات. اضغط «مزامنة الآن» لاستكمال الدفعات. " + totals);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر تشغيل المزامنة.");
+      setError(err instanceof Error ? err.message : "تعذر تشغيل مزامنة ERP.");
+      // The HTTP client may time out while the server commits its last page.
+      // Refresh summary without clearing the actual error/stop signal.
+      try {
+        const response = await fetch("/api/crm/erp/sync", { cache: "no-store" });
+        const data = await readApiJson<{ status?: ErpSyncStatus }>(response);
+        if (response.ok && data.status) setStatus(data.status);
+      } catch {
+        // Keep the original user-visible error.
+      }
     } finally {
+      setBatchProgress(null);
       setBusy(false);
+      stopRequested.current = false;
     }
+  }
+
+  function stopResync() {
+    // Do not abort an in-flight request after it may have written mirror data.
+    // Stop launching new requests after the currently active page finishes.
+    stopRequested.current = true;
+    setBatchProgress("إيقاف الاستكمال بعد انتهاء الدفعة الحالية…");
   }
 
   async function probeSource() {
@@ -174,13 +236,19 @@ export function ErpSyncPanel() {
             {probeBusy ? "جاري فحص المصدر…" : "اختبار مصدر Cashier (قراءة فقط)"}
           </Button>
           <Button type="button" disabled={loading || busy || probeBusy || !status?.connected} onClick={() => void resync()}>
-            {busy ? "جاري المزامنة…" : "مزامنة الآن"}
+            {busy ? "جاري استكمال الدفعات…" : "مزامنة الآن / استكمال"}
           </Button>
+          {busy ? (
+            <Button type="button" variant="outline" onClick={stopResync}>
+              إيقاف بعد الدفعة الحالية
+            </Button>
+          ) : null}
         </div>
       </div>
 
       {error ? <Alert variant="error">{error}</Alert> : null}
-      {notice ? <Alert variant="success">{notice}</Alert> : null}
+      {batchProgress ? <Alert variant="warning">{batchProgress}</Alert> : null}
+      {notice ? <Alert variant={notice.startsWith("اكتملت") ? "success" : "warning"}>{notice}</Alert> : null}
       {probe ? (
         <Card>
           <CardHeader>
