@@ -357,6 +357,79 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
     );
     expect(stored.recordset[0]?.Status).toBe("DRAFT");
     expect(Number(stored.recordset[0]?.PhoneCount)).toBe(1);
+
+    // Simulate a resumable incremental import AFTER a previous successful sync.
+    // Cashier can contain legacy phones that normalize inconsistently or are
+    // reused between different ERP clients. Neither case may stop an entire
+    // batch or silently associate invoices with another ERP customer.
+    SAMPLE.push(
+      {
+        clientId: 104, name: "Synthetic Invalid Phone",
+        mobile: "00001234567", phone: "not-a-phone", email: "invalid@example.test",
+      },
+      {
+        clientId: 105, name: "Synthetic Duplicate Phone Different ERP ID",
+        mobile: SAMPLE[0]!.mobile, phone: SAMPLE[0]!.phone, email: "reuse@example.test",
+      },
+      {
+        clientId: 106, name: "Synthetic Following Valid Customer",
+        mobile: "01055554444", phone: "01055554444", email: "following@example.test",
+      },
+    );
+    invoices.push({
+      invId: 204, invType: "مبيعات", clientId: 104,
+      clientName: "Synthetic Invalid Phone", mobile: "00001234567",
+      invDate: TODAY, status: "active", isActive: "no", grandTotal: 700,
+      lines: [{
+        proId: 15, proType: "serv", proName: "بروتين",
+        qty: 1, sPrice: 700, lineTotal: 700,
+      }],
+    });
+
+    const continued = await postJson(request, "/api/crm/erp/sync", {});
+    const continuedResult = continued.result as {
+      customers: {synced:number}; invoices:{synced:number}; catalog:{synced:number};
+    };
+    expect(continuedResult.customers.synced).toBeGreaterThanOrEqual(3);
+    expect(continuedResult.invoices.synced).toBeGreaterThanOrEqual(1);
+    const continuedStatus = continued.status as {
+      mirrorCounts: {
+        erpCustomers:number; erpCustomersWithoutPhone:number;
+        validInvoices:number; unlinkedInvoices:number; invoiceLines:number;
+      };
+      resources: Array<{resource:string;status:string}>;
+    };
+    expect(continuedStatus.mirrorCounts.erpCustomers).toBe(6);
+    expect(continuedStatus.mirrorCounts.erpCustomersWithoutPhone).toBe(2);
+    expect(continuedStatus.mirrorCounts.validInvoices).toBe(3);
+    expect(continuedStatus.mirrorCounts.unlinkedInvoices).toBe(0);
+    expect(continuedStatus.resources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ resource: "customers", status: "SUCCESS" }),
+      expect.objectContaining({ resource: "invoices", status: "SUCCESS" }),
+      expect.objectContaining({ resource: "catalog", status: "SUCCESS" }),
+    ]));
+    const imported = await query<{ExternalErpClientId:string;PrimaryPhoneNormalized:string|null}>(
+      `SELECT ExternalErpClientId, PrimaryPhoneNormalized
+       FROM dbo.TblCrmCustomer
+       WHERE BusinessID = @businessId AND ExternalErpClientId IN (N'101', N'104', N'105', N'106')
+         AND Status <> N'MERGED'`,
+      [{ name:"businessId", type:sql.UniqueIdentifier, value:businessId! }],
+    );
+    const byErp = new Map(imported.recordset.map(row => [row.ExternalErpClientId, row.PrimaryPhoneNormalized]));
+    expect(byErp.get("104")).toBeNull();
+    expect(byErp.get("105")).toBeNull();
+    expect(byErp.get("106")).toBe("201055554444");
+    expect(byErp.get("101")).toBe(phoneAlpha);
+    const invalidInvoice = await query<{ExternalClientId:string|null;CustomerID:string|null}>(
+      `SELECT ExternalClientId, CustomerID FROM dbo.TblErpInvoiceMirror
+       WHERE BusinessID=@businessId AND ExternalInvId=N'مبيعات:204'`,
+      [{ name:"businessId", type:sql.UniqueIdentifier, value:businessId! }],
+    );
+    expect(invalidInvoice.recordset[0]?.ExternalClientId).toBe("104");
+    expect(invalidInvoice.recordset[0]?.CustomerID).toBeTruthy();
+
+    // No customer data is dropped just because a phone is bad; no WhatsApp
+    // recipients are inferred for phone-less ERP customers.
     // There is no WhatsApp send or real Cashier connection in this test.
     expect(calls).toContain("manifest");
     expect(calls).toContain("customer.list_changes:append");
