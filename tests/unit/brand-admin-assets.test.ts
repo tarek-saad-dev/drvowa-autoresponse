@@ -120,8 +120,8 @@ describe("DRVO Super Admin Brand Assets without SQL migration", () => {
     for (const code of [listRoute, modifyRoute, previewRoute]) {
       expect(code).toContain('requirePlatformAdmin({ roles: ["SUPER_ADMIN"] })');
     }
-    expect(listRoute).toContain('request.headers.get("origin")');
-    expect(modifyRoute).toContain('request.headers.get("origin")');
+    expect(listRoute).toContain("assertBrandAdminSameOrigin(request)");
+    expect(modifyRoute.match(/assertBrandAdminSameOrigin\(request\)/g)).toHaveLength(2);
     expect(listRoute).not.toContain("activateBrandAsset");
     expect(adminLayout).toContain('adminCtx.admin.role === "SUPER_ADMIN"');
     expect(adminNav).toContain("canManageBrand");
