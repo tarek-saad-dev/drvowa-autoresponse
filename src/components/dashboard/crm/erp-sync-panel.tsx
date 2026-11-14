@@ -15,7 +15,7 @@ import { mapUserFacingError } from "@/lib/ui/user-errors";
 type ErpSyncResource = {
   syncStateId: string;
   resource: string;
-  status: "IDLE" | "RUNNING" | "SUCCESS" | "ERROR";
+  status: "IDLE" | "RUNNING" | "PARTIAL" | "SUCCESS" | "ERROR";
   lastSuccessAtUtc: string | null;
   lastAttemptAtUtc: string | null;
   lastErrorCode: string | null;
@@ -81,7 +81,11 @@ export function ErpSyncPanel() {
         throw new Error(mapUserFacingError(data, "تعذر تشغيل المزامنة."));
       }
       setStatus(data.status);
-      setNotice("اكتملت محاولة المزامنة اليدوية.");
+      setNotice(data.status.resources.some((r) => r.status === "PARTIAL")
+        ? "المزامنة جزئية؛ فيه صفحات بيانات لسه محتاجة استكمال. كرر المزامنة لحد ما الحالة تبقى SUCCESS."
+        : data.status.resources.some((r) => r.status === "ERROR")
+          ? "محاولة المزامنة واجهت خطأ؛ راجع حالة كل مورد."
+          : "اكتملت محاولة المزامنة اليدوية. راجع حالة كل مورد للتأكد من اكتمالها.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تشغيل المزامنة.");
     } finally {
@@ -167,7 +171,7 @@ export function ErpSyncPanel() {
                     <div key={resource.syncStateId} className="rounded-xl border border-border px-4 py-3 text-sm">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <strong>{resourceLabel(resource.resource)}</strong>
-                        <Badge variant={resource.status === "ERROR" ? "warning" : "success"}>
+                        <Badge variant={resource.status === "ERROR" || resource.status === "PARTIAL" ? "warning" : resource.status === "SUCCESS" ? "success" : "muted"}>
                           {resource.status}
                         </Badge>
                       </div>
