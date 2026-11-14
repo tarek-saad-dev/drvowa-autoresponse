@@ -34,3 +34,24 @@ export function assertErpSyncRecorded(
     );
   }
 }
+
+/**
+ * A bounded single-resource batch has not executed the other two resources,
+ * so validate only the requested tool's persisted state.
+ */
+export function assertErpResourceSyncRecorded(
+  resource: ResourceName,
+  result: ErpSyncResultContract,
+  status: ErpSyncStatusContract,
+): void {
+  const row = status.resources.find((item) =>
+    item.resource === resource && item.integrationId === status.integrationId,
+  );
+  if (!row || result[resource].skipped ||
+      (row.status !== "PARTIAL" && row.status !== "SUCCESS")) {
+    throw new ConflictError(
+      "لم يتم تأكيد حفظ دفعة مزامنة " + resource +
+      ". افحص حالة المصدر والمؤشر المحفوظ قبل إعادة المحاولة.",
+    );
+  }
+}
