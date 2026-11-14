@@ -268,7 +268,7 @@ async function main(): Promise<void> {
           throw new Error("One-recipient staging draft requires explicit operator confirmation");
         }
         const testPhone = required("CRM_STAGING_CONSENTED_TEST_PHONE");
-        if (!/^\\d{8,15}$/.test(testPhone)) {
+        if (testPhone.length < 8 || testPhone.length > 15 || [...testPhone].some((digit) => digit < "0" || digit > "9")) {
           throw new Error("Test recipient must be a normalized numeric WhatsApp phone");
         }
         if (!validated.eligiblePhones.includes(testPhone)) {
