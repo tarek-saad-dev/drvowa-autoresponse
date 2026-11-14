@@ -787,10 +787,14 @@ export async function getErpSyncStatus(params: { businessId: string }) {
     businessId: params.businessId,
     type: INTEGRATION_TYPE_DRVO_ERP,
   });
-  const states = await repo.listErpSyncStates({ businessId: params.businessId });
+  const [states, mirrorCounts] = await Promise.all([
+    repo.listErpSyncStates({ businessId: params.businessId }),
+    repo.getCrmErpMirrorCounts({ businessId: params.businessId }),
+  ]);
   const manifest = integration ? await loadManifest(integration) : null;
   return {
     connected: Boolean(integration && integration.status === "ACTIVE"),
+    mirrorCounts,
     integrationId: integration?.integrationId ?? null,
     integrationStatus: integration?.status ?? null,
     availableTools: {
