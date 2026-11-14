@@ -59,6 +59,7 @@ export const RATE_LIMITS = {
   // Authenticated CRM admin-only bounded ERP import. Each request consumes
   // one small resource page; one UI run is a sequence of many safe chunks.
   crmErpSyncBatch: { limit: 360, windowMs: 60 * 60 * 1000 },
+  crmErpProgressCounts: { limit: 30, windowMs: 60 * 60 * 1000 },
   labelCampaignLaunch: { limit: 5, windowMs: 60 * 60 * 1000 },
   onboardingPreviewReply: { limit: 12, windowMs: 15 * 60 * 1000 },
   voiceTranscribe: { limit: 20, windowMs: 15 * 60 * 1000 },
