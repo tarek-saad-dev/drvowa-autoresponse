@@ -2,6 +2,7 @@ import { requireApiBusiness } from "@/lib/api/auth-context";
 import { handleApiError, jsonOk } from "@/lib/api/http";
 import { assertRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
 import { getErpSyncStatus, syncErpForBusiness } from "@/modules/crm/erp-sync";
+import { assertErpSyncRecorded } from "@/modules/crm/erp-sync-contract";
 import { requireCrmWriteAccess } from "@/modules/crm/service";
 
 export async function GET() {
@@ -22,6 +23,7 @@ export async function POST() {
     assertRateLimit("crm-erp-sync:" + businessId, RATE_LIMITS.labelCampaignPreflight);
     const result = await syncErpForBusiness({ businessId });
     const status = await getErpSyncStatus({ businessId });
+    assertErpSyncRecorded(result, status);
     return jsonOk({ result, status });
   } catch (error) {
     return handleApiError(error);
