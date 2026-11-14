@@ -62,6 +62,32 @@ node --import tsx scripts/crm-staging-http-smoke.ts --paired
 
 The smoke prints **counts and status only**; no customer names, phones, tokens or invoice payloads. It never calls WhatsApp send, launch or campaign execution APIs. The optional draft stage requires the designated test phone to remain channel-consented on two successive revalidations, creates a one-number list only, and verifies `sendingEnabled=false`. It does **not** prove that the UI confirmation is displayed correctly; that still requires browser testing.
 
+## Independent source-to-mirror SQL count check (read-only)
+
+Run this **inside the isolated AutoRespond staging runtime** with its staging-only SQL credentials, only after the ERP append cursors have reached `SUCCESS`. The script verifies `DB_NAME()` and `SUSER_SNAME()` against explicitly supplied identities **before reading CRM tables**, rejects production `last132`, and prints only aggregate counts:
+
+```bash
+export CRM_STAGING_DB_NAME="<isolated AutoRespond staging database>"
+export CRM_STAGING_DB_LOGIN="<isolated staging SQL login>"
+export CRM_STAGING_BUSINESS_ID="<staging BusinessID UUID>"
+
+# Independently verified source counts from the Cashier staging SQL gate.
+# Recompute before use; the example values below were observed 2026-11-14
+# and are NOT guaranteed to remain current.
+export CRM_STAGING_EXPECT_SOURCE_CUSTOMERS=3114
+export CRM_STAGING_EXPECT_SOURCE_INVOICES=9509
+export CRM_STAGING_EXPECT_SOURCE_CANCELLED=24
+export CRM_STAGING_EXPECT_SOURCE_CATALOG=83
+export CRM_STAGING_EXPECT_SOURCE_CATALOG_DELETED=17
+
+# Configure DB_SERVER / DB_NAME / DB_USER / DB_PASSWORD to the isolated
+# AutoRespond staging database via your secret manager. Never paste secrets.
+export CRM_STAGING_REQUIRE_PARITY=YES_STAGING_ONLY
+node --import tsx scripts/crm-staging-mirror-reconcile.ts
+```
+
+A pass requires all three append streams `SUCCESS` and all five independently supplied source totals matching. If any are missing, the output says `NOT_PROVEN`; it never manufactures a passing parity result. This verifies aggregate coverage, not service lines or Customer 360 correctness, which require their own checks below. The rotating historical sweeps remain ongoing even after append status `SUCCESS`.
+
 ## Required *additional* verification before release
 
 - Fully reconcile Cashier source totals with AutoRespond mirror totals **after all append pages have reached `SUCCESS`**; a `PARTIAL` cursor state is not a completed sync. Check customer ID/phone linking, invoice composite keys, deleted/voided sales, line totals, and catalog deletion/name changes.
