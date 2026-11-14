@@ -45,7 +45,7 @@ export default async function AgentPage({
       whatsappState={waView?.uiState ?? "UNKNOWN"}
       knowledgeCount={knowledge.length}
       canManageCampaigns={membership?.status === "ACTIVE" && membership.role === "OWNER"}
-      initialTab={tab === "knowledge" ? "knowledge" : tab === "campaigns" && membership?.role === "OWNER" ? "campaigns" : "personality"}
+      initialTab={tab === "knowledge" ? "knowledge" : "personality"}
     />
   );
 }
