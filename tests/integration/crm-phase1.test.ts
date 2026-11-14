@@ -166,4 +166,119 @@ describe.runIf(isolated)("CRM Phase 1 SQL Server integration", () => {
       customerB.toLowerCase(),
     );
   });
+  it("executes channel-bound marketing consent and protein/spend SQL with no cross-channel leakage", async () => {
+    const channelA = randomUUID();
+    const channelB = randomUUID();
+    const eligibleCustomer = randomUUID();
+    const otherChannelCustomer = randomUUID();
+    const validInvoiceA = randomUUID();
+    const validInvoiceB = randomUUID();
+    const phoneA = normalizeCrmPhone("01011994455")!;
+    const phoneB = normalizeCrmPhone("01011994456")!;
+
+    await query(
+      `INSERT INTO dbo.TblChannelConnection
+         (ChannelConnectionID, BusinessID, Channel, Provider, Status, IsActive)
+       VALUES
+         (@channelA, @businessId, N'WHATSAPP', N'BAILEYS', N'ACTIVE', 1),
+         (@channelB, @businessId, N'WHATSAPP', N'BAILEYS', N'ACTIVE', 1)`,
+      [
+        { name: "channelA", type: sql.UniqueIdentifier, value: channelA },
+        { name: "channelB", type: sql.UniqueIdentifier, value: channelB },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessA },
+      ],
+    );
+    await query(
+      `INSERT INTO dbo.TblCrmCustomer
+         (CustomerID, BusinessID, FullName, PrimaryPhoneNormalized, Source, Status)
+       VALUES
+         (@customerA, @businessId, N'Protein Test A', @phoneA, N'ERP', N'ACTIVE'),
+         (@customerB, @businessId, N'Protein Test B', @phoneB, N'ERP', N'ACTIVE')`,
+      [
+        { name: "customerA", type: sql.UniqueIdentifier, value: eligibleCustomer },
+        { name: "customerB", type: sql.UniqueIdentifier, value: otherChannelCustomer },
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessA },
+        { name: "phoneA", type: sql.NVarChar(32), value: phoneA },
+        { name: "phoneB", type: sql.NVarChar(32), value: phoneB },
+      ],
+    );
+    await query(
+      `INSERT INTO dbo.TblWhatsAppCampaignPermission
+         (BusinessID, ChannelConnectionID, PhoneNormalized, Source, ProviderMessageID, EvidenceText)
+       VALUES
+         (@businessId, @channelA, @phoneA, N'EXPLICIT_INBOUND', N'stage-msg-1', N'Opt-in test'),
+         (@businessId, @channelB, @phoneB, N'EXPLICIT_INBOUND', N'stage-msg-2', N'Opt-in test')`,
+      [
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessA },
+        { name: "channelA", type: sql.UniqueIdentifier, value: channelA },
+        { name: "channelB", type: sql.UniqueIdentifier, value: channelB },
+        { name: "phoneA", type: sql.NVarChar(32), value: phoneA },
+        { name: "phoneB", type: sql.NVarChar(32), value: phoneB },
+      ],
+    );
+    // A suppression on another channel must not suppress A's current-channel permission.
+    await query(
+      `INSERT INTO dbo.TblWhatsAppCampaignOptOut
+         (BusinessID, ChannelConnectionID, PhoneNormalized, ProviderMessageID)
+       VALUES (@businessId, @channelB, @phoneA, N'stage-stop-1')`,
+      [
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessA },
+        { name: "channelB", type: sql.UniqueIdentifier, value: channelB },
+        { name: "phoneA", type: sql.NVarChar(32), value: phoneA },
+      ],
+    );
+    await query(
+      `INSERT INTO dbo.TblErpInvoiceMirror
+         (InvoiceMirrorID, BusinessID, ExternalInvId, CustomerID, InvType, InvDate, GrandTotal, IsValidSale, IsDeleted)
+       VALUES
+         (@invoiceA, @businessId, N'مبيعات:sql-test-protein-a', @customerA, N'مبيعات',
+           CAST(SYSUTCDATETIME() AS DATE), 1500, 1, 0),
+         (@invoiceB, @businessId, N'مبيعات:sql-test-protein-b', @customerB, N'مبيعات',
+           CAST(SYSUTCDATETIME() AS DATE), 1800, 1, 0)`,
+      [
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessA },
+        { name: "invoiceA", type: sql.UniqueIdentifier, value: validInvoiceA },
+        { name: "invoiceB", type: sql.UniqueIdentifier, value: validInvoiceB },
+        { name: "customerA", type: sql.UniqueIdentifier, value: eligibleCustomer },
+        { name: "customerB", type: sql.UniqueIdentifier, value: otherChannelCustomer },
+      ],
+    );
+    await query(
+      `INSERT INTO dbo.TblErpInvoiceLineMirror
+         (InvoiceLineMirrorID, BusinessID, InvoiceMirrorID, ExternalInvId, ExternalProId, ProType, ProName, Qty, UnitPrice, LineTotal)
+       VALUES
+         (@lineA, @businessId, @invoiceA, N'مبيعات:sql-test-protein-a', N'15', N'serv', N'بروتين', 1, 1500, 1500),
+         (@lineB, @businessId, @invoiceB, N'مبيعات:sql-test-protein-b', N'15', N'serv', N'بروتين', 1, 1800, 1800)`,
+      [
+        { name: "businessId", type: sql.UniqueIdentifier, value: businessA },
+        { name: "lineA", type: sql.UniqueIdentifier, value: randomUUID() },
+        { name: "lineB", type: sql.UniqueIdentifier, value: randomUUID() },
+        { name: "invoiceA", type: sql.UniqueIdentifier, value: validInvoiceA },
+        { name: "invoiceB", type: sql.UniqueIdentifier, value: validInvoiceB },
+      ],
+    );
+    const filter = parseAudienceFilterAst({
+      version: 1,
+      all: [
+        { type: "erp_service", op: "pro_id_in", values: ["15"], windowDays: 30 },
+        { type: "erp_spend", op: "gte", amount: 1000 },
+        { type: "marketing_permission", op: "eligible" },
+      ],
+      limit: 50,
+    });
+    const queryForChannel = async (channelConnectionId: string) => {
+      const compiled = compileAudienceFilter({
+        businessId: businessA, channelConnectionId, filter,
+      });
+      const response = await query<{ CustomerID: string }>(compiled.sqlText, compiled.inputs);
+      return response.recordset.map((entry) => entry.CustomerID.toLowerCase());
+    };
+    const onA = await queryForChannel(channelA);
+    const onB = await queryForChannel(channelB);
+    expect(onA).toContain(eligibleCustomer.toLowerCase());
+    expect(onA).not.toContain(otherChannelCustomer.toLowerCase());
+    expect(onB).toContain(otherChannelCustomer.toLowerCase());
+    expect(onB).not.toContain(eligibleCustomer.toLowerCase());
+  });
+
 });
