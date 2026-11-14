@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createElement } from "react";
+import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -10,7 +10,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 vi.mock("next/link", () => ({
-  default: ({ href, children, ...props }: { href: string; children: React.ReactNode; [key: string]: unknown }) =>
+  default: ({ href, children, ...props }: { href: string; children: ReactNode; [key: string]: unknown }) =>
     createElement("a", { ...props, href }, children),
 }));
 vi.mock("@/components/brand/brand-logo", () => ({
@@ -26,7 +26,7 @@ vi.mock("@/components/ui/theme-toggle", () => ({
   ThemeToggle: () => createElement("span", null, "المظهر"),
 }));
 vi.mock("@/components/ui/button", () => ({
-  Button: ({ children, ...props }: { children: React.ReactNode; [key: string]: unknown }) =>
+  Button: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) =>
     createElement("button", props, children),
 }));
 
