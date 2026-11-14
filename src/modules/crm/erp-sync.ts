@@ -739,6 +739,19 @@ export async function syncErpForBusiness(params: {
   }
 
   const manifest = await loadManifest(integration);
+  // An ACTIVE connector and cached UI tool names are not proof that a sync
+  // can run. Never report a successful no-op when its manifest lacks tools.
+  for (const requiredTool of [
+    "customer.list_changes",
+    "invoice.list_changes",
+    "catalog.list_services",
+  ]) {
+    if (!hasTool(manifest, requiredTool)) {
+      throw new ValidationError(
+        "ربط Cashier لا يعلن أداة المزامنة المطلوبة (" + requiredTool + "). أعد تهيئة التكامل ثم جرّب فحص المصدر.",
+      );
+    }
+  }
   const customers = await syncCustomers({
     businessId: params.businessId,
     integration,
@@ -754,6 +767,9 @@ export async function syncErpForBusiness(params: {
     integration,
     manifest,
   });
+  if (customers.skipped || invoices.skipped || catalog.skipped) {
+    throw new ValidationError("المزامنة لم تنفّذ على كل الموارد؛ افحص مصدر Cashier وإعداد التكامل.");
+  }
 
   // Best-effort phone link for unlinked WhatsApp contacts (no CRM overwrite).
   const contacts = await repo.listUnlinkedWhatsAppContacts({
