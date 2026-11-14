@@ -156,7 +156,9 @@ function compilePredicate(pred: AudiencePredicate, ctx: CompileCtx): string {
       }
       if (pred.to) {
         const t = addParam(ctx, "svcTo_", sql.Date, pred.to);
-        dateParts.push(`inv.InvDate <= ${t}`);
+        // SQL dates are midnight; <= @to would exclude visits/services later
+        // on the selected end date. Use an inclusive calendar day boundary.
+        dateParts.push(`inv.InvDate < DATEADD(day, 1, ${t})`);
       }
       const dateSql = dateParts.length ? `AND ${dateParts.join(" AND ")}` : "";
       let matchSql = "1=0";
@@ -272,7 +274,9 @@ function compileDaysPredicate(
   }
   const from = addParam(ctx, `${prefix}From_`, sql.Date, pred.from);
   const to = addParam(ctx, `${prefix}To_`, sql.Date, pred.to);
-  return `${columnExpr} BETWEEN ${from} AND ${to}`;
+  // SQL BETWEEN with DATE parameters only includes midnight of the final
+  // date, silently dropping invoices / interactions later that calendar day.
+  return `${columnExpr} >= ${from} AND ${columnExpr} < DATEADD(day, 1, ${to})`;
 }
 
 function compileGroup(
