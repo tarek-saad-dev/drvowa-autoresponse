@@ -157,6 +157,26 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
     expect(paired.integration.status).toBe("ACTIVE");
     expect(paired.manifest?.tools.map((x) => x.name).sort()).toEqual([...tools].sort());
 
+    // Live connector probe is READ-ONLY: only counts from max-one-row tool
+    // results, never raw customer or invoice records or production calls.
+    const probed = await postJson(request, "/api/crm/erp/probe", {});
+    const probe = probed.probe as {
+      connected: boolean;
+      allToolsReachable: boolean;
+      anySourceRows: boolean;
+      resources: Array<{ resource: string; ok: boolean; returnedRows: number | null }>;
+    };
+    expect(probe.connected).toBe(true);
+    expect(probe.allToolsReachable).toBe(true);
+    expect(probe.anySourceRows).toBe(true);
+    expect(probe.resources.map((x) => [x.resource, x.returnedRows])).toEqual([
+      ["customers", 1],
+      ["invoices", 1],
+      ["catalog", 1],
+    ]);
+    expect(JSON.stringify(probe)).not.toContain("Synthetic Alpha");
+    expect(JSON.stringify(probe)).not.toContain("01055551111");
+
     const channelA = randomUUID();
     const channelB = randomUUID();
     await query(

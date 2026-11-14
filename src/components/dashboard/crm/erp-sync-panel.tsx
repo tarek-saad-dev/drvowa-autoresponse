@@ -41,6 +41,24 @@ type ErpSyncStatus = {
   resources: ErpSyncResource[];
 };
 
+type ErpSourceProbe = {
+  connected: boolean;
+  allToolsReachable: boolean;
+  anySourceRows: boolean;
+  resources: Array<{
+    resource: string;
+    ok: boolean;
+    returnedRows: number | null;
+    errorCode: string | null;
+  }>;
+};
+
+type ErpSyncResult = {
+  customers: { synced: number; skipped: boolean };
+  invoices: { synced: number; skipped: boolean };
+  catalog: { synced: number; skipped: boolean };
+};
+
 function resourceLabel(raw: string): string {
   if (raw === "customers") return "العملاء";
   if (raw === "invoices") return "الفواتير";
@@ -54,6 +72,8 @@ export function ErpSyncPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [probe, setProbe] = useState<ErpSourceProbe | null>(null);
+  const [probeBusy, setProbeBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -83,20 +103,55 @@ export function ErpSyncPanel() {
     setNotice(null);
     try {
       const response = await fetch("/api/crm/erp/sync", { method: "POST" });
-      const data = await readApiJson<{ status?: ErpSyncStatus }>(response);
-      if (!response.ok || !data.status) {
+      const data = await readApiJson<{ status?: ErpSyncStatus; result?: ErpSyncResult }>(response);
+      if (!response.ok || !data.status || !data.result) {
         throw new Error(mapUserFacingError(data, "تعذر تشغيل المزامنة."));
       }
       setStatus(data.status);
-      setNotice(data.status.resources.some((r) => r.status === "PARTIAL")
-        ? "المزامنة جزئية؛ فيه صفحات بيانات لسه محتاجة استكمال. كرر المزامنة لحد ما الحالة تبقى SUCCESS."
-        : data.status.resources.some((r) => r.status === "ERROR")
-          ? "محاولة المزامنة واجهت خطأ؛ راجع حالة كل مورد."
-          : "اكتملت محاولة المزامنة اليدوية. راجع حالة كل مورد للتأكد من اكتمالها.");
+      const names = ["customers", "invoices", "catalog"] as const;
+      const missing = names.some((name) =>
+        data.result![name].skipped || !data.status!.resources.some(
+          (resource) => resource.resource === name,
+        ),
+      );
+      if (missing) {
+        throw new Error("المزامنة رجعت بدون تنفيذ أو حفظ بعض الموارد. اختبر المصدر؛ لم يتم تأكيد المزامنة.");
+      }
+      const progress = names.map((name) =>
+        resourceLabel(name) + ": " + data.result![name].synced.toLocaleString("ar-EG"),
+      ).join(" · ");
+      if (data.status.resources.some((resource) => resource.status === "PARTIAL")) {
+        setNotice("المزامنة جزئية: " + progress + ". كرر المحاولة حتى تصبح الموارد SUCCESS.");
+      } else if (data.status.resources.some((resource) => resource.status === "ERROR")) {
+        throw new Error("حدث خطأ في أحد موارد المزامنة. راجع التفاصيل أدناه.");
+      } else if ((data.status.mirrorCounts?.validInvoices ?? 0) === 0) {
+        setNotice("تم تسجيل محاولة المزامنة، لكن CRM ما زال بدون فواتير. " + progress + ". استخدم «اختبار مصدر Cashier» لمعرفة هل المصدر بيرجع سجلات.");
+      } else {
+        setNotice("اكتملت المزامنة وسُجلت حالة الموارد. " + progress + ".");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تشغيل المزامنة.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function probeSource() {
+    if (probeBusy || busy) return;
+    setProbeBusy(true);
+    setError(null);
+    setProbe(null);
+    try {
+      const response = await fetch("/api/crm/erp/probe", { method: "POST" });
+      const data = await readApiJson<{ probe?: ErpSourceProbe }>(response);
+      if (!response.ok || !data.probe) {
+        throw new Error(mapUserFacingError(data, "تعذر اختبار مصدر Cashier."));
+      }
+      setProbe(data.probe);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "تعذر اختبار مصدر Cashier.");
+    } finally {
+      setProbeBusy(false);
     }
   }
 
@@ -114,7 +169,10 @@ export function ErpSyncPanel() {
           <Button type="button" variant="outline" disabled={loading || busy} onClick={() => void load()}>
             تحديث الحالة
           </Button>
-          <Button type="button" disabled={loading || busy || !status?.connected} onClick={() => void resync()}>
+          <Button type="button" variant="outline" disabled={loading || busy || probeBusy || !status?.connected} onClick={() => void probeSource()}>
+            {probeBusy ? "جاري فحص المصدر…" : "اختبار مصدر Cashier (قراءة فقط)"}
+          </Button>
+          <Button type="button" disabled={loading || busy || probeBusy || !status?.connected} onClick={() => void resync()}>
             {busy ? "جاري المزامنة…" : "مزامنة الآن"}
           </Button>
         </div>
@@ -122,6 +180,40 @@ export function ErpSyncPanel() {
 
       {error ? <Alert variant="error">{error}</Alert> : null}
       {notice ? <Alert variant="success">{notice}</Alert> : null}
+      {probe ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-black">نتيجة فحص Cashier المباشر — بدون نسخ بيانات</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Alert variant={probe.allToolsReachable && probe.anySourceRows ? "success" : "warning"}>
+              {!probe.connected
+                ? "التكامل ظاهر Active، لكن تعذّر الوصول لمصدر Cashier باستخدام بيانات الربط الحالية."
+                : !probe.allToolsReachable
+                  ? "فيه أداة مش بترد أو مش مُعلنة من Cashier. راجع صلاحيات الربط ومصدر الخدمة."
+                  : !probe.anySourceRows
+                    ? "Cashier رد على الاختبار، لكن الثلاث أدوات رجّعت صفحات فاضية. لو فيه بيانات في المحل، راجع قاعدة البيانات اللي الـConnector متصل بيها."
+                    : "Cashier رجّع سجلات فعلية. لو CRM لسه صفر، المشكلة في حفظ/مزامنة البيانات، مش مجرد الاتصال."}
+            </Alert>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {probe.resources.map((item) => (
+                <div key={item.resource} className="rounded-xl border border-border p-3 text-sm">
+                  <strong>{resourceLabel(item.resource)}</strong>
+                  <p className="mt-2 text-muted-foreground">
+                    {item.ok ? "وصول ناجح" : "فشل الاتصال/الأداة"}
+                    {" · "}
+                    {item.returnedRows == null ? "لا توجد قراءة" : item.returnedRows + " سجل في صفحة الفحص"}
+                  </p>
+                  {item.errorCode ? <p className="mt-1 text-xs text-warning">{item.errorCode}</p> : null}
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              كل أداة بتقرأ صفحة محدودة بحد أقصى سجل واحد. الأعداد هنا ليست إجمالي بيانات Cashier، ومفيش بيانات عملاء أو فواتير اتعرضت من المصدر.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {loading ? (
         <DrvoLoading label="جاري تحميل حالة ERP…" />
