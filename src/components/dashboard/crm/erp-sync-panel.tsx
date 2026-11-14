@@ -119,7 +119,8 @@ export function ErpSyncPanel() {
     try {
       while (completed.size < resources.length && requests < MAX_REQUESTS_PER_CLICK) {
         for (const resource of resources) {
-          if (completed.has(resource) || stopRequested.current) break;
+          if (stopRequested.current) break;
+          if (completed.has(resource)) continue;
           requests += 1;
           setBatchProgress(
             "جاري مزامنة " + resourceLabel(resource) +
