@@ -12,7 +12,7 @@ import {
   parseAudienceFilterAst,
 } from "./audience-ast";
 import { previewAudience } from "./audience-service";
-import { normalizeCampaignFilterForRequest } from "./campaign-filter-intent";
+import { asksForMarketingEligibility, normalizeCampaignFilterForRequest } from "./campaign-filter-intent";
 import { getErpSyncStatus } from "./erp-sync";
 import * as repo from "./repository";
 import { requireCrmWriteAccess } from "./service";
@@ -295,7 +295,7 @@ export async function runCampaignAiTurn(
 
   // Ensure at least one marketing-safe default when user asked for campaign audience
   if (
-    /حملة|عرض|رسالة|marketing|campaign/i.test(message)
+    asksForMarketingEligibility(message)
     && !(filter.all ?? []).some((p) => p.type === "marketing_permission")
   ) {
     filter = {
