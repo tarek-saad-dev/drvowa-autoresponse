@@ -6,6 +6,33 @@ import { compileAudienceFilter } from "@/modules/crm/audience-compiler";
 const BUSINESS_ID = "11111111-1111-4111-8111-111111111111";
 
 describe("crm audience SQL compiler security", () => {
+  it("fails closed without a selected channel for marketing eligible predicates", () => {
+    const filter = parseAudienceFilterAst({
+      version: 1,
+      all: [{ type: "marketing_permission", op: "eligible" }],
+    });
+    expect(() => compileAudienceFilter({ businessId: BUSINESS_ID, filter }))
+      .toThrow(/explicit WhatsApp channel/i);
+  });
+
+  it("scopes consent and opt-out to the same parameterized WhatsApp channel", () => {
+    const channelConnectionId = "22222222-2222-4222-8222-222222222222";
+    const filter = parseAudienceFilterAst({
+      version: 1,
+      all: [
+        { type: "has_phone", value: true },
+        { type: "marketing_permission", op: "eligible" },
+      ],
+    });
+    const compiled = compileAudienceFilter({ businessId: BUSINESS_ID, channelConnectionId, filter });
+    expect(compiled.sqlText).toContain("p.ChannelConnectionID = @channelConnectionId");
+    expect(compiled.sqlText).toContain("o.ChannelConnectionID = @channelConnectionId");
+    expect(compiled.countSqlText).toContain("p.ChannelConnectionID = @channelConnectionId");
+    expect(compiled.countSqlText).toContain("o.ChannelConnectionID = @channelConnectionId");
+    expect(compiled.inputs.some((i) => i.name === "channelConnectionId" && i.value === channelConnectionId)).toBe(true);
+    expect(compiled.sqlText).not.toContain(channelConnectionId);
+  });
+
   it("always scopes queries to BusinessID and uses parameters", () => {
     const filter = parseAudienceFilterAst({
       version: 1,
