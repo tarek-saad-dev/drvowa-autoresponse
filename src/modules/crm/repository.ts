@@ -2519,3 +2519,35 @@ export async function enrichAudienceMarketingEligibility(params: {
     };
   });
 }
+
+/** Aggregate CRM/ERP mirror diagnostics only; no customer PII and no source writes. */
+export async function getCrmErpMirrorCounts(params: { businessId: string }) {
+  const result = await query<{
+    ErpCustomers: number;
+    ValidInvoices: number;
+    UnlinkedInvoices: number;
+    InvoiceLines: number;
+    CatalogServices: number;
+  }>(
+    `SELECT
+      (SELECT COUNT_BIG(1) FROM dbo.TblCrmCustomer
+        WHERE BusinessID = @businessId AND ExternalErpClientId IS NOT NULL AND Status <> N'MERGED') AS ErpCustomers,
+      (SELECT COUNT_BIG(1) FROM dbo.TblErpInvoiceMirror
+        WHERE BusinessID = @businessId AND IsValidSale = 1 AND IsDeleted = 0) AS ValidInvoices,
+      (SELECT COUNT_BIG(1) FROM dbo.TblErpInvoiceMirror
+        WHERE BusinessID = @businessId AND IsValidSale = 1 AND IsDeleted = 0 AND CustomerID IS NULL) AS UnlinkedInvoices,
+      (SELECT COUNT_BIG(1) FROM dbo.TblErpInvoiceLineMirror
+        WHERE BusinessID = @businessId) AS InvoiceLines,
+      (SELECT COUNT_BIG(1) FROM dbo.TblErpServiceCatalog
+        WHERE BusinessID = @businessId AND IsDeleted = 0) AS CatalogServices`,
+    [{ name: "businessId", type: sql.UniqueIdentifier, value: params.businessId }],
+  );
+  const row = result.recordset[0];
+  return {
+    erpCustomers: Number(row?.ErpCustomers ?? 0),
+    validInvoices: Number(row?.ValidInvoices ?? 0),
+    unlinkedInvoices: Number(row?.UnlinkedInvoices ?? 0),
+    invoiceLines: Number(row?.InvoiceLines ?? 0),
+    catalogServices: Number(row?.CatalogServices ?? 0),
+  };
+}

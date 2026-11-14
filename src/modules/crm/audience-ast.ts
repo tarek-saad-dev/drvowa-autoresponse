@@ -45,6 +45,12 @@ const predicateSchema: z.ZodType<AudiencePredicate> = z.discriminatedUnion("type
     to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   }),
   z.object({
+    type: z.literal("erp_invoice_date"),
+    op: z.literal("between"),
+    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  }),
+  z.object({
     type: z.literal("erp_spend"),
     op: z.enum(["gte", "lte", "between"]),
     amount: z.number().finite().min(0).max(10_000_000).optional(),
@@ -195,6 +201,8 @@ function explainPredicate(pred: AudiencePredicate): string {
       if (pred.op === "before_days_ago") return `آخر زيارة قبل أكثر من ${pred.days} يوم`;
       if (pred.op === "within_days") return `زاروا خلال آخر ${pred.days} يوم`;
       return `آخر زيارة بين ${pred.from} و ${pred.to}`;
+    case "erp_invoice_date":
+      return `فواتير بتاريخ ${pred.from}${pred.to !== pred.from ? ` إلى ${pred.to}` : ""}`;
     case "erp_spend":
       if (pred.op === "gte") return `إنفاق ≥ ${pred.amount}${pred.windowDays ? ` خلال ${pred.windowDays} يوم` : ""}`;
       if (pred.op === "lte") return `إنفاق ≤ ${pred.amount}`;

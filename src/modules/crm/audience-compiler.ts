@@ -99,6 +99,15 @@ function compilePredicate(pred: AudiencePredicate, ctx: CompileCtx): string {
       }
       return `(${lastVisit} IS NOT NULL AND ${compileDaysPredicate(lastVisit, pred, ctx, "elv", true)})`;
     }
+    case "erp_invoice_date": {
+      const from = addParam(ctx, "invFrom_", sql.Date, pred.from);
+      const to = addParam(ctx, "invTo_", sql.Date, pred.to);
+      // Any valid sales invoice on the exact calendar date, NOT just the latest
+      // visit. Half-open end covers invoice timestamps throughout the final day.
+      return `EXISTS (SELECT 1 ${validInvoiceJoin()}
+        AND inv.InvDate >= ${from}
+        AND inv.InvDate < DATEADD(day, 1, ${to}))`;
+    }
     case "erp_spend": {
       const window = pred.windowDays
         ? `AND inv.InvDate >= DATEADD(day, -CAST(${addParam(ctx, "spendWin_", sql.Int, pred.windowDays)} AS INT), CAST(SYSUTCDATETIME() AS DATE))`

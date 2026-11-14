@@ -53,6 +53,23 @@ describe("crm audience SQL compiler security", () => {
     expect(compiled.sqlHash).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it("finds any valid sales invoice yesterday using a bounded half-open calendar day", () => {
+    const filter = parseAudienceFilterAst({
+      version: 1,
+      all: [{ type: "erp_invoice_date", op: "between", from: "2026-11-13", to: "2026-11-13" }],
+    });
+    const compiled = compileAudienceFilter({ businessId: BUSINESS_ID, filter });
+    expect(compiled.sqlText).toContain("EXISTS (SELECT 1 FROM dbo.TblErpInvoiceMirror inv");
+    expect(compiled.sqlText).toContain("inv.IsValidSale = 1");
+    expect(compiled.sqlText).toContain("inv.IsDeleted = 0");
+    expect(compiled.sqlText).toContain("inv.CustomerID = c.CustomerID");
+    expect(compiled.sqlText).toContain("inv.InvDate >= @invFrom_");
+    expect(compiled.sqlText).toMatch(/inv\.InvDate < DATEADD\(day, 1, @invTo_/);
+    expect(compiled.inputs.filter((i) => i.value === "2026-11-13")).toHaveLength(2);
+    expect(compiled.sqlText).not.toContain("2026-11-13");
+    expect(compiled.countSqlText).toContain("DATEADD(day, 1, @invTo_");
+  });
+
   it("does not interpolate user strings into SQL identifiers or free text", () => {
     const evil = "'; DROP TABLE TblCrmCustomer;--";
     const filter = parseAudienceFilterAst({

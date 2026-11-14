@@ -176,7 +176,15 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
     expect(synced.customers.synced).toBeGreaterThanOrEqual(3);
     expect(synced.invoices.synced).toBeGreaterThanOrEqual(3);
     expect(synced.catalog.synced).toBeGreaterThanOrEqual(1);
-    const status = sync.status as { resources: Array<{resource:string;status:string}> };
+    const status = sync.status as {
+      resources: Array<{resource:string;status:string}>;
+      mirrorCounts: {erpCustomers:number;validInvoices:number;invoiceLines:number;catalogServices:number;unlinkedInvoices:number};
+    };
+    expect(status.mirrorCounts.erpCustomers).toBe(3);
+    expect(status.mirrorCounts.validInvoices).toBe(2);
+    expect(status.mirrorCounts.invoiceLines).toBe(3);
+    expect(status.mirrorCounts.catalogServices).toBe(1);
+    expect(status.mirrorCounts.unlinkedInvoices).toBe(0);
     expect(status.resources).toEqual(expect.arrayContaining([
       expect.objectContaining({ resource: "customers", status: "SUCCESS" }),
       expect.objectContaining({ resource: "invoices", status: "SUCCESS" }),
@@ -232,6 +240,20 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
     const protein = { version:1, all:[{type:"erp_service",op:"pro_id_in",values:["15"],windowDays:30}] };
     const raw = await postJson(request, "/api/crm/audience/preview", {filter:protein,channelConnectionId:channelA});
     expect((raw.preview as {totalMatched:number}).totalMatched).toBe(2);
+
+    // Both active invoice holders match a date query, even before marketing consent.
+    // A cancelled invoice is excluded and only final confirmation can send.
+    const invoiceDate = {version:1, all:[{type:"erp_invoice_date",op:"between",from:TODAY,to:TODAY}]};
+    const invoiceAudience = await postJson(request, "/api/crm/audience/preview", {
+      filter: invoiceDate, channelConnectionId: channelA,
+    });
+    expect((invoiceAudience.preview as {totalMatched:number}).totalMatched).toBe(2);
+    const previousDay = new Date(new Date(TODAY + "T12:00:00.000Z").valueOf() - 86400000).toISOString().slice(0, 10);
+    const noInvoicesYesterday = await postJson(request, "/api/crm/audience/preview", {
+      filter: {version:1,all:[{type:"erp_invoice_date",op:"between",from:previousDay,to:previousDay}]},
+      channelConnectionId:channelA,
+    });
+    expect((noInvoicesYesterday.preview as {totalMatched:number}).totalMatched).toBe(0);
     const refined = { version:1, all:[
       {type:"erp_service",op:"pro_id_in",values:["15"],windowDays:30},
       {type:"erp_spend",op:"gte",amount:1000},

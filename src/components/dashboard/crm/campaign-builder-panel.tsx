@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
+import { isNewAudienceRequest } from "@/modules/crm/campaign-filter-intent";
 import type {
   AudienceFilterAst,
   CrmAudiencePreview,
@@ -170,6 +171,18 @@ export function CampaignBuilderPanel() {
     resetFinalConfirmation();
   }
 
+  function startFreshAudience() {
+    setFilter(null);
+    setPreview(null);
+    setMessageDraft("");
+    setConfirmName("");
+    setSessionId(null);
+    setInput("");
+    setStep("compose");
+    setNotice("بدأت بحث جمهور جديد. الاستعلامات القادمة مش هتورّث أي شروط قديمة.");
+    resetFinalConfirmation();
+  }
+
   async function sendTurn(event: FormEvent) {
     event.preventDefault();
     const text = input.trim();
@@ -186,14 +199,17 @@ export function CampaignBuilderPanel() {
     resetFinalConfirmation();
 
     try {
-      const mode = messageDraft && filter ? "refine" : filter ? "refine" : "filter";
+      // "هات العملاء ..." starts an independent search, not an AND of all past chats.
+      // "ومنهم ..." / "كمان ..." can still refine the existing audience.
+      const draftIntent = Boolean(filter) && /رسالة|اكتب|صياغة|draft/i.test(text);
+      const mode = draftIntent ? "draft_message" : filter && !isNewAudienceRequest(text) ? "refine" : "filter";
       const response = await fetch("/api/crm/campaigns/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: text,
-          mode: mode === "refine" && /رسالة|اكتب|صياغة|draft/i.test(text) ? "draft_message" : mode,
-          priorFilter: filter ?? undefined,
+          mode,
+          priorFilter: mode === "filter" ? undefined : filter ?? undefined,
           sessionId,
           channelConnectionId,
         }),
@@ -207,7 +223,10 @@ export function CampaignBuilderPanel() {
         ...prev,
         { id: `a-${Date.now()}`, role: "assistant", text: turn.assistantMessage },
       ]);
-      if (turn.filter) setFilter(turn.filter);
+      if (turn.filter) {
+        setFilter(turn.filter);
+        if (mode === "filter") setMessageDraft("");
+      }
       if (turn.preview) {
         setPreview(turn.preview);
         if (turn.preview.channelConnectionId && turn.preview.channelConnectionId !== channelConnectionId) {
@@ -572,6 +591,14 @@ export function CampaignBuilderPanel() {
                 >
                   صياغة رسالة
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy || step === "done"}
+                  onClick={startFreshAudience}
+                >
+                  بحث جديد (بدون الشروط القديمة)
+                </Button>
               </div>
             </form>
 
@@ -617,6 +644,12 @@ export function CampaignBuilderPanel() {
                   ) : (
                     <Alert variant="success">أعداد الأهلية أدناه للجمهور الكامل المثبّت على القناة المحددة.</Alert>
                   )}
+                  {preview.totalMatched === 0 && (preview.filter.all ?? []).some((p) => p.type.startsWith("erp_")) ? (
+                    <Alert variant="warning">
+                      نتيجة البحث صفر. ده ممكن يكون بسبب مزامنة بيانات الفواتير أو بسبب شروط البحث، مش بالضرورة معناه إن مفيش عملاء.{" "}
+                      <Link href="/dashboard/crm/erp" className="font-bold underline">راجع اتصال ومزامنة ERP</Link>
+                    </Alert>
+                  ) : null}
                   <p className="text-sm leading-7 text-muted-foreground">{preview.explanationAr}</p>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {previewCounts?.map((item) => (
