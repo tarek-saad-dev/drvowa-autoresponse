@@ -148,8 +148,20 @@ export function mergeAudienceFilters(
   refinement: AudienceFilterAst,
 ): AudienceFilterAst {
   if (!base) return refinement;
-  const all = [...(base.all ?? []), ...(refinement.all ?? [])];
-  const exclude = [...(base.exclude ?? []), ...(refinement.exclude ?? [])];
+  // A model can repeat a condition on every "ومنهم..." turn. Repeated
+  // equivalent predicates do not add any meaning or SQL selectivity and
+  // should not consume the 25/40-predicate complexity budget.
+  const deduplicate = (items: AudiencePredicate[]) => {
+    const seen = new Set<string>();
+    return items.filter((item) => {
+      const key = JSON.stringify(item);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+  const all = deduplicate([...(base.all ?? []), ...(refinement.all ?? [])]);
+  const exclude = deduplicate([...(base.exclude ?? []), ...(refinement.exclude ?? [])]);
   const any = refinement.any?.length ? refinement.any : base.any;
   if (all.length > MAX_PREDICATES_PER_GROUP || exclude.length > MAX_PREDICATES_PER_GROUP) {
     throw new AudienceComplexityError(
