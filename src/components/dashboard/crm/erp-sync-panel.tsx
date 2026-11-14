@@ -24,6 +24,13 @@ type ErpSyncResource = {
 
 type ErpSyncStatus = {
   connected: boolean;
+  mirrorCounts?: {
+    erpCustomers: number;
+    validInvoices: number;
+    unlinkedInvoices: number;
+    invoiceLines: number;
+    catalogServices: number;
+  };
   integrationId: string | null;
   integrationStatus: string | null;
   availableTools: {
@@ -152,6 +159,44 @@ export function ErpSyncPanel() {
                   </Link>
                 </p>
               ) : null}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-black">الداتا الموجودة فعليًا في CRM</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {status.mirrorCounts ? (
+                <>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {[
+                      { label: "عملاء ERP", value: status.mirrorCounts.erpCustomers },
+                      { label: "فواتير بيع صحيحة", value: status.mirrorCounts.validInvoices },
+                      { label: "بنود الفواتير", value: status.mirrorCounts.invoiceLines },
+                      { label: "خدمات الكتالوج", value: status.mirrorCounts.catalogServices },
+                      { label: "فواتير بلا عميل مربوط", value: status.mirrorCounts.unlinkedInvoices },
+                    ].map((item) => (
+                      <div key={item.label} className="rounded-xl border border-border p-3">
+                        <p className="text-xs text-muted-foreground">{item.label}</p>
+                        <p className="mt-1 text-lg font-bold">{item.value.toLocaleString("ar-EG")}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {status.mirrorCounts.validInvoices === 0 ? (
+                    <Alert variant="warning">
+                      مفيش فواتير بيع في نسخة CRM حاليًا. لو Cashier فيه فواتير، اتأكد من الربط واضغط «مزامنة الآن» لحد ما مزامنة الفواتير تبقى SUCCESS.
+                    </Alert>
+                  ) : null}
+                  {status.mirrorCounts.unlinkedInvoices > 0 ? (
+                    <Alert variant="warning">
+                      فيه {status.mirrorCounts.unlinkedInvoices.toLocaleString("ar-EG")} فاتورة غير مربوطة بعميل CRM. الفواتير دي مش هتظهر في جمهور العملاء لحد ما يتصلح الربط.
+                    </Alert>
+                  ) : null}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">إحصاءات نسخة ERP غير متاحة.</p>
+              )}
             </CardContent>
           </Card>
 
