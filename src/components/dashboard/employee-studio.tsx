@@ -227,7 +227,7 @@ export function EmployeeStudio({
   }
 
   return (
-    <main className="mx-auto flex h-full min-h-0 w-full max-w-4xl flex-col gap-3 overflow-hidden" dir="rtl">
+    <main className="flex h-full min-h-0 min-w-0 w-full flex-col gap-4 overflow-hidden" dir="rtl">
       <div className="flex shrink-0 flex-wrap items-start justify-between gap-2">
         <div>
           <h1 className="text-2xl font-black tracking-tight sm:text-3xl">الموظف الذكي</h1>
@@ -242,7 +242,7 @@ export function EmployeeStudio({
       </div>
 
       <div role="tablist" aria-label="إدارة الموظف الذكي"
-        className={"grid shrink-0 gap-1 rounded-2xl border border-border bg-surface p-1 " + (canManageCampaigns ? "grid-cols-3" : "grid-cols-2")}>
+        className={"grid w-full shrink-0 gap-1 rounded-2xl border border-border bg-surface p-1 lg:max-w-[760px] " + (canManageCampaigns ? "grid-cols-3" : "grid-cols-2")}>
         <button type="button" role="tab" aria-selected={tab === "personality"} aria-controls="studio-personality"
           onClick={() => setTab("personality")}
           className={"rounded-xl px-3 py-3 text-sm font-black transition " +
@@ -266,8 +266,8 @@ export function EmployeeStudio({
       </div>
 
       <section role="tabpanel" id="studio-personality" aria-label="شخصية الموظف" hidden={tab !== "personality"}
-        className="min-h-0 flex-1 space-y-5 overflow-y-auto pb-5">
-        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+        className="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto pb-5 [scrollbar-gutter:stable] [&[hidden]]:hidden lg:grid lg:grid-cols-[minmax(250px,300px)_minmax(0,1fr)] lg:items-start lg:gap-5 lg:space-y-0 xl:grid-cols-[minmax(250px,300px)_minmax(0,1fr)_minmax(280px,340px)] xl:gap-6">
+        <div className="min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-5 lg:sticky lg:top-0">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-black">الشخصيات المحفوظة</h2>
             {isCurrent ? <span className="rounded-full bg-success-soft px-3 py-1 text-xs font-bold text-success">المستخدمة حاليًا</span> : null}
@@ -308,7 +308,7 @@ export function EmployeeStudio({
           ) : null}
         </div>
 
-        <div className="space-y-5 rounded-2xl border border-border bg-card p-4 sm:p-6">
+        <div className="min-w-0 space-y-5 rounded-2xl border border-border bg-card p-4 sm:p-6 xl:p-7">
           <div className="space-y-2">
             <h2 className="text-sm font-black">هيقدّم نفسه إزاي؟</h2>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -428,6 +428,19 @@ export function EmployeeStudio({
             </div>
           </details>
 
+          {error ? <Alert variant="error">{error}</Alert> : null}
+          {success ? <Alert variant="success">{success}</Alert> : null}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">{dirty ? "في تعديلات لسه متحفظتش" : "كل تغيير لازم يتحفظ عشان يتطبق"}</p>
+            <Button type="button" disabled={busy || !draft.name.trim() || !dirty && Boolean(chosen)}
+              onClick={() => void savePersonality()}>
+              {busy ? "جاري الحفظ..." : chosen ? "حفظ التغييرات" : "حفظ الشخصية الجديدة"}
+            </Button>
+          </div>
+        </div>
+
+        <aside aria-label="معاينة رد الموظف" className="min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-5 lg:col-span-2 xl:sticky xl:top-0 xl:col-span-1">
+          <h2 className="mb-3 text-sm font-black">معاينة طريقة الرد</h2>
           <div className="rounded-2xl bg-surface/65 p-4">
             <p className="mb-3 text-xs font-bold text-muted-foreground">مثال لطريقة كلامه</p>
             <div className="flex justify-end">
@@ -441,17 +454,7 @@ export function EmployeeStudio({
             </div>
             <p className="mt-3 text-[11px] text-muted-foreground">مثال توضيحي للأسلوب، مش رد مولّد من الـ AI.</p>
           </div>
-
-          {error ? <Alert variant="error">{error}</Alert> : null}
-          {success ? <Alert variant="success">{success}</Alert> : null}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">{dirty ? "في تعديلات لسه متحفظتش" : "كل تغيير لازم يتحفظ عشان يتطبق"}</p>
-            <Button type="button" disabled={busy || !draft.name.trim() || !dirty && Boolean(chosen)}
-              onClick={() => void savePersonality()}>
-              {busy ? "جاري الحفظ..." : chosen ? "حفظ التغييرات" : "حفظ الشخصية الجديدة"}
-            </Button>
-          </div>
-        </div>
+        </aside>
       </section>
 
       <div role="tabpanel" id="studio-knowledge" aria-label="معلومات الموظف" hidden={tab !== "knowledge"}
