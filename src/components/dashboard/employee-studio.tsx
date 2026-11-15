@@ -74,6 +74,7 @@ export function EmployeeStudio({
     const current = initialAgents.find((agent) => agent.agentId === initialSetting?.agentId) ?? initialAgents[0];
     return current?.language && !agentUsesCustomerLanguage(current.language) ? current.language : "ar";
   });
+  const [previewDemoLanguage, setPreviewDemoLanguage] = useState<"ar" | "en">("ar");
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +88,7 @@ export function EmployeeStudio({
   const currentPreset = selectedPreset ?? PRESETS[0];
   const roleTitle = draft.identity === "ai" ? "مساعد ذكي" : "موظف استقبال";
   const multilingual = agentUsesCustomerLanguage(draft.language);
-  const previewLanguage = multilingual ? "en" : draft.language.trim().toLowerCase().split("-")[0];
+  const previewLanguage = multilingual ? previewDemoLanguage : draft.language.trim().toLowerCase().split("-")[0];
   const languagePreviews: Record<string, { customer: string; reply: string }> = {
     ar: { customer: "مساء الخير، ممكن أعرف تفاصيل خدماتكم؟", reply: currentPreset.example },
     en: { customer: "Hi, can you tell me about your services?", reply: "Hi! Of course. Which service would you like to know more about?" },
@@ -227,240 +228,302 @@ export function EmployeeStudio({
   }
 
   return (
-    <main className="flex h-full min-h-0 min-w-0 w-full flex-col gap-4 overflow-hidden" dir="rtl">
-      <div className="flex shrink-0 flex-wrap items-start justify-between gap-2">
+    <div className="flex h-full min-h-0 min-w-0 w-full flex-col gap-3 overflow-hidden sm:gap-4" dir="rtl">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-black tracking-tight sm:text-3xl">الموظف الذكي</h1>
-          <p className="mt-1 text-sm text-muted-foreground">اختار شخصيته وعلّمه كل حاجة عن شغلك.</p>
+          <p className="mt-1 text-sm text-muted-foreground">اضبط شخصية الموظف وطريقة ردّه، وجرّب شكل المحادثة قبل الحفظ.</p>
         </div>
-        {!whatsappReady ? (
+        {whatsappReady ? (
+          <span className="inline-flex items-center gap-2 rounded-full border border-success/20 bg-success-soft px-3 py-1.5 text-xs font-bold text-success">
+            <span aria-hidden="true" className="h-2 w-2 rounded-full bg-success" />
+            واتساب متصل
+          </span>
+        ) : (
           <Link href="/dashboard/whatsapp"
-            className="rounded-full border border-warning/25 bg-warning-soft/30 px-3 py-2 text-xs font-bold text-foreground hover:bg-warning-soft/50">
-            واتساب محتاج مراجعة ←
+            className="inline-flex min-h-10 items-center rounded-full border border-warning/25 bg-warning-soft/40 px-3 text-xs font-bold text-foreground hover:bg-warning-soft/60">
+            راجع اتصال واتساب ←
           </Link>
-        ) : null}
-      </div>
+        )}
+      </header>
 
       <div role="tablist" aria-label="إدارة الموظف الذكي"
-        className={"grid w-full shrink-0 gap-1 rounded-2xl border border-border bg-surface p-1 lg:max-w-[760px] " + (canManageCampaigns ? "grid-cols-3" : "grid-cols-2")}>
+        className="flex w-full shrink-0 items-center gap-1 overflow-x-auto border-b border-border sm:gap-3">
         <button type="button" role="tab" aria-selected={tab === "personality"} aria-controls="studio-personality"
           onClick={() => setTab("personality")}
-          className={"rounded-xl px-3 py-3 text-sm font-black transition " +
-            (tab === "personality" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+          className={"shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring sm:px-5 " +
+            (tab === "personality" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}>
           شخصية الموظف
         </button>
         <button type="button" role="tab" aria-selected={tab === "knowledge"} aria-controls="studio-knowledge"
           onClick={() => setTab("knowledge")}
-          className={"rounded-xl px-3 py-3 text-sm font-black transition " +
-            (tab === "knowledge" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+          className={"shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring sm:px-5 " +
+            (tab === "knowledge" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}>
           معلومات الموظف
         </button>
         {canManageCampaigns ? (
           <button type="button" role="tab" disabled aria-disabled="true" aria-selected={false}
             aria-label="حملات واتساب - قريبًا" title="قريبًا"
-            className="flex min-h-12 cursor-not-allowed flex-wrap items-center justify-center gap-1.5 rounded-xl border border-border/70 bg-muted/40 px-2 py-2.5 text-xs font-bold text-muted-foreground/75 opacity-75 sm:text-sm">
+            className="flex min-h-10 shrink-0 cursor-not-allowed items-center gap-2 rounded-lg border border-border/70 bg-muted/40 px-3 py-1.5 text-xs font-bold text-muted-foreground/75 opacity-75 sm:text-sm">
             <span>حملات واتساب</span>
-            <span className="rounded-full border border-border bg-card/50 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">قريبًا</span>
+            <span className="rounded-full border border-border bg-card/70 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">قريبًا</span>
           </button>
         ) : null}
       </div>
 
       <section role="tabpanel" id="studio-personality" aria-label="شخصية الموظف" hidden={tab !== "personality"}
-        className="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto pb-5 [scrollbar-gutter:stable] [&[hidden]]:hidden lg:grid lg:grid-cols-[minmax(250px,300px)_minmax(0,1fr)] lg:items-start lg:gap-5 lg:space-y-0 xl:grid-cols-[minmax(250px,300px)_minmax(0,1fr)_minmax(280px,340px)] xl:gap-6">
-        <div className="min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-5 lg:sticky lg:top-0">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-black">الشخصيات المحفوظة</h2>
-            {isCurrent ? <span className="rounded-full bg-success-soft px-3 py-1 text-xs font-bold text-success">المستخدمة حاليًا</span> : null}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <select aria-label="اختار شخصية محفوظة" value={selectedId}
-              onChange={(e) => chooseProfile(e.target.value)}
-              className="min-h-11 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm font-bold text-foreground">
-              {!selectedId ? <option value="">شخصية جديدة</option> : null}
-              {agents.map((agent) => (
-                <option key={agent.agentId} value={agent.agentId}>
-                  {agent.name}{setting?.agentId === agent.agentId ? " — النشطة" : ""}
-                </option>
-              ))}
-              {!agents.length ? <option value="">مفيش شخصيات محفوظة</option> : null}
-            </select>
-            <Button type="button" variant="outline" onClick={createNew} disabled={busy}>+ شخصية جديدة</Button>
-          </div>
-          {chosen && !isCurrent ? (
-            <div className="mt-3 flex items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">الشخصية دي محفوظة، لكن مش بترد على العملاء حاليًا.</p>
-              <Button type="button" size="sm" disabled={busy || dirty}
-                onClick={() => void saveActiveAgent(chosen.agentId, Boolean(setting?.autoReplyEnabled))}>
-                استخدم الشخصية دي
+        className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto pb-4 [&[hidden]]:hidden lg:overflow-hidden">
+        <div className="shrink-0 rounded-2xl border border-border bg-card p-3 sm:p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+              <label htmlFor="studio-saved-profile" className="shrink-0 text-sm font-black">الشخصيات المحفوظة</label>
+              <select id="studio-saved-profile" value={selectedId} disabled={busy}
+                onChange={(e) => chooseProfile(e.target.value)}
+                className="min-h-11 min-w-0 w-full rounded-xl border border-border bg-background px-3 text-sm font-bold text-foreground sm:max-w-xs">
+                {!selectedId ? <option value="">شخصية جديدة</option> : null}
+                {agents.map((agent) => (
+                  <option key={agent.agentId} value={agent.agentId}>
+                    {agent.name}{setting?.agentId === agent.agentId ? " — النشطة" : ""}
+                  </option>
+                ))}
+                {!agents.length ? <option value="">مفيش شخصيات محفوظة</option> : null}
+              </select>
+              <Button type="button" variant="outline" className="shrink-0" onClick={createNew} disabled={busy}>
+                + شخصية جديدة
               </Button>
             </div>
-          ) : null}
-          {setting && isCurrent ? (
-            <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3">
-              <p className="text-xs text-muted-foreground">
-                الرد التلقائي: <strong className="text-foreground">{setting.autoReplyEnabled ? "مفعّل في الإعدادات" : "متوقف"}</strong>
-              </p>
-              <Button type="button" size="sm" variant="outline" disabled={busy || dirty}
-                onClick={() => void saveActiveAgent(chosen!.agentId, !setting.autoReplyEnabled)}>
-                {setting.autoReplyEnabled ? "إيقاف الرد" : "تشغيل الرد"}
-              </Button>
+            <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+              {chosen && isCurrent && setting ? (
+                <>
+                  <span className={"inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold " +
+                    (setting.autoReplyEnabled ? "bg-success-soft text-success" : "bg-surface text-muted-foreground")}>
+                    <span aria-hidden="true" className={"h-2 w-2 rounded-full " +
+                      (setting.autoReplyEnabled ? "bg-success" : "bg-muted-foreground/60")} />
+                    {setting.autoReplyEnabled ? "الرد التلقائي مفعّل في الإعدادات" : "الرد التلقائي متوقف"}
+                  </span>
+                  <Button type="button" size="sm" variant="outline" disabled={busy || dirty}
+                    onClick={() => void saveActiveAgent(chosen.agentId, !setting.autoReplyEnabled)}>
+                    {setting.autoReplyEnabled ? "إيقاف الرد" : "تشغيل الرد"}
+                  </Button>
+                </>
+              ) : chosen ? (
+                <>
+                  <span className="rounded-full bg-surface px-3 py-1.5 text-xs font-bold text-muted-foreground">
+                    الشخصية دي مش مستخدمة حاليًا
+                  </span>
+                  <Button type="button" size="sm" disabled={busy || dirty}
+                    onClick={() => void saveActiveAgent(chosen.agentId, Boolean(setting?.autoReplyEnabled))}>
+                    استخدم الشخصية دي
+                  </Button>
+                </>
+              ) : (
+                <span className="text-xs font-semibold text-muted-foreground">ابدأ بتجهيز شخصية جديدة ثم احفظها.</span>
+              )}
             </div>
-          ) : null}
+          </div>
         </div>
 
-        <div className="min-w-0 space-y-5 rounded-2xl border border-border bg-card p-4 sm:p-6 xl:p-7">
-          <div className="space-y-2">
-            <h2 className="text-sm font-black">هيقدّم نفسه إزاي؟</h2>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <button type="button" aria-pressed={draft.identity === "ai"}
-                onClick={() => update({ identity: "ai" })}
-                className={"rounded-2xl border p-4 text-start transition " +
-                  (draft.identity === "ai" ? "border-primary bg-primary/5" : "border-border hover:border-primary/40")}>
-                <span className="text-xl" aria-hidden="true">✦</span>
-                <p className="mt-2 text-sm font-black">مساعد ذكاء اصطناعي</p>
-                <p className="mt-1 text-xs leading-6 text-muted-foreground">يعرّف نفسه كمساعد ذكي.</p>
-              </button>
-              <button type="button" aria-pressed={draft.identity === "natural"}
-                onClick={() => update({ identity: "natural" })}
-                className={"rounded-2xl border p-4 text-start transition " +
-                  (draft.identity === "natural" ? "border-primary bg-primary/5" : "border-border hover:border-primary/40")}>
-                <span className="text-xl" aria-hidden="true">◉</span>
-                <p className="mt-2 text-sm font-black">أسلوب بشري طبيعي</p>
-                <p className="mt-1 text-xs leading-6 text-muted-foreground">يتكلم كموظف استقبال، ويكون واضح لو اتسأل عن طبيعته.</p>
-              </button>
-            </div>
-          </div>
+        <div className="flex min-w-0 shrink-0 flex-col gap-4 lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(320px,390px)] lg:items-stretch lg:gap-5">
+          <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card">
+            <div className="min-h-0 flex-1 space-y-6 p-4 sm:p-6 lg:overflow-y-auto lg:overscroll-contain lg:[scrollbar-gutter:stable]">
+              <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_minmax(250px,320px)]">
+                <div className="space-y-3">
+                  <div>
+                    <h2 className="text-base font-black">هيقدّم نفسه إزاي؟</h2>
+                    <p className="mt-1 text-xs text-muted-foreground">اختار الطريقة اللي هيعرّف بيها نفسه للعملاء.</p>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <button type="button" aria-pressed={draft.identity === "ai"}
+                      onClick={() => update({ identity: "ai" })}
+                      className={"rounded-2xl border p-4 text-start transition focus-visible:outline-2 focus-visible:outline-ring " +
+                        (draft.identity === "ai" ? "border-primary bg-primary/5" : "border-border hover:border-primary/40")}>
+                      <span aria-hidden="true" className="text-base font-black text-primary">{draft.identity === "ai" ? "✓" : "✦"}</span>
+                      <p className="mt-2 text-sm font-black">مساعد ذكاء اصطناعي</p>
+                      <p className="mt-1 text-xs leading-6 text-muted-foreground">يعرّف نفسه كمساعد ذكي.</p>
+                    </button>
+                    <button type="button" aria-pressed={draft.identity === "natural"}
+                      onClick={() => update({ identity: "natural" })}
+                      className={"rounded-2xl border p-4 text-start transition focus-visible:outline-2 focus-visible:outline-ring " +
+                        (draft.identity === "natural" ? "border-primary bg-primary/5" : "border-border hover:border-primary/40")}>
+                      <span aria-hidden="true" className="text-base font-black text-primary">{draft.identity === "natural" ? "✓" : "👤"}</span>
+                      <p className="mt-2 text-sm font-black">أسلوب بشري طبيعي</p>
+                      <p className="mt-1 text-xs leading-6 text-muted-foreground">يتكلم كموظف استقبال، ويكون واضح لو اتسأل عن طبيعته.</p>
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="studio-agent-name">اسم الموظف</Label>
+                  <Input id="studio-agent-name" value={draft.name} maxLength={80}
+                    onChange={(e) => update({ name: e.target.value })} placeholder="مثال: سارة" />
+                  <p className="text-xs leading-6 text-muted-foreground">الاسم ده اللي هيظهر في معاينة الرد.</p>
+                </div>
+              </div>
 
-          <div>
-            <Label htmlFor="studio-agent-name">اسم الموظف</Label>
-            <Input id="studio-agent-name" value={draft.name} maxLength={80}
-              onChange={(e) => update({ name: e.target.value })} placeholder="مثال: سارة" />
-          </div>
+              <div className="space-y-3 border-t border-border/80 pt-5">
+                <div>
+                  <h2 className="text-base font-black">اختار شخصيته</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">الأسلوب اللي هيتكلم بيه مع عملاءك.</p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">
+                  {PRESETS.map((preset) => {
+                    const active = selectedPreset?.id === preset.id;
+                    return (
+                      <button key={preset.id} type="button" aria-pressed={active}
+                        onClick={() => update({ tone: preset.tone, dialect: preset.dialect })}
+                        className={"rounded-xl border p-3 text-start transition focus-visible:outline-2 focus-visible:outline-ring " +
+                          (active ? "border-primary bg-primary/5" : "border-border hover:border-primary/40")}>
+                        <p className="text-sm font-black">{preset.label} {active ? "✓" : ""}</p>
+                        <p className="mt-1 text-xs leading-6 text-muted-foreground">{preset.hint}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+                {!selectedPreset ? <p className="text-xs text-muted-foreground">أسلوب مخصص محفوظ للشخصية الحالية.</p> : null}
+              </div>
 
-          <div className="space-y-2">
-            <h2 className="text-sm font-black">اختار شخصيته</h2>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {PRESETS.map((preset) => {
-                const active = selectedPreset?.id === preset.id;
-                return (
-                  <button key={preset.id} type="button" aria-pressed={active}
-                    onClick={() => update({ tone: preset.tone, dialect: preset.dialect })}
-                    className={"rounded-xl border p-3 text-start transition " +
-                      (active ? "border-primary bg-primary/5" : "border-border hover:border-primary/40")}>
-                    <p className="text-sm font-black">{preset.label} {active ? "✓" : ""}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{preset.hint}</p>
+              <section aria-label="طريقة الرد حسب اللغة" className="space-y-3 border-t border-border/80 pt-5">
+                <div>
+                  <h2 className="text-base font-black">لغة رد الموظف</h2>
+                  <p className="mt-1 text-xs leading-6 text-muted-foreground">اختار إذا كان الموظف يرد بلغة كل عميل، أو يلتزم بلغة واحدة.</p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <button type="button" aria-pressed={multilingual}
+                    onClick={() => {
+                      if (!multilingual) setLastFixedLanguage(draft.language);
+                      update({ language: AGENT_AUTO_LANGUAGE });
+                    }}
+                    className={"rounded-xl border p-4 text-start transition focus-visible:outline-2 focus-visible:outline-ring " +
+                      (multilingual ? "border-primary bg-primary/5" : "border-border hover:border-primary/40")}>
+                    <p className="text-sm font-black">🌐 متعدد اللغات {multilingual ? "✓" : ""}</p>
+                    <p className="mt-1 text-xs leading-6 text-muted-foreground">يرد بلغة العميل، ويغيّر اللغة لو العميل غيّرها.</p>
                   </button>
-                );
-              })}
+                  <button type="button" aria-pressed={!multilingual}
+                    onClick={() => update({ language: lastFixedLanguage || "ar" })}
+                    className={"rounded-xl border p-4 text-start transition focus-visible:outline-2 focus-visible:outline-ring " +
+                      (!multilingual ? "border-primary bg-primary/5" : "border-border hover:border-primary/40")}>
+                    <p className="text-sm font-black">لغة واحدة {!multilingual ? "✓" : ""}</p>
+                    <p className="mt-1 text-xs leading-6 text-muted-foreground">يلتزم باللغة اللي هتحددها حتى لو العميل كتب بلغة تانية.</p>
+                  </button>
+                </div>
+                {!multilingual ? (
+                  <div className="max-w-sm">
+                    <Label htmlFor="studio-language">اللغة الثابتة للردود</Label>
+                    <select id="studio-language" value={draft.language}
+                      onChange={(e) => {
+                        setLastFixedLanguage(e.target.value);
+                        update({ language: e.target.value });
+                      }}
+                      className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm">
+                      {!AGENT_FIXED_LANGUAGES.some(option => option.code === draft.language) ? (
+                        <option value={draft.language}>{draft.language} (محفوظة سابقًا)</option>
+                      ) : null}
+                      {AGENT_FIXED_LANGUAGES.map(option => (
+                        <option key={option.code} value={option.code}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <p className="text-xs leading-6 text-muted-foreground">اللهجة المختارة بتتطبق على الردود العربية فقط.</p>
+                )}
+              </section>
+
+              <details className="group border-t border-border/80 pt-5">
+                <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-bold [&::-webkit-details-marker]:hidden">
+                  تخصيص إضافي لطريقة الكلام (اختياري)
+                  <span aria-hidden="true" className="text-muted-foreground transition group-open:rotate-180">⌄</span>
+                </summary>
+                <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                  <div>
+                    <Label htmlFor="studio-dialect">اللهجة (للردود بالعربية)</Label>
+                    <Input id="studio-dialect" maxLength={64} value={draft.dialect}
+                      onChange={(e) => update({ dialect: e.target.value })} />
+                    <p className="mt-1 text-xs text-muted-foreground">اللهجة بتتطبق لما الموظف يرد بالعربي فقط.</p>
+                  </div>
+                  <div>
+                    <Label htmlFor="studio-instructions">تعليمات إضافية</Label>
+                    <Textarea id="studio-instructions" rows={3} maxLength={2000}
+                      value={draft.instructions} onChange={(e) => update({ instructions: e.target.value })}
+                      placeholder="مثال: خلي الردود مختصرة واسأل سؤال واحد في كل مرة." />
+                  </div>
+                </div>
+              </details>
             </div>
-            {!selectedPreset ? <p className="text-xs text-muted-foreground">أسلوب مخصص محفوظ للشخصية الحالية.</p> : null}
+
+            <div className="shrink-0 border-t border-border bg-card/95 px-4 py-3 sm:px-6">
+              {error ? <div className="mb-2"><Alert variant="error">{error}</Alert></div> : null}
+              {success ? <div className="mb-2"><Alert variant="success">{success}</Alert></div> : null}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className={"text-xs font-semibold " + (dirty ? "text-warning" : "text-muted-foreground")}>
+                  {dirty ? "عندك تغييرات لسه متحفظتش" : "التعديلات بتتطبق بعد الحفظ"}
+                </p>
+                <Button type="button" disabled={busy || !draft.name.trim() || (!dirty && Boolean(chosen))}
+                  onClick={() => void savePersonality()}>
+                  {busy ? "جاري الحفظ..." : chosen ? "حفظ التغييرات" : "حفظ الشخصية الجديدة"}
+                </Button>
+              </div>
+            </div>
           </div>
 
-          <section aria-label="طريقة الرد حسب اللغة" className="space-y-3 rounded-2xl border border-border bg-surface/45 p-4">
-            <div>
-              <h2 className="text-sm font-black">لغة رد الموظف</h2>
-              <p className="mt-1 text-xs leading-6 text-muted-foreground">
-                اختار إذا كان الموظف يرد بلغة كل عميل، أو يلتزم بلغة واحدة في كل المحادثات.
-              </p>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <button type="button" aria-pressed={multilingual}
-                onClick={() => {
-                  if (!multilingual) setLastFixedLanguage(draft.language);
-                  update({ language: AGENT_AUTO_LANGUAGE });
-                }}
-                className={"rounded-xl border p-3 text-start transition " +
-                  (multilingual ? "border-primary bg-primary/10" : "border-border bg-card hover:border-primary/40")}>
-                <span className="text-sm font-black">🌐 متعدد اللغات {multilingual ? "✓" : ""}</span>
-                <p className="mt-1 text-xs leading-6 text-muted-foreground">يرد تلقائيًا بنفس اللغة اللي العميل بيكلمه بيها، ويغيّر اللغة لو العميل غيّرها.</p>
-              </button>
-              <button type="button" aria-pressed={!multilingual}
-                onClick={() => update({ language: lastFixedLanguage || "ar" })}
-                className={"rounded-xl border p-3 text-start transition " +
-                  (!multilingual ? "border-primary bg-primary/10" : "border-border bg-card hover:border-primary/40")}>
-                <span className="text-sm font-black">🔒 لغة واحدة {!multilingual ? "✓" : ""}</span>
-                <p className="mt-1 text-xs leading-6 text-muted-foreground">يلتزم باللغة اللي هتحددها حتى لو العميل كتب بلغة مختلفة.</p>
-              </button>
-            </div>
-            {!multilingual ? (
+          <aside aria-label="معاينة رد الموظف"
+            className="min-w-0 self-start rounded-2xl border border-border bg-card p-4 sm:p-5 lg:max-h-full lg:overflow-y-auto">
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <Label htmlFor="studio-language">اللغة الثابتة للردود</Label>
-                <select id="studio-language" value={draft.language}
-                  onChange={(e) => {
-                    setLastFixedLanguage(e.target.value);
-                    update({ language: e.target.value });
-                  }}
-                  className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm">
-                  {!AGENT_FIXED_LANGUAGES.some(option => option.code === draft.language) ? (
-                    <option value={draft.language}>{draft.language} (محفوظة سابقًا)</option>
-                  ) : null}
-                  {AGENT_FIXED_LANGUAGES.map(option => (
-                    <option key={option.code} value={option.code}>{option.label}</option>
-                  ))}
-                </select>
+                <h2 className="text-base font-black">معاينة المحادثة</h2>
+                <p className="mt-1 text-xs text-muted-foreground">شوف شكل رد الموظف أثناء تعديل شخصيته.</p>
               </div>
-            ) : (
-              <p className="text-xs leading-6 text-muted-foreground">
-                مثال: لو العميل سأل بالإنجليزي، الموظف يرد بالإنجليزي. ولو سأل بالعربي، يرد بالعربي.
-                اللهجة المختارة بتتطبق على الردود العربية بس.
-              </p>
-            )}
-          </section>
-
-          <details className="group border-t border-border pt-4">
-            <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-bold [&::-webkit-details-marker]:hidden">
-              خصّص طريقة كلامه (اختياري)
-              <span aria-hidden="true" className="text-muted-foreground transition group-open:rotate-180">⌄</span>
-            </summary>
-            <div className="mt-4 space-y-3">
-              <div>
-                <Label htmlFor="studio-dialect">اللهجة (للردود بالعربية)</Label>
-                <Input id="studio-dialect" maxLength={64} value={draft.dialect}
-                  onChange={(e) => update({ dialect: e.target.value })} />
-                <p className="mt-1 text-xs text-muted-foreground">اللهجة بتتطبق لما الموظف يرد بالعربي فقط.</p>
+              <span className="shrink-0 rounded-full bg-surface px-2.5 py-1 text-[11px] font-bold text-muted-foreground">توضيحية</span>
+            </div>
+            <div className="mt-4 rounded-2xl bg-surface/65 p-3 sm:p-4">
+              {multilingual ? (
+                <div className="mb-4 flex items-center gap-1.5">
+                  <span className="me-auto text-xs font-bold text-muted-foreground">لغة المثال</span>
+                  <button type="button" aria-pressed={previewDemoLanguage === "ar"}
+                    onClick={() => setPreviewDemoLanguage("ar")}
+                    className={"rounded-lg px-2.5 py-1.5 text-xs font-bold focus-visible:outline-2 focus-visible:outline-ring " +
+                      (previewDemoLanguage === "ar" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                    عربي
+                  </button>
+                  <button type="button" aria-pressed={previewDemoLanguage === "en"}
+                    onClick={() => setPreviewDemoLanguage("en")}
+                    className={"rounded-lg px-2.5 py-1.5 text-xs font-bold focus-visible:outline-2 focus-visible:outline-ring " +
+                      (previewDemoLanguage === "en" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                    English
+                  </button>
+                </div>
+              ) : null}
+              <div className="flex justify-end">
+                <p dir="auto" className="max-w-[90%] rounded-2xl bg-primary/10 px-3 py-2 text-sm leading-6 [overflow-wrap:anywhere]">{languagePreview.customer}</p>
               </div>
-              <div>
-                <Label htmlFor="studio-instructions">تعليمات إضافية</Label>
-                <Textarea id="studio-instructions" rows={3} maxLength={2000}
-                  value={draft.instructions} onChange={(e) => update({ instructions: e.target.value })}
-                  placeholder="مثال: خلي الردود مختصرة واسأل سؤال واحد في كل مرة." />
+              <div className="mt-3 flex justify-start">
+                <div className="max-w-[93%] rounded-2xl border border-border bg-card px-3 py-2.5">
+                  <p className="mb-1 text-xs font-bold text-primary">{draft.name || "موظفك"} • {roleTitle}</p>
+                  <p dir="auto" className="text-sm leading-7 [overflow-wrap:anywhere]">{languagePreview.reply}</p>
+                </div>
               </div>
             </div>
-          </details>
-
-          {error ? <Alert variant="error">{error}</Alert> : null}
-          {success ? <Alert variant="success">{success}</Alert> : null}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">{dirty ? "في تعديلات لسه متحفظتش" : "كل تغيير لازم يتحفظ عشان يتطبق"}</p>
-            <Button type="button" disabled={busy || !draft.name.trim() || !dirty && Boolean(chosen)}
-              onClick={() => void savePersonality()}>
-              {busy ? "جاري الحفظ..." : chosen ? "حفظ التغييرات" : "حفظ الشخصية الجديدة"}
-            </Button>
-          </div>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <div className="rounded-xl border border-border bg-background p-3">
+                <p className="text-xs text-muted-foreground">أسلوب الرد</p>
+                <p className="mt-1 text-sm font-bold">{selectedPreset?.label ?? "أسلوب مخصص"}</p>
+              </div>
+              <div className="rounded-xl border border-border bg-background p-3">
+                <p className="text-xs text-muted-foreground">لغة الرد</p>
+                <p className="mt-1 text-sm font-bold">
+                  {multilingual ? "حسب لغة العميل" : (AGENT_FIXED_LANGUAGES.find(item => item.code === draft.language)?.label ?? draft.language)}
+                </p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs leading-6 text-muted-foreground">
+              ده مثال توضيحي للأسلوب، مش رد مولّد من الـ AI. تقدر تغيّر لغة المثال من فوق من غير ما تغيّر إعدادات الموظف.
+            </p>
+          </aside>
         </div>
-
-        <aside aria-label="معاينة رد الموظف" className="min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-5 lg:col-span-2 xl:sticky xl:top-0 xl:col-span-1">
-          <h2 className="mb-3 text-sm font-black">معاينة طريقة الرد</h2>
-          <div className="rounded-2xl bg-surface/65 p-4">
-            <p className="mb-3 text-xs font-bold text-muted-foreground">مثال لطريقة كلامه</p>
-            <div className="flex justify-end">
-              <p className="max-w-[85%] rounded-2xl bg-primary/10 px-3 py-2 text-sm">{languagePreview.customer}</p>
-            </div>
-            <div className="mt-2 flex justify-start">
-              <div className="max-w-[88%] rounded-2xl border border-border bg-card px-3 py-2">
-                <p className="mb-1 text-[11px] font-bold text-primary">{draft.name || "موظفك"} • {roleTitle}</p>
-                <p dir="auto" className="text-sm leading-7">{languagePreview.reply}</p>
-              </div>
-            </div>
-            <p className="mt-3 text-[11px] text-muted-foreground">مثال توضيحي للأسلوب، مش رد مولّد من الـ AI.</p>
-          </div>
-        </aside>
       </section>
 
       <div role="tabpanel" id="studio-knowledge" aria-label="معلومات الموظف" hidden={tab !== "knowledge"}
-        className="flex min-h-0 flex-1 flex-col [&[hidden]]:hidden">
+        className="flex min-h-0 min-w-0 flex-1 flex-col [&[hidden]]:hidden">
         <EmployeeKnowledgeChat businessId={businessId} initialCount={knowledgeCount} />
       </div>
-    </main>
+    </div>
   );
 }
