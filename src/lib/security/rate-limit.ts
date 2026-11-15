@@ -56,6 +56,9 @@ export const RATE_LIMITS = {
   labelCampaignDraft: { limit: 10, windowMs: 60 * 60 * 1000 },
   labelCampaignAction: { limit: 30, windowMs: 5 * 60 * 1000 },
   labelCampaignPreflight: { limit: 5, windowMs: 60 * 60 * 1000 },
+  // Read-only CRM audience exploration is iterative; do not share the
+  // five-per-hour limit reserved for launch/preflight actions.
+  crmAudiencePreview: { limit: 60, windowMs: 15 * 60 * 1000 },
   // Authenticated CRM admin-only bounded ERP import. Each request consumes
   // one small resource page; one UI run is a sequence of many safe chunks.
   crmErpSyncBatch: { limit: 360, windowMs: 60 * 60 * 1000 },

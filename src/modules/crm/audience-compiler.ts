@@ -31,6 +31,13 @@ function addParam(ctx: CompileCtx, nameHint: string, type: QueryInput["type"], v
   return `@${name}`;
 }
 
+// Customer-entered search text is data, not a SQL LIKE pattern. Escape
+// %, _ and [ so a query containing these characters cannot accidentally
+// match the entire database. Use a single explicit escape character.
+function literalLikeContains(value: string): string {
+  return "%" + value.replace(/[~%_\[]/g, (ch) => "~" + ch) + "%";
+}
+
 function validInvoiceJoin(): string {
   return `FROM dbo.TblErpInvoiceMirror inv WITH (NOLOCK)
     WHERE inv.BusinessID = @businessId
@@ -156,7 +163,9 @@ function compilePredicate(pred: AudiencePredicate, ctx: CompileCtx): string {
       }
       if (pred.to) {
         const t = addParam(ctx, "svcTo_", sql.Date, pred.to);
-        dateParts.push(`inv.InvDate <= ${t}`);
+        // SQL dates are midnight; <= @to would exclude visits/services later
+        // on the selected end date. Use an inclusive calendar day boundary.
+        dateParts.push(`inv.InvDate < DATEADD(day, 1, ${t})`);
       }
       const dateSql = dateParts.length ? `AND ${dateParts.join(" AND ")}` : "";
       let matchSql = "1=0";
@@ -167,14 +176,14 @@ function compilePredicate(pred: AudiencePredicate, ctx: CompileCtx): string {
         matchSql = `line.ExternalProId IN (${ids.join(", ")})`;
       } else if (pred.op === "category_contains") {
         const likes = pred.values.map((v, i) => {
-          const p = addParam(ctx, `cat${i}_`, sql.NVarChar(220), `%${v}%`);
-          return `sc.CategoryName LIKE ${p} OR sc.ProName LIKE ${p} OR sc.ProNameAr LIKE ${p}`;
+          const p = addParam(ctx, `cat${i}_`, sql.NVarChar(440), literalLikeContains(v));
+          return `sc.CategoryName LIKE ${p} ESCAPE N'~' OR sc.ProName LIKE ${p} ESCAPE N'~' OR sc.ProNameAr LIKE ${p} ESCAPE N'~'`;
         });
         matchSql = `(${likes.join(" OR ")})`;
       } else {
         const likes = pred.values.map((v, i) => {
-          const p = addParam(ctx, `svcName${i}_`, sql.NVarChar(220), `%${v}%`);
-          return `line.ProName LIKE ${p} OR sc.ProName LIKE ${p} OR sc.ProNameAr LIKE ${p}`;
+          const p = addParam(ctx, `svcName${i}_`, sql.NVarChar(440), literalLikeContains(v));
+          return `line.ProName LIKE ${p} ESCAPE N'~' OR sc.ProName LIKE ${p} ESCAPE N'~' OR sc.ProNameAr LIKE ${p} ESCAPE N'~'`;
         });
         matchSql = `(${likes.join(" OR ")})`;
       }
@@ -203,8 +212,8 @@ function compilePredicate(pred: AudiencePredicate, ctx: CompileCtx): string {
         )`;
       }
       const likes = pred.values.map((v, i) => {
-        const p = addParam(ctx, `brName${i}_`, sql.NVarChar(220), `%${v}%`);
-        return `inv.BranchName LIKE ${p}`;
+        const p = addParam(ctx, `brName${i}_`, sql.NVarChar(440), literalLikeContains(v));
+        return `inv.BranchName LIKE ${p} ESCAPE N'~'`;
       });
       return `EXISTS (
         SELECT 1 ${validInvoiceJoin()} AND (${likes.join(" OR ")})
@@ -272,7 +281,9 @@ function compileDaysPredicate(
   }
   const from = addParam(ctx, `${prefix}From_`, sql.Date, pred.from);
   const to = addParam(ctx, `${prefix}To_`, sql.Date, pred.to);
-  return `${columnExpr} BETWEEN ${from} AND ${to}`;
+  // SQL BETWEEN with DATE parameters only includes midnight of the final
+  // date, silently dropping invoices / interactions later that calendar day.
+  return `${columnExpr} >= ${from} AND ${columnExpr} < DATEADD(day, 1, ${to})`;
 }
 
 function compileGroup(

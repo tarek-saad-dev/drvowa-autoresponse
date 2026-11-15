@@ -17,7 +17,7 @@ const schema = z
 export async function POST(request: Request) {
   try {
     const { user, businessId } = await requireApiBusiness();
-    assertRateLimit("crm-audience-preview:" + businessId, RATE_LIMITS.labelCampaignPreflight);
+    assertRateLimit("crm-audience-preview:" + businessId, RATE_LIMITS.crmAudiencePreview);
     const input = schema.parse(await parseJsonBody(request));
     const preview = await previewAudience({
       businessId,

@@ -281,6 +281,18 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
       ],
     );
 
+    // A message/visit later in the day must be included in an inclusive
+    // calendar date lookup. This updates only the throwaway CI SQL database.
+    await query(
+      `UPDATE dbo.TblCrmCustomer
+       SET LastInteractionAtUtc=DATEADD(hour, 18, CAST(@today AS DATETIME2))
+       WHERE BusinessID=@business AND ExternalErpClientId=N'101'`,
+      [
+        { name: "business", type: sql.UniqueIdentifier, value: businessId! },
+        { name: "today", type: sql.Date, value: TODAY },
+      ],
+    );
+
     const protein = { version:1, all:[{type:"erp_service",op:"pro_id_in",values:["15"],windowDays:30}] };
     const raw = await postJson(request, "/api/crm/audience/preview", {filter:protein,channelConnectionId:channelA});
     expect((raw.preview as {totalMatched:number}).totalMatched).toBe(2);
@@ -298,6 +310,73 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
       channelConnectionId:channelA,
     });
     expect((noInvoicesYesterday.preview as {totalMatched:number}).totalMatched).toBe(0);
+
+    // Campaign-builder query matrix: execute REAL parameterized SQL through
+    // authenticated Next audience-preview HTTP, not just inspect compiled text.
+    // No external Gemini call, CRM production query, WhatsApp send or customer PII.
+    const queryCases: Array<{
+      name: string; filter: Record<string, unknown>; matches: number;
+    }> = [
+      { name: "Arabic service name بروتين", matches: 2,
+        filter: { version:1, all:[{type:"erp_service",op:"name_contains",values:["بروتين"]}] } },
+      { name: "same service by catalog ProID", matches: 2,
+        filter: { version:1, all:[{type:"erp_service",op:"pro_id_in",values:["15"]}] } },
+      { name: "service within full selected date", matches: 2,
+        filter: { version:1, all:[{type:"erp_service",op:"name_contains",values:["بروتين"],from:TODAY,to:TODAY}] } },
+      { name: "spend over 1000 EGP, no marketing consent required for search", matches: 1,
+        filter: { version:1, all:[{type:"erp_spend",op:"gte",amount:1000}] } },
+      { name: "spend below 900 including never-purchased customers", matches: 2,
+        filter: { version:1, all:[{type:"erp_spend",op:"lte",amount:900}] } },
+      { name: "no valid spending excludes cancelled invoice", matches: 1,
+        filter: { version:1, all:[{type:"erp_spend",op:"lte",amount:0}] } },
+      { name: "visited at least once", matches: 2,
+        filter: { version:1, all:[{type:"erp_visits",op:"gte",count:1}] } },
+      { name: "never purchased or visited", matches: 1,
+        filter: { version:1, all:[{type:"erp_visits",op:"eq",count:0}] } },
+      { name: "two visits required", matches: 0,
+        filter: { version:1, all:[{type:"erp_visits",op:"gte",count:2}] } },
+      { name: "protein customers who spent at least 1000", matches: 1,
+        filter: { version:1, all:[
+          {type:"erp_service",op:"name_contains",values:["بروتين"]},
+          {type:"erp_spend",op:"gte",amount:1000},
+        ] } },
+      { name: "not a protein service buyer", matches: 1,
+        filter: { version:1, all:[{type:"has_phone",value:true}],
+          exclude:[{type:"erp_service",op:"name_contains",values:["بروتين"]}] } },
+      { name: "high spend OR zero visits", matches: 2,
+        filter: { version:1, any:[
+          {type:"erp_spend",op:"gte",amount:1000},
+          {type:"erp_visits",op:"eq",count:0},
+        ] } },
+      { name: "valid invoices on specified calendar date", matches: 2,
+        filter: { version:1, all:[{type:"erp_invoice_date",op:"between",from:TODAY,to:TODAY}] } },
+      { name: "last visit within an exact calendar date", matches: 2,
+        filter: { version:1, all:[{type:"erp_last_visit",op:"between",from:TODAY,to:TODAY}] } },
+      { name: "last CRM interaction at 18:00 on the final date", matches: 1,
+        filter: { version:1, all:[{type:"last_interaction",op:"between",from:TODAY,to:TODAY}] } },
+      { name: "never visited even though a cancelled invoice exists", matches: 1,
+        filter: { version:1, all:[{type:"erp_last_visit",op:"before_days_ago",days:60}] } },
+      { name: "products are not the same as salon services", matches: 0,
+        filter: { version:1, all:[{type:"erp_product",op:"name_contains",values:["بروتين"]}] } },
+      { name: "a percent character is literal, not LIKE wildcard", matches: 0,
+        filter: { version:1, all:[{type:"erp_service",op:"name_contains",values:["%"]}] } },
+      { name: "an underscore is literal, not LIKE wildcard", matches: 0,
+        filter: { version:1, all:[{type:"erp_service",op:"name_contains",values:["_"]}] } },
+    ];
+    for (const scenario of queryCases) {
+      const response = await postJson(request, "/api/crm/audience/preview", {
+        filter: scenario.filter,
+        channelConnectionId: channelA,
+      });
+      const result = response.preview as {totalMatched: number; customers: Array<{customerId:string}>};
+      expect(result.totalMatched, scenario.name).toBe(scenario.matches);
+      expect(result.customers.length, scenario.name + " preview").toBe(scenario.matches);
+      // Multiple invoices cannot duplicate the audience's distinct customers.
+      const ids = result.customers.map((c) => c.customerId);
+      expect(new Set(ids).size, scenario.name + " distinct").toBe(ids.length);
+    }
+    console.log(`CRM_AUDIENCE_SQL_QUERY_MATRIX_PASS ${queryCases.length} audited isolated scenarios`);
+
     const refined = { version:1, all:[
       {type:"erp_service",op:"pro_id_in",values:["15"],windowDays:30},
       {type:"erp_spend",op:"gte",amount:1000},
