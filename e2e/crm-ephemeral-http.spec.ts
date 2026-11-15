@@ -462,6 +462,43 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
     expect(stored.recordset[0]?.Status).toBe("DRAFT");
     expect(Number(stored.recordset[0]?.PhoneCount)).toBe(1);
 
+    // Test the newly linked review page's existing authenticated backend
+    // stages: text approval and preflight. These are REVIEW ONLY and do not
+    // queue or send messages; the server-side launch flag stays OFF in CI.
+    const draftId = (draft.drafts as Array<{draftId:string}>)[0]!.draftId;
+    const approvedResponse = await request.patch(
+      `/api/whatsapp/label-campaigns/${encodeURIComponent(draftId)}`,
+      {
+        data: { action: "approve_copy", messageText: "Synthetic CI test draft, do not send." },
+        headers: { Origin: "http://localhost:3000" },
+      },
+    );
+    expect(approvedResponse.ok()).toBe(true);
+    const approved = await approvedResponse.json() as {
+      draft:{status:string};sendingEnabled:boolean;
+    };
+    expect(approved.draft.status).toBe("COPY_APPROVED");
+    expect(approved.sendingEnabled).toBe(false);
+    const preflight = await postJson(request,
+      `/api/whatsapp/label-campaigns/${encodeURIComponent(draftId)}/preflight`,
+      {},
+    );
+    const plan = preflight.preflight as {
+      preflightId:string;status:string;observedMemberships:number;sendEnabled:boolean;
+    };
+    expect(plan.status).toBe("REVIEW_ONLY");
+    expect(plan.observedMemberships).toBe(1);
+    expect(plan.sendEnabled).toBe(false);
+    const readiness = await request.get(
+      `/api/whatsapp/label-campaigns/${encodeURIComponent(draftId)}/launch?preflightId=${encodeURIComponent(plan.preflightId)}`,
+    );
+    expect(readiness.ok()).toBe(true);
+    const readinessBody = await readiness.json() as {
+      preview:{enabled:boolean;canLaunch:boolean};
+    };
+    expect(readinessBody.preview.enabled).toBe(false);
+    expect(readinessBody.preview.canLaunch).toBe(false);
+
     // Simulate a resumable incremental import AFTER a previous successful sync.
     // Cashier can contain legacy phones that normalize inconsistently or are
     // reused between different ERP clients. Neither case may stop an entire
