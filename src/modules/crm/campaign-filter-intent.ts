@@ -10,7 +10,10 @@ export function isNewAudienceRequest(message: string): boolean {
 }
 
 export function asksForMarketingEligibility(message: string): boolean {
-  return /حملة|حملات|موافقة\s*(?:التسويق|الواتساب|واتساب)|إذن\s*(?:التسويق|الواتساب|واتساب)|اذن\s*(?:التسويق|الواتساب|واتساب)|مسموح\s*(?:لهم\s*)?(?:بالتسويق|بالرسائل)|مؤهل(?:ين)?\s*(?:للتسويق|للحملة)|ارسال\s*(?:رسالة|واتساب)|إرسال\s*(?:رسالة|واتساب)|ابعت\s*(?:رسالة|واتساب)|ابعث\s*(?:رسالة|واتساب)|opt.?in|consent|marketing|campaign/iu.test(message);
+  // Building a campaign or saying "send WhatsApp" is not a request to
+  // *filter the search* to consented rows. Search the requested audience;
+  // freeze, preflight and launch enforce real consent independently.
+  return /موافقة\s*(?:التسويق|الواتساب|واتساب)|موافق(?:ين|ون)?\s*(?:على\s*)?(?:التسويق|استقبال\s*(?:العروض|الرسائل)|عروض\s*واتساب)|إذن\s*(?:التسويق|الواتساب|واتساب)|اذن\s*(?:التسويق|الواتساب|واتساب)|مسموح\s*(?:لهم\s*)?(?:بالتسويق|بالرسائل)|مؤهل(?:ين)?\s*(?:للتسويق|للحملة)|opt.?in|consent/iu.test(message);
 }
 
 function asksForYesterdayInvoices(message: string): boolean {
