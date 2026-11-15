@@ -203,8 +203,7 @@ export function CampaignBuilderPanel({ initialSegmentId }: { initialSegmentId?: 
     return [
       { label: "مطابق (كامل)", value: preview.totalMatched },
       { label: `برقم (${scopeLabel})`, value: preview.withPhone },
-      { label: `مؤهل (${scopeLabel})`, value: preview.eligibleMarketing },
-      { label: `بدون إذن (${scopeLabel})`, value: preview.withoutPermission },
+      { label: `جاهز للإرسال (${scopeLabel})`, value: preview.eligibleMarketing },
       { label: "مكرر محذوف", value: preview.duplicatesRemoved },
     ];
   }, [preview]);
@@ -686,7 +685,7 @@ export function CampaignBuilderPanel({ initialSegmentId }: { initialSegmentId?: 
                 <div className="space-y-4">
                   {preview.countsScope === "preview_page" ? (
                     <Alert variant="warning">
-                      أعداد «مؤهل / بدون إذن» أدناه من صفحة المعاينة فقط
+                      أعداد «جاهز للإرسال» أدناه تخص العملاء الظاهرين في صفحة المعاينة فقط
                       {previewPageEligible != null
                         ? ` (${previewPageEligible.toLocaleString("ar-EG")} من ${preview.customers.length.toLocaleString("ar-EG")} ظاهرين)`
                         : ""}
@@ -719,14 +718,20 @@ export function CampaignBuilderPanel({ initialSegmentId }: { initialSegmentId?: 
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <strong>{customer.fullName}</strong>
                           <Badge variant={customer.marketingEligible ? "success" : "warning"}>
-                            {customer.marketingEligible ? "مؤهل" : "غير مؤهل"}
+                            {customer.marketingEligible ? "جاهز للإرسال" : "يحتاج مراجعة"}
                           </Badge>
                         </div>
                         <p className="mt-1 text-muted-foreground" dir="ltr">
                           {customer.primaryPhoneNormalized || "بدون رقم"}
                         </p>
                         {!customer.marketingEligible && customer.exclusionReason ? (
-                          <p className="mt-1 text-warning">{customer.exclusionReason}</p>
+                          <p className="mt-1 text-warning">{customer.exclusionReason === "NO_PERMISSION"
+                            ? "لم يُسجّل تأكيد استقبال العروض لهذا الرقم بعد"
+                            : customer.exclusionReason === "OPTED_OUT"
+                              ? "العميل طلب إيقاف رسائل العروض"
+                              : customer.exclusionReason === "NO_PHONE"
+                                ? "لا يوجد رقم واتساب صالح"
+                                : "تحتاج أهلية الإرسال للمراجعة"}</p>
                         ) : null}
                         <p className="mt-1 text-muted-foreground">
                           إنفاق: {formatCrmMoney(customer.totalSpend)} · آخر زيارة: {formatCrmDate(customer.lastVisitAt)}

@@ -19,7 +19,9 @@ describe("CRM Egyptian Arabic audience chat intent", () => {
     expect(asksForMarketingEligibility("اعرض العملاء اللي عملوا بروتين")).toBe(false);
     expect(asksForMarketingEligibility("هات العملاء اللي عملوا بروتين عندنا")).toBe(false);
     expect(asksForMarketingEligibility("هات العملاء المسموح لهم بالتسويق")).toBe(true);
-    expect(asksForMarketingEligibility("اعمل حملة واتساب للعملاء")).toBe(true);
+    expect(asksForMarketingEligibility("اعمل حملة واتساب للعملاء")).toBe(false);
+    expect(asksForMarketingEligibility("ابعت واتساب للعملاء اللي عملوا بروتين")).toBe(false);
+    expect(asksForMarketingEligibility("العملاء الموافقين على استقبال العروض")).toBe(true);
   });
 
   it("removes model-invented consent restriction but still enables separate channel eligibility counts", () => {
@@ -53,6 +55,23 @@ describe("CRM Egyptian Arabic audience chat intent", () => {
       }),
     });
     expect(normalized.all?.some((p) => p.type === "marketing_permission")).toBe(true);
+  });
+
+  it("does not silently make an audience empty just because its campaign will send WhatsApp", () => {
+    const filtered = normalizeCampaignFilterForRequest({
+      message: "اعمل حملة واتساب للعملاء اللي عملوا بروتين",
+      businessToday: "2026-11-15",
+      filter: parseAudienceFilterAst({
+        version: 1,
+        all: [
+          { type: "marketing_permission", op: "eligible" },
+          { type: "erp_service", op: "name_contains", values: ["بروتين"] },
+        ],
+      }),
+    });
+    expect(filtered.all).toEqual([
+      { type: "erp_service", op: "name_contains", values: ["بروتين", "protein"] },
+    ]);
   });
 
   it("maps invoices yesterday to exactly yesterday's business calendar date, never last visit", () => {

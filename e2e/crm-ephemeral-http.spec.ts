@@ -8,7 +8,13 @@ import { configureDrvoErpIntegration } from "../src/modules/integrations/service
 
 type Obj = Record<string, unknown>;
 const TEST_DB = "crm_ephemeral_ci";
-const SAMPLE = [
+type SyntheticCustomer = {
+  clientId: number; name: string; mobile: string; phone: string; email: string;
+  whatsAppOffersConsentPhone?: string | null;
+  whatsAppOffersConsentedAtUtc?: string | null;
+  whatsAppOffersConsentEvidence?: string | null;
+};
+const SAMPLE: SyntheticCustomer[] = [
   { clientId: 101, name: "Synthetic Alpha", mobile: "01055551111", phone: "01055551111", email: "alpha@example.test" },
   { clientId: 102, name: "Synthetic Bravo", mobile: "01055552222", phone: "01055552222", email: "bravo@example.test" },
   { clientId: 103, name: "Synthetic Cancelled", mobile: "01055553333", phone: "01055553333", email: "cancelled@example.test" },
@@ -621,6 +627,83 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
       headers: { Origin: "http://localhost:3000" },
     });
     expect(invalidResource.status()).toBe(400);
+
+    // Cashier staff-confirmed opt-in: never infer from an old customer phone.
+    // A source record must prove opt-in on precisely the same phone. This
+    // is synthetic data in isolated SQL and never schedules a campaign.
+    await query(
+      `UPDATE dbo.TblChannelConnection SET IsActive=0
+       WHERE BusinessID=@businessId AND ChannelConnectionID=@channelB`,
+      [
+        {name:"businessId",type:sql.UniqueIdentifier,value:businessId!},
+        {name:"channelB",type:sql.UniqueIdentifier,value:channelB},
+      ],
+    );
+    const at = new Date().toISOString();
+    SAMPLE.push(
+      {
+        clientId:133, name:"Synthetic POS Confirmed", mobile:"01055556666",
+        phone:"01055556666", email:"verified@example.test",
+        whatsAppOffersConsentPhone:"01055556666",
+        whatsAppOffersConsentedAtUtc:at,
+        whatsAppOffersConsentEvidence:"STAFF_CONFIRMED_CUSTOMER_WHATSAPP_OFFERS",
+      },
+      {
+        clientId:134, name:"Synthetic Mismatch Proof", mobile:"01055557777",
+        phone:"01055557777", email:"mismatch@example.test",
+        whatsAppOffersConsentPhone:"01055558888",
+        whatsAppOffersConsentedAtUtc:at,
+        whatsAppOffersConsentEvidence:"STAFF_CONFIRMED_CUSTOMER_WHATSAPP_OFFERS",
+      },
+      {
+        clientId:135, name:"Synthetic No Consent", mobile:"01055559999",
+        phone:"01055559999", email:"unverified@example.test",
+      },
+    );
+    const withPosEvidence = await postJson(request, "/api/crm/erp/sync", {resource:"customers"});
+    expect((withPosEvidence.result as {customers:{synced:number}}).customers.synced).toBeGreaterThanOrEqual(3);
+    const storedPermission = await query<{PhoneNormalized:string;Source:string}>(
+      `SELECT PhoneNormalized,Source FROM dbo.TblWhatsAppCampaignPermission
+       WHERE BusinessID=@businessId AND ChannelConnectionID=@channelA
+         AND PhoneNormalized IN (N'201055556666',N'201055557777',N'201055559999')`,
+      [
+        {name:"businessId",type:sql.UniqueIdentifier,value:businessId!},
+        {name:"channelA",type:sql.UniqueIdentifier,value:channelA},
+      ],
+    );
+    expect(storedPermission.recordset).toEqual([expect.objectContaining({
+      PhoneNormalized:"201055556666", Source:"EXPLICIT_POS_REGISTRATION",
+    })]);
+
+    const erpAll = {version:1,all:[{type:"source",op:"in",values:["ERP"]}]};
+    const checked = await postJson(request, "/api/crm/audience/preview", {
+      filter:erpAll,channelConnectionId:channelA,
+    });
+    const lookup = (checked.preview as {customers:Array<{
+      fullName:string;marketingEligible:boolean;exclusionReason:string|null;
+    }>}).customers;
+    expect(lookup.find(c=>c.fullName==="Synthetic POS Confirmed")?.marketingEligible).toBe(true);
+    expect(lookup.find(c=>c.fullName==="Synthetic Mismatch Proof")?.marketingEligible).toBe(false);
+    expect(lookup.find(c=>c.fullName==="Synthetic No Consent")?.marketingEligible).toBe(false);
+
+    // An explicit STOP overrides even a previously recorded Cashier consent.
+    await query(
+      `INSERT INTO dbo.TblWhatsAppCampaignOptOut
+         (BusinessID,ChannelConnectionID,PhoneNormalized,ProviderMessageID)
+       VALUES (@businessId,@channelA,N'201055556666',N'CI-SYNTHETIC-STOP')`,
+      [
+        {name:"businessId",type:sql.UniqueIdentifier,value:businessId!},
+        {name:"channelA",type:sql.UniqueIdentifier,value:channelA},
+      ],
+    );
+    const stopped = await postJson(request, "/api/crm/audience/preview", {
+      filter:erpAll,channelConnectionId:channelA,
+    });
+    const stoppedCustomer = (stopped.preview as {customers:Array<{
+      fullName:string;marketingEligible:boolean;exclusionReason:string|null;
+    }>}).customers.find(c=>c.fullName==="Synthetic POS Confirmed");
+    expect(stoppedCustomer?.marketingEligible).toBe(false);
+    expect(stoppedCustomer?.exclusionReason).toBe("OPTED_OUT");
 
     // No customer data is dropped just because a phone is bad; no WhatsApp
     // recipients are inferred for phone-less ERP customers.

@@ -55,7 +55,7 @@ const candidateQuery = `
  SELECT COUNT_BIG(1) AS Total FROM dbo.TblWhatsAppCampaignPreflightRecipient pr
  JOIN dbo.TblWhatsAppCampaignPermission perm
    ON perm.BusinessID=pr.BusinessID AND perm.PhoneNormalized=pr.PhoneNormalized
-   AND perm.ChannelConnectionID=@channelConnectionId AND perm.Source=N'EXPLICIT_INBOUND'
+   AND perm.ChannelConnectionID=@channelConnectionId AND perm.Source IN(N'EXPLICIT_INBOUND',N'EXPLICIT_POS_REGISTRATION')
  JOIN dbo.TblWhatsAppContactLabel cl
    ON cl.BusinessID=pr.BusinessID AND cl.ContactID=pr.ContactID
    AND cl.ChannelConnectionID=@channelConnectionId AND cl.ProviderLabelID=@labelId
@@ -237,7 +237,7 @@ export async function launchCampaign(params: {
          ON perm.BusinessID=pr.BusinessID
            AND perm.ChannelConnectionID=@channelConnectionId
            AND perm.PhoneNormalized=pr.PhoneNormalized
-           AND perm.Source=N'EXPLICIT_INBOUND'
+           AND perm.Source IN(N'EXPLICIT_INBOUND',N'EXPLICIT_POS_REGISTRATION')
        JOIN dbo.TblWhatsAppContactLabel cl
          ON cl.BusinessID=pr.BusinessID
            AND cl.ContactID=pr.ContactID

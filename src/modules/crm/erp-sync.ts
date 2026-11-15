@@ -10,6 +10,7 @@ import {
 } from "@/modules/integrations/repository";
 
 import { normalizeErpCustomerPhone } from "./erp-phone";
+import { importCashierWhatsAppOffersConsent } from "./erp-marketing-consent";
 import * as repo from "./repository";
 
 const RESOURCE_CUSTOMERS = "customers";
@@ -239,14 +240,28 @@ async function syncCustomers(params: {
         const row = asRecord(item);
         if (!row) continue;
         const clientId = str(row.clientId ?? row.ClientID);
-        await ensureCrmCustomerFromErp({
+        const mobile = str(row.mobile ?? row.Mobile);
+        const phone = str(row.phone ?? row.Phone);
+        const customerId = await ensureCrmCustomerFromErp({
           businessId: params.businessId,
           clientId,
           name: str(row.name ?? row.Name),
-          mobile: str(row.mobile ?? row.Mobile),
-          phone: str(row.phone ?? row.Phone),
+          mobile,
+          phone,
           email: str(row.email ?? row.Email),
         });
+        if (customerId && clientId && row.whatsAppOffersConsentEvidence) {
+          await importCashierWhatsAppOffersConsent({
+            businessId: params.businessId,
+            customerId,
+            externalClientId: clientId,
+            mobile,
+            phone,
+            proofPhone: str(row.whatsAppOffersConsentPhone),
+            consentedAtUtc: str(row.whatsAppOffersConsentedAtUtc),
+            evidence: str(row.whatsAppOffersConsentEvidence),
+          });
+        }
         synced += 1;
       }
     };

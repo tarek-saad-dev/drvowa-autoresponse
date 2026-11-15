@@ -40,7 +40,7 @@ async function discardNotAllowed(): Promise<number> {
              WHERE perm.BusinessID=item.BusinessID
                AND perm.ChannelConnectionID=run.ChannelConnectionID
                AND perm.PhoneNormalized=item.PhoneNormalized
-               AND perm.Source=N'EXPLICIT_INBOUND') THEN N'NO_PERMISSION'
+               AND perm.Source IN(N'EXPLICIT_INBOUND',N'EXPLICIT_POS_REGISTRATION')) THEN N'NO_PERMISSION'
            WHEN EXISTS (SELECT 1
              FROM dbo.TblWhatsAppCampaignRunItem oldItem
              JOIN dbo.TblWhatsAppCampaignRun oldRun ON oldRun.RunID=oldItem.RunID
@@ -63,7 +63,7 @@ async function discardNotAllowed(): Promise<number> {
            WHERE perm.BusinessID=item.BusinessID
              AND perm.ChannelConnectionID=run.ChannelConnectionID
              AND perm.PhoneNormalized=item.PhoneNormalized
-             AND perm.Source=N'EXPLICIT_INBOUND')
+             AND perm.Source IN(N'EXPLICIT_INBOUND',N'EXPLICIT_POS_REGISTRATION'))
          OR NOT EXISTS (SELECT 1 FROM dbo.TblWhatsAppContactLabel cl
            WHERE cl.BusinessID=item.BusinessID AND cl.ChannelConnectionID=run.ChannelConnectionID
              AND cl.ProviderLabelID=run.ProviderLabelID AND cl.ContactID=item.ContactID
@@ -142,7 +142,7 @@ async function claimNext(): Promise<Claimed | null> {
          AND cl.IsActive=1
        JOIN dbo.TblWhatsAppCampaignPermission perm ON perm.BusinessID=item.BusinessID
          AND perm.ChannelConnectionID=run.ChannelConnectionID
-         AND perm.PhoneNormalized=item.PhoneNormalized AND perm.Source=N'EXPLICIT_INBOUND'
+         AND perm.PhoneNormalized=item.PhoneNormalized AND perm.Source IN(N'EXPLICIT_INBOUND',N'EXPLICIT_POS_REGISTRATION')
        JOIN dbo.TblWhatsAppLabelCampaignDraft d ON d.BusinessID=run.BusinessID
          AND d.CampaignDraftID=run.CampaignDraftID AND d.Status=N'COPY_APPROVED'
          AND d.MessageText=run.MessageText
@@ -218,7 +218,7 @@ async function stillAllowed(job: Claimed): Promise<boolean> {
          AND cl.ContactID=item.ContactID AND cl.IsActive=1
        JOIN dbo.TblWhatsAppCampaignPermission perm ON perm.BusinessID=item.BusinessID
          AND perm.ChannelConnectionID=run.ChannelConnectionID
-         AND perm.PhoneNormalized=item.PhoneNormalized AND perm.Source=N'EXPLICIT_INBOUND'
+         AND perm.PhoneNormalized=item.PhoneNormalized AND perm.Source IN(N'EXPLICIT_INBOUND',N'EXPLICIT_POS_REGISTRATION')
        JOIN dbo.TblWhatsAppLabelCampaignDraft draft ON draft.BusinessID=run.BusinessID
          AND draft.CampaignDraftID=run.CampaignDraftID
          AND draft.Status=N'COPY_APPROVED' AND draft.MessageText=run.MessageText
