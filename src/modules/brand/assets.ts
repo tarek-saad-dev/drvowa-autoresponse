@@ -9,7 +9,7 @@ import { ConflictError, NotFoundError, ValidationError } from "@/lib/tenancy/err
  * Root must live outside /home/drvowa/app and be writable only by the app service.
  * A production deploy explicitly provisions /var/lib/drvowa/brand-assets at 0700.
  */
-export const BRAND_VARIANTS = ["primary-dark", "primary-light", "compact", "stacked", "icon"] as const;
+export const BRAND_VARIANTS = ["primary-dark", "primary-light", "compact", "stacked", "icon", "navigation"] as const;
 export type BrandVariant = (typeof BRAND_VARIANTS)[number];
 export type BrandAssetMeta = {
   id: string;
