@@ -20,6 +20,7 @@ import type {
   CrmAudiencePreview,
   CampaignAiTurnResult,
 } from "@/modules/crm";
+import type { CrmSegment } from "@/modules/crm/types";
 
 type ChatMessage = {
   id: string;
@@ -61,7 +62,7 @@ function channelLabel(channel: CrmChannelOption): string {
   );
 }
 
-export function CampaignBuilderPanel() {
+export function CampaignBuilderPanel({ initialSegmentId }: { initialSegmentId?: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
@@ -89,6 +90,7 @@ export function CampaignBuilderPanel() {
   const [confirmedFinalCount, setConfirmedFinalCount] = useState(false);
   const [confirmedChannel, setConfirmedChannel] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const importedSegmentId = useRef<string | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -127,6 +129,55 @@ export function CampaignBuilderPanel() {
       cancelled = true;
     };
   }, []);
+
+  // Start a *new* campaign from an existing tenant-owned CRM segment.
+  // The filter is only previewed. This never freezes an audience, creates a
+  // WhatsApp list, approves a draft, or triggers outbound delivery.
+  useEffect(() => {
+    if (!initialSegmentId || !channelConnectionId ||
+        importedSegmentId.current === initialSegmentId) return;
+    importedSegmentId.current = initialSegmentId;
+    void (async () => {
+      const segmentsRes = await fetch("/api/crm/segments", { cache: "no-store" });
+      const data = await readApiJson<{ segments?: CrmSegment[] }>(segmentsRes);
+      if (!segmentsRes.ok || !Array.isArray(data.segments)) {
+        throw new Error(mapUserFacingError(data, "تعذر تحميل الشرائح المحفوظة."));
+      }
+      const segment = data.segments.find((item) => item.segmentId === initialSegmentId);
+      if (!segment) {
+        throw new Error("الشريحة المطلوبة غير موجودة داخل النشاط الحالي.");
+      }
+      const importedFilter = JSON.parse(segment.filterJson) as AudienceFilterAst;
+      const result = await fetch("/api/crm/audience/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filter: importedFilter, channelConnectionId }),
+      });
+      const resultData = await readApiJson<{ preview?: CrmAudiencePreview }>(result);
+      if (!result.ok || !resultData.preview ||
+          resultData.preview.channelConnectionId !== channelConnectionId) {
+        throw new Error(mapUserFacingError(resultData, "تعذر عرض عملاء الشريحة المحفوظة."));
+      }
+      setFilter(resultData.preview.filter);
+      setPreview(resultData.preview);
+      setConfirmName(segment.name.slice(0, 80));
+      setFinalAudience(null);
+      setConfirmedFinalCount(false);
+      setConfirmedChannel(false);
+      setMessageDraft("");
+      setStep("compose");
+      setMessages((prev) => [...prev, {
+        id: "saved-segment-" + segment.segmentId,
+        role: "assistant",
+        text: "حمّلنا الشريحة «" + segment.name +
+          "» وعرضنا العملاء المطابقين. اكتب رسالتك وراجع العدد النهائي والموافقات قبل إنشاء المسودة.",
+      }]);
+      setNotice("تم تحميل الشريحة المحفوظة. ده بحث ومعاينة فقط — لم يتم إرسال أي رسالة.");
+    })().catch((error) => {
+      importedSegmentId.current = null;
+      setError(error instanceof Error ? error.message : "تعذر تحميل الشريحة.");
+    });
+  }, [initialSegmentId, channelConnectionId]);
 
   const selectedChannel = useMemo(
     () => channels.find((c) => c.channelConnectionId === channelConnectionId) ?? null,
@@ -795,9 +846,17 @@ export function CampaignBuilderPanel() {
                   {createdListId ? (
                     <p className="text-xs text-muted-foreground" dir="ltr">List: {createdListId}</p>
                   ) : null}
-                  <Link href="/dashboard/agent?tab=campaigns" className="inline-block font-bold text-primary hover:underline">
-                    فتح مسودات حملات الموظف
+                  <Link
+                    href={createdDraftId
+                      ? `/dashboard/campaigns/drafts?draftId=${encodeURIComponent(createdDraftId)}`
+                      : "/dashboard/campaigns/drafts"}
+                    className="inline-block font-bold text-primary hover:underline"
+                  >
+                    مراجعة الرسالة وتجهيز الإرسال
                   </Link>
+                  <p className="text-xs text-muted-foreground">
+                    الإرسال لا يبدأ قبل اعتماد الرسالة، فحص الموافقات، ثم تأكيدك النهائي من صفحة المسودات.
+                  </p>
                 </div>
               ) : null}
 

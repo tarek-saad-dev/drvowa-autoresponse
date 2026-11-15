@@ -29,7 +29,7 @@ type ApiPayload = {
 };
 type View = "compose" | "manage" | "review" | "history";
 
-export function LabelCampaignChat() {
+export function LabelCampaignChat({ initialDraftId }: { initialDraftId?: string }) {
   const [view, setView] = useState<View>("compose");
   const [selectedLabel, setSelectedLabel] = useState<MirroredWhatsAppLabel | null>(null);
   const [input, setInput] = useState("");
@@ -43,6 +43,7 @@ export function LabelCampaignChat() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(true);
+  const draftSelectionApplied = useRef(false);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const activeDraft = drafts.find(draft => draft.draftId === activeDraftId);
 
@@ -62,6 +63,19 @@ export function LabelCampaignChat() {
     }).finally(() => { if (alive.current) setLoading(false); });
     return () => { alive.current = false; };
   }, [refresh]);
+
+  useEffect(() => {
+    if (!initialDraftId || loading || draftSelectionApplied.current) return;
+    draftSelectionApplied.current = true;
+    const draft = drafts.find((item) => item.draftId === initialDraftId);
+    if (draft && draft.status !== "CANCELLED") {
+      setActiveDraftId(draft.draftId);
+      setView("review");
+    } else {
+      setError("المسودة المطلوبة غير موجودة ضمن آخر 25 مسودة. افتح «الحملات السابقة» للمراجعة.");
+      setView("history");
+    }
+  }, [initialDraftId, loading, drafts]);
 
   function navigate(next: View) {
     setView(next);
