@@ -26,11 +26,11 @@ html[data-theme="light"] {
   --brand-teal-strong: var(--primary-hover);
   --brand-teal-deep: var(--brand-deep-green);
 
-  /* Readable application typography until official lettering is licensed. */
-  --font-ui-arabic: var(--font-ibm-plex-arabic), "Segoe UI", Tahoma, sans-serif;
-  --font-display-arabic: var(--font-ibm-plex-arabic), "Segoe UI", Tahoma, sans-serif;
-  --font-display-latin: var(--font-space-grotesk), Arial, sans-serif;
-  --font-data: var(--font-space-grotesk), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* Cairo is the unified font for Arabic, Latin, headings and numeric UI. */
+  --font-ui-arabic: var(--font-cairo), "Segoe UI", Tahoma, sans-serif;
+  --font-display-arabic: var(--font-ui-arabic);
+  --font-display-latin: var(--font-cairo), Arial, sans-serif;
+  --font-data: var(--font-cairo), "Segoe UI", Tahoma, sans-serif;
 
   /* Light theme: use accessible deep green instead of neon on white. */
   --background: #f7f9fc;
@@ -221,14 +221,14 @@ body {
 .drvo-display {
   font-family: var(--font-display-arabic);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: normal;
   line-height: 1.25;
 }
 
 .drvo-display:lang(en),
 .drvo-display[lang="en"] {
   font-family: var(--font-display-latin);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.02em;
 }
 
 .drvo-data {
