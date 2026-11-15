@@ -99,6 +99,14 @@ export function SegmentsPanel() {
                       {segment.explanationAr}
                     </p>
                   ) : null}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Link href={`/dashboard/campaigns/create?segmentId=${encodeURIComponent(segment.segmentId)}`}>
+                      <Button type="button" size="sm">إنشاء حملة من الشريحة</Button>
+                    </Link>
+                    <p className="text-xs text-muted-foreground">
+                      اختيار الشريحة لا يرسل رسائل. راجع الأرقام والموافقات وصياغة الرسالة أولاً.
+                    </p>
+                  </div>
                 </article>
               ))}
             </div>
