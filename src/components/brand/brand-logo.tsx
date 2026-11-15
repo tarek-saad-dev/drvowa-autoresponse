@@ -15,15 +15,17 @@ function LogoImage({
   surface,
   className,
   priority,
+  navigation,
 }: {
   surface: Surface;
   className?: string;
   priority: boolean;
+  navigation: boolean;
 }) {
   const logo = LOGOS[surface];
   return (
     <Image
-      src={logo.src}
+      src={navigation ? `/api/brand/assets/navigation?surface=${surface}` : logo.src}
       unoptimized
       width={logo.width}
       height={logo.height}
@@ -42,18 +44,21 @@ export function BrandLogo({
   surface = "auto",
   className,
   priority = false,
+  navigation = false,
 }: {
   surface?: Surface | "auto";
   className?: string;
   priority?: boolean;
+  /** Keep the dashboard navigation logo independent from general brand logos. */
+  navigation?: boolean;
 }) {
   if (surface !== "auto") {
-    return <LogoImage surface={surface} className={className} priority={priority} />;
+    return <LogoImage surface={surface} className={className} priority={priority} navigation={navigation} />;
   }
   return (
     <>
-      <LogoImage surface="light" className={cn(className, "dark:hidden")} priority={priority} />
-      <LogoImage surface="dark" className={cn(className, "hidden dark:block")} priority={priority} />
+      <LogoImage surface="light" className={cn(className, "dark:hidden")} priority={priority} navigation={navigation} />
+      <LogoImage surface="dark" className={cn(className, "hidden dark:block")} priority={priority} navigation={navigation} />
     </>
   );
 }

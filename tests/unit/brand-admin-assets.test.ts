@@ -19,6 +19,9 @@ const modifyRoute = source("src/app/api/admin/brand-assets/[id]/route.ts");
 const previewRoute = source("src/app/api/admin/brand-assets/[id]/image/route.ts");
 const publicRoute = source("src/app/api/brand/assets/[variant]/route.ts");
 const moduleSource = source("src/modules/brand/assets.ts");
+const dashboardTopbar = source("src/components/dashboard/topbar.tsx");
+const brandLogo = source("src/components/brand/brand-logo.tsx");
+const adminAssets = source("src/components/admin/admin-brand-assets.tsx");
 
 function minimalPng(): Buffer {
   const b = Buffer.alloc(24);
@@ -46,7 +49,7 @@ afterAll(async () => {
 
 describe("DRVO Super Admin Brand Assets without SQL migration", () => {
   it("supports the five known variants and rejects path traversal", () => {
-    expect(BRAND_VARIANTS).toEqual(["primary-dark", "primary-light", "compact", "stacked", "icon"]);
+    expect(BRAND_VARIANTS).toEqual(["primary-dark", "primary-light", "compact", "stacked", "icon", "navigation"]);
     for (const variant of BRAND_VARIANTS) expect(isBrandVariant(variant)).toBe(true);
     for (const invalid of ["../../../etc", "favicon.svg", "__proto__", "", "primary-light/../icon"]) {
       expect(isBrandVariant(invalid)).toBe(false);
@@ -106,6 +109,25 @@ describe("DRVO Super Admin Brand Assets without SQL migration", () => {
     expect(await getPublishedBrandImage("primary-light")).toBeNull();
     const pointer = JSON.parse(await readFile(join(sandbox, "published", "icon.json"), "utf8")) as { id: string };
     expect(pointer.id).toBe(iconId);
+  });
+
+  it("manages the navigation image independently from all brand and favicon slots", async () => {
+    const navigationId = await stageBrandAsset({
+      variant: "navigation", file: file("nav-only.png", minimalPng()), userId: "test-super-admin",
+    });
+    expect(await getPublishedBrandImage("navigation")).toBeNull();
+    await activateBrandAsset(navigationId);
+    expect(await getPublishedBrandImage("navigation")).not.toBeNull();
+    const active = await listBrandAssets();
+    expect(active.find((item) => item.variant === "navigation")?.active).toBe(true);
+    expect(active.find((item) => item.variant === "primary-dark")?.active).toBe(true);
+    expect(active.find((item) => item.variant === "icon")?.active).toBe(true);
+    expect(await getPublishedBrandImage("primary-light")).toBeNull();
+    expect(brandLogo).toContain('navigation ? `/api/brand/assets/navigation?surface=${surface}` : logo.src');
+    expect(dashboardTopbar).toContain("<BrandLogo navigation priority");
+    expect(adminAssets).toContain('id: "navigation"');
+    expect(publicRoute).toContain('variant === "navigation"');
+    expect(publicRoute).toContain("fallbackVariant");
   });
 
   it("never imports SQL or creates database migration paths", () => {

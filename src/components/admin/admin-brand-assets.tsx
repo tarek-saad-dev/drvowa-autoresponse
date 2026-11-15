@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 
-type Variant = "primary-dark" | "primary-light" | "compact" | "stacked" | "icon";
+type Variant = "primary-dark" | "primary-light" | "compact" | "stacked" | "icon" | "navigation";
 type Asset = {
   id: string;
   variant: Variant;
@@ -17,8 +17,9 @@ type Asset = {
   activatedAt: string | null;
 };
 const SLOTS: { id: Variant; title: string; help: string; light: boolean }[] = [
-  { id: "primary-dark", title: "الشعار الأساسي — خلفية داكنة", help: "للهيدر الداكن والـSidebar", light: false },
-  { id: "primary-light", title: "الشعار الأساسي — خلفية فاتحة", help: "لصفحات الدخول والـLight Mode", light: true },
+  { id: "navigation", title: "صورة شريط التنقل (Nav)", help: "تُعرض في أعلى لوحة المستخدم فقط، مستقلة عن بقية الشعارات.", light: false },
+  { id: "primary-dark", title: "الشعار الأساسي — خلفية داكنة", help: "للواجهات العامة ذات الخلفية الداكنة", light: false },
+  { id: "primary-light", title: "الشعار الأساسي — خلفية فاتحة", help: "للواجهات العامة ذات الخلفية الفاتحة", light: true },
   { id: "compact", title: "Compact — الشعار الأفقي الصغير", help: "للمساحات الضيقة والموبايل", light: false },
   { id: "stacked", title: "Stacked — الشعار الرأسي", help: "للمواد التسويقية والمربعة", light: false },
   { id: "icon", title: "Icon Only — أيقونة التطبيق", help: "لأيقونة التطبيق والمشاركة الاجتماعية", light: false },
@@ -80,7 +81,9 @@ export function AdminBrandAssets() {
 
   async function act(asset: Asset, action: "publish" | "delete") {
     if (action === "publish" &&
-      !window.confirm("هيتم استبدال الشعار المنشور فورًا في الموقع والتطبيق. هل تعتمد النسخة دي؟")) return;
+      !window.confirm(asset.variant === "navigation"
+        ? "هيتم تغيير صورة الـNav فقط من غير ما نغيّر أي شعار تاني. هل تعتمد النسخة دي؟"
+        : "هيتم استبدال الشعار المنشور فورًا في الموقع والتطبيق. هل تعتمد النسخة دي؟")) return;
     if (action === "delete" && !window.confirm("حذف المسودة دي نهائيًا؟")) return;
     setBusy(asset.id); setError(""); setNotice("");
     try {
@@ -108,6 +111,10 @@ export function AdminBrandAssets() {
         {" "}<strong className="text-foreground">2 MB</strong>. يفضل PNG بخلفية شفافة.
         أولًا ارفع الصورة كمسودة، وعاينها، وبعدها اضغط <strong className="text-foreground">اعتماد ونشر</strong>.
         النسخة القديمة بتفضل محفوظة وتقدر ترجع لها في أي وقت. ملفات SVG مش مدعومة حفاظًا على الأمان.
+        <p className="mt-2 font-semibold text-foreground">
+          صورة الـNav مستقلة تمامًا: قبل نشر صورة خاصة بيها، بيظهر الشعار الأساسي المناسب للوضع الفاتح أو الداكن.
+          بعد النشر، بتظهر نفس صورة الـNav في الوضعين، فاختار صورة واضحة على الخلفيتين.
+        </p>
       </div>
       {error ? <p role="alert" className="rounded-xl border border-destructive/25 bg-destructive-soft p-3 text-sm text-destructive">{error}</p> : null}
       {notice ? <p role="status" className="rounded-xl border border-success/25 bg-success-soft p-3 text-sm text-success">{notice}</p> : null}
@@ -117,22 +124,44 @@ export function AdminBrandAssets() {
           const versions = assets.filter((asset) => asset.variant === slot.id);
           const current = versions.find((asset) => asset.active);
           return (
-            <section key={slot.id} className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card shadow-sm" aria-label={slot.title}>
+            <section key={slot.id} className={"min-w-0 overflow-hidden rounded-2xl border bg-card shadow-sm " + (slot.id === "navigation" ? "border-primary/35 lg:col-span-2" : "border-border")} aria-label={slot.title}>
               <header className="space-y-1 border-b border-border px-4 py-4 sm:px-5">
+                {slot.id === "navigation" ? <p dir="ltr" className="text-left text-[11px] font-bold tracking-widest text-primary">NAVIGATION / INDEPENDENT IMAGE</p> : null}
                 <h2 className="font-display text-base font-bold">{slot.title}</h2>
                 <p className="text-xs text-muted-foreground">{slot.help}</p>
                 <p className="text-xs font-semibold text-primary">{current ? "نسخة معتمدة ونشطة" : "لسه مفيش نسخة منشورة — بيستخدم الشعار الافتراضي"}</p>
               </header>
-              <div className={"flex h-40 items-center justify-center p-5 " + (slot.light ? "bg-[#f7f9fc]" : "bg-[#0b0f14]")}>
-                <Image
-                  src={"/api/brand/assets/" + slot.id + (current ? "?v=" + current.id : "")}
-                  alt={"المعاينة الحالية — " + slot.title}
-                  unoptimized
-                  width={440}
-                  height={160}
-                  className="max-h-full w-auto max-w-full object-contain"
-                />
-              </div>
+              {slot.id === "navigation" ? (
+                <div className="grid sm:grid-cols-2">
+                  {(["light", "dark"] as const).map((surface) => (
+                    <div key={surface} className={"flex h-40 flex-col items-center justify-center gap-2 p-4 " +
+                      (surface === "light" ? "bg-[#f7f9fc]" : "bg-[#0b0f14]")}>
+                      <span className={"text-[11px] font-bold " + (surface === "light" ? "text-[#0b0f14]" : "text-[#f7f9fc]")}>
+                        {surface === "light" ? "معاينة الوضع الفاتح" : "معاينة الوضع الداكن"}
+                      </span>
+                      <Image
+                        src={"/api/brand/assets/navigation?surface=" + surface + (current ? "&v=" + current.id : "")}
+                        alt={"معاينة صورة الـNav — " + surface}
+                        unoptimized
+                        width={440}
+                        height={125}
+                        className="max-h-24 w-auto max-w-full object-contain"
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className={"flex h-40 items-center justify-center p-5 " + (slot.light ? "bg-[#f7f9fc]" : "bg-[#0b0f14]")}>
+                  <Image
+                    src={"/api/brand/assets/" + slot.id + (current ? "?v=" + current.id : "")}
+                    alt={"المعاينة الحالية — " + slot.title}
+                    unoptimized
+                    width={440}
+                    height={160}
+                    className="max-h-full w-auto max-w-full object-contain"
+                  />
+                </div>
+              )}
               <form onSubmit={(event) => void upload(event, slot.id)} className="space-y-3 border-y border-border px-4 py-4 sm:px-5">
                 <label className="block text-sm font-semibold">
                   اختيار صورة جديدة
