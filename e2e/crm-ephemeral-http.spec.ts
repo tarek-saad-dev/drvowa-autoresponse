@@ -632,7 +632,7 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
     // A source record must prove opt-in on precisely the same phone. This
     // is synthetic data in isolated SQL and never schedules a campaign.
     await query(
-      `UPDATE dbo.TblChannelConnection SET IsActive=0,Status=N'DISCONNECTED'
+      `UPDATE dbo.TblChannelConnection SET IsActive=0
        WHERE BusinessID=@businessId AND ChannelConnectionID=@channelB`,
       [
         {name:"businessId",type:sql.UniqueIdentifier,value:businessId!},
