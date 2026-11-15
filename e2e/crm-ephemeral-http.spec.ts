@@ -294,6 +294,31 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
     );
 
     const protein = { version:1, all:[{type:"erp_service",op:"pro_id_in",values:["15"],windowDays:30}] };
+
+    // Persist a CRM segment, reload the saved filter for a newly started
+    // campaign and preview the same customers without invoking Gemini, list
+    // creation, WhatsApp send, or any production business data.
+    const createdSegment = await postJson(request, "/api/crm/segments", {
+      name: "Synthetic Protein Regulars",
+      description: "CI-only segment; no sending",
+      filter: protein,
+    });
+    const segmentId = (createdSegment.segment as {segmentId:string}).segmentId;
+    expect(segmentId).toMatch(/^[a-f0-9-]{36}$/i);
+    const savedSegmentsResponse = await request.get("/api/crm/segments");
+    expect(savedSegmentsResponse.ok()).toBe(true);
+    const savedSegments = await savedSegmentsResponse.json() as {
+      segments:Array<{segmentId:string; filterJson:string}>;
+    };
+    const savedSegment = savedSegments.segments.find((item) => item.segmentId === segmentId);
+    expect(savedSegment).toBeTruthy();
+    expect(JSON.parse(savedSegment!.filterJson)).toEqual(protein);
+    const loadedPreview = await postJson(request, "/api/crm/audience/preview", {
+      filter: JSON.parse(savedSegment!.filterJson) as unknown,
+      channelConnectionId: channelA,
+    });
+    expect((loadedPreview.preview as {totalMatched:number}).totalMatched).toBe(2);
+
     const raw = await postJson(request, "/api/crm/audience/preview", {filter:protein,channelConnectionId:channelA});
     expect((raw.preview as {totalMatched:number}).totalMatched).toBe(2);
 
