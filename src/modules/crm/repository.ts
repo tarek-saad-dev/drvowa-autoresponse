@@ -2526,9 +2526,11 @@ export async function getCrmErpMirrorCounts(params: { businessId: string }) {
     ErpCustomers: number;
     ErpCustomersWithoutPhone: number;
     ValidInvoices: number;
+    AllInvoiceHeaders: number;
     UnlinkedInvoices: number;
     InvoiceLines: number;
     CatalogServices: number;
+    AllCatalogItems: number;
   }>(
     `SELECT
       (SELECT COUNT_BIG(1) FROM dbo.TblCrmCustomer
@@ -2539,11 +2541,15 @@ export async function getCrmErpMirrorCounts(params: { businessId: string }) {
       (SELECT COUNT_BIG(1) FROM dbo.TblErpInvoiceMirror
         WHERE BusinessID = @businessId AND IsValidSale = 1 AND IsDeleted = 0) AS ValidInvoices,
       (SELECT COUNT_BIG(1) FROM dbo.TblErpInvoiceMirror
+        WHERE BusinessID = @businessId) AS AllInvoiceHeaders,
+      (SELECT COUNT_BIG(1) FROM dbo.TblErpInvoiceMirror
         WHERE BusinessID = @businessId AND IsValidSale = 1 AND IsDeleted = 0 AND CustomerID IS NULL) AS UnlinkedInvoices,
       (SELECT COUNT_BIG(1) FROM dbo.TblErpInvoiceLineMirror
         WHERE BusinessID = @businessId) AS InvoiceLines,
       (SELECT COUNT_BIG(1) FROM dbo.TblErpServiceCatalog
-        WHERE BusinessID = @businessId AND IsDeleted = 0) AS CatalogServices`,
+        WHERE BusinessID = @businessId AND IsDeleted = 0) AS CatalogServices,
+      (SELECT COUNT_BIG(1) FROM dbo.TblErpServiceCatalog
+        WHERE BusinessID = @businessId) AS AllCatalogItems`,
     [{ name: "businessId", type: sql.UniqueIdentifier, value: params.businessId }],
   );
   const row = result.recordset[0];
@@ -2551,8 +2557,10 @@ export async function getCrmErpMirrorCounts(params: { businessId: string }) {
     erpCustomers: Number(row?.ErpCustomers ?? 0),
     erpCustomersWithoutPhone: Number(row?.ErpCustomersWithoutPhone ?? 0),
     validInvoices: Number(row?.ValidInvoices ?? 0),
+    allInvoiceHeaders: Number(row?.AllInvoiceHeaders ?? 0),
     unlinkedInvoices: Number(row?.UnlinkedInvoices ?? 0),
     invoiceLines: Number(row?.InvoiceLines ?? 0),
     catalogServices: Number(row?.CatalogServices ?? 0),
+    allCatalogItems: Number(row?.AllCatalogItems ?? 0),
   };
 }

@@ -33,7 +33,7 @@ const invoices = [
 ];
 const catalog = [{ proId: 15, proName: "بروتين", proNameAr: "بروتين", proType: "serv", isDeleted: false }];
 
-const tools = ["customer.list_changes", "invoice.list_changes", "catalog.list_services"];
+const tools = ["customer.list_changes", "invoice.list_changes", "catalog.list_services", "sync.source_counts"];
 const manifest = {
   contractVersion: "drvowa-erp-v1",
   provider: "Synthetic Cashier Contract Emulator",
@@ -77,6 +77,19 @@ function startEmulator(token: string): Promise<{ server: Server; url: string; ca
     const limit = Math.max(1, Math.min(200, Number(input.limit ?? 100)));
     const sweep = input.identitySweep === true || input.statusSweep === true;
     calls.push(`${name}:${sweep ? "sweep" : "append"}`);
+    if (name === "sync.source_counts") {
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        ok: true, tool: name,
+        data: {
+          customers: SAMPLE.length,
+          invoices: invoices.length,
+          catalog: catalog.length,
+          asOfUtc: new Date().toISOString(),
+        },
+      }));
+      return;
+    }
     if (name === "customer.list_changes") {
       const key = sweep ? "identitySweepSinceClientId" : "sinceClientId";
       const page = nextPage(SAMPLE, Number(input[key] ?? 0), "clientId", limit);
@@ -163,6 +176,15 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
     expect(paired.integration.status).toBe("ACTIVE");
     expect(paired.manifest?.tools.map((x) => x.name).sort()).toEqual([...tools].sort());
 
+    // Initial snapshot uses source totals even when nothing is mirrored yet.
+    const emptyProgress = await postJson(request, "/api/crm/erp/progress", {});
+    const empty = emptyProgress.progress as {
+      sourceCounts: { customers:number; invoices:number; catalog:number; asOfUtc:string };
+      mirrored: {customers:number; invoices:number; catalog:number};
+    };
+    expect(empty.sourceCounts).toMatchObject({ customers:3, invoices:3, catalog:1 });
+    expect(empty.mirrored).toEqual({customers:0, invoices:0, catalog:0});
+
     // Live connector probe is READ-ONLY: only counts from max-one-row tool
     // results, never raw customer or invoice records or production calls.
     const probed = await postJson(request, "/api/crm/erp/probe", {});
@@ -234,6 +256,9 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
     expect(status.mirrorCounts.validInvoices).toBe(2);
     expect(status.mirrorCounts.invoiceLines).toBe(3);
     expect(status.mirrorCounts.catalogServices).toBe(1);
+    const afterInitial = await postJson(request, "/api/crm/erp/progress", {});
+    expect((afterInitial.progress as { mirrored: Record<string, number> }).mirrored)
+      .toEqual({ customers:3, invoices:3, catalog:1 });
     expect(status.mirrorCounts.unlinkedInvoices).toBe(0);
     expect(status.resources).toEqual(expect.arrayContaining([
       expect.objectContaining({ resource: "customers", status: "SUCCESS" }),

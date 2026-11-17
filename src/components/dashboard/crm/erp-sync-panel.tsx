@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DrvoLoading } from "@/components/ui/drvo-loading";
 import { EmptyState } from "@/components/ui/empty-state";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
+import { calculateErpProgressRows, overallErpProgress } from "@/modules/crm/erp-progress";
+import type { ErpSourceCounts } from "@/modules/crm/erp-source-counts";
 
 type ErpSyncResource = {
   syncStateId: string;
@@ -28,6 +30,8 @@ type ErpSyncStatus = {
     erpCustomers: number;
     erpCustomersWithoutPhone: number;
     validInvoices: number;
+    allInvoiceHeaders: number;
+    allCatalogItems: number;
     unlinkedInvoices: number;
     invoiceLines: number;
     catalogServices: number;
@@ -40,6 +44,11 @@ type ErpSyncStatus = {
     catalog: boolean;
   };
   resources: ErpSyncResource[];
+};
+
+type ErpLiveProgress = {
+  sourceCounts: ErpSourceCounts;
+  mirrored: { customers: number; invoices: number; catalog: number };
 };
 
 type ErpSourceProbe = {
@@ -77,6 +86,28 @@ export function ErpSyncPanel() {
   const [probeBusy, setProbeBusy] = useState(false);
   const stopRequested = useRef(false);
   const [batchProgress, setBatchProgress] = useState<string | null>(null);
+  const [liveProgress, setLiveProgress] = useState<ErpLiveProgress | null>(null);
+  const [progressError, setProgressError] = useState<string | null>(null);
+  const [progressBusy, setProgressBusy] = useState(false);
+
+  const refreshProgress = useCallback(async () => {
+    setProgressBusy(true);
+    setProgressError(null);
+    try {
+      const response = await fetch("/api/crm/erp/progress", { method: "POST" });
+      const data = await readApiJson<{ progress?: ErpLiveProgress }>(response);
+      if (!response.ok || !data.progress) {
+        throw new Error(mapUserFacingError(data, "إجمالي المصدر غير متاح لسه."));
+      }
+      setLiveProgress(data.progress);
+    } catch (err) {
+      setLiveProgress(null);
+      setProgressError(err instanceof Error ? err.message : "تعذر قراءة إجمالي Cashier.");
+    } finally {
+      setProgressBusy(false);
+    }
+  }, []);
+
 
 
   const load = useCallback(async () => {
@@ -100,6 +131,10 @@ export function ErpSyncPanel() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (status?.connected) void refreshProgress();
+  }, [status?.connected, status?.integrationId, refreshProgress]);
 
   async function resync() {
     if (busy || probeBusy || !status?.connected) return;
@@ -190,6 +225,7 @@ export function ErpSyncPanel() {
       setBatchProgress(null);
       setBusy(false);
       stopRequested.current = false;
+      void refreshProgress();
     }
   }
 
@@ -219,6 +255,18 @@ export function ErpSyncPanel() {
     }
   }
 
+  const progressRows = liveProgress && status?.mirrorCounts
+    ? calculateErpProgressRows({
+      sourceCounts: liveProgress.sourceCounts,
+      mirrored: {
+        customers: status.mirrorCounts.erpCustomers,
+        invoices: status.mirrorCounts.allInvoiceHeaders,
+        catalog: status.mirrorCounts.allCatalogItems,
+      },
+    })
+    : null;
+  const overallPercent = progressRows ? overallErpProgress(progressRows) : null;
+
   return (
     <div className="space-y-5" dir="rtl">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -226,12 +274,15 @@ export function ErpSyncPanel() {
           <p className="text-xs font-black text-primary">CRM</p>
           <h1 className="mt-1 text-3xl font-black tracking-[-0.035em]">مزامنة ERP</h1>
           <p className="mt-2 max-w-2xl text-sm leading-7 text-muted-foreground">
-            راقب اتصال DRVO ERP وشغّل مزامنة يدوية للعملاء والفواتير والكتالوج.
+            راقب نسبة استيراد بيانات Cashier، واستكمل الدفعات للعملاء والفواتير والكتالوج. المزامنة حاليًا يدوية؛ التحديث التلقائي يحتاج جدولة مستقلة.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" disabled={loading || busy} onClick={() => void load()}>
             تحديث الحالة
+          </Button>
+          <Button type="button" variant="outline" disabled={progressBusy || busy || !status?.connected} onClick={() => void refreshProgress()}>
+            {progressBusy ? "جاري حساب النسبة…" : "تحديث نسبة الإنجاز"}
           </Button>
           <Button type="button" variant="outline" disabled={loading || busy || probeBusy || !status?.connected} onClick={() => void probeSource()}>
             {probeBusy ? "جاري فحص المصدر…" : "اختبار مصدر Cashier (قراءة فقط)"}
@@ -321,6 +372,57 @@ export function ErpSyncPanel() {
                   </Link>
                 </p>
               ) : null}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-black">نسبة استيراد بيانات Cashier</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {progressRows ? (
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <strong className="text-lg">الإنجاز الإجمالي: {overallPercent === null ? "تحتاج مراجعة" : overallPercent.toLocaleString("ar-EG") + "%"}</strong>
+                    <span className="text-xs text-muted-foreground">
+                      وقت فحص Cashier: {formatCrmDate(liveProgress?.sourceCounts.asOfUtc ?? null)}
+                    </span>
+                  </div>
+                  {progressRows.map((row) => (
+                    <div key={row.resource} className="space-y-1">
+                      <div className="flex items-center justify-between gap-2 text-sm">
+                        <strong>{resourceLabel(row.resource)}</strong>
+                        <span className="tabular-nums">
+                          {row.mirroredCount.toLocaleString("ar-EG")} من {row.sourceCount.toLocaleString("ar-EG")} · {row.percent === null ? "غير متاح" : row.percent.toLocaleString("ar-EG") + "%"}
+                        </span>
+                      </div>
+                      <div role="progressbar" aria-label={"تقدم " + resourceLabel(row.resource)}
+                        aria-valuemin={0} aria-valuemax={100} aria-valuenow={row.percent ?? 0}
+                        className="h-2 overflow-hidden rounded-full bg-muted">
+                        <div className="h-full rounded-full bg-primary transition-all"
+                          style={{ width: (row.percent ?? 0) + "%" }} />
+                      </div>
+                      {row.discrepancy ? (
+                        <p className="text-xs text-warning">
+                          عدد CRM أكبر من إجمالي المصدر، وده محتاج مراجعة هوية السجلات؛ النسبة مش إثبات اكتمال.
+                        </p>
+                      ) : null}
+                    </div>
+                  ))}
+                  <p className="text-xs leading-6 text-muted-foreground">
+                    النسبة مبنية على عدد السجلات المحفوظة مقارنةً بإجمالي Cashier وقت الفحص.
+                    شاملة فواتير البيع الملغاة والخدمات المحذوفة عشان المقارنة تكون عادلة.
+                    لو بيانات Cashier اتغيرت بعد وقت الفحص، اضغط «تحديث نسبة الإنجاز».
+                    نسبة 100% وحدها مش تأكيد نهائي؛ لازم موارد المزامنة تكون SUCCESS.
+                  </p>
+                </>
+              ) : (
+                <Alert variant="warning">
+                  {progressBusy
+                    ? "جاري قراءة إجمالي البيانات من Cashier…"
+                    : progressError || "النسبة غير متاحة لحد ما نتحقق من إجمالي بيانات Cashier الفعلي. الأرقام الموجودة في CRM ظاهرة بالأسفل."}
+                </Alert>
+              )}
             </CardContent>
           </Card>
 
