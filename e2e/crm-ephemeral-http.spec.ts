@@ -621,6 +621,62 @@ test("isolated app HTTP → synthetic ERP connector → CRM customer 360 + conse
     expect((finalInvoiceBatch.status as { resources:Array<{resource:string;status:string}> }).resources)
       .toEqual(expect.arrayContaining([expect.objectContaining({resource:"invoices",status:"SUCCESS"})]));
 
+    // A real 504 can happen after the server has already committed a page but
+    // before the browser receives HTTP 200. Replay old invoices deliberately:
+    // stable CRM customer IDs, invoice header counts, line counts and customer
+    // activity counts must NOT grow. Only the "processed" counter can grow.
+    const countSnapshot = async () => {
+      const rows = await query<{
+        Customers:number; Invoices:number; InvoiceLines:number; InvoiceEvents:number;
+      }>(
+        `SELECT
+         (SELECT COUNT_BIG(1) FROM dbo.TblCrmCustomer
+          WHERE BusinessID=@businessId AND ExternalErpClientId IS NOT NULL AND Status<>N'MERGED') AS Customers,
+         (SELECT COUNT_BIG(1) FROM dbo.TblErpInvoiceMirror
+          WHERE BusinessID=@businessId) AS Invoices,
+         (SELECT COUNT_BIG(1) FROM dbo.TblErpInvoiceLineMirror
+          WHERE BusinessID=@businessId) AS InvoiceLines,
+         (SELECT COUNT_BIG(1) FROM dbo.TblCrmActivity
+          WHERE BusinessID=@businessId AND ActivityType=N'ERP_INVOICE'
+            AND RelatedEntityType=N'ERP_INVOICE') AS InvoiceEvents`,
+        [{ name: "businessId", type: sql.UniqueIdentifier, value: businessId! }],
+      );
+      const row = rows.recordset[0]!;
+      return {
+        customers: Number(row.Customers),
+        invoices: Number(row.Invoices),
+        invoiceLines: Number(row.InvoiceLines),
+        invoiceEvents: Number(row.InvoiceEvents),
+      };
+    };
+    const beforeReplay = await countSnapshot();
+    expect(beforeReplay.invoices).toBe(15); // 14 valid + one cancelled.
+    expect(beforeReplay.invoiceEvents).toBe(14);
+    await query(
+      `UPDATE dbo.TblErpSyncState
+       SET CursorJson = @resetCursor
+       WHERE BusinessID=@businessId AND Resource=N'invoices'`,
+      [
+        { name:"businessId", type:sql.UniqueIdentifier, value:businessId! },
+        { name:"resetCursor", type:sql.NVarChar(sql.MAX), value:JSON.stringify({
+          sinceInvId: 0, statusSweepSinceInvId: 0,
+        }) },
+      ],
+    );
+    for (let i = 0; i < 2; i += 1) {
+      const replay = await postJson(request, "/api/crm/erp/sync", { resource:"invoices" });
+      expect((replay.result as {invoices:{synced:number}}).invoices.synced).toBeGreaterThan(0);
+    }
+    expect(await countSnapshot()).toEqual(beforeReplay);
+    const afterReplayStatus = await request.get("/api/crm/erp/sync");
+    expect(afterReplayStatus.ok()).toBe(true);
+    const diagnostics = await afterReplayStatus.json() as {
+      status: {mirrorCounts:{ duplicateInvoiceActivities:number; erpCustomers:number; validInvoices:number }};
+    };
+    expect(diagnostics.status.mirrorCounts.duplicateInvoiceActivities).toBe(0);
+    expect(diagnostics.status.mirrorCounts.erpCustomers).toBe(32);
+    expect(diagnostics.status.mirrorCounts.validInvoices).toBe(14);
+
     // A malformed resource must be rejected before any ERP writes.
     const invalidResource = await request.post("/api/crm/erp/sync", {
       data: { resource: "unknown" },

@@ -476,13 +476,11 @@ async function syncInvoices(params: {
         });
 
         if (opts.recordActivity && customerId && validSale) {
-          await repo.insertActivity({
+          await repo.insertErpInvoiceActivityOnce({
             businessId: params.businessId,
             customerId,
-            activityType: "ERP_INVOICE",
+            externalInvId,
             title: `فاتورة ERP #${invId}`,
-            relatedEntityType: "ERP_INVOICE",
-            relatedEntityId: externalInvId,
           });
         }
         synced += 1;

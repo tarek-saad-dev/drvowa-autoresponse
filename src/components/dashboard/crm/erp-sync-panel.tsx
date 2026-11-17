@@ -27,6 +27,7 @@ type ErpSyncStatus = {
   mirrorCounts?: {
     erpCustomers: number;
     erpCustomersWithoutPhone: number;
+    duplicateInvoiceActivities: number;
     validInvoices: number;
     unlinkedInvoices: number;
     invoiceLines: number;
@@ -162,7 +163,8 @@ export function ErpSyncPanel() {
         if (stopRequested.current) break;
       }
       const totals = resources.map((name) =>
-        resourceLabel(name) + ": " + syncedTotals[name].toLocaleString("ar-EG"),
+        resourceLabel(name) + " (سجلات تمت معالجتها، مش سجلات جديدة): " +
+        syncedTotals[name].toLocaleString("ar-EG"),
       ).join(" · ");
       if (completed.size === resources.length) {
         setNotice(
@@ -331,6 +333,9 @@ export function ErpSyncPanel() {
             <CardContent className="space-y-3">
               {status.mirrorCounts ? (
                 <>
+                  <p className="text-xs leading-6 text-muted-foreground">
+                    الأرقام دي إجمالي السجلات الفعلية المحفوظة، وليست عدد الدفعات أو عدد السجلات التي عولجت أثناء إعادة الفحص. لو البيانات خلصت، المفروض الإجمالي يثبت إلا مع إضافة/تحديث بيانات Cashier.
+                  </p>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {[
                       { label: "عملاء ERP", value: status.mirrorCounts.erpCustomers },
@@ -339,6 +344,7 @@ export function ErpSyncPanel() {
                       { label: "بنود الفواتير", value: status.mirrorCounts.invoiceLines },
                       { label: "خدمات الكتالوج", value: status.mirrorCounts.catalogServices },
                       { label: "فواتير بلا عميل مربوط", value: status.mirrorCounts.unlinkedInvoices },
+                      { label: "أنشطة فواتير مكررة (تاريخية)", value: status.mirrorCounts.duplicateInvoiceActivities ?? 0 },
                     ].map((item) => (
                       <div key={item.label} className="rounded-xl border border-border p-3">
                         <p className="text-xs text-muted-foreground">{item.label}</p>
@@ -346,6 +352,11 @@ export function ErpSyncPanel() {
                       </div>
                     ))}
                   </div>
+                  {(status.mirrorCounts.duplicateInvoiceActivities ?? 0) > 0 ? (
+                    <Alert variant="warning">
+                      اكتشفنا {status.mirrorCounts.duplicateInvoiceActivities.toLocaleString("ar-EG")} سجل نشاط فاتورة زائد من مزامنات سابقة. منعنا تكرار الأحداث الجديدة، لكن مش هنحذف السجلات التاريخية تلقائيًا قبل مراجعة أثرها على تاريخ العميل.
+                    </Alert>
+                  ) : null}
                   {status.mirrorCounts.erpCustomersWithoutPhone > 0 ? (
                     <Alert variant="warning">
                       فيه {status.mirrorCounts.erpCustomersWithoutPhone.toLocaleString("ar-EG")} عميل من Cashier بدون رقم هاتف صالح محفوظ. العملاء دول لسه موجودين في CRM بمعرّف ERP، لكن مش ممكن إرسال واتساب ليهم إلا بعد تصحيح الرقم وموافقة التسويق.
