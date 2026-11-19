@@ -3,6 +3,7 @@ import { sql, withTransaction, type TransactionClient } from "@/lib/db";
 import { NotFoundError } from "@/lib/tenancy/errors";
 import { parseOptionalUtc } from "@/modules/messaging/content";
 import { canonicalizeWhatsAppContactIdentity } from "@/modules/messaging/whatsapp-identity";
+import { redactMirroredOtp } from "@/modules/otp/redaction";
 import * as messages from "@/modules/messaging/repository";
 import { ingestWhatsAppLabelEvent } from "./whatsapp-label-sync-service";
 
@@ -119,7 +120,7 @@ export async function ingestWhatsAppSync(input: WhatsappSyncInput): Promise<{
         provider: "baileys",
         providerMessageId: event.providerMessageId,
         contentType: event.contentType,
-        textContent: event.text ?? null,
+        textContent: redactMirroredOtp({ direction: event.direction, text: event.text }),
         origin: event.direction === "INBOUND" ? "CUSTOMER" : "UNKNOWN",
         providerTimestampUtc: at,
         receivedAtUtc: at,
