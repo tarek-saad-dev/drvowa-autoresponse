@@ -69,7 +69,7 @@ CUT CLUB's server must tie the result to the same pending registration session a
 - Normalization accepts international numbers and Egyptian local mobile numbers beginning 01.
 - Codes must never appear in logs, events, analytics, inbox previews of *API* responses, or persisted request payloads.
 - OTP is a transactional/account-access message, not marketing opt-in; **never** infer campaign consent from it.
-- For an ambiguous WhatsApp send/timeout, retries must reuse the same requestId, not create a second send. Current API returns an error on runtime uncertainty; do not automatically resend.
+- For an ambiguous WhatsApp send/timeout, a challenge may be in UNKNOWN state. Retries must reuse the same requestId, not create a second send. The customer may still verify a received code; do not automatically resend.
 - Since Baileys uses WhatsApp Web, delivery is subject to WhatsApp availability and account health; sending is not equivalent to handset delivery.
 - The first version is limited to active DRVO_ERP integration keys. A general third-party API-key management UI and billing can be added separately.
 
