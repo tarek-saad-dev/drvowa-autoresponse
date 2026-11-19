@@ -257,6 +257,15 @@ jobs:
               SECRET_VALUE="$(openssl rand -hex 32)"
               printf '\nINTEGRATION_SECRET_KEY=%s\n' "$SECRET_VALUE" >> "$ENV_FILE"
             fi
+            # OTP API: provision a durable, private HMAC secret on first deploy only.
+            # Never rotate this value on routine deployments: a rotation invalidates
+            # all outstanding OTP challenges.
+            if ! grep -q '^OTP_HMAC_SECRET=' "$ENV_FILE"; then
+              OTP_SECRET_VALUE="$(openssl rand -hex 32)"
+              printf '\nOTP_HMAC_SECRET=%s\n' "$OTP_SECRET_VALUE" >> "$ENV_FILE"
+              unset OTP_SECRET_VALUE
+              echo "PASS: OTP_HMAC_SECRET provisioned securely (value not logged)"
+            fi
             # Activate Pricing V1 for the owner's production test businesses.
             # All flags remain explicit and reversible via the environment file.
             for key in DRVO_PRICING_V1_PAYMENTS DRVO_PRICING_V1_FREE_TRIAL DRVO_PRICING_V1_ADDON_DRAFTS DRVO_PRICING_V1_ADDON_CONSUMPTION; do
