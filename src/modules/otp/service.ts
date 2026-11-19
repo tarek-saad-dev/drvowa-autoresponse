@@ -32,7 +32,7 @@ type ChallengeRow = {
   PhoneNormalized: string;
   Purpose: string;
   CodeHash: string;
-  Status: "SENDING" | "SENT" | "FAILED" | "VERIFIED" | "LOCKED";
+  Status: "SENDING" | "SENT" | "UNKNOWN" | "FAILED" | "VERIFIED" | "LOCKED";
   AttemptCount: number;
   ExpiresAtUtc: Date;
   CreatedAtUtc: Date;
@@ -61,7 +61,7 @@ export async function sendExternalOtp(params: {
   requestId: string;
 }): Promise<{
   challengeId: string;
-  status: "SENT" | "SENDING";
+  status: "SENT" | "SENDING" | "UNKNOWN";
   expiresAtUtc: string;
   resendAfterSec: number;
   idempotentReplay: boolean;
@@ -181,7 +181,7 @@ export async function sendExternalOtp(params: {
 
   if (!claim.created) {
     const existing = claim.challenge!;
-    if (existing.Status !== "SENT" && existing.Status !== "SENDING") {
+    if (existing.Status !== "SENT" && existing.Status !== "SENDING" && existing.Status !== "UNKNOWN") {
       throw new OtpApiError("OTP_REQUEST_ALREADY_USED", 409, "Request is no longer active");
     }
     return {
@@ -209,6 +209,19 @@ export async function sendExternalOtp(params: {
       idempotencyKey: reservationKey,
     });
     if (!sent.success) {
+      if (sent.code === "OUTBOUND_RESULT_UNKNOWN" || sent.status === "unknown") {
+        await setDeliveryStatus({ challengeId, status: "UNKNOWN" });
+        // The runtime might have handed the message to WhatsApp.
+        // An observed/ambiguous send is counted as an outbound attempt.
+        await consumeQuotaReservation({
+          businessId, eventType: USAGE_EVENT_WHATSAPP_OUTBOUND, reservationKey,
+          metadata: { source: "OTP_VERIFICATION", purpose: params.purpose, outcome: "UNKNOWN" },
+        });
+        return {
+          challengeId, status: "UNKNOWN", expiresAtUtc: expiresAt.toISOString(),
+          resendAfterSec: OTP_RESEND_SECONDS, idempotentReplay: false,
+        };
+      }
       throw new OtpApiError("OTP_DELIVERY_FAILED", 503, "Unable to send WhatsApp verification");
     }
     await setDeliveryStatus({
@@ -236,11 +249,17 @@ export async function sendExternalOtp(params: {
       `SELECT Status FROM dbo.TblOtpChallenge WHERE ChallengeID = @challengeId`,
       [{ name: "challengeId", type: sql.UniqueIdentifier, value: challengeId }],
     );
-    if (delivery.recordset[0]?.Status !== "SENT") {
-      await setDeliveryStatus({ challengeId, status: "FAILED" });
-      await releaseQuotaReservation({
-        businessId, eventType: USAGE_EVENT_WHATSAPP_OUTBOUND, reservationKey,
+    if (delivery.recordset[0]?.Status === "SENDING") {
+      const isDefinitiveFailure = error instanceof OtpApiError
+        && error.code === "OTP_DELIVERY_FAILED";
+      await setDeliveryStatus({
+        challengeId, status: isDefinitiveFailure ? "FAILED" : "UNKNOWN",
       });
+      if (isDefinitiveFailure) {
+        await releaseQuotaReservation({
+          businessId, eventType: USAGE_EVENT_WHATSAPP_OUTBOUND, reservationKey,
+        });
+      }
     }
     throw error;
   }
@@ -248,7 +267,7 @@ export async function sendExternalOtp(params: {
 
 async function setDeliveryStatus(params: {
   challengeId: string;
-  status: "SENT" | "FAILED";
+  status: "SENT" | "FAILED" | "UNKNOWN";
   providerMessageId?: string | null;
 }): Promise<void> {
   await query(
@@ -294,7 +313,7 @@ export async function verifyExternalOtp(params: {
     if (!challenge || challenge.Status === "FAILED" || challenge.Status === "VERIFIED" || challenge.Status === "LOCKED") {
       return "INVALID" as const;
     }
-    if (challenge.Status !== "SENT") return "NOT_READY" as const;
+    if (challenge.Status !== "SENT" && challenge.Status !== "UNKNOWN") return "NOT_READY" as const;
     if (challenge.ExpiresAtUtc.getTime() <= Date.now()) return "EXPIRED" as const;
     if (challenge.AttemptCount >= OTP_MAX_ATTEMPTS) return "INVALID" as const;
 
