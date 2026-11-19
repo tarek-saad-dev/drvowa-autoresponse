@@ -151,7 +151,7 @@ export async function sendExternalOtp(params: {
     await trx.query(
       `UPDATE dbo.TblOtpChallenge SET Status = N'FAILED', UpdatedAtUtc = SYSUTCDATETIME()
        WHERE BusinessID = @businessId AND PhoneNormalized = @phone AND Purpose = @purpose
-         AND Status IN (N'SENDING', N'SENT')`,
+         AND Status IN (N'SENDING', N'SENT', N'UNKNOWN')`,
       [
         { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
         { name: "phone", type: sql.NVarChar(20), value: phone },
