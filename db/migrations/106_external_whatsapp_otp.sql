@@ -23,7 +23,7 @@ BEGIN
       REFERENCES dbo.TblIntegration (IntegrationID),
     CONSTRAINT UQ_TblOtpChallenge_Integration_Request UNIQUE (IntegrationID, RequestID),
     CONSTRAINT CK_TblOtpChallenge_Status CHECK (
-      Status IN (N'SENDING', N'SENT', N'FAILED', N'VERIFIED', N'LOCKED')
+      Status IN (N'SENDING', N'SENT', N'UNKNOWN', N'FAILED', N'VERIFIED', N'LOCKED')
     ),
     CONSTRAINT CK_TblOtpChallenge_Attempts CHECK (AttemptCount BETWEEN 0 AND 5)
   );
