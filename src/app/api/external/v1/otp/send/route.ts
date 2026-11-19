@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     }
     const body = schema.parse(await parseJsonBody(request));
     const result = await sendExternalOtp({ integration, ...body });
-    return jsonOk(result, { status: result.status === "SENDING" ? 202 : 200 });
+    return jsonOk(result, { status: result.status !== "SENT" ? 202 : 200 });
   } catch (error) {
     if (error instanceof OtpApiError) return jsonError(error.message, error.status, { code: error.code });
     return handleApiError(error);
