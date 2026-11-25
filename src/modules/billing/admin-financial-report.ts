@@ -147,16 +147,16 @@ export async function getAdminFinancialReport(params: {
     ]),
     query<SubscriptionTotals>(CURRENT_SUBSCRIPTIONS + `
       SELECT
-        COUNT(CASE WHEN s.Status = N'ACTIVE' AND p.Code <> N'FREE'
+        COUNT(CASE WHEN s.Status = N'ACTIVE' AND p.Code IN (N'STARTER', N'PRO', N'BUSINESS')
           AND (s.PeriodEndUtc IS NULL OR s.PeriodEndUtc > SYSUTCDATETIME()) THEN 1 END) AS ActivePaid,
         COUNT(CASE WHEN s.Status = N'ACTIVE' AND p.Code = N'FREE' THEN 1 END) AS ActiveFree,
         COUNT(CASE WHEN s.Status = N'TRIALING'
           AND (s.PeriodEndUtc IS NULL OR s.PeriodEndUtc > SYSUTCDATETIME()) THEN 1 END) AS Trialing,
         COUNT(CASE WHEN s.Status = N'PAST_DUE' THEN 1 END) AS PastDue,
-        COUNT(CASE WHEN s.Status = N'ACTIVE' AND p.Code <> N'FREE'
+        COUNT(CASE WHEN s.Status = N'ACTIVE' AND p.Code IN (N'STARTER', N'PRO', N'BUSINESS')
           AND s.PeriodEndUtc > SYSUTCDATETIME()
           AND s.PeriodEndUtc <= DATEADD(DAY, 7, SYSUTCDATETIME()) THEN 1 END) AS ExpiringSoon,
-        COALESCE(SUM(CASE WHEN s.Status = N'ACTIVE' AND p.Code <> N'FREE'
+        COALESCE(SUM(CASE WHEN s.Status = N'ACTIVE' AND p.Code IN (N'STARTER', N'PRO', N'BUSINESS')
           AND (s.PeriodEndUtc IS NULL OR s.PeriodEndUtc > SYSUTCDATETIME())
           AND p.BillingInterval = N'MONTHLY' AND p.CurrencyCode = N'EGP'
           THEN COALESCE(p.MonthlyPriceAmount, 0) ELSE 0 END), 0) AS EstimatedMrr
@@ -193,7 +193,7 @@ export async function getAdminFinancialReport(params: {
       FROM RankedSubscriptions s
       INNER JOIN TblBusiness b ON b.BusinessID = s.BusinessID
       INNER JOIN TblPlan p ON p.PlanID = s.PlanID
-      WHERE s.rn = 1 AND s.Status = N'ACTIVE' AND p.Code <> N'FREE'
+      WHERE s.rn = 1 AND s.Status = N'ACTIVE' AND p.Code IN (N'STARTER', N'PRO', N'BUSINESS')
         AND s.PeriodEndUtc > SYSUTCDATETIME()
         AND s.PeriodEndUtc <= DATEADD(DAY, 14, SYSUTCDATETIME())
       ORDER BY s.PeriodEndUtc ASC
