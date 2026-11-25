@@ -33,9 +33,15 @@ export async function setPrivateUnlimited(input: {
     if (input.action === "revoke" && previous?.code !== PRIVATE_UNLIMITED_PLAN_CODE) {
       throw new ConflictError("النشاط لا يملك الباقة الخاصة");
     }
-    // Do not destroy purchased time, existing scheduled entitlements or payments.
-    if (input.action === "assign" && previous && previous.code !== DEFAULT_BOOTSTRAP_PLAN_CODE) {
-      throw new ConflictError("راجع الاشتراك الحالي وسوِّ أي فترة مدفوعة قبل التفعيل");
+    // An explicit SUPER_ADMIN grant supersedes the existing entitlement immediately.
+    // Keep the old subscription dates, approved payments, invoices and receipts intact.
+    // A simple scheduled cancellation is superseded; a paid future downgrade
+    // still requires separate settlement, as it represents an additional purchase.
+    if (input.action === "assign") {
+      await trx.query(
+        "UPDATE TblBillingScheduledChange SET State=N'CANCELED' WHERE BusinessID=@business AND State=N'PENDING' AND Kind=N'CANCEL' AND PaymentRequestID IS NULL",
+        [{ name: "business", type: sql.UniqueIdentifier, value: input.businessId }],
+      );
     }
     await assertNoScheduledChange(input.businessId, trx);
     const open = await trx.query(
@@ -71,7 +77,7 @@ export async function setPrivateUnlimited(input: {
       businessId: input.businessId, actorUserId: input.actorUserId,
       action: input.action === "assign" ? "PRIVATE_UNLIMITED_ASSIGNED" : "PRIVATE_UNLIMITED_REVOKED",
       entityType: "Subscription", entityId: created.subscriptionId,
-      metadata: { reason: input.reason, previousSubscriptionId: current?.subscriptionId ?? null, previousPlan: previous?.code ?? null, targetPlan: target.code },
+      metadata: { reason: input.reason, previousSubscriptionId: current?.subscriptionId ?? null, previousPlan: previous?.code ?? null, previousPeriodEndUtc: current?.periodEndUtc?.toISOString() ?? null, targetPlan: target.code },
     }, trx);
     return { status: input.action === "assign" ? "ASSIGNED" as const : "REVOKED" as const, subscriptionId: created.subscriptionId };
   });
