@@ -12,7 +12,7 @@ export function PrivateUnlimitedAction({ businessId, businessName, assigned }: {
   const [expanded, setExpanded] = useState(false);
   async function apply() {
     if (!reason.trim() || busy) return;
-    if (!window.confirm(assigned ? `إلغاء الباقة الخاصة والعودة للمجاني: ${businessName}؟` : `تفعيل DRVO Unlimited بلا موعد انتهاء للنشاط: ${businessName}؟`)) return;
+    if (!window.confirm(assigned ? `إلغاء الباقة الخاصة والعودة للمجاني: ${businessName}؟` : `تفعيل DRVO Unlimited فوراً للنشاط: ${businessName}؟ سيتم استبدال الباقة الحالية دون تغيير الفواتير السابقة أو إجراء استرداد تلقائي.`)) return;
     setBusy(true);
     setMessage("");
     try {
