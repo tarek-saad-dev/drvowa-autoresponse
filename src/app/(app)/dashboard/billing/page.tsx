@@ -128,7 +128,8 @@ export default async function BillingPage() {
   const awaitingTransfer = latest?.status === "AWAITING_TRANSFER";
   const pendingReview = latest?.status === "PENDING";
   const rejected = latest?.status === "REJECTED";
-  const paid = Boolean(plan && plan.code !== "FREE");
+  const privateUnlimited = plan?.code === "PRIVATE_UNLIMITED";
+  const paid = Boolean(plan && plan.code !== "FREE" && !privateUnlimited);
   const grace = Boolean(paid && sub?.periodEndUtc && sub.periodEndUtc <= new Date());
   const scheduledIncomplete = Boolean(scheduled && scheduled.Kind !== "CANCEL" && !scheduled.PlanDisplayName);
   const inconsistent = !sub || !plan ||
@@ -157,7 +158,7 @@ export default async function BillingPage() {
     : "bg-success-soft text-success";
   const catalogPrice = plan?.monthlyPriceAmount;
   const currency = plan?.currencyCode ?? "EGP";
-  const priceText = plan?.code === "FREE"
+  const priceText = privateUnlimited ? "مجانية — باقة خاصة" : plan?.code === "FREE"
     ? "مجانية"
     : catalogPrice == null
       ? "غير محدد"
@@ -231,6 +232,7 @@ export default async function BillingPage() {
             <p className="text-sm text-muted-foreground">
               {sub?.periodEndUtc
                 ? `نهاية الفترة الحالية: ${formatDate(sub.periodEndUtc)}`
+                : privateUnlimited ? "باقة خاصة بلا موعد انتهاء أو تجديد"
                 : plan?.code === "FREE"
                   ? "الباقة المجانية بدون موعد انتهاء محدد"
                   : "لا يوجد موعد تجديد مؤكد"}
@@ -256,7 +258,7 @@ export default async function BillingPage() {
               : `الانتقال إلى ${scheduled.PlanDisplayName}`} يوم {formatDate(scheduled.EffectiveAtUtc)}. لا يعني ذلك أنه طُبّق الآن.
           </p>
         ) : null}
-        <div className="mt-5 border-t border-border pt-4">
+        {!privateUnlimited ? <div className="mt-5 border-t border-border pt-4">
           <BillingPlansClient
             initialDiscountCode={savedPromo?.code??null}
             initialBillingInterval={claimedInterval==="ANNUAL"?"ANNUAL":"MONTHLY"}
@@ -300,21 +302,21 @@ export default async function BillingPage() {
             periodEnd={sub?.periodEndUtc?.toISOString() ?? null}
             scheduledKind={scheduled?.Kind ?? null}
           />
-        </div>
+        </div> : null}
       </section>
 
       <section className="space-y-3" aria-labelledby="usage-heading">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="usage-heading" className="font-display text-lg font-bold">استخدامك هذا الشهر</h2>
           <p className="text-xs text-muted-foreground">
-            تتجدد حدود الرسائل والردود في {formatDate(overview.usagePeriod.usagePeriodEndUtc)}
+            {privateUnlimited ? "تسجيل الاستهلاك فقط — بلا حصة شهرية" : `تتجدد حدود الرسائل والردود في ${formatDate(overview.usagePeriod.usagePeriodEndUtc)}`}
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <UsageMeter title="ردود الموظف الذكي" used={overview.aiUsed} limit={plan?.monthlyAiReplies} />
           <UsageMeter title="رسائل واتساب الصادرة" used={overview.whatsappOutboundUsed} limit={plan?.monthlyWhatsAppOutbound} />
         </div>
-        {process.env.DRVO_PRICING_V1_ADDON_DRAFTS === "true" ? <AddonPurchasesClient /> : null}
+        {!privateUnlimited && process.env.DRVO_PRICING_V1_ADDON_DRAFTS === "true" ? <AddonPurchasesClient /> : null}
 
       <details className="group rounded-2xl border border-border bg-card">
           <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
