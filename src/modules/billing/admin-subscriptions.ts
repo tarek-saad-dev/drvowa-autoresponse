@@ -1,7 +1,7 @@
 import { query, sql, type QueryInput } from "@/lib/db";
 
 export const ADMIN_SUBSCRIPTION_FILTERS = [
-  "ALL", "PAID", "FREE", "TRIAL", "PAST_DUE", "EXPIRING", "EXPIRED", "NO_PLAN",
+  "ALL", "PAID", "PRIVATE", "FREE", "TRIAL", "PAST_DUE", "EXPIRING", "EXPIRED", "NO_PLAN",
 ] as const;
 
 export type AdminSubscriptionFilter = (typeof ADMIN_SUBSCRIPTION_FILTERS)[number];
@@ -100,7 +100,8 @@ export async function listAdminSubscriptions(params: {
       @status = N'ALL'
       OR (@status = N'NO_PLAN' AND SubscriptionStatus IS NULL)
       OR (@status = N'PAID' AND SubscriptionStatus = N'ACTIVE'
-          AND PlanCode <> N'FREE' AND (PeriodEndUtc IS NULL OR PeriodEndUtc > SYSUTCDATETIME()))
+          AND PlanCode NOT IN (N'FREE', N'PRIVATE_UNLIMITED') AND (PeriodEndUtc IS NULL OR PeriodEndUtc > SYSUTCDATETIME()))
+      OR (@status = N'PRIVATE' AND SubscriptionStatus = N'ACTIVE' AND PlanCode = N'PRIVATE_UNLIMITED')
       OR (@status = N'FREE' AND SubscriptionStatus = N'ACTIVE' AND PlanCode = N'FREE')
       OR (@status = N'TRIAL' AND SubscriptionStatus = N'TRIALING'
           AND (PeriodEndUtc IS NULL OR PeriodEndUtc > SYSUTCDATETIME()))
