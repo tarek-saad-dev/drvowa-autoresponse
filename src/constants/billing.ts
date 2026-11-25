@@ -12,3 +12,6 @@ export type PaidPlanCode = (typeof PAID_PLAN_CODES)[number];
 export function isPaidPlanCode(code: string): code is PaidPlanCode {
   return (PAID_PLAN_CODES as readonly string[]).includes(code);
 }
+
+/** Restricted to explicit platform Super Admin grants; never a commercial SKU. */
+export const PRIVATE_UNLIMITED_PLAN_CODE = "PRIVATE_UNLIMITED" as const;

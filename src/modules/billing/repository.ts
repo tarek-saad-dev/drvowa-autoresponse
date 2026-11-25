@@ -135,7 +135,7 @@ export async function listActivePlans(
   const result = await db(trx).query<PlanRow>(
     `SELECT ${PLAN_SELECT}
      FROM TblPlan
-     WHERE Status = N'ACTIVE'
+     WHERE Status = N'ACTIVE' AND Code <> N'PRIVATE_UNLIMITED'
      ORDER BY
        CASE Code
          WHEN N'FREE' THEN 0

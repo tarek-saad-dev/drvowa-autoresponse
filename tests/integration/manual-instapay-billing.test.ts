@@ -21,7 +21,9 @@ import {
   withResourceLimitGate,
 } from "@/modules/billing/entitlements";
 import { PLAN_ERROR_CODES } from "@/modules/billing/errors";
-import { USAGE_EVENT_AI_REPLY } from "@/modules/billing/period";
+import { USAGE_EVENT_AI_REPLY, USAGE_EVENT_WHATSAPP_OUTBOUND } from "@/modules/billing/period";
+import { setPrivateUnlimited } from "@/modules/billing/private-unlimited";
+import { isPaidPlanCode } from "@/constants/billing";
 import * as billingRepo from "@/modules/billing/repository";
 import { upsertPlatformAdmin } from "@/modules/platform-admin/service";
 import { completeOnboarding } from "@/modules/onboarding/service";
@@ -111,6 +113,54 @@ describe.runIf(dbEnvOk && isolated)("manual instapay billing lifecycle", () => {
   afterAll(async () => {
     clearTestCookies();
     await closePool().catch(() => undefined);
+  });
+
+  it("private unlimited: hidden plan, audited grant, unlimited quota, isolation and revoke", async () => {
+    process.env.MANUAL_INSTAPAY_ENABLED = "1";
+    const admin = await makeAdmin();
+    const ctx = await onboardUser(`private_${randomUUID().slice(0,8)}@example.com`);
+    const other = await onboardUser(`private_other_${randomUUID().slice(0,8)}@example.com`);
+    const grant = { businessId: ctx.businessId, actorUserId: admin, action: "assign" as const, reason: "Integration test grant" };
+    const first = await setPrivateUnlimited(grant);
+    expect(first.status).toBe("ASSIGNED");
+    expect((await setPrivateUnlimited(grant)).subscriptionId).toBe(first.subscriptionId);
+    const snap = await getEntitlementSnapshot(ctx.businessId);
+    expect(snap.canAct).toBe(true);
+    expect(snap.subscription?.periodEndUtc).toBeNull();
+    expect(snap.plan).toMatchObject({
+      code: "PRIVATE_UNLIMITED", monthlyPriceAmount: 0, monthlyAiReplies: null,
+      monthlyWhatsAppOutbound: null, maxAgents: null, maxWhatsAppConnections: null,
+      maxActiveKnowledgeItems: null,
+    });
+    expect(isPaidPlanCode("PRIVATE_UNLIMITED")).toBe(false);
+    expect((await billingRepo.listActivePlans()).some(p => p.code === "PRIVATE_UNLIMITED")).toBe(false);
+    expect((await getEntitlementSnapshot(other.businessId)).plan?.code).toBe("FREE");
+    await reserveQuota({ businessId: ctx.businessId, eventType: USAGE_EVENT_AI_REPLY, reservationKey: randomUUID(), quantity: 100000 });
+    await reserveQuota({ businessId: ctx.businessId, eventType: USAGE_EVENT_WHATSAPP_OUTBOUND, reservationKey: randomUUID(), quantity: 100000 });
+    const result = await withResourceLimitGate({ businessId: ctx.businessId, kind: "agent", createFn: async () => "created" });
+    expect(result).toBe("created");
+    await expect(createManualPaymentIntent({ ...other, planCode: "PRIVATE_UNLIMITED" })).rejects.toBeInstanceOf(ValidationError);
+    await expect(createManualPaymentIntent({ ...ctx, planCode: "STARTER" })).rejects.toBeInstanceOf(ConflictError);
+    const revoked = await setPrivateUnlimited({ ...grant, action: "revoke", reason: "Integration test revoke" });
+    expect(revoked.status).toBe("REVOKED");
+    expect((await getEntitlementSnapshot(ctx.businessId)).plan?.code).toBe("FREE");
+    const events = await query<{ Action: string }>(
+      "SELECT Action FROM TblAuditEvent WHERE BusinessID=@business AND Action IN (N'PRIVATE_UNLIMITED_ASSIGNED',N'PRIVATE_UNLIMITED_REVOKED')",
+      [{ name: "business", type: sql.UniqueIdentifier, value: ctx.businessId }],
+    );
+    expect(events.recordset.map(r => r.Action).sort()).toEqual(["PRIVATE_UNLIMITED_ASSIGNED", "PRIVATE_UNLIMITED_REVOKED"]);
+  });
+
+  it("private unlimited: open payment or current paid subscription is not silently replaced", async () => {
+    process.env.MANUAL_INSTAPAY_ENABLED = "1";
+    const admin = await makeAdmin();
+    const ctx = await onboardUser(`private_paid_${randomUUID().slice(0,8)}@example.com`);
+    const payment = await submitManualPaymentRequest({ ...ctx, planCode: "STARTER", payerName: "Private test" });
+    const grant = { businessId: ctx.businessId, actorUserId: admin, action: "assign" as const, reason: "Integration test" };
+    await expect(setPrivateUnlimited(grant)).rejects.toBeInstanceOf(ConflictError);
+    await approveManualPayment({ paymentRequestId: payment.paymentRequestId, reviewerUserId: admin });
+    await expect(setPrivateUnlimited(grant)).rejects.toBeInstanceOf(ConflictError);
+    expect((await getEntitlementSnapshot(ctx.businessId)).plan?.code).toBe("STARTER");
   });
 
   it("coupon: snapshots discount, holds capacity, releases canceled intent, settles exactly one receipt", async () => {

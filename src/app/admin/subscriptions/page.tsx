@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { PrivateUnlimitedAction } from "@/components/admin/private-unlimited-action";
+import { requirePlatformAdmin } from "@/modules/platform-admin/service";
 
 import {
   listAdminSubscriptions,
@@ -44,6 +46,7 @@ function statusOf(item: AdminSubscriptionItem): {
 const filters = [
   ["ALL", "الكل"],
   ["PAID", "مدفوعة نشطة"],
+  ["PRIVATE", "Unlimited الخاصة"],
   ["FREE", "مجانية"],
   ["TRIAL", "تجريبية"],
   ["PAST_DUE", "متأخرة"],
@@ -66,6 +69,8 @@ export default async function AdminSubscriptionsPage({
 }: {
   searchParams: Promise<{ q?: string; status?: string; page?: string }>;
 }) {
+  const admin = await requirePlatformAdmin();
+  const canAssign = admin.admin.role === "SUPER_ADMIN";
   const params = await searchParams;
   const status = parseAdminSubscriptionFilter(params.status);
   const parsedPage = Number(params.page ?? 1);
@@ -85,7 +90,7 @@ export default async function AdminSubscriptionsPage({
             <p className="text-xs font-bold tracking-wide text-primary">SUBSCRIPTION OPERATIONS</p>
             <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">العملاء والاشتراكات</h1>
             <p className="max-w-xl text-sm leading-7 text-muted-foreground">
-              كل مساحات العمل وباقاتها وتواريخ تجديدها في مكان واحد. بيانات مباشرة للمتابعة، وأي تغيير في اشتراك العميل يتم من نظام الدفع المعتمد.
+              كل مساحات العمل وباقاتها وتواريخ تجديدها في مكان واحد. بيانات مباشرة للمتابعة، وإدارة الباقات الخاصة بصلاحية مدير المنصة.
             </p>
           </div>
           <div className="rounded-2xl bg-surface p-4 text-center">
@@ -166,7 +171,9 @@ export default async function AdminSubscriptionsPage({
                         <p className="mt-1 truncate text-xs text-muted-foreground" dir="ltr">{item.slug}</p>
                         {item.businessStatus !== "ACTIVE" ? <span className="mt-1 inline-block text-xs text-warning">النشاط: {item.businessStatus}</span> : null}
                       </td>
-                      <td className="px-4 py-4 font-semibold">{item.planName ?? "—"}</td>
+                      <td className="px-4 py-4 font-semibold">{item.planName ?? "—"}
+                        {canAssign ? <PrivateUnlimitedAction businessId={item.businessId} businessName={item.name} assigned={item.planCode === "PRIVATE_UNLIMITED" && item.subscriptionStatus === "ACTIVE"} /> : null}
+                      </td>
                       <td className="px-4 py-4"><span className={"inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold " + itemStatus.className}>{itemStatus.label}</span></td>
                       <td className="whitespace-nowrap px-4 py-4 tabular-nums">
                         {item.monthlyPrice === null ? "—" : fmtMoney.format(item.monthlyPrice) + " " + (item.currency ?? "")}

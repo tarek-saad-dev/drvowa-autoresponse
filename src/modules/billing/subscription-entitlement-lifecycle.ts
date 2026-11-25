@@ -3,7 +3,7 @@
  * Neutral module — does not import entitlements.ts (avoids cycles).
  */
 
-import { DEFAULT_BOOTSTRAP_PLAN_CODE, isPaidPlanCode } from "@/constants/billing";
+import { DEFAULT_BOOTSTRAP_PLAN_CODE, isPaidPlanCode, PRIVATE_UNLIMITED_PLAN_CODE } from "@/constants/billing";
 import {
   query,
   sql,
@@ -98,6 +98,8 @@ async function expirePaidAndBootstrapFree(
   ]);
   const found = await lockCurrentSubscription(businessId, trx);
   if (!found) return null;
+  const existingPlan = await billingRepo.getPlanById(found.planId, trx);
+  if (existingPlan?.code === PRIVATE_UNLIMITED_PLAN_CODE) return found;
   const locked = await applyDueScheduledChange(found, trx);
 
   if (!gracePeriodEnded(locked.periodEndUtc)) {
