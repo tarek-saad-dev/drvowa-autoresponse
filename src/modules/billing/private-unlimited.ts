@@ -6,6 +6,8 @@ import { writeAuditEvent } from "@/modules/audit/service";
 import { getCurrentSubscription, getPlanById } from "./entitlements";
 import * as repo from "./repository";
 import { assertNoScheduledChange } from "./scheduled-changes";
+import { markPaymentCanceled } from "./manual-payment-repository";
+import { voidPaymentInvoice } from "./documents";
 
 /** Only called from the platform SUPER_ADMIN endpoint. No payment or invoice is created. */
 export async function setPrivateUnlimited(input: {
@@ -44,11 +46,24 @@ export async function setPrivateUnlimited(input: {
       );
     }
     await assertNoScheduledChange(input.businessId, trx);
-    const open = await trx.query(
-      "SELECT PaymentRequestID FROM TblManualPaymentRequest WITH (UPDLOCK,HOLDLOCK) WHERE BusinessID=@business AND Status IN (N'AWAITING_TRANSFER',N'PENDING')",
+    // Billing review is independent of the grant. An unsubmitted intent can
+    // be canceled using the normal checkout cancellation path. A declared
+    // transfer must remain in the financial review queue, never auto-rejected.
+    const open = await trx.query<{ PaymentRequestID: string; Status: string }>(
+      "SELECT PaymentRequestID, Status FROM TblManualPaymentRequest WITH (UPDLOCK,HOLDLOCK) WHERE BusinessID=@business AND Status IN (N'AWAITING_TRANSFER',N'PENDING')",
       [{ name: "business", type: sql.UniqueIdentifier, value: input.businessId }],
     );
-    if (open.recordset.length) throw new ConflictError("يوجد طلب دفع مفتوح؛ راجعه أولاً");
+    const canceledIntentIds: string[] = [];
+    const pendingReviewIds: string[] = [];
+    for (const payment of open.recordset) {
+      if (input.action === "assign" && payment.Status === "AWAITING_TRANSFER") {
+        await markPaymentCanceled(payment.PaymentRequestID, trx);
+        await voidPaymentInvoice(payment.PaymentRequestID, trx);
+        canceledIntentIds.push(payment.PaymentRequestID);
+      } else if (payment.Status === "PENDING") {
+        pendingReviewIds.push(payment.PaymentRequestID);
+      }
+    }
 
     if (input.action === "assign") {
       // Serialized lazy provisioning: never overwrite an existing plan's settings.
@@ -77,8 +92,8 @@ export async function setPrivateUnlimited(input: {
       businessId: input.businessId, actorUserId: input.actorUserId,
       action: input.action === "assign" ? "PRIVATE_UNLIMITED_ASSIGNED" : "PRIVATE_UNLIMITED_REVOKED",
       entityType: "Subscription", entityId: created.subscriptionId,
-      metadata: { reason: input.reason, previousSubscriptionId: current?.subscriptionId ?? null, previousPlan: previous?.code ?? null, previousPeriodEndUtc: current?.periodEndUtc?.toISOString() ?? null, targetPlan: target.code },
+      metadata: { reason: input.reason, previousSubscriptionId: current?.subscriptionId ?? null, previousPlan: previous?.code ?? null, previousPeriodEndUtc: current?.periodEndUtc?.toISOString() ?? null, targetPlan: target.code, canceledIntentIds, pendingReviewIds },
     }, trx);
-    return { status: input.action === "assign" ? "ASSIGNED" as const : "REVOKED" as const, subscriptionId: created.subscriptionId };
+    return { status: input.action === "assign" ? "ASSIGNED" as const : "REVOKED" as const, subscriptionId: created.subscriptionId, canceledIntentCount: canceledIntentIds.length, pendingReviewCount: pendingReviewIds.length };
   });
 }
