@@ -151,13 +151,33 @@ describe.runIf(dbEnvOk && isolated)("manual instapay billing lifecycle", () => {
     expect(events.recordset.map(r => r.Action).sort()).toEqual(["PRIVATE_UNLIMITED_ASSIGNED", "PRIVATE_UNLIMITED_REVOKED"]);
   });
 
-  it("private unlimited: pending payment is protected, approved paid plan switches immediately", async () => {
+  it("private unlimited: open checkout is voided while submitted transfers remain in review", async () => {
+    process.env.MANUAL_INSTAPAY_ENABLED = "1";
+    const admin = await makeAdmin();
+    const open = await onboardUser(`priv_open_${randomUUID().slice(0,8)}@example.com`);
+    const pending = await onboardUser(`priv_pending_${randomUUID().slice(0,8)}@example.com`);
+    const intent = await createManualPaymentIntent({ ...open, planCode: "STARTER" });
+    const transfer = await submitManualPaymentRequest({ ...pending, planCode: "STARTER", payerName: "Private test" });
+    for (const ctx of [open, pending]) {
+      const result = await setPrivateUnlimited({ businessId: ctx.businessId, actorUserId: admin, action: "assign", reason: "Integration test" });
+      expect(result.status).toBe("ASSIGNED");
+      expect((await getEntitlementSnapshot(ctx.businessId)).plan?.code).toBe("PRIVATE_UNLIMITED");
+    }
+    const state = async (id: string) => (await query<{ Status: string }>("SELECT Status FROM TblManualPaymentRequest WHERE PaymentRequestID=@id", [{ name: "id", type: sql.UniqueIdentifier, value: id }])).recordset[0]?.Status;
+    expect(await state(intent.paymentRequestId)).toBe("CANCELED");
+    expect((await listBillingDocuments(open.businessId))[0]?.Status).toBe("VOID");
+    expect(await state(transfer.paymentRequestId)).toBe("PENDING");
+    expect((await listBillingDocuments(pending.businessId))[0]?.Status).toBe("OPEN");
+    await expect(approveManualPayment({ paymentRequestId: transfer.paymentRequestId, reviewerUserId: admin })).rejects.toBeInstanceOf(ConflictError);
+    expect((await getEntitlementSnapshot(pending.businessId)).plan?.code).toBe("PRIVATE_UNLIMITED");
+  });
+
+  it("private unlimited: approved paid plan switches immediately", async () => {
     process.env.MANUAL_INSTAPAY_ENABLED = "1";
     const admin = await makeAdmin();
     const ctx = await onboardUser(`private_paid_${randomUUID().slice(0,8)}@example.com`);
     const payment = await submitManualPaymentRequest({ ...ctx, planCode: "STARTER", payerName: "Private test" });
     const grant = { businessId: ctx.businessId, actorUserId: admin, action: "assign" as const, reason: "Integration test" };
-    await expect(setPrivateUnlimited(grant)).rejects.toBeInstanceOf(ConflictError);
     const approved = await approveManualPayment({ paymentRequestId: payment.paymentRequestId, reviewerUserId: admin });
     expect((await getEntitlementSnapshot(ctx.businessId)).plan?.code).toBe("STARTER");
     const before = await listBillingDocuments(ctx.businessId);
