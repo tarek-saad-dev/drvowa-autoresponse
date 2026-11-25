@@ -85,6 +85,9 @@ export async function previewManualPaymentQuote(params: {
   discountCode?: string | null;
 }) {
   assertManualBillingEnabled();
+  const active = await getCurrentSubscription(params.businessId);
+  const activePlan = active ? await getPlanById(active.planId) : null;
+  if (activePlan?.code === PRIVATE_UNLIMITED_PLAN_CODE) throw new ConflictError("باقتك الخاصة لا تحتاج دفعاً؛ تواصل مع الإدارة لتغييرها");
   const planCode = params.planCode.trim().toUpperCase();
   if (!isPaidPlanCode(planCode)) throw new ValidationError("الباقة المختارة غير متاحة للدفع");
   const plan = await getPlanByCode(planCode);
@@ -383,6 +386,16 @@ export async function approveManualPayment(params: {
   reviewNote?: string | null;
 }): Promise<ApproveResult> {
   return withTransaction(async (trx) => {
+    // Same lock order as administrative grants, renewal and payment intents.
+    const requestBusiness = (await trx.query<{ BusinessID: string }>(
+      "SELECT BusinessID FROM TblManualPaymentRequest WHERE PaymentRequestID=@payment",
+      [{ name: "payment", type: sql.UniqueIdentifier, value: params.paymentRequestId }],
+    )).recordset[0];
+    if (!requestBusiness) throw new NotFoundError("طلب الدفع غير موجود");
+    await trx.query(
+      "SELECT BusinessID FROM TblBusiness WITH (UPDLOCK,HOLDLOCK) WHERE BusinessID=@business",
+      [{ name: "business", type: sql.UniqueIdentifier, value: requestBusiness.BusinessID }],
+    );
     const locked = await paymentRepo.lockPaymentRequest(
       params.paymentRequestId,
       trx,
