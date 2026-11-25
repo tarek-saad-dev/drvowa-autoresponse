@@ -162,6 +162,9 @@ export async function createManualPaymentIntent(params: {
   const v1Quote = isPricingV1PaymentEnabled() ? quotePricingV1(code, billingInterval) : null;
   const paymentAmount = v1Quote?.amount ?? Number((plan.monthlyPriceAmount * (billingInterval === "ANNUAL" ? 12 : 1)).toFixed(2));
 
+  const initialSubscription = await getCurrentSubscription(params.businessId);
+  const initialPlan = initialSubscription ? await getPlanById(initialSubscription.planId) : null;
+  if (initialPlan?.code === PRIVATE_UNLIMITED_PLAN_CODE) throw new ConflictError("باقتك الخاصة لا تحتاج دفعاً؛ تواصل مع الإدارة لتغييرها");
   const existingOpen = await paymentRepo.findOpenByBusinessId(params.businessId);
   if (existingOpen) {
     if (existingOpen.status === "PENDING") {
@@ -481,7 +484,7 @@ export async function approveManualPayment(params: {
       currentPlan = await getPlanById(current.planId, trx);
     }
 
-    if (currentPlan?.code === PRIVATE_UNLIMITED_PLAN_CODE) throw new ConflictError("لا يمكن استبدال الباقة الخاصة من خلال اعتماد دفعة");
+    if (currentPlan?.code === PRIVATE_UNLIMITED_PLAN_CODE) throw new ConflictError("النشاط على Unlimited؛ راجع تسوية التحويل المالي بشكل منفصل، ولا تستبدل الباقة الخاصة");
     const samePlanRenewal = Boolean(
       current
       && currentPlan
