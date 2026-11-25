@@ -3,6 +3,8 @@
  * Does not hardcode Stripe/Paymob — adapters live behind payment-provider.ts.
  */
 
+import { PRIVATE_UNLIMITED_PLAN_CODE, isPaidPlanCode } from "@/constants/billing";
+import { ConflictError, ValidationError } from "@/lib/tenancy/errors";
 import { withTransaction } from "@/lib/db";
 import { structuredLog } from "@/lib/observability/logger";
 import type { Subscription, SubscriptionStatus } from "@/types/domain";
@@ -108,6 +110,11 @@ export async function applyVerifiedWebhook(
     || (subscription.providerName && subscription.providerName !== providerName)) {
     throw new Error("SUBSCRIPTION_IDENTITY_MISMATCH");
   }
+  const privatePlan = await repo.getPlanByCode(PRIVATE_UNLIMITED_PLAN_CODE, trx);
+  if (result.planCode?.trim().toUpperCase() === PRIVATE_UNLIMITED_PLAN_CODE || (privatePlan?.code === PRIVATE_UNLIMITED_PLAN_CODE && subscription.planId === privatePlan.planId)) {
+    await repo.finishWebhookEvent(insert.billingWebhookEventId, "IGNORED", "PRIVATE_PLAN_ADMIN_ONLY", trx);
+    return { status: "ignored", reason: "PRIVATE_PLAN_ADMIN_ONLY" };
+  }
   const periodStart = toDate(result.periodStartUtc);
   const periodEnd = toDate(result.periodEndUtc);
   if ((result.periodStartUtc !== undefined && (!periodStart || !Number.isFinite(periodStart.getTime())))
@@ -161,6 +168,10 @@ export async function createCheckoutSession(
   if (!isPaymentCheckoutEnabled()) {
     throw new Error(PAYMENT_GATE_ERROR);
   }
+  if (!isPaidPlanCode(input.planCode)) throw new ValidationError("الباقة غير متاحة للدفع");
+  const current = await repo.getSubscriptionByBusinessId({ businessId: input.businessId });
+  const privatePlan = await repo.getPlanByCode(PRIVATE_UNLIMITED_PLAN_CODE);
+  if (privatePlan?.code === PRIVATE_UNLIMITED_PLAN_CODE && current?.planId === privatePlan.planId) throw new ConflictError("الباقة الخاصة لا تحتاج دفعاً");
   return getPaymentProvider().createCheckout(input);
 }
 
