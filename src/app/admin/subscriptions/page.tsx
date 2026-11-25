@@ -100,6 +100,16 @@ export default async function AdminSubscriptionsPage({
         </div>
       </section>
 
+      <section className="rounded-2xl border border-border bg-card p-4 sm:p-5" aria-label="إدارة الباقة الخاصة">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold"><span dir="ltr">DRVO Unlimited ∞</span></h2>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">باقة خاصة بدون رسوم أو تاريخ انتهاء، تُفعّل لكل نشاط على حدة وليست ضمن الباقات العامة.</p>
+            <p className="mt-2 text-sm font-semibold">{canAssign ? "ابحث عن النشاط بالاسم ثم استخدم زر تفعيل Unlimited بجوار بياناته." : "حسابك يملك صلاحية الاطلاع فقط على الباقة الخاصة. التفعيل والإلغاء يتطلبان صلاحية SUPER_ADMIN."}</p>
+          </div>
+          <Link href={queryUrl("", "PRIVATE")} className="inline-flex min-h-10 items-center rounded-lg border border-input px-3 text-sm font-bold text-primary hover:bg-surface">عرض الأنشطة المفعّلة</Link>
+        </div>
+      </section>
       <section className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
         <form method="GET" action="/admin/subscriptions" className="flex flex-col gap-3 sm:flex-row">
           {status !== "ALL" ? <input type="hidden" name="status" value={status} /> : null}
@@ -139,7 +149,7 @@ export default async function AdminSubscriptionsPage({
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border p-5">
           <div>
             <h2 className="text-lg font-bold">سجل العملاء والاشتراكات</h2>
-            <p className="mt-1 text-xs text-muted-foreground">عرض 25 عميل في كل صفحة · قراءة فقط</p>
+            <p className="mt-1 text-xs text-muted-foreground">عرض 25 عميل في كل صفحة · {canAssign ? "إدارة Unlimited متاحة" : "عرض الاشتراكات"}</p>
           </div>
           <Link href="/admin/payments" className="text-sm font-bold text-primary hover:underline">مراجعة المدفوعات ←</Link>
         </div>
@@ -149,7 +159,31 @@ export default async function AdminSubscriptionsPage({
             <p className="mt-2 text-sm text-muted-foreground">غيّر البحث أو حالة الاشتراك وجرب تاني.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <div className="divide-y divide-border lg:hidden">
+            {result.items.map((item) => {
+              const itemStatus = statusOf(item);
+              const assigned = item.planCode === "PRIVATE_UNLIMITED" && item.subscriptionStatus === "ACTIVE";
+              return <article key={item.businessId} className="space-y-3 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="break-words font-bold">{item.name}</p>
+                    <p className="mt-1 break-all text-xs text-muted-foreground" dir="ltr">{item.slug}</p>
+                    {item.businessStatus !== "ACTIVE" ? <p className="text-xs text-warning">النشاط: {item.businessStatus}</p> : null}
+                  </div>
+                  <span className={"rounded-full px-3 py-1 text-xs font-bold " + itemStatus.className}>{itemStatus.label}</span>
+                </div>
+                <dl className="grid grid-cols-2 gap-3 text-sm">
+                  <div><dt className="text-xs text-muted-foreground">الباقة الحالية</dt><dd className="mt-1 font-bold">{item.planName ?? "—"}</dd></div>
+                  <div><dt className="text-xs text-muted-foreground">سعر الخطة</dt><dd className="mt-1">{item.monthlyPrice === null ? "—" : fmtMoney.format(item.monthlyPrice) + " " + (item.currency ?? "")}</dd></div>
+                  <div><dt className="text-xs text-muted-foreground">نهاية الاشتراك</dt><dd className="mt-1">{assigned ? "بدون انتهاء" : date(item.endUtc)}</dd></div>
+                  <div><dt className="text-xs text-muted-foreground">تاريخ الانضمام</dt><dd className="mt-1">{date(item.joinedAtUtc)}</dd></div>
+                </dl>
+                {canAssign ? <PrivateUnlimitedAction businessId={item.businessId} businessName={item.name} assigned={assigned} /> : null}
+              </article>;
+            })}
+          </div>
+          <div className="hidden overflow-x-auto lg:block">
             <table className="w-full min-w-[800px] text-right text-sm">
               <thead className="bg-surface text-xs text-muted-foreground">
                 <tr>
@@ -186,6 +220,7 @@ export default async function AdminSubscriptionsPage({
               </tbody>
             </table>
           </div>
+          </>
         )}
         <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border p-5 text-xs text-muted-foreground">
           <span>صفحة {fmt.format(result.page)} من {fmt.format(totalPages)} — إجمالي {fmt.format(result.total)}</span>
