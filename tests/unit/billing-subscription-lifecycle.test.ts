@@ -173,6 +173,21 @@ describe("webhook safety regressions", () => {
     await expect(applyVerifiedWebhook({ ok: true, providerEventId: "cross-provider", externalSubscriptionId: "ext", mappedStatus: "ACTIVE" })).rejects.toThrow("SUBSCRIPTION_IDENTITY_MISMATCH");
     expect(updateSubscriptionBillingFields).not.toHaveBeenCalled();
   });
+  it("ignores an attempted private-plan grant from a provider", async () => {
+    getPlanByCode.mockResolvedValue({ code: "PRIVATE_UNLIMITED", planId: "private" });
+    const { applyVerifiedWebhook } = await import("@/modules/billing/subscription-lifecycle");
+    const result = await applyVerifiedWebhook({ ok: true, providerEventId: "private-grant", externalSubscriptionId: "ext", mappedStatus: "ACTIVE", planCode: "PRIVATE_UNLIMITED" });
+    expect(result).toEqual({ status: "ignored", reason: "PRIVATE_PLAN_ADMIN_ONLY" });
+    expect(updateSubscriptionBillingFields).not.toHaveBeenCalled();
+  });
+  it("ignores provider updates targeting a private subscription", async () => {
+    getPlanByCode.mockResolvedValue({ code: "PRIVATE_UNLIMITED", planId: "private" });
+    findSubscriptionByExternalId.mockResolvedValue({ subscriptionId: "sub", businessId: "business", providerName: "test-provider", planId: "private" });
+    const { applyVerifiedWebhook } = await import("@/modules/billing/subscription-lifecycle");
+    const result = await applyVerifiedWebhook({ ok: true, providerEventId: "private-cancel", externalSubscriptionId: "ext", mappedStatus: "CANCELED" });
+    expect(result).toEqual({ status: "ignored", reason: "PRIVATE_PLAN_ADMIN_ONLY" });
+    expect(updateSubscriptionBillingFields).not.toHaveBeenCalled();
+  });
   it("propagates persistence failure so the transaction rolls back and provider retries", async () => {
     updateSubscriptionBillingFields.mockRejectedValue(new Error("write failed"));
     const { applyVerifiedWebhook } = await import("@/modules/billing/subscription-lifecycle");
