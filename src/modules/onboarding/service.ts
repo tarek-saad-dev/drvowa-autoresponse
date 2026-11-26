@@ -1,5 +1,5 @@
 import { KNOWLEDGE_CATEGORIES } from "@/constants/knowledge";
-import { query, sql } from "@/lib/db";
+import { DbError } from "@/lib/db";
 import { setSessionActiveBusiness } from "@/modules/auth/session";
 import { writeAuditEvent } from "@/modules/audit/service";
 import { createAgent, listAgents } from "@/modules/agents/service";
@@ -21,6 +21,30 @@ import type {
   Subscription,
 } from "@/types/domain";
 import { ensureDefaultSubscription } from "@/modules/billing/service";
+
+/** Log the failing setup step without logging request payloads, credentials or SQL values. */
+async function onboardingStage<T>(stage: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const reason = /could not find stored procedure/i.test(message) ? "MISSING_PROCEDURE"
+      : /invalid object name/i.test(message) ? "MISSING_TABLE"
+      : /invalid column name/i.test(message) ? "MISSING_COLUMN"
+      : /deadlock/i.test(message) ? "DEADLOCK"
+      : /timeout|timed out/i.test(message) ? "TIMEOUT"
+      : /constraint|duplicate key/i.test(message) ? "CONSTRAINT"
+      : /cannot insert the value null/i.test(message) ? "NULL_VALUE"
+      : "UNKNOWN";
+    console.error("[onboarding] workspace_stage_failed", {
+      stage,
+      reason,
+      name: error instanceof Error ? error.name : "UnknownError",
+      code: error instanceof DbError ? error.code : undefined,
+    });
+    throw error;
+  }
+}
 
 export type CompleteOnboardingInput = {
   userId: string;
@@ -66,33 +90,30 @@ export type CompleteOnboardingResult = {
 export async function completeOnboarding(
   input: CompleteOnboardingInput,
 ): Promise<CompleteOnboardingResult> {
-  const business = await createBusiness({
+  const business = await onboardingStage("create_business_and_subscription", () => createBusiness({
     ownerUserId: input.userId,
     name: input.business.name,
     category: input.business.category,
     countryCode: input.business.countryCode,
     locale: input.business.locale,
     timezone: input.business.timezone,
-  });
+  }));
 
-  if (input.sessionId) {
-    await setSessionActiveBusiness({
-      sessionId: input.sessionId,
+  const sessionId = input.sessionId;
+  if (sessionId) {
+    await onboardingStage("set_active_business", () => setSessionActiveBusiness({
+      sessionId,
       activeBusinessId: business.businessId,
-    });
+    }));
   }
 
   // Entitlements require a current FREE subscription before Agent/Knowledge.
-  const subscription = await ensureDefaultSubscription({
+  const subscription = await onboardingStage("ensure_subscription", () => ensureDefaultSubscription({
     businessId: business.businessId,
-  });
+  }));
 
-  // One-time free-trial identity starts at initial business onboarding.
-  // The SQL procedure is idempotent and never resets the first activation.
-  if (process.env.DRVO_PRICING_V1_FREE_TRIAL === "true") {
-    await query("EXEC dbo.PricingV1StartFreeTrial @BusinessID=@businessId",
-      [{ name: "businessId", type: sql.UniqueIdentifier, value: business.businessId }]);
-  }
+  // ensureDefaultSubscription owns initial trial enrollment atomically.
+  // Do not invoke the trial procedure again here.
 
   let location: Location | null = null;
   if (input.location?.name?.trim()) {
@@ -107,7 +128,7 @@ export async function completeOnboarding(
     });
   }
 
-  const agent = await createAgent({
+  const agent = await onboardingStage("create_agent", () => createAgent({
     businessId: business.businessId,
     name: input.agent.name.trim() || "موظف الاستقبال",
     roleTitle: input.agent.roleTitle?.trim() || "موظف استقبال",
@@ -115,9 +136,9 @@ export async function completeOnboarding(
     dialect: input.agent.dialect ?? null,
     tone: input.agent.tone ?? null,
     instructions: input.agent.instructions ?? null,
-  });
+  }));
 
-  await ensureDefaultKnowledgeBase({ businessId: business.businessId });
+  await onboardingStage("ensure_knowledge_base", () => ensureDefaultKnowledgeBase({ businessId: business.businessId }));
 
   const seedItems =
     input.knowledgeItems && input.knowledgeItems.length > 0
@@ -139,19 +160,19 @@ export async function completeOnboarding(
   const knowledgeItems: KnowledgeItem[] = [];
   for (const item of seedItems) {
     knowledgeItems.push(
-      await createItem({
+      await onboardingStage("create_knowledge_item", () => createItem({
         businessId: business.businessId,
         category: item.category ?? KNOWLEDGE_CATEGORIES.CUSTOM,
         title: item.title,
         content: item.content,
-      }),
+      })),
     );
   }
 
-  const completedBusiness = await updateBusiness({
+  const completedBusiness = await onboardingStage("mark_completed", () => updateBusiness({
     businessId: business.businessId,
     onboardingCompletedAtUtc: new Date(),
-  });
+  }));
 
   await writeAuditEvent({
     businessId: business.businessId,
@@ -188,28 +209,29 @@ export async function ensureOnboardingWorkspace(params: {
   agent: Agent;
   subscription: Subscription;
 }> {
-  const businesses = await listBusinessesForUser(params.userId);
+  const businesses = await onboardingStage("list_existing_businesses", () => listBusinessesForUser(params.userId));
   const business = businesses[0];
   if (!business) {
     throw new Error("NO_BUSINESS");
   }
 
-  if (params.sessionId) {
-    await setSessionActiveBusiness({
-      sessionId: params.sessionId,
+  const sessionId = params.sessionId;
+  if (sessionId) {
+    await onboardingStage("set_active_business", () => setSessionActiveBusiness({
+      sessionId,
       activeBusinessId: business.businessId,
-    });
+    }));
   }
 
-  const subscription = await ensureDefaultSubscription({
+  const subscription = await onboardingStage("ensure_subscription", () => ensureDefaultSubscription({
     businessId: business.businessId,
-  });
-  await ensureDefaultKnowledgeBase({ businessId: business.businessId });
+  }));
+  await onboardingStage("ensure_knowledge_base", () => ensureDefaultKnowledgeBase({ businessId: business.businessId }));
 
-  const agents = await listAgents({ businessId: business.businessId });
+  const agents = await onboardingStage("list_agents", () => listAgents({ businessId: business.businessId }));
   let agent = agents.find((item) => item.isActive) ?? agents[0] ?? null;
   if (!agent) {
-    agent = await createAgent({
+    agent = await onboardingStage("repair_agent", () => createAgent({
       businessId: business.businessId,
       name: params.agent?.name?.trim() || "موظف الاستقبال",
       roleTitle: params.agent?.roleTitle?.trim() || "موظف استقبال",
@@ -219,7 +241,7 @@ export async function ensureOnboardingWorkspace(params: {
       instructions:
         params.agent?.instructions
         ?? "جاوب باختصار ووضوح وبناءً على معلومات النشاط فقط.",
-    });
+    }));
   }
 
   return { business, agent, subscription };
