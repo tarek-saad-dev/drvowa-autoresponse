@@ -4,7 +4,7 @@ import { useRef,useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 
-export function SignupOtpKeyPanel({initialActive}:{initialActive:boolean}){
+export function SignupOtpKeyPanel({initialActive,businessId}:{initialActive:boolean;businessId:string}){
   const [active,setActive]=useState(initialActive);
   const [apiKey,setApiKey]=useState<string|null>(null);
   const [busy,setBusy]=useState(false);
@@ -16,7 +16,7 @@ export function SignupOtpKeyPanel({initialActive}:{initialActive:boolean}){
     if(pending.current)return;
     pending.current=true;setBusy(true);setApiKey(null);setCopied(false);setError("");
     try{
-      const res=await fetch("/api/integrations/signup-otp",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action}),cache:"no-store"});
+      const res=await fetch("/api/integrations/signup-otp",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,expectedBusinessId:businessId}),cache:"no-store"});
       const result=await res.json();
       if(!res.ok||!result.ok)throw new Error(result.error||"تعذر حفظ المفتاح.");
       if(action==="rotate"&&typeof result.apiKey!=="string")throw new Error("تعذر عرض المفتاح الجديد. أعد إصداره.");

@@ -22,7 +22,8 @@ export async function POST(request:Request){
     const businessId=await authorizedBusiness();
     const site=request.headers.get("sec-fetch-site");
     if((site && site!=="same-origin" && site!=="none")||!request.headers.get("content-type")?.toLowerCase().startsWith("application/json"))return reply({error:"طلب غير صالح."},415);
-    const body=z.object({action:z.enum(["rotate","revoke"])}).strict().parse(await parseJsonBody(request));
+    const body=z.object({action:z.enum(["rotate","revoke"]),expectedBusinessId:z.string().uuid()}).strict().parse(await parseJsonBody(request));
+    if(body.expectedBusinessId.toLowerCase()!==businessId.toLowerCase())return reply({error:"تم تغيير المنشأة النشطة. حدّث الصفحة أولًا."},409);
     if(body.action==="revoke"){await revokeSignupOtpKey(businessId);return reply({ok:true,active:false});}
     const apiKey=await rotateSignupOtpKey(businessId);
     return reply({ok:true,active:true,apiKey});

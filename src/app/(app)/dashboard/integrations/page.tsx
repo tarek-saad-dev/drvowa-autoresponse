@@ -34,7 +34,7 @@ export default async function IntegrationsPage() {
         </p>
       </div>
 
-      {canManageOtp&&<SignupOtpKeyPanel initialActive={otp?.status==="ACTIVE"&&!!otp.inboundApiKeyHash}/>}
+      {canManageOtp&&<SignupOtpKeyPanel key={businessId} businessId={businessId} initialActive={otp?.status==="ACTIVE"&&!!otp.inboundApiKeyHash}/>}
       <IntegrationManager
         initialIntegration={
           drvoErp

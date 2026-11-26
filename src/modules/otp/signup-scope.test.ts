@@ -18,6 +18,7 @@ describe("dedicated signup OTP key",()=>{
     const service=readFileSync("src/modules/integrations/signup-otp-key.ts","utf8");
     expect(route).toContain('requireBusinessRole(user.userId,businessId,["OWNER","ADMIN"])');
     expect(route).toContain('"Cache-Control":"no-store"');
+    expect(route).toContain("body.expectedBusinessId.toLowerCase()!==businessId.toLowerCase()");
     expect(service).toContain("hashIntegrationApiKey(key)");
     expect(service).toContain("target.BusinessID=source.BusinessID AND target.Type=source.Type");
     expect(service).toContain("WHERE BusinessID=@businessId AND Type=@type");
