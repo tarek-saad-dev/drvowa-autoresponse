@@ -240,6 +240,7 @@ export function GuidedOnboardingPreview({
   const [step, setStep] = useState<Step>("BUSINESS");
   const [transitioning, setTransitioning] = useState(false);
   const [transitionMessage, setTransitionMessage] = useState("");
+  const [skipError, setSkipError] = useState<string | null>(null);
   const [mockState, setMockState] = useState<MockState>("default");
   const [businessQuestion, setBusinessQuestion] = useState(0);
   const [business, setBusiness] = useState<Record<string, string>>({ countryCode: "EG" });
@@ -840,7 +841,7 @@ export function GuidedOnboardingPreview({
   }
 
   async function finishDiscoveryAndContinue() {
-    if (!learningReady || discoveryLoading || recording || transcribing) return;
+    if (transitioning || !learningReady || discoveryLoading || recording || transcribing) return;
     if (knowledgeApplied) {
       await next();
       return;
@@ -964,8 +965,8 @@ export function GuidedOnboardingPreview({
     }
   }
 
-  async function ensureWorkspace() {
-    if (workspaceReady) return;
+  async function ensureWorkspace(forceCheck = false) {
+    if (workspaceReady && !forceCheck) return;
 
     const agentPayload = {
       name: "موظف الاستقبال",
@@ -978,6 +979,9 @@ export function GuidedOnboardingPreview({
 
     const existingResponse = await fetch("/api/businesses", { cache: "no-store" });
     const existingData = await existingResponse.json().catch(() => ({}));
+    if (!existingResponse.ok) {
+      throw new Error(existingData?.error ?? existingData?.message ?? "تعذر التحقق من مساحة العمل");
+    }
     const hasBusiness = existingResponse.ok
       && Array.isArray(existingData.businesses)
       && existingData.businesses.length > 0;
@@ -1322,12 +1326,12 @@ export function GuidedOnboardingPreview({
 
   /* eslint-disable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect -- guarded one-shot async transition */
   useEffect(() => {
-    if (step !== "KNOWLEDGE" || !draftRestored || !discoveryDone || !learningReady || !knowledge.trim() || knowledgeApplied || mockState === "error") return;
+    if (transitioning || step !== "KNOWLEDGE" || !draftRestored || !discoveryDone || !learningReady || !knowledge.trim() || knowledgeApplied || mockState === "error") return;
     if (trainingStartedRef.current) return;
     trainingStartedRef.current = true;
     void trainKnowledge();
     // learningReady is derived from discovery coverage; keep deps length stable across HMR.
-  }, [step, draftRestored, discoveryDone, learningReady, knowledge, knowledgeApplied, mockState]);
+  }, [step, draftRestored, discoveryDone, learningReady, knowledge, knowledgeApplied, mockState, transitioning]);
   /* eslint-enable react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
 
   const primaryLabel = useMemo(() => {
@@ -1390,6 +1394,23 @@ export function GuidedOnboardingPreview({
     setTransitionMessage(STEP_SCENES[target].cue);
     setTransitioning(true);
     sceneTimerRef.current = window.setTimeout(commit, target === step ? 420 : 720);
+  }
+
+  async function skipTraining() {
+    if (transitioning || !draftRestored || discoveryLoading || recording || transcribing || mockState === "loading") return;
+    setSkipError(null);
+    setTransitionMessage("بنجهّز لوحة التحكم…");
+    setTransitioning(true);
+    try {
+      // The dashboard requires a real business, subscription and agent.
+      // Skipping must never enable WhatsApp auto-reply or fake training progress.
+      await ensureWorkspace(true);
+      router.push(selectedPlan ? "/dashboard/billing" : "/dashboard");
+      router.refresh();
+    } catch (error) {
+      setSkipError(error instanceof Error ? error.message : "تعذر تخطي التدريب. حاول تاني.");
+      setTransitioning(false);
+    }
   }
 
   async function next() {
@@ -1518,11 +1539,27 @@ export function GuidedOnboardingPreview({
                   style={{ width: `${Math.max(learningPercent, 3)}%` }}
                 />
               </div>
-              <p className="mt-1.5 text-[11px] text-muted-foreground">
-                {learningReady
-                  ? "ممتاز — التعلم وصل للحد الأدنى. اضغط «التالي» لما تكون جاهز تكمّل."
-                  : "كمّل الأسئلة لحد ما الشريط يوصل للأخضر. مش هنقدر ندخل المرحلة اللي بعدها قبل كده."}
-              </p>
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <p className="min-w-0 flex-1 text-[11px] leading-5 text-muted-foreground">
+                  {learningReady
+                    ? "ممتاز — التعلم وصل للحد الأدنى. اضغط «التالي» لما تكون جاهز تكمّل."
+                    : "كمّل التدريب لحد 70% أو تخطّيه دلوقتي ودرّب موظفك لاحقًا من لوحة التحكم."}
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void skipTraining()}
+                  disabled={transitioning || !draftRestored || discoveryLoading || recording || transcribing || mockState === "loading"}
+                  className="shrink-0 rounded-full border border-border/70 px-3 font-semibold"
+                >
+                  تخطي التدريب الآن
+                </Button>
+              </div>
+              {skipError ? <p className="mt-1 text-xs text-destructive" role="alert">{skipError}</p> : null}
+              {discoveryTurns.length > 0 && !knowledgeApplied ? (
+                <p className="mt-1 text-[11px] text-muted-foreground">التخطي مش هيضيف إجابات التدريب غير المحفوظة لقاعدة المعرفة.</p>
+              ) : null}
             </div>
           </header>
         ) : null}
