@@ -7,6 +7,7 @@ import { USAGE_EVENT_WHATSAPP_OUTBOUND } from "@/modules/billing/period";
 import { findWhatsAppConnection } from "@/modules/channels/repository";
 import { sendAccountMessage } from "@/modules/channels/runtime-client";
 import type { Integration } from "@/types/domain";
+import { PLATFORM_SIGNUP_OTP_TYPE } from "@/modules/integrations/otp-scope";
 
 import {
   createOtpCode,
@@ -313,7 +314,7 @@ export async function verifyExternalOtp(params: {
     if (!challenge || challenge.Status === "FAILED" || challenge.Status === "VERIFIED" || challenge.Status === "LOCKED") {
       return "INVALID" as const;
     }
-    if (challenge.Status !== "SENT" && challenge.Status !== "UNKNOWN") return "NOT_READY" as const;
+    if (challenge.Status !== "SENT" && (challenge.Status !== "UNKNOWN" || params.integration.type === PLATFORM_SIGNUP_OTP_TYPE)) return "NOT_READY" as const;
     if (challenge.ExpiresAtUtc.getTime() <= Date.now()) return "EXPIRED" as const;
     if (challenge.AttemptCount >= OTP_MAX_ATTEMPTS) return "INVALID" as const;
 
@@ -325,7 +326,7 @@ export async function verifyExternalOtp(params: {
       await trx.query(
         `UPDATE dbo.TblOtpChallenge
          SET AttemptCount = @attemptCount,
-             Status = CASE WHEN @attemptCount >= @maxAttempts THEN N'LOCKED' ELSE N'SENT' END,
+             Status = CASE WHEN @attemptCount >= @maxAttempts THEN N'LOCKED' ELSE Status END,
              UpdatedAtUtc = SYSUTCDATETIME()
          WHERE ChallengeID = @challengeId`,
         [
@@ -340,7 +341,7 @@ export async function verifyExternalOtp(params: {
       `UPDATE dbo.TblOtpChallenge
        SET Status = N'VERIFIED', VerifiedAtUtc = SYSUTCDATETIME(),
            UpdatedAtUtc = SYSUTCDATETIME()
-       WHERE ChallengeID = @challengeId AND Status = N'SENT'`,
+       WHERE ChallengeID = @challengeId AND Status IN (N'SENT', N'UNKNOWN')`,
       [{ name: "challengeId", type: sql.UniqueIdentifier, value: params.challengeId }],
     );
     return "VERIFIED" as const;

@@ -2,7 +2,8 @@ import { z } from "zod";
 
 import { handleApiError, jsonError, jsonOk, parseJsonBody } from "@/lib/api/http";
 import { ForbiddenError } from "@/lib/tenancy/errors";
-import { authenticateExternalIntegration, INTEGRATION_TYPE_DRVO_ERP } from "@/modules/integrations/service";
+import { authenticateExternalIntegration } from "@/modules/integrations/service";
+import { allowsOtpPurpose } from "@/modules/integrations/otp-scope";
 import { OtpApiError, verifyExternalOtp } from "@/modules/otp/service";
 
 export const runtime = "nodejs";
@@ -16,11 +17,9 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const integration = await authenticateExternalIntegration(request.headers.get("authorization"));
-    if (integration.type !== INTEGRATION_TYPE_DRVO_ERP) {
-      throw new ForbiddenError("OTP API requires a paired ERP integration");
-    }
+    const integration = await authenticateExternalIntegration(request.headers.get("authorization"), "otp");
     const body = schema.parse(await parseJsonBody(request));
+    if (!allowsOtpPurpose(integration.type, body.purpose)) throw new ForbiddenError("OTP purpose not permitted");
     return jsonOk(await verifyExternalOtp({ integration, ...body }));
   } catch (error) {
     if (error instanceof OtpApiError) return jsonError(error.message, error.status, { code: error.code });

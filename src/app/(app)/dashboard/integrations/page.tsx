@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 
 import { IntegrationManager } from "@/components/dashboard/integration-manager";
+import { SignupOtpKeyPanel } from "@/components/dashboard/signup-otp-key-panel";
+import { requireBusinessMembership } from "@/lib/tenancy/require-membership";
+import { PLATFORM_SIGNUP_OTP_TYPE } from "@/modules/integrations/otp-scope";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
 import { requireAuthenticatedUser } from "@/lib/tenancy/require-user";
 import { listIntegrations } from "@/modules/integrations/service";
@@ -15,6 +18,9 @@ export default async function IntegrationsPage() {
 
   const integrations = await listIntegrations({ businessId });
   const drvoErp = integrations.find((item) => item.type === "DRVO_ERP") ?? null;
+  const membership=await requireBusinessMembership(user.userId,businessId);
+  const otp=integrations.find(item=>item.type===PLATFORM_SIGNUP_OTP_TYPE);
+  const canManageOtp=membership.role==="OWNER"||membership.role==="ADMIN";
 
   return (
     <div className="space-y-6">
@@ -28,6 +34,7 @@ export default async function IntegrationsPage() {
         </p>
       </div>
 
+      {canManageOtp&&<SignupOtpKeyPanel initialActive={otp?.status==="ACTIVE"&&!!otp.inboundApiKeyHash}/>}
       <IntegrationManager
         initialIntegration={
           drvoErp

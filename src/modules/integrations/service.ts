@@ -28,6 +28,7 @@ import type {
 } from "./contracts";
 import * as repo from "./repository";
 import { INTEGRATION_TYPE_DRVO_ERP } from "./repository";
+import { allowsExternalIntegration, type ExternalIntegrationScope } from "./otp-scope";
 
 export async function listIntegrations(params: {
   businessId: string;
@@ -274,7 +275,7 @@ export async function invokeDrvoErpTool(params: {
     businessId: params.businessId,
     type: INTEGRATION_TYPE_DRVO_ERP,
   });
-  if (!integration || integration.status !== "ACTIVE") {
+  if (!integration || integration.status !== "ACTIVE" || !allowsExternalIntegration(integration.type, scope)) {
     throw new NotFoundError("DRVO ERP integration is not active");
   }
 
@@ -311,6 +312,7 @@ export async function invokeDrvoErpTool(params: {
 
 export async function authenticateExternalIntegration(
   authorizationHeader: string | null,
+  scope: ExternalIntegrationScope = "erp",
 ): Promise<Integration> {
   const match = authorizationHeader?.match(/^Bearer\s+(.+)$/i);
   const token = match?.[1]?.trim();
