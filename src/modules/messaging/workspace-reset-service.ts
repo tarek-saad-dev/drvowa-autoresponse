@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { query,sql,withTransaction } from "@/lib/db";
+import {getResetCleanupStatus} from "./privacy-purge-service";
 const scope=(businessId:string)=>[{name:"businessId",type:sql.UniqueIdentifier,value:businessId}];
 const wa=(a:string)=>`EXISTS(SELECT 1 FROM dbo.TblChannelConnection ch WHERE ch.BusinessID=${a}.BusinessID AND ch.ChannelConnectionID=${a}.ChannelConnectionID AND ch.Channel=N'WHATSAPP')`;
 export async function getWorkspaceResetRevision(businessId:string){
@@ -12,7 +13,7 @@ export async function previewWorkspaceReset(businessId:string){
  (SELECT COUNT(*) FROM dbo.TblConversation c WHERE c.BusinessID=@businessId AND ${wa("c")} AND (NOT EXISTS(SELECT 1 FROM dbo.TblWhatsAppWorkspaceReset rr WHERE rr.BusinessID=c.BusinessID) OR EXISTS(SELECT 1 FROM dbo.VwPrivacyCurrentMessage v WHERE v.BusinessID=c.BusinessID AND v.ConversationID=c.ConversationID))) Conversations,
  (SELECT COUNT(*) FROM dbo.TblContact ct WHERE ct.BusinessID=@businessId AND ${wa("ct")} AND (NOT EXISTS(SELECT 1 FROM dbo.TblWhatsAppWorkspaceReset rr WHERE rr.BusinessID=ct.BusinessID) OR EXISTS(SELECT 1 FROM dbo.TblConversation c JOIN dbo.VwPrivacyCurrentMessage v ON v.BusinessID=c.BusinessID AND v.ConversationID=c.ConversationID WHERE c.BusinessID=ct.BusinessID AND c.ContactID=ct.ContactID))) Contacts,
  (SELECT COUNT(*) FROM dbo.TblMessage m JOIN dbo.VwPrivacyCurrentMessage v ON v.BusinessID=m.BusinessID AND v.MessageID=m.MessageID WHERE m.BusinessID=@businessId AND ${wa("m")}) Messages`,scope(businessId));
- const s=r.recordset[0];return {conversations:Number(s?.Conversations??0),contacts:Number(s?.Contacts??0),messages:Number(s?.Messages??0),revision:await getWorkspaceResetRevision(businessId)};
+ const s=r.recordset[0];const revision=await getWorkspaceResetRevision(businessId);return {conversations:Number(s?.Conversations??0),contacts:Number(s?.Contacts??0),messages:Number(s?.Messages??0),revision,cleanup:revision?await getResetCleanupStatus(businessId):null};
 }
 export async function resetWhatsAppWorkspace(businessId:string){
  const id=randomUUID();
@@ -40,5 +41,5 @@ export async function resetWhatsAppWorkspace(businessId:string){
   UPDATE l SET IsDeleted=1,LabelName=NULL,Color=NULL,UpdatedAtUtc=@now FROM dbo.TblWhatsAppLabel l WHERE l.BusinessID=@businessId AND ${wa("l")};
   `,params);
  });
- return {revision:await getWorkspaceResetRevision(businessId),contentCleanupPending:true};
+ return {revision:await getWorkspaceResetRevision(businessId),cleanup:await getResetCleanupStatus(businessId)};
 }

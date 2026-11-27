@@ -17,6 +17,14 @@ export async function previewContentPurge(businessId:string,target:PurgeTarget){
  const result=await query<{Candidates:number;Eligible:number}>(`SELECT COUNT(1) Candidates,COALESCE(SUM(CASE WHEN ${noActiveJob} THEN 1 ELSE 0 END),0) Eligible FROM dbo.TblMessage m WHERE ${base} AND ${filter(target)}`,parameters(businessId,target));
  return {candidates:Number(result.recordset[0]?.Candidates??0),eligible:Number(result.recordset[0]?.Eligible??0)};
 }
+export async function getResetCleanupStatus(businessId:string){
+ const [messages,files]=await Promise.all([
+  previewContentPurge(businessId,{kind:"reset"}),
+  query<{Pending:number;Deleted:number}>("SELECT COALESCE(SUM(CASE WHEN DeletedAtUtc IS NULL THEN 1 ELSE 0 END),0) Pending, COALESCE(SUM(CASE WHEN DeletedAtUtc IS NOT NULL THEN 1 ELSE 0 END),0) Deleted FROM dbo.TblWhatsAppMediaPurge WHERE BusinessID=@businessId",scope(businessId))
+ ]);
+ const pendingFiles=Number(files.recordset[0]?.Pending??0);
+ return {pendingMessages:messages.candidates,eligibleMessages:messages.eligible,pendingFiles,deletedFiles:Number(files.recordset[0]?.Deleted??0),status:messages.candidates||pendingFiles?"PENDING" as const:"CONTENT_CLEANED" as const};
+}
 // Offline maintenance ONLY: all app/runtime/AI writers must be stopped before invoking.
 export async function purgeContentBatch(businessId:string,target:PurgeTarget){
  if(process.env.DRVO_PRIVACY_OFFLINE_MAINTENANCE!=="true")throw Error("OFFLINE_MAINTENANCE_REQUIRED");
@@ -57,6 +65,19 @@ export async function deleteQueuedMedia(businessId:string,root:string){
   deleted++;
  }
  return deleted;
+}
+// Bound each maintenance run; a subsequent invocation safely resumes.
+export async function drainResetCleanup(businessId:string,root:string,maxBatches=100){
+ if(process.env.DRVO_PRIVACY_OFFLINE_MAINTENANCE!=="true")throw Error("OFFLINE_MAINTENANCE_REQUIRED");
+ if(!Number.isInteger(maxBatches)||maxBatches<1||maxBatches>100)throw Error("INVALID_BATCH_LIMIT");
+ let purged=0,deletedFiles=0,batches=0;
+ for(;batches<maxBatches;batches++){
+  const n=await purgeContentBatch(businessId,{kind:"reset"});
+  const files=await deleteQueuedMedia(businessId,root);
+  purged+=n;deletedFiles+=files;
+  if(!n&&!files){batches++;break;}
+ }
+ return {purged,deletedFiles,batches,remaining:await getResetCleanupStatus(businessId)};
 }
 export async function getRetentionPreference(businessId:string){
  const r=await query<{RetentionDays:number|null}>("SELECT RetentionDays FROM dbo.TblWhatsAppRetentionPreference WHERE BusinessID=@businessId",scope(businessId));

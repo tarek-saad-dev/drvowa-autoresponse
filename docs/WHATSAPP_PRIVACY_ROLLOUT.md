@@ -30,3 +30,6 @@ SQL AI eligibility applies visibility, non-historical/non-purged status, mode an
 
 ## Workspace reset (114)
 Owner-only typed-confirmation reset hides all pre-reset WhatsApp history/contact-only chats and clears imported names, labels and conversation timeline fields. New allowed live events reappear; explicit private/removed policies remain. Old history permanently rejected after reset; CRM master records/ERP/billing/auth untouched. Pre-reset content remains stored pending offline `privacy:maintain BUSINESS_UUID reset` operation; no automatic physical erasure or full derived/backup purge. Existing in-flight sends and other direct reporting/notification surfaces need further review. V7 worker reset spool handling must be coordinated separately.
+
+## Reset cleanup progress and drain
+The owner reset preview now returns pending message and queued media counts and distinguishes PENDING from CONTENT_CLEANED (primary content only). An operator can explicitly drain at most 100 batches per run, after stopping ALL writers and verifying the real media directory, with `DRVO_PRIVACY_OFFLINE_MAINTENANCE=true npm run privacy:maintain -- BUSINESS_UUID reset --apply --drain`. Exit 2 means work remains; rerun only in verified offline maintenance. No production invocation, no automatic scheduling, no backup or complete identity erasure.
