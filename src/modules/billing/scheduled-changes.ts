@@ -3,7 +3,7 @@ import { sql, type TransactionClient } from "@/lib/db";
 import { ConflictError } from "@/lib/tenancy/errors";
 import type { ManualPaymentRequest, Subscription } from "@/types/domain";
 import * as repo from "./repository";
-import { addCalendarMonths } from "./subscription-period";
+import { addPaidBillingInterval } from "./subscription-period";
 
 const rank: Record<string, number> = { FREE: 0, STARTER: 1, PRO: 2, BUSINESS: 3 };
 export function isDowngrade(from: string, to: string): boolean {
@@ -44,7 +44,7 @@ export async function applyDueScheduledChange(current: Subscription, trx: Transa
   await repo.updateSubscriptionBillingFields({ subscriptionId: current.subscriptionId, status: "CANCELED" }, trx);
   const created = await repo.insertSubscription({ businessId: current.businessId, planId: plan.planId,
     periodStartUtc: change.EffectiveAtUtc,
-    periodEndUtc: change.Kind === "CANCEL" ? null : addCalendarMonths(change.EffectiveAtUtc, change.BillingInterval === "ANNUAL" ? 12 : 1),
+    periodEndUtc: change.Kind === "CANCEL" ? null : addPaidBillingInterval(change.EffectiveAtUtc, change.BillingInterval === "ANNUAL" ? "ANNUAL" : "MONTHLY"),
     providerName: change.Kind === "CANCEL" ? null : "INSTAPAY_MANUAL",
     billingInterval: change.BillingInterval === "ANNUAL" ? "ANNUAL" : "MONTHLY",
   }, trx);

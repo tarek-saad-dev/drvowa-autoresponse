@@ -29,7 +29,7 @@ import { generatePaymentReference } from "./payment-reference";
 import * as billingRepo from "./repository";
 import {
   computePaidSubscriptionPeriod,
-  isSubscriptionPeriodExpired,
+  gracePeriodEnded,
 } from "./subscription-period";
 import { reconcileExpiredPaidSubscription } from "./subscription-entitlement-lifecycle";
 import { captureApprovedManualPayment } from "./saas-financial-outbox";
@@ -485,22 +485,25 @@ export async function approveManualPayment(params: {
     }
 
     if (currentPlan?.code === PRIVATE_UNLIMITED_PLAN_CODE) throw new ConflictError("النشاط على Unlimited؛ راجع تسوية التحويل المالي بشكل منفصل، ولا تستبدل الباقة الخاصة");
+    const approvalAt = new Date();
     const samePlanRenewal = Boolean(
       current
       && currentPlan
       && currentPlan.code === locked.requestedPlanCode
-      && !isSubscriptionPeriodExpired({ periodEndUtc: current.periodEndUtc }),
+      && current.periodEndUtc
+      && !gracePeriodEnded(current.periodEndUtc, approvalAt),
     );
 
     const { periodStartUtc, periodEndUtc } = computePaidSubscriptionPeriod({
       samePlanRenewal,
       billingInterval: locked.billingInterval,
       currentPeriodEndUtc: current?.periodEndUtc,
+      now: approvalAt,
     });
 
     await assertNoScheduledChange(locked.businessId, trx);
     const scheduledDowngrade = !!(current && currentPlan && current.periodEndUtc
-      && current.periodEndUtc > new Date() && isDowngrade(currentPlan.code, locked.requestedPlanCode));
+      && current.periodEndUtc > approvalAt && isDowngrade(currentPlan.code, locked.requestedPlanCode));
     let subscription: Subscription;
     if (scheduledDowngrade) {
       await schedulePaidDowngrade(current!, locked, trx);

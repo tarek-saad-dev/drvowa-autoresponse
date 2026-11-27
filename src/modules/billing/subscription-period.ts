@@ -3,8 +3,8 @@
  * Distinct from usage-period calendar month windows in period.ts.
  *
  * Rules (V1 manual billing):
- * - Paid activation duration = 1 calendar month from a base instant.
- * - Same-plan renewal: if current paid PeriodEndUtc > now, extend FROM
+ * - Paid monthly activation duration = 30 elapsed days from a base instant.
+ * - Same-plan renewal: if current paid period has not passed its grace deadline, extend FROM
  *   existing PeriodEndUtc (customer does not lose remaining paid time).
  * - Upgrade to a different plan: period starts at approval time (no proration).
  */
@@ -30,6 +30,10 @@ export function addCalendarMonths(from: Date, months: number): Date {
  * @param currentPeriodEndUtc - existing PeriodEndUtc when renewing
  * @param now - approval / activation instant
  */
+export function addPaidBillingInterval(from: Date, interval: "MONTHLY" | "ANNUAL" = "MONTHLY"): Date {
+  return interval === "ANNUAL" ? addCalendarMonths(from, 12) : new Date(from.getTime() + 30 * 86400000);
+}
+
 export function computePaidSubscriptionPeriod(params: {
   billingInterval?: "MONTHLY" | "ANNUAL";
   samePlanRenewal: boolean;
@@ -40,17 +44,17 @@ export function computePaidSubscriptionPeriod(params: {
   if (
     params.samePlanRenewal
     && params.currentPeriodEndUtc
-    && params.currentPeriodEndUtc.getTime() > now.getTime()
+    && !gracePeriodEnded(params.currentPeriodEndUtc, now)
   ) {
     const periodStartUtc = params.currentPeriodEndUtc;
     return {
       periodStartUtc,
-      periodEndUtc: addCalendarMonths(periodStartUtc, params.billingInterval === "ANNUAL" ? 12 : 1),
+      periodEndUtc: addPaidBillingInterval(periodStartUtc, params.billingInterval),
     };
   }
   return {
     periodStartUtc: now,
-    periodEndUtc: addCalendarMonths(now, params.billingInterval === "ANNUAL" ? 12 : 1),
+    periodEndUtc: addPaidBillingInterval(now, params.billingInterval),
   };
 }
 
