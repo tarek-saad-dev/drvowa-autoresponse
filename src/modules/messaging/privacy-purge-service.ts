@@ -34,6 +34,11 @@ export async function purgeContentBatch(businessId:string,target:PurgeTarget){
 async function purgeBatch(businessId:string,target:PurgeTarget,online:boolean){
  return withTransaction(async trx=>{
  if(online)await lockPrivacyStorage(trx,businessId);
+ // A user can disable or change retention while a worker is waiting for the lock.
+ if(online&&target.kind==="retention"){
+  const preference=await trx.query<{RetentionDays:number}>("SELECT RetentionDays FROM dbo.TblWhatsAppRetentionPreference WHERE BusinessID=@businessId AND AutomaticEnabledAtUtc IS NOT NULL",scope(businessId));
+  if(preference.recordset[0]?.RetentionDays!==target.days||!automaticRetentionAvailable())return 0;
+ }
  const result=await trx.query<{Purged:number}>(`
  DECLARE @ids TABLE(MessageID uniqueidentifier PRIMARY KEY);
  INSERT INTO @ids SELECT TOP(100) m.MessageID FROM dbo.TblMessage m WITH(UPDLOCK,HOLDLOCK)
@@ -90,7 +95,7 @@ export async function drainResetCleanup(businessId:string,root:string,maxBatches
  }
  return {purged,deletedFiles,batches,remaining:await getResetCleanupStatus(businessId)};
 }
-// Only worker invokes this; never automatically purges general retention.
+// Separate owner-authorized reset worker.
 export async function runNextResetCleanup(){
  if(process.env.DRVO_PRIVACY_RESET_CLEANUP_ENABLED!=="true")return null;
  const root=process.env.DRVO_MEDIA_STORAGE_DIR;
@@ -112,8 +117,39 @@ export async function getRetentionPreference(businessId:string){
  const r=await query<{RetentionDays:number|null}>("SELECT RetentionDays FROM dbo.TblWhatsAppRetentionPreference WHERE BusinessID=@businessId",scope(businessId));
  return r.recordset[0]?.RetentionDays??null;
 }
-export async function saveRetentionPreference(businessId:string,days:number|null){
+export function automaticRetentionAvailable(){
+ const root=process.env.DRVO_MEDIA_STORAGE_DIR;
+ return process.env.DRVO_PRIVACY_RETENTION_ENABLED==="true"&&Boolean(root&&isAbsolute(root));
+}
+export async function getRetentionSettings(businessId:string){
+ const r=await query<{RetentionDays:number|null;AutomaticEnabledAtUtc:Date|null;CleanupAttemptAtUtc:Date|null}>("SELECT RetentionDays,AutomaticEnabledAtUtc,CleanupAttemptAtUtc FROM dbo.TblWhatsAppRetentionPreference WHERE BusinessID=@businessId",scope(businessId));
+ const row=r.recordset[0],days=row?.RetentionDays??null;
+ return {days,automatic:Boolean(days&&row?.AutomaticEnabledAtUtc),available:automaticRetentionAvailable(),enabledAt:row?.AutomaticEnabledAtUtc?.toISOString()??null,lastAttemptAt:row?.CleanupAttemptAtUtc?.toISOString()??null,preview:days===null?null:await previewContentPurge(businessId,{kind:"retention",days})};
+}
+export async function runNextRetentionCleanup(){
+ if(!automaticRetentionAvailable())return null;
+ const root=process.env.DRVO_MEDIA_STORAGE_DIR!;
+ const next=await query<{BusinessID:string;RetentionDays:number|null;AutomaticEnabledAtUtc:Date|null}>(`SELECT TOP(1) p.BusinessID,p.RetentionDays,p.AutomaticEnabledAtUtc FROM dbo.TblWhatsAppRetentionPreference p
+ WHERE (p.CleanupAttemptAtUtc IS NULL OR p.CleanupAttemptAtUtc<DATEADD(second,-30,SYSUTCDATETIME()))
+ AND ((p.AutomaticEnabledAtUtc IS NOT NULL AND p.RetentionDays IS NOT NULL AND EXISTS(
+ SELECT 1 FROM dbo.TblMessage m WHERE m.BusinessID=p.BusinessID AND m.PrivacyPurgedAtUtc IS NULL
+ AND m.CreatedAtUtc<DATEADD(day,-p.RetentionDays,SYSUTCDATETIME())
+ AND EXISTS(SELECT 1 FROM dbo.TblChannelConnection ch WHERE ch.BusinessID=m.BusinessID AND ch.ChannelConnectionID=m.ChannelConnectionID AND ch.Channel=N'WHATSAPP')))
+ OR EXISTS(SELECT 1 FROM dbo.TblWhatsAppMediaPurge q WHERE q.BusinessID=p.BusinessID AND q.DeletedAtUtc IS NULL))
+ ORDER BY p.CleanupAttemptAtUtc,p.BusinessID`);
+ const row=next.recordset[0];if(!row)return null;
+ await query("UPDATE dbo.TblWhatsAppRetentionPreference SET CleanupAttemptAtUtc=SYSUTCDATETIME() WHERE BusinessID=@businessId",scope(row.BusinessID));
+ const purged=row.AutomaticEnabledAtUtc&&row.RetentionDays!==null?await purgeBatch(row.BusinessID,{kind:"retention",days:row.RetentionDays},true):0;
+ // Already-queued files were authorized before the owner disabled retention.
+ const deletedFiles=await deleteMediaBatch(row.BusinessID,root,true);
+ return {purged,deletedFiles};
+}
+export async function saveRetentionPreference(businessId:string,days:number|null,automatic=false){
  if(days!==null&&!RETENTION_DAYS.some(d=>d===days))throw Error("INVALID_RETENTION_DAYS");
- await query("MERGE dbo.TblWhatsAppRetentionPreference WITH(HOLDLOCK) AS t USING(SELECT @businessId AS BusinessID) s ON t.BusinessID=s.BusinessID WHEN MATCHED THEN UPDATE SET RetentionDays=@days,UpdatedAtUtc=SYSUTCDATETIME() WHEN NOT MATCHED THEN INSERT(BusinessID,RetentionDays) VALUES(@businessId,@days);",[...scope(businessId),{name:"days",type:sql.Int,value:days}]);
+ if(automatic&&(days===null||!automaticRetentionAvailable()))throw Error("AUTOMATIC_RETENTION_UNAVAILABLE");
+ await withTransaction(async trx=>{
+  await lockPrivacyStorage(trx,businessId);
+  await trx.execute("MERGE dbo.TblWhatsAppRetentionPreference WITH(HOLDLOCK) AS t USING(SELECT @businessId AS BusinessID) s ON t.BusinessID=s.BusinessID WHEN MATCHED THEN UPDATE SET RetentionDays=@days,AutomaticEnabledAtUtc=CASE WHEN @automatic=1 THEN SYSUTCDATETIME() ELSE NULL END,CleanupAttemptAtUtc=NULL,UpdatedAtUtc=SYSUTCDATETIME() WHEN NOT MATCHED THEN INSERT(BusinessID,RetentionDays,AutomaticEnabledAtUtc) VALUES(@businessId,@days,CASE WHEN @automatic=1 THEN SYSUTCDATETIME() ELSE NULL END);",[...scope(businessId),{name:"days",type:sql.Int,value:days},{name:"automatic",type:sql.Bit,value:automatic}]);
+ });
  return days;
 }

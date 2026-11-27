@@ -19,7 +19,7 @@ import { runReliabilityAudit } from "../src/modules/reliability/service";
 import { scanWhatsAppIncidentAlerts } from "../src/modules/reliability/whatsapp-alert-service";
 import { scanPulseBatch } from "../src/modules/pulse/scanner";
 import { runPulseShadowBatch } from "../src/modules/pulse/shadow-worker";
-import { runNextResetCleanup } from "../src/modules/messaging/privacy-purge-service";
+import { runNextResetCleanup,runNextRetentionCleanup } from "../src/modules/messaging/privacy-purge-service";
 import { processNextCampaignDelivery } from "../src/modules/messaging/campaign-delivery-worker";
 import {
   resolveHeartbeatMs,
@@ -212,7 +212,15 @@ async function main(): Promise<void> {
   const resetCleanupTimer=setInterval(resetCleanupTick,10_000);
   resetCleanupTick();
 
+  let stoppingRetention=false;
+  let retentionTask:Promise<void>|null=null;
+  const retentionTick=()=>{
+    if(stoppingRetention||retentionTask||process.env.DRVO_PRIVACY_RETENTION_ENABLED!=="true")return;
+    retentionTask=runNextRetentionCleanup().then(result=>{if(result&&(result.purged||result.deletedFiles))console.info("[privacy-retention] batch",result);}).catch(error=>{console.warn("[privacy-retention] batch_failed",{code:error instanceof Error?error.name:"UNKNOWN"});}).finally(()=>{retentionTask=null;});
+  };
+  const retentionTimer=setInterval(retentionTick,30_000);retentionTick();
   const shutdown = () => {
+    stoppingRetention=true;clearInterval(retentionTimer);
     stoppingResetCleanup=true;
     clearInterval(resetCleanupTimer);
     stoppingNotifications = true;
@@ -234,7 +242,8 @@ async function main(): Promise<void> {
 
   const result = await runner.loop();
   stoppingResetCleanup=true;clearInterval(resetCleanupTimer);
-  if(result.reason!=="deadline_exceeded")await resetCleanupTask;
+  stoppingRetention=true;clearInterval(retentionTimer);
+  if(result.reason!=="deadline_exceeded")await Promise.all([resetCleanupTask,retentionTask]);
   stoppingNotifications = true;
   clearInterval(notificationTimer);
   stoppingCustomerHold = true;
