@@ -8,6 +8,7 @@ import {
   WhatsAppRuntimeError,
 } from "@/modules/channels/runtime-client";
 import { AdminWhatsAppDiagnostics } from "@/components/admin/admin-whatsapp-diagnostics";
+import { buildIncidentView, type IncidentView } from "@/modules/channels/incident-view";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,7 @@ export default async function AdminWhatsAppPage() {
       let live: {
         state: string | null;
         ready: boolean;
+        incidents: IncidentView | null;
         cryptoHealth: {
           status: string;
           plaintextInboundCount: number;
@@ -40,6 +42,7 @@ export default async function AdminWhatsAppPage() {
           live = {
             state: status.state ?? null,
             ready: Boolean(status.ready),
+            incidents: buildIncidentView(status.incidentMonitor),
             cryptoHealth: ch
               ? {
                   status: String(ch.status || ch.cryptoHealth || "UNKNOWN"),
@@ -92,9 +95,9 @@ export default async function AdminWhatsAppPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold">WhatsApp compatibility</h2>
+        <h2 className="text-xl font-semibold">WhatsApp reliability &amp; compatibility</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Phase 1 observation only — no automatic engine switching.
+          Live worker diagnostics and recent incidents. Refresh to get the latest sample; no automatic engine switching.
         </p>
       </div>
       <AdminWhatsAppDiagnostics rows={rows} />

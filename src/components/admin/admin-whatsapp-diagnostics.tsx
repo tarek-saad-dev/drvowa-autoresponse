@@ -1,3 +1,5 @@
+import type { IncidentView } from "@/modules/channels/incident-view";
+
 type LiveCrypto = {
   status: string;
   plaintextInboundCount: number;
@@ -25,6 +27,7 @@ export type AdminWhatsAppRow = {
   live: {
     state: string | null;
     ready: boolean;
+    incidents?: IncidentView | null;
     cryptoHealth: LiveCrypto | null;
     compatibilityStatus: string | null;
     recommendedRuntimeEngine: string | null;
@@ -52,12 +55,14 @@ export function AdminWhatsAppDiagnostics({
             <th className="px-3 py-2 font-medium">Runtime</th>
             <th className="px-3 py-2 font-medium">Compatibility</th>
             <th className="px-3 py-2 font-medium">Technical</th>
+            <th className="px-3 py-2 font-medium">Incidents</th>
             <th className="px-3 py-2 font-medium">Recommended</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => {
             const crypto = row.live?.cryptoHealth;
+            const incidents = row.live?.incidents;
             return (
               <tr
                 key={row.channelConnectionId}
@@ -123,6 +128,18 @@ export function AdminWhatsAppDiagnostics({
                   ) : (
                     <span className="text-muted-foreground">no live crypto</span>
                   )}
+                </td>
+                <td className="min-w-56 px-3 py-3 text-xs">
+                  {!incidents ? <span className="text-muted-foreground">Monitoring unavailable</span> : <>
+                    <p className={incidents.stale || incidents.active.length ? "font-bold text-warning" : "text-muted-foreground"}>
+                      {incidents.stale ? "Stale sample — refresh" : incidents.active.length ? String(incidents.active.length) + " active" : "No active incident observed"}
+                    </p>
+                    <p className="mt-1 text-muted-foreground">Sample: {incidents.lastSampleAt.slice(0, 19)} UTC</p>
+                    {incidents.active.map((i, index) => <div key={i.issue + index} className="mt-2 font-mono text-warning">{i.issue} · {Math.floor(i.durationMs / 1000)}s</div>)}
+                    {incidents.recent.length ? <details className="mt-2"><summary>Recent conditions cleared ({incidents.recent.length})</summary>
+                      {incidents.recent.map((i, index) => <p key={i.startedAt + i.issue + index} className="mt-1 font-mono">{i.issue} · {Math.floor(i.durationMs / 1000)}s · {i.endedAt.slice(0, 19)} UTC</p>)}
+                    </details> : null}
+                  </>}
                 </td>
                 <td className="px-3 py-3 font-mono text-xs">
                   {row.recommendedRuntimeEngine || "—"}
