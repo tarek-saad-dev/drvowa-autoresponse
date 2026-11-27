@@ -68,6 +68,10 @@ export type RuntimeAccountStatus = {
   linkedDestination?: string | null;
   runtimeEngine?: "BAILEYS_V6" | "BAILEYS_V7";
   cryptoHealth?: RuntimeCryptoHealth | null;
+  deliveryEvidence?: unknown;
+  peerCryptoHealth?: unknown;
+  socketRecovery?: unknown;
+  incidentMonitor?: unknown;
   compatibilityStatus?: string | null;
   compatibilityReason?: string | null;
   recommendedRuntimeEngine?: "BAILEYS_V6" | "BAILEYS_V7" | null;
