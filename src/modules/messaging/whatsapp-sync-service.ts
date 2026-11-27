@@ -147,7 +147,7 @@ export async function ingestWhatsAppSync(input: WhatsappSyncInput): Promise<{
            MediaFileName = COALESCE(MediaFileName,@fileName),
            MediaSizeBytes = COALESCE(MediaSizeBytes,@fileSize),
            QuotedProviderMessageID = COALESCE(QuotedProviderMessageID,@quoted)
-         WHERE BusinessID=@businessId AND MessageID=@messageId`,
+         WHERE BusinessID=@businessId AND MessageID=@messageId AND PrivacyPurgedAtUtc IS NULL`,
         [
           { name: "businessId", type: sql.UniqueIdentifier, value: channel.businessId },
           { name: "messageId", type: sql.UniqueIdentifier, value: insertedMessage.message.messageId },

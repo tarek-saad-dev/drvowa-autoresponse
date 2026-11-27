@@ -1004,6 +1004,7 @@ export async function listRecentTextMessages(params: {
        WHERE BusinessID = @businessId
          AND ConversationID = @conversationId
          AND ContentType = N'TEXT'
+         AND PrivacyPurgedAtUtc IS NULL
          AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)
        ORDER BY ISNULL(ProviderTimestampUtc, CreatedAtUtc) DESC, CreatedAtUtc DESC, MessageID DESC
      ) AS recent
@@ -1208,13 +1209,13 @@ export async function listConversationsForBusiness(params: {
         (
           SELECT TOP 1 m.TextContent
           FROM TblMessage m
-          WHERE m.BusinessID = c.BusinessID AND m.ConversationID = c.ConversationID
+          WHERE m.BusinessID = c.BusinessID AND m.ConversationID = c.ConversationID AND m.PrivacyPurgedAtUtc IS NULL
           ORDER BY ISNULL(m.ProviderTimestampUtc, m.CreatedAtUtc) DESC, m.CreatedAtUtc DESC
         ) AS LastMessagePreview,
         (
           SELECT TOP 1 m.Direction
           FROM TblMessage m
-          WHERE m.BusinessID = c.BusinessID AND m.ConversationID = c.ConversationID
+          WHERE m.BusinessID = c.BusinessID AND m.ConversationID = c.ConversationID AND m.PrivacyPurgedAtUtc IS NULL
           ORDER BY ISNULL(m.ProviderTimestampUtc, m.CreatedAtUtc) DESC, m.CreatedAtUtc DESC
         ) AS LastMessageDirection,
         ai.Mode AS AiMode,
@@ -1400,6 +1401,7 @@ export async function listMessagesForConversation(params: {
            FROM TblMessage
            WHERE BusinessID = @businessId
              AND ConversationID = @conversationId
+             AND PrivacyPurgedAtUtc IS NULL
              AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)
              AND (
                ISNULL(ProviderTimestampUtc, CreatedAtUtc) < @beforeAt
@@ -1431,6 +1433,7 @@ export async function listMessagesForConversation(params: {
            FROM TblMessage
            WHERE BusinessID = @businessId
              AND ConversationID = @conversationId
+             AND PrivacyPurgedAtUtc IS NULL
              AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)
            ORDER BY ISNULL(ProviderTimestampUtc, CreatedAtUtc) DESC,
                     CreatedAtUtc DESC,
