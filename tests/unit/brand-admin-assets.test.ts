@@ -114,6 +114,12 @@ describe("DRVO Super Admin Brand Assets without SQL migration", () => {
   });
 
   it("manages the navigation image independently from all brand and favicon slots", async () => {
+    const darkFallback = await getPublicBrandAsset(new Request("https://example.com/api/brand/assets/navigation?surface=dark"), { params: Promise.resolve({ variant: "navigation" }) });
+    expect(darkFallback.status).toBe(200);
+    expect(Buffer.from(await darkFallback.arrayBuffer())).toEqual(Buffer.from((await getPublishedBrandImage("primary-dark"))!.data));
+    const lightFallback = await getPublicBrandAsset(new Request("https://example.com/api/brand/assets/navigation-light"), { params: Promise.resolve({ variant: "navigation-light" }) });
+    expect(lightFallback.status).toBe(307);
+    expect(lightFallback.headers.get("location")).toBe("https://example.com/brand/logo-on-light.png");
     const navigationId = await stageBrandAsset({
       variant: "navigation", file: file("nav-only.png", minimalPng()), userId: "test-super-admin",
     });
