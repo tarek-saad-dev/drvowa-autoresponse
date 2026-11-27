@@ -18,8 +18,13 @@ try{
   if(process.argv.length!==3||process.argv[2]!=="--rollback-only-without-backup")throw Error("RECENT_CHECKSUM_FULL_BACKUP_REQUIRED");
   console.warn("WARNING: no recent verified backup; rollback-only rehearsal explicitly authorized. No commit path.");
  }
- const log=(await pool.request().query("SELECT total_log_size_in_bytes,used_log_space_in_bytes,used_log_space_in_percent FROM sys.dm_db_log_space_usage")).recordset[0];
- emit("TRANSACTION_LOG_BEFORE",log);
+ try {
+  const log=(await pool.request().query("SELECT total_log_size_in_bytes,used_log_space_in_bytes,used_log_space_in_percent FROM sys.dm_db_log_space_usage")).recordset[0];
+  emit("TRANSACTION_LOG_BEFORE",log);
+ } catch(error) {
+  if(![229,297,300].includes(Number(error?.number)))throw error;
+  console.warn("TRANSACTION_LOG_METRICS_UNAVAILABLE: existing SQL permissions retained; check filesystem free space separately");
+ }
  await trx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);begun=true;
  await q("SET XACT_ABORT ON; SET LOCK_TIMEOUT 10000;");
  const businesses=await q("SELECT BusinessID,Name,Status FROM dbo.TblBusiness ORDER BY Name");
