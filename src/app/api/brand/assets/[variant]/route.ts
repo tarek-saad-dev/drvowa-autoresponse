@@ -17,13 +17,17 @@ const fallback: Record<string, string> = {
 export async function GET(request: Request, ctx: { params: Promise<{ variant: string }> }) {
   const { variant } = await ctx.params;
   if (!isBrandVariant(variant)) return new Response("Not found", { status: 404 });
-  // Until a navigation-only logo is published, preserve the active theme-aware
-  // logo already used by the dashboard. Other brand variants stay unchanged.
-  const fallbackVariant = variant === "navigation"
-    ? new URL(request.url).searchParams.get("surface") === "light" ? "primary-light" : "primary-dark"
+  // Keep old URLs and the previously published shared navigation image working.
+  // A theme-specific publication overrides only that theme.
+  const navigationVariant = variant === "navigation"
+    ? new URL(request.url).searchParams.get("surface") === "light" ? "navigation-light" : "navigation-dark"
+    : variant === "navigation-light" || variant === "navigation-dark" ? variant : null;
+  const fallbackVariant = navigationVariant
+    ? navigationVariant === "navigation-light" ? "primary-light" : "primary-dark"
     : null;
   try {
-    const asset = (await getPublishedBrandImage(variant)) ??
+    const asset = (await getPublishedBrandImage(navigationVariant ?? variant)) ??
+      (navigationVariant ? await getPublishedBrandImage("navigation") : null) ??
       (fallbackVariant ? await getPublishedBrandImage(fallbackVariant) : null);
     if (asset) {
       return new Response(Uint8Array.from(asset.data), {
@@ -37,7 +41,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ variant: st
       });
     }
   } catch (error) {
-    // Preserve the bundled logo if DB is briefly unavailable.
+    // Preserve the bundled logo if asset storage is briefly unavailable.
     console.error("[brand] published asset lookup failed", error instanceof Error ? error.name : "unknown");
   }
   const response = NextResponse.redirect(new URL(fallback[fallbackVariant ?? variant], request.url), { status: 307 });

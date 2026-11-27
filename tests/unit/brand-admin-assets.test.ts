@@ -10,6 +10,8 @@ import {
   isBrandVariant, listBrandAssets, stageBrandAsset, validateBrandImage,
 } from "@/modules/brand/assets";
 
+import { GET as getPublicBrandAsset } from "@/app/api/brand/assets/[variant]/route";
+
 const source = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 const page = source("src/app/admin/brand-assets/page.tsx");
 const adminNav = source("src/components/admin/admin-navigation.tsx");
@@ -48,8 +50,8 @@ afterAll(async () => {
 });
 
 describe("DRVO Super Admin Brand Assets without SQL migration", () => {
-  it("supports the five known variants and rejects path traversal", () => {
-    expect(BRAND_VARIANTS).toEqual(["primary-dark", "primary-light", "compact", "stacked", "icon", "navigation"]);
+  it("supports all known variants and rejects path traversal", () => {
+    expect(BRAND_VARIANTS).toEqual(["primary-dark", "primary-light", "compact", "stacked", "icon", "navigation", "navigation-light", "navigation-dark"]);
     for (const variant of BRAND_VARIANTS) expect(isBrandVariant(variant)).toBe(true);
     for (const invalid of ["../../../etc", "favicon.svg", "__proto__", "", "primary-light/../icon"]) {
       expect(isBrandVariant(invalid)).toBe(false);
@@ -112,6 +114,12 @@ describe("DRVO Super Admin Brand Assets without SQL migration", () => {
   });
 
   it("manages the navigation image independently from all brand and favicon slots", async () => {
+    const darkFallback = await getPublicBrandAsset(new Request("https://example.com/api/brand/assets/navigation?surface=dark"), { params: Promise.resolve({ variant: "navigation" }) });
+    expect(darkFallback.status).toBe(200);
+    expect(Buffer.from(await darkFallback.arrayBuffer())).toEqual(Buffer.from((await getPublishedBrandImage("primary-dark"))!.data));
+    const lightFallback = await getPublicBrandAsset(new Request("https://example.com/api/brand/assets/navigation-light"), { params: Promise.resolve({ variant: "navigation-light" }) });
+    expect(lightFallback.status).toBe(307);
+    expect(lightFallback.headers.get("location")).toBe("https://example.com/brand/logo-on-light.png");
     const navigationId = await stageBrandAsset({
       variant: "navigation", file: file("nav-only.png", minimalPng()), userId: "test-super-admin",
     });
@@ -125,9 +133,52 @@ describe("DRVO Super Admin Brand Assets without SQL migration", () => {
     expect(await getPublishedBrandImage("primary-light")).toBeNull();
     expect(brandLogo).toContain('navigation ? `/api/brand/assets/navigation?surface=${surface}` : logo.src');
     expect(dashboardTopbar).toContain("<BrandLogo navigation priority");
-    expect(adminAssets).toContain('id: "navigation"');
+    expect(adminAssets).toContain('id: "navigation-light"');
+    expect(adminAssets).toContain('id: "navigation-dark"');
     expect(publicRoute).toContain('variant === "navigation"');
     expect(publicRoute).toContain("fallbackVariant");
+  });
+
+  it("serves independent theme-specific navigation publications, preserving legacy and primary fallback", async () => {
+    const responseFor = (variant: string, query = "") => getPublicBrandAsset(
+      new Request("https://example.com/api/brand/assets/" + variant + query),
+      { params: Promise.resolve({ variant }) },
+    );
+    const bytesFor = async (variant: string, query = "") => {
+      const response = await responseFor(variant, query);
+      expect(response.status).toBe(200);
+      return Buffer.from(await response.arrayBuffer());
+    };
+    const legacy = await getPublishedBrandImage("navigation");
+    expect(legacy).not.toBeNull();
+    const legacyBytes = Buffer.from(legacy!.data);
+    const light = minimalPng();
+    light.writeUInt32BE(7, 16);
+    const dark = minimalPng();
+    dark.writeUInt32BE(8, 16);
+    const lightId = await stageBrandAsset({ variant: "navigation-light", file: file("light.png", light), userId: "test-super-admin" });
+    const darkId = await stageBrandAsset({ variant: "navigation-dark", file: file("dark.png", dark), userId: "test-super-admin" });
+    expect(await bytesFor("navigation", "?surface=light")).toEqual(legacyBytes);
+    expect(await bytesFor("navigation-dark")).toEqual(legacyBytes);
+    await activateBrandAsset(lightId);
+    expect(await bytesFor("navigation", "?surface=light")).toEqual(light);
+    expect(await bytesFor("navigation-light")).toEqual(light);
+    expect(await bytesFor("navigation", "?surface=dark")).toEqual(legacyBytes);
+    await activateBrandAsset(darkId);
+    expect(await bytesFor("navigation", "?surface=dark")).toEqual(dark);
+    expect(await bytesFor("navigation-dark")).toEqual(dark);
+    expect(await bytesFor("navigation-light")).toEqual(light);
+    const replacement = minimalPng();
+    replacement.writeUInt32BE(9, 16);
+    const replacementId = await stageBrandAsset({ variant: "navigation-dark", file: file("dark-new.png", replacement), userId: "test-super-admin" });
+    await activateBrandAsset(replacementId);
+    expect(await bytesFor("navigation-dark")).toEqual(replacement);
+    await activateBrandAsset(darkId);
+    expect(await bytesFor("navigation-dark")).toEqual(dark);
+    expect(await bytesFor("navigation-light")).toEqual(light);
+    expect(await getPublishedBrandImage("primary-light")).toBeNull();
+    expect((await listBrandAssets()).find((asset) => asset.variant === "primary-dark" && asset.active)).toBeDefined();
+    expect(Buffer.from((await getPublishedBrandImage("navigation"))!.data)).toEqual(legacyBytes);
   });
 
   it("never imports SQL or creates database migration paths", () => {

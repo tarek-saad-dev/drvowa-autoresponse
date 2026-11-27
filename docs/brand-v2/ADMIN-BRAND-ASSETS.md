@@ -4,11 +4,11 @@
 
 Visit `https://app.drvotech.com/admin/brand-assets` while logged in as an active `SUPER_ADMIN` account, then open **الهوية واللوجوهات** in the Admin navigation.
 
-1. Upload one of the five slots: `primary-dark`, `primary-light`, `compact`, `stacked`, `icon`.
+1. Upload one of seven UI slots: `navigation-light`, `navigation-dark`, `primary-dark`, `primary-light`, `compact`, `stacked`, `icon`. The first two control only the dashboard navigation for their respective themes.
 2. Allowed formats: PNG, JPG or WebP, maximum 2 MiB per file; SVG is disabled. Preview the uploaded image as a **draft**.
 3. Choose **اعتماد ونشر** and confirm to make it public. The previous published image becomes available in history.
 4. To roll back, publish a prior version. An active image cannot be deleted; inactive versions can be removed.
-5. Existing bundled DRVO logo images remain the fallback when no version is published. The icon slot falls back to `/favicon.ico`. Refresh open tabs after a publish.
+5. Existing bundled DRVO logo images remain the fallback when no version is published. The icon slot falls back to `/favicon.ico`. Refresh open tabs after a publish. Navigation resolves the theme-specific approved image first, then the legacy shared `navigation` publication, then the matching primary logo (published or bundled). Existing shared assets stay stored for compatibility; new uploads use the two independent slots. The existing `/api/brand/assets/navigation?surface=light|dark` URLs continue to work.
 
 Only `SUPER_ADMIN` can list/upload/publish/delete or preview drafts. Other admin roles do not see the nav tab. Unauthenticated/unauthorized API requests are rejected.
 
@@ -44,4 +44,4 @@ Do not merge full Brand V2 PR #121 on top of this branch: its SQL Brand Asset im
 
 ## Verification
 
-CI runs TypeScript, production build, full unit suite, payment/financial SQL tests and WhatsApp source isolation. A temporary-directory filesystem test covers draft, publication, deletion guard and rollback; static contract tests check server admin authorization and fallback. After deploy, validate on a controlled Super Admin account by uploading a real PNG, confirming draft-only visibility, publishing it, observing the logo on public/auth/dashboard, and rolling back. No logo is automatically published by the deployment.
+CI runs TypeScript, production build, full unit suite, payment/financial SQL tests and WhatsApp source isolation. A temporary-directory filesystem test covers draft, publication, deletion guard and rollback; static contract tests check server admin authorization and fallback. After deploy, validate on a controlled Super Admin account by uploading a real PNG, confirming draft-only visibility, publishing it, observing the logo on public/auth/dashboard, and rolling back. Upload and publish each navigation theme separately, then switch themes and confirm the other theme and primary logos remain unchanged. No logo is automatically published by the deployment.
