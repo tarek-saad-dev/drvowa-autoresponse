@@ -1475,7 +1475,7 @@ export function InboxPanel({
                                     {outgoing && (
                                       <div className="mb-1 flex items-center gap-1.5 text-[10px] font-bold opacity-70">
                                         <Glyph name={m.origin === "AI" ? "bot" : "check"} size={13} />
-                                        {m.origin === "AI" ? "الموظف الذكي" : m.origin === "HUMAN" ? (m.actorName || "الفريق") : "رسالة صادرة"}
+                                        {m.origin === "AI" ? "الموظف الذكي" : m.origin === "HUMAN" ? (m.actorName || "الفريق") : m.origin === "SYSTEM" && m.actorName === "OTP" ? "رمز تحقق · النظام" : "رسالة صادرة"}
                                       </div>
                                     )}
                                     {m.isHistorical && <span className="mb-1 block text-[9px] opacity-65">من سجل واتساب السابق</span>}
