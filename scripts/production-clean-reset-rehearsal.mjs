@@ -1,4 +1,4 @@
-// ROLLBACK-ONLY rehearsal. No commit path. Run after a verified current backup and during a maintenance window.
+// ROLLBACK-ONLY rehearsal. No commit path. Explicit no-backup override is limited to rehearsal, never a permanent reset.
 import sql from "mssql";
 import { createHash } from "node:crypto";
 const KEEP="C9413A3E-DC87-4A70-BC6E-D00D76F9066B";
@@ -14,7 +14,12 @@ const id=n=>"["+String(n).replaceAll("]","]]")+"]";
 const emit=(label,value)=>console.log(label+" "+JSON.stringify(value));
 try{
  const backup=(await pool.request().query("SELECT TOP(1) backup_finish_date Finished FROM msdb.dbo.backupset WHERE database_name=DB_NAME() AND type='D' AND is_damaged=0 AND has_backup_checksums=1 AND backup_finish_date>=DATEADD(hour,-2,GETDATE()) ORDER BY backup_finish_date DESC")).recordset[0];
- if(!backup)throw Error("RECENT_CHECKSUM_FULL_BACKUP_REQUIRED");
+ if(!backup){
+  if(process.argv.length!==3||process.argv[2]!=="--rollback-only-without-backup")throw Error("RECENT_CHECKSUM_FULL_BACKUP_REQUIRED");
+  console.warn("WARNING: no recent verified backup; rollback-only rehearsal explicitly authorized. No commit path.");
+ }
+ const log=(await pool.request().query("SELECT total_log_size_in_bytes,used_log_space_in_bytes,used_log_space_in_percent FROM sys.dm_db_log_space_usage")).recordset[0];
+ emit("TRANSACTION_LOG_BEFORE",log);
  await trx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);begun=true;
  await q("SET XACT_ABORT ON; SET LOCK_TIMEOUT 10000;");
  const businesses=await q("SELECT BusinessID,Name,Status FROM dbo.TblBusiness ORDER BY Name");
@@ -57,9 +62,9 @@ try{
  if(hash!=="c423874f8ded8743e398d93d05352ddafb2be4996ccf5e99078afd3a05db5700")throw Error("SCHEMA_PLAN_CHANGED");
  if(unclassified.length)throw Error("UNCLASSIFIED_NONEMPTY_TABLES");
  const activeTriggers=await q("SELECT OBJECT_NAME(parent_id) TableName,name TriggerName FROM sys.triggers WHERE parent_class=1 AND is_disabled=0");
- if(activeTriggers.some(x=>rules.has(x.TableName)))throw Error("ENABLED_DML_TRIGGER_REVIEW_REQUIRED");
+ if(activeTriggers.some(x=>rules.has(x.TableName))){emit("BLOCKING_TRIGGERS",activeTriggers.filter(x=>rules.has(x.TableName)));throw Error("ENABLED_DML_TRIGGER_REVIEW_REQUIRED");}
  const unsafeFk=await q("SELECT name FROM sys.foreign_keys WHERE is_disabled=1 OR is_not_trusted=1 OR delete_referential_action<>0 OR update_referential_action<>0");
- if(unsafeFk.length)throw Error("FK_TRUST_OR_CASCADE_REVIEW_REQUIRED");
+ if(unsafeFk.length){emit("BLOCKING_FKS",unsafeFk);throw Error("FK_TRUST_OR_CASCADE_REVIEW_REQUIRED");}
  const external=await q("SELECT DeliveryState,EventType,COUNT(*) AS [Rows] FROM dbo.TblSaasFinancialOutbox GROUP BY DeliveryState,EventType");
  if(external.some(x=>x.DeliveryState!=="ACCEPTED"))throw Error("UNSETTLED_FINANCIAL_OUTBOX");
  emit("EXTERNAL_OUTBOX",external);
