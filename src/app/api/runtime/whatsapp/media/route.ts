@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { query, sql } from "@/lib/db";
+import { lockPrivacyStorage } from "@/modules/messaging/privacy-storage-lock";
+import { query, sql, withTransaction } from "@/lib/db";
 import { requireRuntimeBearer } from "@/lib/api/runtime-auth";
 import { handleApiError, jsonError, jsonOk } from "@/lib/api/http";
 import { blocksPrivateContact } from "@/modules/messaging/private-contact-service";
@@ -59,13 +60,20 @@ export async function POST(request: Request) {
     const bytes = Buffer.concat(chunks.map(chunk=>Buffer.from(chunk)));
     const key = createHash("sha256").update(channel.channelConnectionId + ":" + providerId).digest("hex");
     const folder = process.env.DRVO_MEDIA_STORAGE_DIR || join(process.cwd(), "data", "whatsapp-media");
+    return withTransaction(async trx=>{
+    await lockPrivacyStorage(trx,channel.businessId);
+    const latest=await trx.query<{MediaStorageKey:string|null;IsCurrent:boolean}>(`SELECT m.MediaStorageKey,CAST(CASE WHEN EXISTS(SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=m.BusinessID AND cm.MessageID=m.MessageID)
+     AND EXISTS(SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=m.BusinessID AND pv.ConversationID=m.ConversationID) THEN 1 ELSE 0 END AS bit) IsCurrent
+     FROM dbo.TblMessage m WITH(UPDLOCK,HOLDLOCK) WHERE m.BusinessID=@businessId AND m.ChannelConnectionID=@channelId AND m.ProviderMessageID=@providerId`,params);
+    if(!latest.recordset[0]?.IsCurrent)return jsonOk({stored:false,ignored:true});
+    if(latest.recordset[0].MediaStorageKey)return jsonOk({stored:true,duplicate:true});
     await mkdir(folder, { recursive: true, mode: 0o700 });
     const temp = join(folder, "." + randomUUID());
     try {
       await writeFile(temp, bytes, { mode: 0o600 });
       await rename(temp, join(folder, key));
     } finally { await rm(temp, { force: true }).catch(() => {}); }
-    await query(
+    const updated=await trx.execute(
       "UPDATE dbo.TblMessage SET MediaStorageKey=@key, MediaMimeType=@mime, MediaFileName=COALESCE(MediaFileName,@name), MediaSizeBytes=@size WHERE BusinessID=@businessId AND ChannelConnectionID=@channelId AND ProviderMessageID=@providerId AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=TblMessage.BusinessID AND cm.MessageID=TblMessage.MessageID)",
       [...params,
         { name: "key", type: sql.NVarChar(128), value: key },
@@ -74,6 +82,8 @@ export async function POST(request: Request) {
         { name: "size", type: sql.BigInt, value: size },
       ],
     );
+    if(updated!==1){await rm(join(folder,key),{force:true});return jsonOk({stored:false,ignored:true});}
     return jsonOk({ stored: true, size });
+    });
   } catch (error) { return handleApiError(error); }
 }

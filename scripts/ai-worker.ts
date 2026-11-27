@@ -19,6 +19,7 @@ import { runReliabilityAudit } from "../src/modules/reliability/service";
 import { scanWhatsAppIncidentAlerts } from "../src/modules/reliability/whatsapp-alert-service";
 import { scanPulseBatch } from "../src/modules/pulse/scanner";
 import { runPulseShadowBatch } from "../src/modules/pulse/shadow-worker";
+import { runNextResetCleanup } from "../src/modules/messaging/privacy-purge-service";
 import { processNextCampaignDelivery } from "../src/modules/messaging/campaign-delivery-worker";
 import {
   resolveHeartbeatMs,
@@ -200,7 +201,20 @@ async function main(): Promise<void> {
   const campaignTimer = setInterval(() => void campaignTick(), 10_000);
   void campaignTick();
 
+  let stoppingResetCleanup=false;
+  let resetCleanupTask:Promise<void>|null=null;
+  const resetCleanupTick=()=>{
+    if(stoppingResetCleanup||resetCleanupTask||process.env.DRVO_PRIVACY_RESET_CLEANUP_ENABLED!=="true")return;
+    resetCleanupTask=runNextResetCleanup().then(result=>{
+      if(result&&(result.purged||result.deletedFiles))console.info("[privacy-reset] batch",result);
+    }).catch(error=>{console.warn("[privacy-reset] batch_failed",{code:error instanceof Error?error.name:"UNKNOWN"});}).finally(()=>{resetCleanupTask=null;});
+  };
+  const resetCleanupTimer=setInterval(resetCleanupTick,10_000);
+  resetCleanupTick();
+
   const shutdown = () => {
+    stoppingResetCleanup=true;
+    clearInterval(resetCleanupTimer);
     stoppingNotifications = true;
     clearInterval(notificationTimer);
     stoppingCustomerHold = true;
@@ -219,6 +233,8 @@ async function main(): Promise<void> {
   process.once("SIGTERM", shutdown);
 
   const result = await runner.loop();
+  stoppingResetCleanup=true;clearInterval(resetCleanupTimer);
+  if(result.reason!=="deadline_exceeded")await resetCleanupTask;
   stoppingNotifications = true;
   clearInterval(notificationTimer);
   stoppingCustomerHold = true;

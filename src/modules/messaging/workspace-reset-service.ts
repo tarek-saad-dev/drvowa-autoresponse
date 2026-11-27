@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { query,sql,withTransaction } from "@/lib/db";
+import {lockPrivacyStorage} from "./privacy-storage-lock";
 import {getResetCleanupStatus} from "./privacy-purge-service";
 const scope=(businessId:string)=>[{name:"businessId",type:sql.UniqueIdentifier,value:businessId}];
 const wa=(a:string)=>`EXISTS(SELECT 1 FROM dbo.TblChannelConnection ch WHERE ch.BusinessID=${a}.BusinessID AND ch.ChannelConnectionID=${a}.ChannelConnectionID AND ch.Channel=N'WHATSAPP')`;
@@ -18,11 +19,12 @@ export async function previewWorkspaceReset(businessId:string){
 export async function resetWhatsAppWorkspace(businessId:string){
  const id=randomUUID();
  await withTransaction(async trx=>{
+  await lockPrivacyStorage(trx,businessId);
   const params=[...scope(businessId),{name:"resetId",type:sql.UniqueIdentifier,value:id}];
   await trx.execute(`
   DECLARE @now datetime2=SYSUTCDATETIME();
   MERGE dbo.TblWhatsAppWorkspaceReset WITH(HOLDLOCK) AS t USING(SELECT @businessId AS BusinessID) s ON t.BusinessID=s.BusinessID
-  WHEN MATCHED THEN UPDATE SET ResetAtUtc=@now,ResetID=@resetId
+  WHEN MATCHED THEN UPDATE SET ResetAtUtc=@now,ResetID=@resetId,CleanupAttemptAtUtc=NULL
   WHEN NOT MATCHED THEN INSERT(BusinessID,ResetAtUtc,ResetID) VALUES(@businessId,@now,@resetId);
   UPDATE dbo.TblChannelConnection SET WhatsAppHistoryImportEnabled=0,UpdatedAtUtc=@now WHERE BusinessID=@businessId AND Channel=N'WHATSAPP';
   -- Preserve existing operating mode and approval lists, but fence old AI jobs.
