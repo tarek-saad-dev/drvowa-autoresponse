@@ -4,8 +4,8 @@ import { previewContentPurge,purgeContentBatch,deleteQueuedMedia,getRetentionPre
 async function main(){
  const args=process.argv.slice(2);
  const businessId=args[0];
- if(!businessId||! /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(businessId)||!["removed","retention"].includes(args[1])||args.slice(2).some(a=>a!=="--apply"))throw Error("Usage: privacy:maintain BUSINESS_UUID removed|retention [--apply]");
- let target:PurgeTarget={kind:"removed"};
+ if(!businessId||! /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(businessId)||!["removed","retention","reset"].includes(args[1])||args.slice(2).some(a=>a!=="--apply"))throw Error("Usage: privacy:maintain BUSINESS_UUID removed|retention|reset [--apply]");
+ let target:PurgeTarget=args[1]==="reset"?{kind:"reset"}:{kind:"removed"};
  if(args[1]==="retention"){
   const days=await getRetentionPreference(businessId);
   if(days===null)throw Error("NO_RETENTION_PREFERENCE");

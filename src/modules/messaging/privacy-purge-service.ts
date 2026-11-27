@@ -2,10 +2,11 @@ import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { query,sql,withTransaction } from "@/lib/db";
 export const RETENTION_DAYS=[7,30,90,180,365] as const;
-export type PurgeTarget={kind:"removed"}|{kind:"retention";days:number};
+export type PurgeTarget={kind:"removed"}|{kind:"reset"}|{kind:"retention";days:number};
 const scope=(businessId:string)=>[{name:"businessId",type:sql.UniqueIdentifier,value:businessId}];
 function filter(target:PurgeTarget){
  if(target.kind==="removed")return "EXISTS (SELECT 1 FROM dbo.TblWhatsAppRemovedContact r JOIN dbo.TblContact ct ON ct.BusinessID=r.BusinessID AND ct.PhoneNormalized=r.PhoneNormalized WHERE r.BusinessID=m.BusinessID AND ct.ContactID=m.ContactID)";
+ if(target.kind==="reset")return "EXISTS (SELECT 1 FROM dbo.TblWhatsAppWorkspaceReset rr WHERE rr.BusinessID=m.BusinessID AND (m.IsHistorical=1 OR m.CreatedAtUtc<rr.ResetAtUtc OR COALESCE(m.ProviderTimestampUtc,m.ReceivedAtUtc)<rr.ResetAtUtc))";
  if(!RETENTION_DAYS.some(d=>d===target.days))throw Error("INVALID_RETENTION_DAYS");
  return "m.CreatedAtUtc<DATEADD(day,-@days,SYSUTCDATETIME())";
 }

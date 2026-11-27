@@ -34,6 +34,7 @@ type ChannelRow = {
   IsActive: boolean | number;
   RuntimeEngine?: string | null;
   WhatsAppHistoryImportEnabled?: boolean | number | null;
+  WhatsAppResetAtUtc?: Date | null;
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
@@ -127,6 +128,7 @@ function mapChannel(row: ChannelRow): ChannelConnection {
     isActive: Boolean(row.IsActive),
     runtimeEngine: row.RuntimeEngine === "BAILEYS_V7" ? "BAILEYS_V7" : "BAILEYS_V6",
     whatsappHistoryImportEnabled: row.WhatsAppHistoryImportEnabled == null ? null : Boolean(row.WhatsAppHistoryImportEnabled),
+    whatsappResetAtUtc: row.WhatsAppResetAtUtc ?? null,
     compatibilityStatus: null,
     compatibilityReason: null,
     compatibilityUpdatedAt: null,
@@ -212,6 +214,7 @@ export async function resolveChannelByExternalAccountKey(
             ExternalAccountKey, DisplayName, MaskedPhone, Status, IsActive,
             ISNULL(RuntimeEngine, N'BAILEYS_V6') AS RuntimeEngine,
             WhatsAppHistoryImportEnabled,
+            (SELECT rr.ResetAtUtc FROM dbo.TblWhatsAppWorkspaceReset rr WHERE rr.BusinessID=TblChannelConnection.BusinessID) AS WhatsAppResetAtUtc,
             CreatedAtUtc, UpdatedAtUtc
      FROM TblChannelConnection
      WHERE Channel = N'WHATSAPP'
@@ -969,7 +972,7 @@ export async function getMessageForBusiness(params: {
             Origin, ActorUserID, ActorName,
             ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
      FROM TblMessage
-     WHERE BusinessID = @businessId AND MessageID = @messageId AND PrivacyPurgedAtUtc IS NULL AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)`,
+     WHERE BusinessID = @businessId AND MessageID = @messageId AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=TblMessage.BusinessID AND cm.MessageID=TblMessage.MessageID) AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)`,
     [
       {
         name: "businessId",
@@ -1004,7 +1007,7 @@ export async function listRecentTextMessages(params: {
        WHERE BusinessID = @businessId
          AND ConversationID = @conversationId
          AND ContentType = N'TEXT'
-         AND PrivacyPurgedAtUtc IS NULL
+         AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=TblMessage.BusinessID AND cm.MessageID=TblMessage.MessageID)
          AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)
        ORDER BY ISNULL(ProviderTimestampUtc, CreatedAtUtc) DESC, CreatedAtUtc DESC, MessageID DESC
      ) AS recent
@@ -1209,13 +1212,13 @@ export async function listConversationsForBusiness(params: {
         (
           SELECT TOP 1 m.TextContent
           FROM TblMessage m
-          WHERE m.BusinessID = c.BusinessID AND m.ConversationID = c.ConversationID AND m.PrivacyPurgedAtUtc IS NULL
+          WHERE m.BusinessID = c.BusinessID AND m.ConversationID = c.ConversationID AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=m.BusinessID AND cm.MessageID=m.MessageID)
           ORDER BY ISNULL(m.ProviderTimestampUtc, m.CreatedAtUtc) DESC, m.CreatedAtUtc DESC
         ) AS LastMessagePreview,
         (
           SELECT TOP 1 m.Direction
           FROM TblMessage m
-          WHERE m.BusinessID = c.BusinessID AND m.ConversationID = c.ConversationID AND m.PrivacyPurgedAtUtc IS NULL
+          WHERE m.BusinessID = c.BusinessID AND m.ConversationID = c.ConversationID AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=m.BusinessID AND cm.MessageID=m.MessageID)
           ORDER BY ISNULL(m.ProviderTimestampUtc, m.CreatedAtUtc) DESC, m.CreatedAtUtc DESC
         ) AS LastMessageDirection,
         ai.Mode AS AiMode,
@@ -1245,7 +1248,7 @@ export async function listConversationsForBusiness(params: {
           FROM TblMessage mo
           WHERE mo.BusinessID = c.BusinessID
             AND mo.ConversationID = c.ConversationID
-            AND mo.Direction = N'OUTBOUND' AND mo.IsHistorical=0 AND mo.PrivacyPurgedAtUtc IS NULL
+            AND mo.Direction = N'OUTBOUND' AND mo.IsHistorical=0 AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=mo.BusinessID AND cm.MessageID=mo.MessageID)
             AND mo.CreatedAtUtc >= li.CreatedAtUtc
         ) THEN 1 ELSE 0 END AS AnsweredAfterLastInbound,
         lj.Status AS LastInboundJobStatus,
@@ -1264,7 +1267,7 @@ export async function listConversationsForBusiness(params: {
        FROM TblMessage m
        WHERE m.BusinessID = c.BusinessID
          AND m.ConversationID = c.ConversationID
-         AND m.Direction = N'INBOUND' AND m.IsHistorical=0 AND m.PrivacyPurgedAtUtc IS NULL
+         AND m.Direction = N'INBOUND' AND m.IsHistorical=0 AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=m.BusinessID AND cm.MessageID=m.MessageID)
        ORDER BY m.CreatedAtUtc DESC
      ) li
      OUTER APPLY (
@@ -1401,7 +1404,7 @@ export async function listMessagesForConversation(params: {
            FROM TblMessage
            WHERE BusinessID = @businessId
              AND ConversationID = @conversationId
-             AND PrivacyPurgedAtUtc IS NULL
+             AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=TblMessage.BusinessID AND cm.MessageID=TblMessage.MessageID)
              AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)
              AND (
                ISNULL(ProviderTimestampUtc, CreatedAtUtc) < @beforeAt
@@ -1433,7 +1436,7 @@ export async function listMessagesForConversation(params: {
            FROM TblMessage
            WHERE BusinessID = @businessId
              AND ConversationID = @conversationId
-             AND PrivacyPurgedAtUtc IS NULL
+             AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=TblMessage.BusinessID AND cm.MessageID=TblMessage.MessageID)
              AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)
            ORDER BY ISNULL(ProviderTimestampUtc, CreatedAtUtc) DESC,
                     CreatedAtUtc DESC,
@@ -1499,7 +1502,7 @@ export async function countMessagesForBusiness(params: {
   businessId: string;
 }): Promise<number> {
   const result = await query<{ Cnt: number }>(
-    `SELECT COUNT(1) AS Cnt FROM TblMessage WHERE BusinessID = @businessId AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)`,
+    `SELECT COUNT(1) AS Cnt FROM TblMessage WHERE BusinessID = @businessId AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=TblMessage.BusinessID AND cm.MessageID=TblMessage.MessageID) AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)`,
     [
       {
         name: "businessId",

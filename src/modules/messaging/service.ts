@@ -18,6 +18,7 @@ import {
 } from "./content";
 import * as repo from "./repository";
 import { canonicalizeWhatsAppContactIdentity } from "./whatsapp-identity";
+import { isBeforeWhatsAppReset } from "./workspace-reset-policy";
 import { blocksPrivateContact, blocksAiContact } from "./private-contact-service";
 import { classifyBlockedWhatsAppSource } from "./whatsapp-source-guard";
 import { isCampaignOptOutRequest, recordCampaignOptOut } from "./campaign-optout";
@@ -49,7 +50,8 @@ export type IngestOutcome =
         | "call"
         | "not_live_notify"
         | "inactive_connection"
-        | "private_contact";
+        | "private_contact"
+        | "before_workspace_reset";
     };
 
 const USAGE_EVENT = "WHATSAPP_INBOUND_MESSAGE";
@@ -102,6 +104,7 @@ export async function ingestWhatsAppInbound(
   const receivedAtUtc =
     parseOptionalUtc(dto.receivedAt) ?? new Date();
   const messageAt = providerTimestampUtc ?? receivedAtUtc;
+  if (isBeforeWhatsAppReset(connection.whatsappResetAtUtc, providerTimestampUtc ?? parseOptionalUtc(dto.receivedAt))) return {outcome:"ignored",reason:"before_workspace_reset"};
   const ownerMessage = await isEscalationOwnerPhone(businessId, phoneNormalized);
   const customerStoppedOffers = !ownerMessage && normalized.contentType === "TEXT"
     && isCampaignOptOutRequest(normalized.textContent);

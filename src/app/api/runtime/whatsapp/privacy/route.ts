@@ -17,7 +17,8 @@ export async function POST(request: Request) {
     // Pairing can request policy before the channel is ACTIVE. Legacy NULL keeps
     // existing behavior; the migration defaults new channels to false.
     const mode = await getPrivacyMode(channel.businessId);
-    const res = jsonOk({ historyImportEnabled: channel.whatsappHistoryImportEnabled !== false,
+    const res = jsonOk({ historyImportEnabled: !channel.whatsappResetAtUtc && channel.whatsappHistoryImportEnabled !== false,
+      resetAtUtc: channel.whatsappResetAtUtc?.toISOString() ?? null,
       privateContactPhones: await listBlockedContactPhones(channel.businessId),
       mode: mode.mode, approvedContactPhones: mode.approved.map(c => c.phone) });
     res.headers.set("Cache-Control", "no-store");

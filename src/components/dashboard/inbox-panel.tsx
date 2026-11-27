@@ -472,6 +472,7 @@ export function InboxPanel({
   const mobileThreadRef = useRef(false);
   const readWatermarksRef = useRef<Map<string, string>>(new Map());
   const listRequestRef = useRef(0);
+  const resetRevisionRef = useRef<string|null|undefined>(undefined);
   const listBusyRef = useRef(false);
   const listScroller = useRef<HTMLDivElement | null>(null);
   const listSentinel = useRef<HTMLDivElement | null>(null);
@@ -514,6 +515,7 @@ export function InboxPanel({
       const data = await response.json() as {
         conversations?: Array<ConversationRow & { lastMessageAtUtc: Date | string | null }>;
         counts?: Counts;
+        resetRevision?: string|null;
         hasMore?: boolean;
         nextCursor?: ConversationCursor | null;
         error?: string;
@@ -521,6 +523,10 @@ export function InboxPanel({
       if (!response.ok) throw new Error(mapUserFacingError(data, "تعذر تحديث الشاتات"));
       if (requestId !== listRequestRef.current) return;
       const latest = serializeConversations(data.conversations ?? []);
+      if(data.resetRevision!==undefined && data.resetRevision!==resetRevisionRef.current && (resetRevisionRef.current!==undefined || data.resetRevision!==null)){
+        resetRevisionRef.current=data.resetRevision;setConversations(latest);selectedIdRef.current=null;setSelectedId(null);setSelectedSnapshot(null);setMessages([]);setDrafts({});setDetailsOpen(false);setMobileThread(false);setPrivacySelection(null);setCounts(data.counts??{total:0,unread:0});setCursor(data.nextCursor??null);setHasMore(Boolean(data.hasMore));return;
+      }
+      if(data.resetRevision!==undefined)resetRevisionRef.current=data.resetRevision;
       setConversations(prev => {
         if (!silent) {
           // Preserve the selected deep-link target even when it predates the
@@ -1197,6 +1203,7 @@ export function InboxPanel({
               <span className="text-[10px] text-muted-foreground">يرجع للبوت بعد 90 دقيقة هدوء، بشرط عدم وجود رد أو متابعة معلّقة</span>
             </div>
           )}
+          {canManagePrivacy && <Link href="/dashboard/settings/privacy#reset-whatsapp" className="mb-2 inline-block text-xs font-bold text-muted-foreground hover:text-primary">مسح سجل واتساب بالكامل</Link>}
           {canManagePrivacy && <div className="mb-2 flex items-center gap-2 text-xs"><button type="button" className="rounded-lg border border-border px-3 py-2 font-bold" onClick={()=>setPrivacySelection(s=>s===null?[]:null)}>{privacySelection===null?"تحديد محادثات":"إلغاء التحديد"}</button>{privacySelection!==null&&<button type="button" className="rounded-lg border border-border px-3 py-2 font-bold text-destructive disabled:opacity-50" disabled={!privacySelection.length||privacyBusy} onClick={()=>void changePrivacy("remove",privacySelection)}>إزالة المحدد ({privacySelection.length}/25)</button>}</div>}
           {bulkFeedback && <p role="status" className="mb-2 rounded-lg bg-success-soft px-3 py-2 text-xs font-semibold text-success">{bulkFeedback}</p>}
           <div className="flex h-11 items-center gap-2 rounded-xl border border-input bg-card px-3 transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/25 motion-reduce:transition-none">

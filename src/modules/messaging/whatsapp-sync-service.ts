@@ -5,6 +5,7 @@ import { parseOptionalUtc } from "@/modules/messaging/content";
 import { canonicalizeWhatsAppContactIdentity } from "@/modules/messaging/whatsapp-identity";
 import { redactMirroredOtp } from "@/modules/otp/redaction";
 import * as messages from "@/modules/messaging/repository";
+import { isBeforeWhatsAppReset } from "./workspace-reset-policy";
 import { getPrivacyMode } from "./privacy-mode-service";
 import { modeAllowsCapture } from "./privacy-mode-policy";
 import { listBlockedContactPhones } from "./private-contact-service";
@@ -71,13 +72,14 @@ export async function ingestWhatsAppSync(input: WhatsappSyncInput): Promise<{
   const privatePhones = await listBlockedContactPhones(channel.businessId);
   const mode = await getPrivacyMode(channel.businessId);
   for (const event of input.events) {
+    if (channel.whatsappResetAtUtc && (event.kind !== "message" || isBeforeWhatsAppReset(channel.whatsappResetAtUtc, new Date(event.occurredAt), event.historical))) continue;
     if (event.kind === "label" && (privatePhones.length || mode.mode === "BUSINESS_ONLY")) continue;
     if ("contactKey" in event) {
       const phone = canonicalizeWhatsAppContactIdentity({ externalContactKey: event.contactKey }).phoneNormalized;
       if (isPrivateContactBlocked(privatePhones, phone) || !modeAllowsCapture(mode, phone)) continue;
     }
     // Unscoped metadata cannot be distinguished from historical metadata yet.
-    if (channel.whatsappHistoryImportEnabled === false &&
+    if ((channel.whatsappResetAtUtc || channel.whatsappHistoryImportEnabled === false) &&
         (event.kind !== "message" || event.historical)) continue;
     // Each event is independently idempotent; crash midway is safe to retry.
     const inserted = await withTransaction(async trx => {

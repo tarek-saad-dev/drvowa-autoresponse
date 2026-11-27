@@ -27,3 +27,6 @@ The owner may save a retention preference (not an active automatic rule). `npm r
 
 ## Release hardening (113)
 SQL AI eligibility applies visibility, non-historical/non-purged status, mode and approval watermarks to Pulse shadow assessment. Added isolated SQL fixture covering tenant isolation, private removal, manual/approved and business-only policy. Worker policy outage remains fail-closed (new events can be missed); V6 and backup/derived retention are not covered. Do not enable purge flags or deploy until coordinated compatibility checks and real mixed-number staging tests pass.
+
+## Workspace reset (114)
+Owner-only typed-confirmation reset hides all pre-reset WhatsApp history/contact-only chats and clears imported names, labels and conversation timeline fields. New allowed live events reappear; explicit private/removed policies remain. Old history permanently rejected after reset; CRM master records/ERP/billing/auth untouched. Pre-reset content remains stored pending offline `privacy:maintain BUSINESS_UUID reset` operation; no automatic physical erasure or full derived/backup purge. Existing in-flight sends and other direct reporting/notification surfaces need further review. V7 worker reset spool handling must be coordinated separately.

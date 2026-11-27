@@ -31,14 +31,14 @@ export async function POST(request: Request) {
       { name: "channelId", type: sql.UniqueIdentifier, value: channel.channelConnectionId },
       { name: "providerId", type: sql.NVarChar(256), value: providerId },
     ];
-    const existing = await query<{ MessageID: string; MediaStorageKey: string | null; PhoneNormalized: string | null; IsHistorical: boolean; PrivacyPurgedAtUtc: Date | null }>(
-      `SELECT TOP 1 m.MessageID, m.MediaStorageKey, c.PhoneNormalized, m.IsHistorical, m.PrivacyPurgedAtUtc FROM dbo.TblMessage m
+    const existing = await query<{ MessageID: string; MediaStorageKey: string | null; PhoneNormalized: string | null; IsHistorical: boolean; PrivacyPurgedAtUtc: Date | null; IsCurrent: boolean }>(
+      `SELECT TOP 1 m.MessageID, m.MediaStorageKey, c.PhoneNormalized, m.IsHistorical, m.PrivacyPurgedAtUtc, CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=m.BusinessID AND cm.MessageID=m.MessageID) THEN 1 ELSE 0 END AS bit) IsCurrent FROM dbo.TblMessage m
        LEFT JOIN dbo.TblContact c ON c.ContactID=m.ContactID AND c.BusinessID=m.BusinessID
        WHERE m.BusinessID=@businessId AND m.ChannelConnectionID=@channelId AND m.ProviderMessageID=@providerId`,
       params,
     );
     if (!existing.recordset.length) return jsonError("Message not synced yet", 409);
-    if (existing.recordset[0].PrivacyPurgedAtUtc || await blocksPrivateContact(channel.businessId, existing.recordset[0].PhoneNormalized) ||
+    if (existing.recordset[0].IsCurrent === false || existing.recordset[0].PrivacyPurgedAtUtc || await blocksPrivateContact(channel.businessId, existing.recordset[0].PhoneNormalized) ||
         (channel.whatsappHistoryImportEnabled === false && existing.recordset[0].IsHistorical)) {
       return jsonOk({ stored: false, ignored: true });
     }
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
       await rename(temp, join(folder, key));
     } finally { await rm(temp, { force: true }).catch(() => {}); }
     await query(
-      "UPDATE dbo.TblMessage SET MediaStorageKey=@key, MediaMimeType=@mime, MediaFileName=COALESCE(MediaFileName,@name), MediaSizeBytes=@size WHERE BusinessID=@businessId AND ChannelConnectionID=@channelId AND ProviderMessageID=@providerId AND PrivacyPurgedAtUtc IS NULL",
+      "UPDATE dbo.TblMessage SET MediaStorageKey=@key, MediaMimeType=@mime, MediaFileName=COALESCE(MediaFileName,@name), MediaSizeBytes=@size WHERE BusinessID=@businessId AND ChannelConnectionID=@channelId AND ProviderMessageID=@providerId AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=TblMessage.BusinessID AND cm.MessageID=TblMessage.MessageID)",
       [...params,
         { name: "key", type: sql.NVarChar(128), value: key },
         { name: "mime", type: sql.NVarChar(128), value: mime },
