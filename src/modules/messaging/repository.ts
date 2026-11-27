@@ -596,7 +596,7 @@ export async function upsertOpenConversation(
       await trx.execute(
         `UPDATE TblConversation
          SET Status = N'OPEN', UpdatedAtUtc = SYSUTCDATETIME()
-         WHERE BusinessID = @businessId AND ConversationID = @conversationId`,
+         WHERE BusinessID = @businessId AND ConversationID = @conversationId AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblConversation.BusinessID AND pv.ConversationID=TblConversation.ConversationID)`,
         [
           {
             name: "businessId",
@@ -969,7 +969,7 @@ export async function getMessageForBusiness(params: {
             Origin, ActorUserID, ActorName,
             ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
      FROM TblMessage
-     WHERE BusinessID = @businessId AND MessageID = @messageId`,
+     WHERE BusinessID = @businessId AND MessageID = @messageId AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)`,
     [
       {
         name: "businessId",
@@ -1004,6 +1004,7 @@ export async function listRecentTextMessages(params: {
        WHERE BusinessID = @businessId
          AND ConversationID = @conversationId
          AND ContentType = N'TEXT'
+         AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)
        ORDER BY ISNULL(ProviderTimestampUtc, CreatedAtUtc) DESC, CreatedAtUtc DESC, MessageID DESC
      ) AS recent
      ORDER BY ISNULL(ProviderTimestampUtc, CreatedAtUtc) ASC, CreatedAtUtc ASC, MessageID ASC`,
@@ -1085,7 +1086,7 @@ export async function countConversationsForBusiness(params: {
               AND (LastReadAtUtc IS NULL OR LastInboundAtUtc > LastReadAtUtc)
               THEN 1 END) AS UnreadCount
        FROM dbo.TblConversation
-       WHERE BusinessID = @businessId AND IsArchived=0`,
+       WHERE BusinessID = @businessId AND IsArchived=0 AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblConversation.BusinessID AND pv.ConversationID=TblConversation.ConversationID)`,
     [{ name: "businessId", type: sql.UniqueIdentifier, value: params.businessId }],
   );
   return {
@@ -1112,6 +1113,7 @@ export async function getDashboardDailyActivity(params: {
        FROM dbo.TblConversation c
       WHERE c.BusinessID = @businessId
         AND c.IsArchived = 0
+        AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=c.BusinessID AND pv.ConversationID=c.ConversationID)
         AND ISNULL(c.LastMessageAtUtc, c.CreatedAtUtc) >= CAST(SYSUTCDATETIME() AS date)`,
     args,
   );
@@ -1273,6 +1275,7 @@ export async function listConversationsForBusiness(params: {
        ORDER BY j.CreatedAtUtc DESC
      ) lj
      WHERE c.BusinessID = @businessId
+       AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=c.BusinessID AND pv.ConversationID=c.ConversationID)
        ${visibleSql}
        ${filterSql}
        ${cursorSql}
@@ -1397,6 +1400,7 @@ export async function listMessagesForConversation(params: {
            FROM TblMessage
            WHERE BusinessID = @businessId
              AND ConversationID = @conversationId
+             AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)
              AND (
                ISNULL(ProviderTimestampUtc, CreatedAtUtc) < @beforeAt
                OR (
@@ -1427,6 +1431,7 @@ export async function listMessagesForConversation(params: {
            FROM TblMessage
            WHERE BusinessID = @businessId
              AND ConversationID = @conversationId
+             AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)
            ORDER BY ISNULL(ProviderTimestampUtc, CreatedAtUtc) DESC,
                     CreatedAtUtc DESC,
                     MessageID DESC

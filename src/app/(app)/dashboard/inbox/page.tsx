@@ -106,6 +106,7 @@ export default async function InboxPage({ searchParams }: {
     <InboxPanel
       key={initialFilter + ":" + (deepLinkId ?? "list")}
       canResumeAll={canResumeAll}
+      canManagePrivacy={membership?.status === "ACTIVE" && membership.role === "OWNER"}
       initialSelectedId={deepLinkId}
       requestedConversationUnavailable={Boolean(requested.conversationId) && !deepLinkId}
       initialFilter={initialFilter}

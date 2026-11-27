@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/modules/messaging/privacy-mode-service", () => ({ getPrivacyMode: vi.fn(async () => ({ mode: "ALL", approved: [] })) }));
 const mock = vi.hoisted(() => ({ resolve: vi.fn(), list: vi.fn() }));
-vi.mock("@/modules/messaging/private-contact-service", () => ({ listPrivateContactPhones: mock.list }));
+vi.mock("@/modules/messaging/private-contact-service", () => ({ listBlockedContactPhones: mock.list }));
 vi.mock("@/modules/messaging/repository", () => ({
   resolveChannelByExternalAccountKey: mock.resolve,
 }));

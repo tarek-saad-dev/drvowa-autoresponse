@@ -15,3 +15,6 @@ Owner-only business-level exclusions. Inbound, mirror/label association, outboun
 
 ## Operation modes draft (110)
 ALL default; BUSINESS_ONLY allowlist capture and AI; MANUAL capture non-private messages but AI only for owner-approved numbers. Mode/approval timestamps block earlier jobs. Shared approvals are currently managed by number in Settings, not inline in Inbox. Existing history not hidden. Worker policy requires companion update; prior queued mirror data can still replay after approvals. E2E, availability and permission verification required.
+
+## Inbox removal draft (111)
+Owner-only single/batch removal creates business-wide phone tombstones, separate from reversible private exclusions. Primary inbox list/count/detail/media queries use privacy visibility view. Removed contacts are also included in runtime blocked list. No physical deletion, no WhatsApp deletion, no retention purge; old content and derivatives remain and other CRM/report/escalation surfaces require audit. Existing tabs may retain cached previews until refreshed. Unresolved phones cannot be removed through this action. Maximum 25 IDs per batch and 1000 removal tombstones per business. Deploy migration before app/worker. E2E and concurrency checks required.

@@ -10,7 +10,7 @@ export async function GET(_: Request, context: { params: Promise<{ messageId: st
     const { messageId } = await context.params;
     if (!/^[0-9a-f-]{36}$/i.test(messageId)) return jsonError("Invalid message ID", 400);
     const result = await query<{ MediaStorageKey: string | null; MediaMimeType: string | null; MediaFileName: string | null }>(
-      "SELECT MediaStorageKey, MediaMimeType, MediaFileName FROM dbo.TblMessage WHERE BusinessID=@businessId AND MessageID=@messageId",
+      "SELECT MediaStorageKey, MediaMimeType, MediaFileName FROM dbo.TblMessage WHERE BusinessID=@businessId AND MessageID=@messageId AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)",
       [
         { name: "businessId", type: sql.UniqueIdentifier, value: businessId },
         { name: "messageId", type: sql.UniqueIdentifier, value: messageId },

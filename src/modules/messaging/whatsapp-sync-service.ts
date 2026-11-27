@@ -7,7 +7,7 @@ import { redactMirroredOtp } from "@/modules/otp/redaction";
 import * as messages from "@/modules/messaging/repository";
 import { getPrivacyMode } from "./privacy-mode-service";
 import { modeAllowsCapture } from "./privacy-mode-policy";
-import { listPrivateContactPhones } from "./private-contact-service";
+import { listBlockedContactPhones } from "./private-contact-service";
 import { isPrivateContactBlocked } from "./private-contact-policy";
 import { ingestWhatsAppLabelEvent } from "./whatsapp-label-sync-service";
 
@@ -68,7 +68,7 @@ export async function ingestWhatsAppSync(input: WhatsappSyncInput): Promise<{
   }
 
   const result = { chats: 0, messages: 0, duplicates: 0, labels: 0, associations: 0 };
-  const privatePhones = await listPrivateContactPhones(channel.businessId);
+  const privatePhones = await listBlockedContactPhones(channel.businessId);
   const mode = await getPrivacyMode(channel.businessId);
   for (const event of input.events) {
     if (event.kind === "label" && (privatePhones.length || mode.mode === "BUSINESS_ONLY")) continue;

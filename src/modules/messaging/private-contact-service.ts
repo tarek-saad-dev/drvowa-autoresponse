@@ -11,11 +11,18 @@ export async function listPrivateContactPhones(businessId: string): Promise<stri
   );
   return result.recordset.map(row => row.PhoneNormalized);
 }
+export async function listBlockedContactPhones(businessId: string): Promise<string[]> {
+  const result = await query<{ PhoneNormalized: string }>(
+    "SELECT PhoneNormalized FROM dbo.VwWhatsAppBlockedContact WHERE BusinessID=@businessId ORDER BY PhoneNormalized",
+    [{ name: "businessId", type: sql.UniqueIdentifier, value: businessId }],
+  );
+  return result.recordset.map(row => row.PhoneNormalized);
+}
 export async function blocksPrivateContact(businessId: string, phone: string | null | undefined) {
-  return isPrivateContactBlocked(await listPrivateContactPhones(businessId), phone) || !modeAllowsCapture(await getPrivacyMode(businessId), phone);
+  return isPrivateContactBlocked(await listBlockedContactPhones(businessId), phone) || !modeAllowsCapture(await getPrivacyMode(businessId), phone);
 }
 export async function blocksAiContact(businessId: string, phone: string | null | undefined, at: Date) {
-  return isPrivateContactBlocked(await listPrivateContactPhones(businessId), phone) || !modeAllowsAi(await getPrivacyMode(businessId), phone, at);
+  return isPrivateContactBlocked(await listBlockedContactPhones(businessId), phone) || !modeAllowsAi(await getPrivacyMode(businessId), phone, at);
 }
 export async function changePrivateContact(businessId: string, phone: string, add: boolean) {
   const params = [
