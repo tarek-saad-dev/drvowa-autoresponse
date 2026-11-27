@@ -2,7 +2,7 @@ import { randomUUID,createHash } from "node:crypto";
 import {mkdtemp,writeFile,readFile,rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {drainResetCleanup,getResetCleanupStatus,runNextResetCleanup} from "@/modules/messaging/privacy-purge-service";
+import {drainResetCleanup,getResetCleanupStatus,runNextResetCleanup,runNextRetentionCleanup,saveRetentionPreference,getRetentionSettings} from "@/modules/messaging/privacy-purge-service";
 import { afterAll,beforeAll,describe,expect,it } from "vitest";
 import { closePool,query,sql } from "@/lib/db";
 import { changePrivateContact } from "@/modules/messaging/private-contact-service";
@@ -115,6 +115,35 @@ describe.runIf(isolated)("WhatsApp privacy SQL",()=>{
    expect(await runNextResetCleanup()).toBeNull();
   }finally{
    if(oldFlag===undefined)delete process.env.DRVO_PRIVACY_RESET_CLEANUP_ENABLED;else process.env.DRVO_PRIVACY_RESET_CLEANUP_ENABLED=oldFlag;
+   if(oldRoot===undefined)delete process.env.DRVO_MEDIA_STORAGE_DIR;else process.env.DRVO_MEDIA_STORAGE_DIR=oldRoot;
+   await rm(root,{recursive:true,force:true});
+  }
+ },30000);
+
+ it("requires explicit automatic retention consent; preserves recent and other-tenant data; stops after disable",async()=>{
+  const d=fixture(),other=fixture();await seed(d);await seed(other);
+  const root=await mkdtemp(join(tmpdir(),"privacy-retention-synthetic-"));
+  const oldFlag=process.env.DRVO_PRIVACY_RETENTION_ENABLED,oldRoot=process.env.DRVO_MEDIA_STORAGE_DIR;
+  try{
+   process.env.DRVO_MEDIA_STORAGE_DIR=root;process.env.DRVO_PRIVACY_RETENTION_ENABLED="true";
+   for(const f of [d,other])await query("UPDATE dbo.TblMessage SET CreatedAtUtc=DATEADD(day,-40,SYSUTCDATETIME()) WHERE BusinessID=@business AND MessageID=@message",[uuid("business",f.business),uuid("message",f.message)]);
+   await saveRetentionPreference(d.business,30);await saveRetentionPreference(other.business,30);
+   expect(await getRetentionSettings(d.business)).toMatchObject({automatic:false,preview:{candidates:1}});
+   expect(await runNextRetentionCleanup()).toBeNull();
+   await saveRetentionPreference(d.business,30,true);
+   expect(await getRetentionSettings(d.business)).toMatchObject({automatic:true,available:true});
+   await query("INSERT INTO dbo.TblMessage(MessageID,BusinessID,ConversationID,ChannelConnectionID,ContactID,Direction,Provider,ProviderMessageID,ContentType,TextContent,ReceivedAtUtc) VALUES(@new,@business,@conversation,@channel,@contact,N'INBOUND',N'baileys',@provider,N'TEXT',N'recent content',SYSUTCDATETIME())",[...Object.entries(d).map(([name,value])=>uuid(name,value)),uuid("new",randomUUID()),{name:"provider",type:sql.NVarChar(256),value:"recent-"+d.message}]);
+   expect(await runNextRetentionCleanup()).toMatchObject({purged:1,deletedFiles:0});
+   expect((await listMessagesForConversation({businessId:d.business,conversationId:d.conversation})).map(m=>m.textContent)).toEqual(["recent content"]);
+   expect(await listMessagesForConversation({businessId:other.business,conversationId:other.conversation})).toHaveLength(1);
+   await saveRetentionPreference(d.business,30,false);
+   await query("UPDATE dbo.TblMessage SET CreatedAtUtc=DATEADD(day,-40,SYSUTCDATETIME()) WHERE BusinessID=@business AND PrivacyPurgedAtUtc IS NULL",[uuid("business",d.business)]);
+   expect(await runNextRetentionCleanup()).toBeNull();
+   expect(await getRetentionSettings(d.business)).toMatchObject({automatic:false,preview:{candidates:1}});
+   process.env.DRVO_PRIVACY_RETENTION_ENABLED="false";
+   await expect(saveRetentionPreference(d.business,30,true)).rejects.toThrow("AUTOMATIC_RETENTION_UNAVAILABLE");
+  }finally{
+   if(oldFlag===undefined)delete process.env.DRVO_PRIVACY_RETENTION_ENABLED;else process.env.DRVO_PRIVACY_RETENTION_ENABLED=oldFlag;
    if(oldRoot===undefined)delete process.env.DRVO_MEDIA_STORAGE_DIR;else process.env.DRVO_MEDIA_STORAGE_DIR=oldRoot;
    await rm(root,{recursive:true,force:true});
   }
