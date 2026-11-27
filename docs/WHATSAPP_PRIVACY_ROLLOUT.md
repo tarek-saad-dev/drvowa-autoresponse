@@ -12,3 +12,6 @@ Do not deploy before both PRs pass E2E testing.
 
 ## Private contacts draft (109)
 Owner-only business-level exclusions. Inbound, mirror/label association, outbound observations, AI job generation/send checks and runtime policy endpoint. Previously stored conversations are NOT hidden or erased; manual sends/campaigns, media upload, worker capture, queued data disposal and in-flight race fencing need further work. Unknown identities are blocked when any exclusions exist. Regression suite must be updated and run; do not deploy.
+
+## Operation modes draft (110)
+ALL default; BUSINESS_ONLY allowlist capture and AI; MANUAL capture non-private messages but AI only for owner-approved numbers. Mode/approval timestamps block earlier jobs. Shared approvals are currently managed by number in Settings, not inline in Inbox. Existing history not hidden. Worker policy requires companion update; prior queued mirror data can still replay after approvals. E2E, availability and permission verification required.

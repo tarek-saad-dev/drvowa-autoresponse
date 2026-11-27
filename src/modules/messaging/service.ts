@@ -18,7 +18,7 @@ import {
 } from "./content";
 import * as repo from "./repository";
 import { canonicalizeWhatsAppContactIdentity } from "./whatsapp-identity";
-import { blocksPrivateContact } from "./private-contact-service";
+import { blocksPrivateContact, blocksAiContact } from "./private-contact-service";
 import { classifyBlockedWhatsAppSource } from "./whatsapp-source-guard";
 import { isCampaignOptOutRequest, recordCampaignOptOut } from "./campaign-optout";
 import { isExplicitCampaignOptIn, recordExplicitCampaignOptIn } from "./campaign-permission";
@@ -218,7 +218,7 @@ export async function ingestWhatsAppInbound(
         mode: "HUMAN_PAUSED",
         pauseReason: "ESCALATION",
       }, trx);
-    } else if (!ownerMessage) {
+    } else if (!ownerMessage && !(await blocksAiContact(businessId, phoneNormalized, messageAt))) {
       await maybeScheduleAiReplyAfterInbound(
         {
           businessId,

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { BusinessSettingsForm } from "@/components/dashboard/business-settings-form";
 import { SettingsAccountSection } from "@/components/dashboard/settings-account-section";
 import { SettingsWhatsAppConnection } from "@/components/dashboard/settings-whatsapp-connection";
+import { SettingsPrivacyMode } from "@/components/dashboard/settings-privacy-mode";
 import { SettingsPrivateContacts } from "@/components/dashboard/settings-private-contacts";
 import { SettingsWhatsAppLabels } from "@/components/dashboard/settings-whatsapp-labels";
 import { resolveActiveBusiness } from "@/lib/tenancy/active-business";
@@ -47,6 +48,7 @@ export default async function SettingsPage({
       ) : (
         <>
           <SettingsWhatsAppConnection openInitially={params.whatsapp === "1"} />
+          <SettingsPrivacyMode />
           <SettingsPrivateContacts />
           <SettingsWhatsAppLabels />
           {business ? <BusinessSettingsForm key={business.businessId} business={business} /> : null}

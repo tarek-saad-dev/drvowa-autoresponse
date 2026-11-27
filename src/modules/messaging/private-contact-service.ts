@@ -1,5 +1,7 @@
 import { query, sql, withTransaction } from "@/lib/db";
 import { ConflictError } from "@/lib/tenancy/errors";
+import { getPrivacyMode } from "./privacy-mode-service";
+import { modeAllowsCapture, modeAllowsAi } from "./privacy-mode-policy";
 import { isPrivateContactBlocked } from "./private-contact-policy";
 
 export async function listPrivateContactPhones(businessId: string): Promise<string[]> {
@@ -10,7 +12,10 @@ export async function listPrivateContactPhones(businessId: string): Promise<stri
   return result.recordset.map(row => row.PhoneNormalized);
 }
 export async function blocksPrivateContact(businessId: string, phone: string | null | undefined) {
-  return isPrivateContactBlocked(await listPrivateContactPhones(businessId), phone);
+  return isPrivateContactBlocked(await listPrivateContactPhones(businessId), phone) || !modeAllowsCapture(await getPrivacyMode(businessId), phone);
+}
+export async function blocksAiContact(businessId: string, phone: string | null | undefined, at: Date) {
+  return isPrivateContactBlocked(await listPrivateContactPhones(businessId), phone) || !modeAllowsAi(await getPrivacyMode(businessId), phone, at);
 }
 export async function changePrivateContact(businessId: string, phone: string, add: boolean) {
   const params = [

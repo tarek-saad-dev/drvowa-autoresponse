@@ -23,7 +23,7 @@ import {
 } from "@/modules/channels/runtime-client";
 import { listItems } from "@/modules/knowledge/service";
 import type { AiReplyJob } from "@/types/domain";
-import { blocksPrivateContact } from "@/modules/messaging/private-contact-service";
+import { blocksAiContact } from "@/modules/messaging/private-contact-service";
 import * as messagingRepo from "@/modules/messaging/repository";
 
 import {
@@ -390,7 +390,7 @@ export async function processAiReplyJob(params: {
     contactId: job.contactId,
   });
   const customerPhoneHint = contact?.phoneNormalized ?? null;
-  if (await blocksPrivateContact(businessId, customerPhoneHint)) return finishTerminal("SKIPPED", "PRIVATE_CONTACT");
+  if (await blocksAiContact(businessId, customerPhoneHint, job.createdAtUtc)) return finishTerminal("SKIPPED", "PRIVATE_CONTACT");
   const destination =
     customerPhoneHint
     || (contact?.externalContactKey?.endsWith("@lid")
@@ -467,7 +467,7 @@ export async function processAiReplyJob(params: {
       customerPhoneHint,
       beforeWrite: async () => {
         if (!(await requireLiveLease("before_erp_write"))) return false;
-        if (await blocksPrivateContact(businessId, customerPhoneHint)) return false;
+        if (await blocksAiContact(businessId, customerPhoneHint, job.createdAtUtc)) return false;
         const active = await getChannelAiSettingByConnection({
           businessId,
           channelConnectionId: job.channelConnectionId,
@@ -489,7 +489,7 @@ export async function processAiReplyJob(params: {
       status: "UNAVAILABLE" as const,
     }));
 
-    if (await blocksPrivateContact(businessId, customerPhoneHint)) {
+    if (await blocksAiContact(businessId, customerPhoneHint, job.createdAtUtc)) {
       await releaseAiQuota();
       return finishTerminal("SKIPPED", "PRIVATE_CONTACT");
     }
@@ -720,7 +720,7 @@ export async function processAiReplyJob(params: {
     throw error;
   }
 
-  if (await blocksPrivateContact(businessId, customerPhoneHint)) {
+  if (await blocksAiContact(businessId, customerPhoneHint, job.createdAtUtc)) {
     await releaseReservedQuotas();
     return finishTerminal("SKIPPED", "PRIVATE_CONTACT");
   }
