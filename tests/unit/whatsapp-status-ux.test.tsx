@@ -46,11 +46,21 @@ describe("WhatsApp connection issue UX", () => {
     expect(markup).not.toContain("كل شيء جاهز");
   });
 
+  it("distinguishes an unverified socket from proven traffic", () => {
+    const initial = view({ health: "healthy" });
+    const markup = renderToStaticMarkup(<WhatsAppConnectionPanel initial={{ ...initial, runtime: { ...initial.runtime, reliability: { evidence: "unverified", issue: null } } }} />);
+    expect(markup).toContain("لسه مفيش دليل على إرسال واستقبال فعلي");
+    expect(markup).not.toContain("واتساب شغال وجاهز");
+    expect(markup).not.toContain("اتصال واتساب وخدمة استقبال الرسائل جاهزين حسب آخر فحص.");
+  });
+
   it("shows healthy reception for a recovered connection", () => {
     const markup = renderToStaticMarkup(
       <WhatsAppConnectionPanel initial={view({ health: "healthy" })} />,
     );
-    expect(markup).toContain("واتساب شغال وجاهز");
+    expect(markup).toContain("واتساب متصل");
+    expect(markup).not.toContain("واتساب شغال وجاهز");
+    expect(markup).toContain("اتصال واتساب وخدمة استقبال الرسائل جاهزين حسب آخر فحص.");
     expect(markup).not.toContain("إعادة فحص الاستقبال");
   });
 });

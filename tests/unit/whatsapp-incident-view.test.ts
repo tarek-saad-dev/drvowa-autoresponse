@@ -6,7 +6,10 @@ describe("admin incident projection", () => {
   it("preserves only allowed fields and bounded known issues", () => {
     const result = buildIncidentView({ lastSampleAt: ts, active: [{ ...row, jid: "private" }, { ...row, issue: "unknown" }], recent: [{ ...row, endedAt: ts, raw: "secret" }] }, Date.parse(ts));
     expect(result?.active).toEqual([row]);
-    expect(result?.recent).toEqual([{ ...row, endedAt: ts }]);
+    expect(result?.recent).toEqual([{ ...row, endedAt: ts, outcome: "CONDITION_NO_LONGER_OBSERVED" }]);
+    const interrupted = buildIncidentView({ lastSampleAt: ts, persistence: "WRITE_ERROR", recent: [{ ...row, endedAt: ts, outcome: "OBSERVATION_INTERRUPTED" }] }, Date.parse(ts));
+    expect(interrupted?.recent[0].outcome).toBe("OBSERVATION_INTERRUPTED");
+    expect(interrupted?.persistence).toBe("WRITE_ERROR");
     expect(JSON.stringify(result)).not.toContain("secret");
     expect(JSON.stringify(result)).not.toContain("private");
   });

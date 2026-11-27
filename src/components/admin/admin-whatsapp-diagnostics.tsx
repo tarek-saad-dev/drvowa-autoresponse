@@ -135,9 +135,10 @@ export function AdminWhatsAppDiagnostics({
                       {incidents.stale ? "Stale sample — refresh" : incidents.active.length ? String(incidents.active.length) + " active" : "No active incident observed"}
                     </p>
                     <p className="mt-1 text-muted-foreground">Sample: {incidents.lastSampleAt.slice(0, 19)} UTC</p>
+                    {incidents.persistence !== "OK" ? <p className="mt-1 text-warning">History storage: {incidents.persistence}</p> : null}
                     {incidents.active.map((i, index) => <div key={i.issue + index} className="mt-2 font-mono text-warning">{i.issue} · {Math.floor(i.durationMs / 1000)}s</div>)}
-                    {incidents.recent.length ? <details className="mt-2"><summary>Recent conditions cleared ({incidents.recent.length})</summary>
-                      {incidents.recent.map((i, index) => <p key={i.startedAt + i.issue + index} className="mt-1 font-mono">{i.issue} · {Math.floor(i.durationMs / 1000)}s · {i.endedAt.slice(0, 19)} UTC</p>)}
+                    {incidents.recent.length ? <details className="mt-2"><summary>Recent incident history ({incidents.recent.length})</summary>
+                      {incidents.recent.map((i, index) => <p key={i.startedAt + i.issue + index} className="mt-1 font-mono">{i.issue} · {Math.floor(i.durationMs / 1000)}s · {i.endedAt.slice(0, 19)} UTC · {i.outcome === "OBSERVATION_INTERRUPTED" ? "Observation interrupted" : "Condition no longer observed"}</p>)}
                     </details> : null}
                   </>}
                 </td>
