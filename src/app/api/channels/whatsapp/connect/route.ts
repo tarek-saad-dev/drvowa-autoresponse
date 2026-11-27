@@ -1,17 +1,21 @@
 import { requireApiBusiness } from "@/lib/api/auth-context";
-import { handleApiError, jsonOk } from "@/lib/api/http";
+import { z } from "zod";
+import { handleApiError, jsonOk, parseJsonBody } from "@/lib/api/http";
 import {
   RATE_LIMITS,
   assertRateLimit,
 } from "@/lib/security/rate-limit";
 import { startWhatsAppPairing } from "@/modules/channels/whatsapp-service";
 
-export async function POST() {
+const pairingPrivacySchema = z.object({ historyImportEnabled: z.boolean() }).strict();
+
+export async function POST(request: Request) {
   try {
     const { businessId } = await requireApiBusiness();
     assertRateLimit(`wa-connect:${businessId}`, RATE_LIMITS.whatsappConnect);
     // Browser cannot supply accountKey — DB-owned ExternalAccountKey only.
-    const view = await startWhatsAppPairing({ businessId });
+    const privacy = request.body ? pairingPrivacySchema.parse(await parseJsonBody(request)) : undefined;
+    const view = await startWhatsAppPairing({ businessId, historyImportEnabled: privacy?.historyImportEnabled });
     return jsonOk({
       uiState: view.uiState,
       message: view.message ?? null,

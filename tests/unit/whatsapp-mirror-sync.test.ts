@@ -72,6 +72,25 @@ describe("WhatsApp mirror sync", () => {
     expect(mock.upsertContact).not.toHaveBeenCalled();
   });
 
+  it("fresh start discards historical messages and chat/label metadata before writes", async () => {
+    mock.resolve.mockResolvedValue({ businessId: id1, channelConnectionId: id2,
+      isActive: true, status: "ACTIVE", whatsappHistoryImportEnabled: false });
+    const result = await ingestWhatsAppSync({ accountKey: "linked-account", events: [
+      message, { kind: "chat", contactKey: message.contactKey, displayName: "Private" },
+      { kind: "label", labelId: "2", name: "Personal" },
+      { kind: "labelAssociation", labelId: "2", contactKey: message.contactKey, action: "add" },
+    ] });
+    expect(result.messages).toBe(0);
+    expect(mock.upsertContact).not.toHaveBeenCalled();
+    expect(mock.execute).not.toHaveBeenCalled();
+  });
+  it("fresh start keeps live mirror messages", async () => {
+    mock.resolve.mockResolvedValue({ businessId: id1, channelConnectionId: id2,
+      isActive: true, status: "ACTIVE", whatsappHistoryImportEnabled: false });
+    const result = await ingestWhatsAppSync({ accountKey: "linked-account", events: [{ ...message, historical: false }] });
+    expect(result.messages).toBe(1);
+    expect(mock.insertMessage).toHaveBeenCalledOnce();
+  });
   it("rejects callers trying to supply their own business ID", () => {
     expect(whatsappSyncSchema.safeParse({
       accountKey: "linked-account", events: [message], businessId: id1,

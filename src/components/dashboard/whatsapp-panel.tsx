@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { WhatsAppHistoryConsent } from "./whatsapp-history-consent";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -165,6 +166,7 @@ export function WhatsAppConnectionPanel({
   const [view, setView] = useState<ConnectionPayload>(initial);
   const [qrImageDataUrl, setQrImageDataUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [historyImportEnabled, setHistoryImportEnabled] = useState(false);
   const [pairingActive, setPairingActive] = useState(false);
   const pairingDeadline = useRef(0);
   const [error, setError] = useState<string | null>(null);
@@ -297,7 +299,7 @@ export function WhatsAppConnectionPanel({
     setPairingActive(true);
     try {
       const res = await fetch("/api/channels/whatsapp/connect", {
-        method: "POST",
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ historyImportEnabled }),
       });
       const data = (await res.json()) as ConnectionPayload & {
         error?: string;
@@ -438,6 +440,9 @@ export function WhatsAppConnectionPanel({
         </Alert>
       ) : null}
 
+      {["NOT_CONNECTED", "DISCONNECTED", "LOGGED_OUT", "ERROR"].includes(state) && !pairingActive ? (
+        <WhatsAppHistoryConsent enabled={historyImportEnabled} onChange={setHistoryImportEnabled} disabled={busy} />
+      ) : null}
       {state === "NOT_CONNECTED" || state === "DISCONNECTED" ? (
         <Card>
           <CardHeader>

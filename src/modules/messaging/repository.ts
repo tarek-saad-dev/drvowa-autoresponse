@@ -33,6 +33,7 @@ type ChannelRow = {
   Status: string;
   IsActive: boolean | number;
   RuntimeEngine?: string | null;
+  WhatsAppHistoryImportEnabled?: boolean | number | null;
   CreatedAtUtc: Date;
   UpdatedAtUtc: Date;
 };
@@ -125,6 +126,7 @@ function mapChannel(row: ChannelRow): ChannelConnection {
     status: row.Status as ChannelConnection["status"],
     isActive: Boolean(row.IsActive),
     runtimeEngine: row.RuntimeEngine === "BAILEYS_V7" ? "BAILEYS_V7" : "BAILEYS_V6",
+    whatsappHistoryImportEnabled: row.WhatsAppHistoryImportEnabled == null ? null : Boolean(row.WhatsAppHistoryImportEnabled),
     compatibilityStatus: null,
     compatibilityReason: null,
     compatibilityUpdatedAt: null,
@@ -209,6 +211,7 @@ export async function resolveChannelByExternalAccountKey(
     `SELECT ChannelConnectionID, BusinessID, LocationID, Channel, Provider,
             ExternalAccountKey, DisplayName, MaskedPhone, Status, IsActive,
             ISNULL(RuntimeEngine, N'BAILEYS_V6') AS RuntimeEngine,
+            WhatsAppHistoryImportEnabled,
             CreatedAtUtc, UpdatedAtUtc
      FROM TblChannelConnection
      WHERE Channel = N'WHATSAPP'

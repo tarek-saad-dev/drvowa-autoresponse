@@ -65,6 +65,9 @@ export async function ingestWhatsAppSync(input: WhatsappSyncInput): Promise<{
 
   const result = { chats: 0, messages: 0, duplicates: 0, labels: 0, associations: 0 };
   for (const event of input.events) {
+    // Unscoped metadata cannot be distinguished from historical metadata yet.
+    if (channel.whatsappHistoryImportEnabled === false &&
+        (event.kind !== "message" || event.historical)) continue;
     // Each event is independently idempotent; crash midway is safe to retry.
     const inserted = await withTransaction(async trx => {
       if (event.kind === "label" || event.kind === "labelAssociation") {
