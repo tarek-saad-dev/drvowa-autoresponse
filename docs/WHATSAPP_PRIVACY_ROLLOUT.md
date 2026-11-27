@@ -1,9 +1,11 @@
 # WhatsApp privacy rollout — P0 draft
-Do not deploy before runtime-side enforcement and E2E testing.
+Do not deploy before both PRs pass E2E testing.
 
-- New connections default to fresh; legacy NULL preserves previous behavior until a pairing choice is made.
+- Migration 108: new connections default to fresh; legacy NULL preserves previous behavior until a pairing choice is made.
 - SaaS mirror skips history and unscoped chat/label metadata in fresh mode; live messages remain eligible. No existing chats are deleted.
+- Runtime policy endpoint uses the existing S2S bearer and account-key lookup. It returns only historyImportEnabled, with no caching by HTTP intermediaries. It works before ACTIVE status so policy is available at QR pairing.
 - Fresh mode currently suppresses all chat/label metadata because historical and live metadata are indistinguishable. This affects label, archive, pin and name mirroring.
-- Worker may still receive and spool history. Per-account worker policy, media, old spool disposal, reconnect and direct inbound/observed outbound checks remain required.
-- Mixed-use allowlisting, AI gating, private contact aliases, deletion and backup handling are follow-up work.
-- Validate database migration/permissions, both pairing UIs, legacy compatibility and fail-closed behavior before rollout.
+- Deploy migration and SaaS endpoint before the V7 worker update, then restart workers and validate both pairing surfaces. Old V7 binaries must not be presented as providing worker-side privacy.
+- Worker-side consent is bounded by policy refresh timing and protocol-level receipt; do not claim that WhatsApp never sends personal data to a linked device. Check pending legacy spools, media, reconnect, LID identity mapping and historical outbound observation.
+- Mixed-use allowlisting, AI gating for new personal messages, private contact aliases, deletion and backup handling are follow-up work.
+- Validate database permissions and end-to-end behavior before rollout. Legacy V6 is not covered by the V7 worker change.
