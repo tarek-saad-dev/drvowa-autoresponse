@@ -68,6 +68,7 @@ export async function ingestWhatsAppSync(input: WhatsappSyncInput): Promise<{
   const result = { chats: 0, messages: 0, duplicates: 0, labels: 0, associations: 0 };
   const privatePhones = await listPrivateContactPhones(channel.businessId);
   for (const event of input.events) {
+    if (event.kind === "label" && privatePhones.length) continue;
     if ("contactKey" in event && isPrivateContactBlocked(privatePhones,
       canonicalizeWhatsAppContactIdentity({ externalContactKey: event.contactKey }).phoneNormalized)) continue;
     // Unscoped metadata cannot be distinguished from historical metadata yet.

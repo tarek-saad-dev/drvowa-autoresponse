@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { query, sql } from "@/lib/db";
 import { requireRuntimeBearer } from "@/lib/api/runtime-auth";
 import { handleApiError, jsonError, jsonOk } from "@/lib/api/http";
+import { blocksPrivateContact } from "@/modules/messaging/private-contact-service";
 import { resolveChannelByExternalAccountKey } from "@/modules/messaging/repository";
 
 const MAX_MEDIA_BYTES = 24 * 1024 * 1024;
@@ -30,11 +31,17 @@ export async function POST(request: Request) {
       { name: "channelId", type: sql.UniqueIdentifier, value: channel.channelConnectionId },
       { name: "providerId", type: sql.NVarChar(256), value: providerId },
     ];
-    const existing = await query<{ MessageID: string; MediaStorageKey: string | null }>(
-      "SELECT TOP 1 MessageID, MediaStorageKey FROM dbo.TblMessage WHERE BusinessID=@businessId AND ChannelConnectionID=@channelId AND ProviderMessageID=@providerId",
+    const existing = await query<{ MessageID: string; MediaStorageKey: string | null; PhoneNormalized: string | null; IsHistorical: boolean }>(
+      `SELECT TOP 1 m.MessageID, m.MediaStorageKey, c.PhoneNormalized, m.IsHistorical FROM dbo.TblMessage m
+       LEFT JOIN dbo.TblContact c ON c.ContactID=m.ContactID AND c.BusinessID=m.BusinessID
+       WHERE m.BusinessID=@businessId AND m.ChannelConnectionID=@channelId AND m.ProviderMessageID=@providerId`,
       params,
     );
     if (!existing.recordset.length) return jsonError("Message not synced yet", 409);
+    if (await blocksPrivateContact(channel.businessId, existing.recordset[0].PhoneNormalized) ||
+        (channel.whatsappHistoryImportEnabled === false && existing.recordset[0].IsHistorical)) {
+      return jsonOk({ stored: false, ignored: true });
+    }
     if (existing.recordset[0].MediaStorageKey) return jsonOk({ stored: true, duplicate: true });
     const reader = request.body?.getReader();
     if (!reader) return jsonError("Empty media", 400);
@@ -48,6 +55,7 @@ export async function POST(request: Request) {
       chunks.push(value);
     }
     if (size !== length) return jsonError("Incomplete media", 400);
+    if (await blocksPrivateContact(channel.businessId, existing.recordset[0].PhoneNormalized)) return jsonOk({ stored: false, ignored: true });
     const bytes = Buffer.concat(chunks.map(chunk=>Buffer.from(chunk)));
     const key = createHash("sha256").update(channel.channelConnectionId + ":" + providerId).digest("hex");
     const folder = process.env.DRVO_MEDIA_STORAGE_DIR || join(process.cwd(), "data", "whatsapp-media");

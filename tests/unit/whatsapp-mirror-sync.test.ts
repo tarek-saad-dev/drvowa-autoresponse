@@ -42,6 +42,7 @@ const message = {
 describe("WhatsApp mirror sync", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mock.query.mockResolvedValue({ recordset: [] });
     mock.resolve.mockResolvedValue({ businessId: id1, channelConnectionId: id2,
       isActive: true, status: "ACTIVE" });
     mock.upsertContact.mockResolvedValue({ contactId: id3 });
@@ -70,6 +71,14 @@ describe("WhatsApp mirror sync", () => {
       { kind: "labelAssociation", labelId: "3", contactKey: "12345@lid", action: "add" },
     ] })).rejects.toThrow("LABEL_ASSOCIATION_REQUIRES_RESOLVED_PHONE");
     expect(mock.upsertContact).not.toHaveBeenCalled();
+  });
+
+  it("private contact does not create or update a conversation", async () => {
+    mock.query.mockResolvedValue({ recordset: [{ PhoneNormalized: "201011747438" }] });
+    const result = await ingestWhatsAppSync({ accountKey: "linked-account", events: [{ ...message, historical: false }] });
+    expect(result.messages).toBe(0);
+    expect(mock.upsertContact).not.toHaveBeenCalled();
+    expect(mock.insertMessage).not.toHaveBeenCalled();
   });
 
   it("fresh start discards historical messages and chat/label metadata before writes", async () => {

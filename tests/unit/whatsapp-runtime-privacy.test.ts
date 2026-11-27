@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mock = vi.hoisted(() => ({ resolve: vi.fn() }));
+const mock = vi.hoisted(() => ({ resolve: vi.fn(), list: vi.fn() }));
+vi.mock("@/modules/messaging/private-contact-service", () => ({ listPrivateContactPhones: mock.list }));
 vi.mock("@/modules/messaging/repository", () => ({
   resolveChannelByExternalAccountKey: mock.resolve,
 }));
@@ -15,13 +16,14 @@ function request(body: object, token = "test-runtime-privacy-token") {
 describe("runtime WhatsApp privacy", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mock.list.mockResolvedValue([]);
     vi.stubEnv("DRVOWA_RUNTIME_TOKEN", "test-runtime-privacy-token");
     mock.resolve.mockResolvedValue({ whatsappHistoryImportEnabled: false });
   });
   it("returns only the DB-owned policy for a known account", async () => {
     const res = await POST(request({ accountKey: "account-one" }));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ historyImportEnabled: false });
+    expect(await res.json()).toEqual({ historyImportEnabled: false, privateContactPhones: [] });
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     expect(mock.resolve).toHaveBeenCalledWith("account-one");
   });
@@ -37,7 +39,7 @@ describe("runtime WhatsApp privacy", () => {
   it("keeps legacy opt-in behavior and supports explicit import", async () => {
     for (const value of [null, true]) {
       mock.resolve.mockResolvedValue({ whatsappHistoryImportEnabled: value });
-      expect(await (await POST(request({ accountKey: "account-one" }))).json()).toEqual({ historyImportEnabled: true });
+      expect(await (await POST(request({ accountKey: "account-one" }))).json()).toEqual({ historyImportEnabled: true, privateContactPhones: [] });
     }
   });
 });
