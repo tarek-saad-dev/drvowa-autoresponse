@@ -1496,7 +1496,7 @@ export async function countMessagesForBusiness(params: {
   businessId: string;
 }): Promise<number> {
   const result = await query<{ Cnt: number }>(
-    `SELECT COUNT(1) AS Cnt FROM TblMessage WHERE BusinessID = @businessId`,
+    `SELECT COUNT(1) AS Cnt FROM TblMessage WHERE BusinessID = @businessId AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)`,
     [
       {
         name: "businessId",

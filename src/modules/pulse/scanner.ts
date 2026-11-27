@@ -7,6 +7,7 @@ export async function scanPulseBatch(limit=120):Promise<number> {
     "SELECT TOP (@limit) m.MessageID,m.BusinessID,m.ConversationID,m.TextContent,",
     "COALESCE(m.ProviderTimestampUtc,m.ReceivedAtUtc) AS MessageAtUtc FROM dbo.TblMessage m",
     "WHERE m.Direction=N'INBOUND' AND m.IsHistorical=0 AND m.ContentType=N'TEXT'",
+     "AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=m.BusinessID AND pv.ConversationID=m.ConversationID)",
     "AND m.TextContent IS NOT NULL AND m.ReceivedAtUtc>=DATEADD(day,-60,SYSUTCDATETIME())",
     "AND NOT EXISTS(SELECT 1 FROM dbo.TblPulseMessageScan s WHERE s.MessageID=m.MessageID)",
     "ORDER BY m.ReceivedAtUtc DESC,m.MessageID DESC"
