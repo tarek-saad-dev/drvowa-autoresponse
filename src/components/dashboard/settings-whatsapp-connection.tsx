@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { WhatsAppHistoryConsent } from "./whatsapp-history-consent";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
@@ -28,6 +29,7 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
   const [qr, setQr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [historyImportEnabled, setHistoryImportEnabled] = useState(false);
   const [pairingActive, setPairingActive] = useState(false);
   const pairingDeadline = useRef(0);
   const pairingTimedOut = useRef(false);
@@ -117,7 +119,7 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
     pairingDeadline.current = Date.now() + 60_000;
     setPairingActive(true);
     try {
-      const res = await fetch("/api/channels/whatsapp/connect", { method: "POST" });
+      const res = await fetch("/api/channels/whatsapp/connect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ historyImportEnabled }) });
       const data = (await res.json().catch(() => ({}))) as ConnectionView;
       if (!res.ok || !data.uiState) throw new Error(mapUserFacingError(data, "تعذر بدء ربط واتساب."));
       if (alive.current) setView(data);
@@ -188,6 +190,9 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
           <Button type="button" variant="outline" size="sm" onClick={() => void refresh()} disabled={busy}>إعادة التحقق</Button>
         ) : null}
       </div>
+      {!loading && !ready && !connecting && !pairing && view?.uiState !== "RUNTIME_DISABLED" ? (
+        <WhatsAppHistoryConsent enabled={historyImportEnabled} onChange={setHistoryImportEnabled} disabled={busy} />
+      ) : null}
       {connecting || pairing ? (
         <div className="mt-4 border-t border-border pt-4">
           <p className="text-xs text-muted-foreground">{pairing ? "من واتساب: الأجهزة المرتبطة ← ربط جهاز، وبعدها امسح الكود." : "بنتأكد من الاتصال..."}</p>

@@ -134,6 +134,8 @@ export type ChannelConnection = {
   status: ChannelConnectionStatus;
   isActive: boolean;
   runtimeEngine: WhatsAppRuntimeEngine;
+  whatsappHistoryImportEnabled?: boolean | null;
+  whatsappResetAtUtc?: Date | null;
   compatibilityStatus: CompatibilityStatus | null;
   compatibilityReason: string | null;
   compatibilityUpdatedAt: Date | null;

@@ -1,4 +1,5 @@
 import QRCode from "qrcode";
+import { execute, sql } from "@/lib/db";
 
 import { withResourceLimitGate } from "@/modules/billing/entitlements";
 import { listLocations } from "@/modules/locations/service";
@@ -593,6 +594,7 @@ export async function getWhatsAppConnectionView(params: {
 
 export async function startWhatsAppPairing(params: {
   businessId: string;
+  historyImportEnabled?: boolean;
 }): Promise<WhatsAppConnectionView> {
   const connection = await ensureWhatsAppConnection({
     businessId: params.businessId,
@@ -600,6 +602,17 @@ export async function startWhatsAppPairing(params: {
   const accountKey = connection.externalAccountKey;
   if (!accountKey) {
     throw new Error("WhatsApp account key missing");
+  }
+
+  // Persist the explicit choice before starting pairing.
+  if (params.historyImportEnabled !== undefined) {
+    await execute(`UPDATE dbo.TblChannelConnection
+      SET WhatsAppHistoryImportEnabled=@enabled, UpdatedAtUtc=SYSUTCDATETIME()
+      WHERE BusinessID=@businessId AND ChannelConnectionID=@channelId`, [
+      { name: "enabled", type: sql.Bit, value: params.historyImportEnabled },
+      { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
+      { name: "channelId", type: sql.UniqueIdentifier, value: connection.channelConnectionId },
+    ]);
   }
 
   try {

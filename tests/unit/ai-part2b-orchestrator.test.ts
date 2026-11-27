@@ -64,6 +64,7 @@ vi.mock("@/modules/knowledge/service", () => knowledgeMocks);
 vi.mock("@/modules/messaging/repository", () => messagingMocks);
 vi.mock("@/modules/billing/entitlements", () => billingMocks);
 vi.mock("@/lib/db", () => dbMocks);
+vi.mock("@/modules/messaging/private-contact-service", () => ({ blocksPrivateContact: vi.fn(async () => false), blocksAiContact: vi.fn(async () => false) }));
 
 function baseJob(overrides: Partial<AiReplyJob> = {}): AiReplyJob {
   const id = "31d6e6ce-900b-4cfd-b8f5-e92b08047ee3";

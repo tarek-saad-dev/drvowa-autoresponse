@@ -1020,7 +1020,7 @@ export async function listCustomerConversations(params: {
     `SELECT c.ConversationID, c.ContactID, c.Status, c.LastMessageAtUtc,
             (
               SELECT TOP 1 m.TextContent FROM dbo.TblMessage m
-              WHERE m.BusinessID = c.BusinessID AND m.ConversationID = c.ConversationID
+              WHERE m.BusinessID = c.BusinessID AND m.ConversationID = c.ConversationID AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=m.BusinessID AND cm.MessageID=m.MessageID)
               ORDER BY ISNULL(m.ProviderTimestampUtc, m.CreatedAtUtc) DESC, m.CreatedAtUtc DESC
             ) AS LastMessagePreview,
             ct.DisplayName AS ContactDisplayName,
@@ -1031,6 +1031,7 @@ export async function listCustomerConversations(params: {
      INNER JOIN dbo.TblContact ct
        ON ct.BusinessID = link.BusinessID AND ct.ContactID = link.ContactID
      WHERE link.BusinessID = @businessId AND link.CustomerID = @customerId
+       AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=c.BusinessID AND pv.ConversationID=c.ConversationID)
      ORDER BY ISNULL(c.LastMessageAtUtc, c.CreatedAtUtc) DESC`,
     [
       { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
@@ -2311,6 +2312,9 @@ export async function listUnlinkedWhatsAppContacts(params: {
      FROM dbo.TblContact ct
      WHERE ct.BusinessID = @businessId
        AND ct.PhoneNormalized IS NOT NULL
+       AND (NOT EXISTS(SELECT 1 FROM dbo.TblWhatsAppWorkspaceReset rr WHERE rr.BusinessID=ct.BusinessID) OR EXISTS(SELECT 1 FROM dbo.TblConversation c JOIN dbo.VwPrivacyVisibleConversation v ON v.BusinessID=c.BusinessID AND v.ConversationID=c.ConversationID WHERE c.BusinessID=ct.BusinessID AND c.ContactID=ct.ContactID))
+       AND NOT EXISTS (SELECT 1 FROM dbo.VwWhatsAppBlockedContact pb WHERE pb.BusinessID=ct.BusinessID AND (pb.PhoneNormalized=ct.PhoneNormalized OR ct.PhoneNormalized IS NULL))
+       AND (NOT EXISTS (SELECT 1 FROM dbo.TblWhatsAppPrivacyMode pm WHERE pm.BusinessID=ct.BusinessID AND pm.Mode='BUSINESS_ONLY') OR EXISTS (SELECT 1 FROM dbo.TblWhatsAppApprovedContact pa WHERE pa.BusinessID=ct.BusinessID AND pa.PhoneNormalized=ct.PhoneNormalized))
        AND NOT EXISTS (
          SELECT 1 FROM dbo.TblCrmContactLink link
          WHERE link.BusinessID = ct.BusinessID AND link.ContactID = ct.ContactID
@@ -2341,7 +2345,7 @@ export async function getInboxPanelByConversationId(params: {
 } | null> {
   const conv = await query<{ ContactID: string }>(
     `SELECT ContactID FROM dbo.TblConversation
-     WHERE BusinessID = @businessId AND ConversationID = @conversationId`,
+     WHERE BusinessID = @businessId AND ConversationID = @conversationId AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblConversation.BusinessID AND pv.ConversationID=TblConversation.ConversationID)`,
     [
       { name: "businessId", type: sql.UniqueIdentifier, value: params.businessId },
       {

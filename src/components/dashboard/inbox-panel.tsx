@@ -377,9 +377,13 @@ export function InboxPanel({
   requestedConversationUnavailable = false,
   initialFilter = "ALL",
   canResumeAll = false,
+  canManagePrivacy = false,
+  initialResetRevision = null,
 }: {
   initialConversations: ConversationRow[];
   canResumeAll?: boolean;
+  canManagePrivacy?: boolean;
+  initialResetRevision?: string|null;
   initialCounts: Counts;
   initialHasMore: boolean;
   initialCursor: ConversationCursor | null;
@@ -388,6 +392,8 @@ export function InboxPanel({
   initialFilter?: InboxFilter;
 }) {
   const [conversations, setConversations] = useState(initialConversations);
+  const [privacySelection, setPrivacySelection] = useState<string[] | null>(null);
+  const [privacyBusy, setPrivacyBusy] = useState(false);
   const [counts, setCounts] = useState(initialCounts);
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [cursor, setCursor] = useState<ConversationCursor | null>(initialCursor);
@@ -468,6 +474,7 @@ export function InboxPanel({
   const mobileThreadRef = useRef(false);
   const readWatermarksRef = useRef<Map<string, string>>(new Map());
   const listRequestRef = useRef(0);
+  const resetRevisionRef = useRef<string|null|undefined>(initialResetRevision);
   const listBusyRef = useRef(false);
   const listScroller = useRef<HTMLDivElement | null>(null);
   const listSentinel = useRef<HTMLDivElement | null>(null);
@@ -510,6 +517,7 @@ export function InboxPanel({
       const data = await response.json() as {
         conversations?: Array<ConversationRow & { lastMessageAtUtc: Date | string | null }>;
         counts?: Counts;
+        resetRevision?: string|null;
         hasMore?: boolean;
         nextCursor?: ConversationCursor | null;
         error?: string;
@@ -517,6 +525,10 @@ export function InboxPanel({
       if (!response.ok) throw new Error(mapUserFacingError(data, "تعذر تحديث الشاتات"));
       if (requestId !== listRequestRef.current) return;
       const latest = serializeConversations(data.conversations ?? []);
+      if(data.resetRevision!==undefined && data.resetRevision!==resetRevisionRef.current && (resetRevisionRef.current!==undefined || data.resetRevision!==null)){
+        resetRevisionRef.current=data.resetRevision;setConversations(latest);selectedIdRef.current=null;setSelectedId(null);setSelectedSnapshot(null);setMessages([]);setDrafts({});setDetailsOpen(false);setMobileThread(false);setPrivacySelection(null);setCounts(data.counts??{total:0,unread:0});setCursor(data.nextCursor??null);setHasMore(Boolean(data.hasMore));return;
+      }
+      if(data.resetRevision!==undefined)resetRevisionRef.current=data.resetRevision;
       setConversations(prev => {
         if (!silent) {
           // Preserve the selected deep-link target even when it predates the
@@ -652,6 +664,13 @@ export function InboxPanel({
         { credentials: "same-origin", cache: "no-store" },
       );
       const data = await response.json() as { messages?: MessageRow[]; error?: string };
+      if (response.status === 404 && selectedIdRef.current === id) {
+        setConversations(prev => prev.filter(c => c.conversationId !== id));
+        selectedIdRef.current = null;
+        setSelectedId(null); setSelectedSnapshot(null); setMessages([]);
+        setDetailsOpen(false); setMobileThread(false); setLoadingThread(false);
+        return;
+      }
       if (!response.ok) throw new Error(mapUserFacingError(data, "تعذر تحميل الرسائل"));
       if (selectedIdRef.current !== id) return;
       const next = data.messages ?? [];
@@ -931,6 +950,32 @@ export function InboxPanel({
     }
   }, [loadFirstPage]);
 
+  const changePrivacy = useCallback(async (action: "remove" | "private" | "approve", ids: string[]) => {
+    if (!ids.length || privacyBusy) return;
+    const prompt = action === "remove" ? "إزالة المحادثات من DRVO ومنع ظهور رسائل هذه الأرقام مستقبلًا. السجل المخزن لا يُمحى نهائيًا ولا تتأثر محادثات واتساب. هل تريد المتابعة؟"
+      : action === "private" ? "استثناء هذا الرقم وإخفاء محادثاته من الصندوق. يمكن إلغاء الاستثناء من الإعدادات." : "اعتماد الرقم للسماح بالموظف الذكي حسب وضع التشغيل الحالي؟";
+    if (!window.confirm(prompt)) return;
+    setPrivacyBusy(true);
+    try {
+      const response = await fetch("/api/inbox/conversations/privacy", {method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},
+        body: JSON.stringify(action === "remove" ? {action,conversationIds:ids} : {action,conversationId:ids[0]})});
+      const data = await response.json();
+      if(!response.ok) throw new Error(mapUserFacingError(data,"تعذر حفظ الخصوصية"));
+      if(action !== "approve"){
+        const removed = new Set<string>((data.removedIds ?? ids).map((id:string)=>id.toLowerCase()));
+        const privatePhone = action === "private" ? conversations.find(c=>c.conversationId===ids[0])?.contactPhoneNormalized : null;
+        const shouldHide = (c:ConversationRow) => removed.has(c.conversationId.toLowerCase()) || Boolean(privatePhone && c.contactPhoneNormalized===privatePhone);
+        ++listRequestRef.current;
+        setConversations(prev=>prev.filter(c=>!shouldHide(c)));
+        setSelectedSnapshot(null); selectedIdRef.current=null; setSelectedId(null); setMessages([]);
+        setMobileThread(false);setDetailsOpen(false);setPrivacySelection(null);
+      }
+      setNotice(action==="approve"?"تم اعتماد الرقم.":"تم تطبيق الخصوصية.");
+      void loadFirstPage(false);
+    } catch(e){setError(e instanceof Error?e.message:"تعذر حفظ الخصوصية");}
+    finally{setPrivacyBusy(false);}
+  }, [privacyBusy, conversations, loadFirstPage]);
+
   const sendManual = useCallback(async () => {
     const id = selectedIdRef.current;
     const text = (id ? drafts[id] ?? "" : "").trim();
@@ -1160,6 +1205,8 @@ export function InboxPanel({
               <span className="text-[10px] text-muted-foreground">يرجع للبوت بعد 90 دقيقة هدوء، بشرط عدم وجود رد أو متابعة معلّقة</span>
             </div>
           )}
+          {canManagePrivacy && <Link href="/dashboard/settings/privacy#reset-whatsapp" className="mb-2 inline-block text-xs font-bold text-muted-foreground hover:text-primary">مسح سجل واتساب بالكامل</Link>}
+          {canManagePrivacy && <div className="mb-2 flex items-center gap-2 text-xs"><button type="button" className="rounded-lg border border-border px-3 py-2 font-bold" onClick={()=>setPrivacySelection(s=>s===null?[]:null)}>{privacySelection===null?"تحديد محادثات":"إلغاء التحديد"}</button>{privacySelection!==null&&<button type="button" className="rounded-lg border border-border px-3 py-2 font-bold text-destructive disabled:opacity-50" disabled={!privacySelection.length||privacyBusy} onClick={()=>void changePrivacy("remove",privacySelection)}>إزالة المحدد ({privacySelection.length}/25)</button>}</div>}
           {bulkFeedback && <p role="status" className="mb-2 rounded-lg bg-success-soft px-3 py-2 text-xs font-semibold text-success">{bulkFeedback}</p>}
           <div className="flex h-11 items-center gap-2 rounded-xl border border-input bg-card px-3 transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/25 motion-reduce:transition-none">
             <Glyph name="search" size={19} className="shrink-0 text-muted-foreground" />
@@ -1214,7 +1261,8 @@ export function InboxPanel({
                 const showOwnership = c.hasOpenEscalation || c.aiMode !== "AUTO" ||
                   ["DISABLED", "FAILED", "REPLYING"].includes(c.aiReplyHealth?.state ?? "");
                 return (
-                  <li key={c.conversationId}>
+                  <li key={c.conversationId} className="flex items-center">
+                    {privacySelection!==null&&<input type="checkbox" aria-label={"تحديد "+contactLabel(c)} className="mx-2 h-4 w-4 shrink-0" checked={privacySelection.includes(c.conversationId)} disabled={!privacySelection.includes(c.conversationId)&&privacySelection.length>=25} onChange={e=>setPrivacySelection(prev=>prev===null?null:e.target.checked?[...prev,c.conversationId]:prev.filter(id=>id!==c.conversationId))}/>}
                     <button
                       type="button" onClick={() => selectConversation(c.conversationId)}
                       aria-current={active ? "true" : undefined}
@@ -1596,6 +1644,7 @@ export function InboxPanel({
               {selected.aiMode !== "AUTO" && (
                 <button type="button" onClick={() => void resumeAi()} disabled={resuming} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-3 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"><Glyph name="spark" size={17} />رجّع الرد التلقائي</button>
               )}
+              {canManagePrivacy && <div className="space-y-2 border-t border-border pt-4"><h4 className="text-xs font-bold">خصوصية المحادثة</h4><button type="button" disabled={privacyBusy||!selected.contactPhoneNormalized} className="w-full rounded-xl border border-border px-3 py-3 text-xs font-bold" onClick={()=>void changePrivacy("approve",[selected.conversationId])}>اعتماد الرقم للموظف الذكي</button><button type="button" disabled={privacyBusy||!selected.contactPhoneNormalized} className="w-full rounded-xl border border-border px-3 py-3 text-xs font-bold" onClick={()=>void changePrivacy("private",[selected.conversationId])}>استثناء كرقم شخصي</button><button type="button" disabled={privacyBusy||!selected.contactPhoneNormalized} className="w-full rounded-xl border border-border px-3 py-3 text-xs font-bold text-destructive" onClick={()=>void changePrivacy("remove",[selected.conversationId])}>إزالة ومنع إعادة الظهور</button><p className="text-[10px] text-muted-foreground">الإزالة لا تمحو السجل المخزن نهائيًا أو تحذف رسائل واتساب.</p></div>}
               <div className="border-t border-border pt-5">
                 <InboxCrmPanel conversationId={selected.conversationId} />
               </div>

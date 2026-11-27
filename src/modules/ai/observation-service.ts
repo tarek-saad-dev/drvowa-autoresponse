@@ -6,6 +6,8 @@ import { parseOptionalUtc } from "@/modules/messaging/content";
 import { recordHumanFollowUpReply } from "@/modules/escalations/followup-service";
 import { recordHumanPulseReply } from "@/modules/pulse/action-tracking";
 import * as messagingRepo from "@/modules/messaging/repository";
+import { isBeforeWhatsAppReset } from "@/modules/messaging/workspace-reset-policy";
+import { blocksPrivateContact } from "@/modules/messaging/private-contact-service";
 import { canonicalizeWhatsAppContactIdentity } from "@/modules/messaging/whatsapp-identity";
 
 import {
@@ -48,7 +50,7 @@ export type OutboundObservedOutcome =
     }
   | {
       outcome: "ignored";
-      reason: "inactive_connection";
+      reason: "inactive_connection" | "private_contact" | "before_workspace_reset";
     };
 
 function logObservation(
@@ -84,6 +86,7 @@ export async function ingestWhatsAppOutboundObserved(
   const businessId = connection.businessId;
   const channelConnectionId = connection.channelConnectionId;
   const occurredAtUtc = parseOptionalUtc(dto.occurredAt) ?? new Date();
+  if(isBeforeWhatsAppReset(connection.whatsappResetAtUtc,parseOptionalUtc(dto.occurredAt)))return {outcome:"ignored",reason:"before_workspace_reset"};
 
   let identity: ReturnType<typeof canonicalizeWhatsAppContactIdentity> | null =
     null;
@@ -95,6 +98,7 @@ export async function ingestWhatsAppOutboundObserved(
   }
   const phoneNormalized = identity?.phoneNormalized ?? null;
   const externalContactKey = identity?.canonicalExternalContactKey ?? null;
+  if (await blocksPrivateContact(businessId, phoneNormalized)) return { outcome: "ignored", reason: "private_contact" };
 
   const existing = await findOutboundObservation({
     channelConnectionId,

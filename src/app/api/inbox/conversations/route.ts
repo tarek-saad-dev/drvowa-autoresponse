@@ -1,3 +1,4 @@
+import { getWorkspaceResetRevision } from "@/modules/messaging/workspace-reset-service";
 import { requireApiBusiness } from "@/lib/api/auth-context";
 import { handleApiError, jsonError, jsonOk } from "@/lib/api/http";
 import {
@@ -36,6 +37,7 @@ export async function GET(request: Request) {
       before = { at: new Date(beforeAt), conversationId: beforeId };
     }
 
+    const revision = await getWorkspaceResetRevision(businessId);
     const [batch, counts] = await Promise.all([
       listInboxConversations({
         businessId, limit: pageSize + 1, before, search, filter,
@@ -47,6 +49,7 @@ export async function GET(request: Request) {
     const last = conversations.at(-1);
     return jsonOk({
       conversations,
+      resetRevision: revision?.id ?? null,
       counts,
       hasMore,
       nextCursor: hasMore && last ? {

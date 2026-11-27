@@ -5,6 +5,11 @@ import { parseOptionalUtc } from "@/modules/messaging/content";
 import { canonicalizeWhatsAppContactIdentity } from "@/modules/messaging/whatsapp-identity";
 import { redactMirroredOtp } from "@/modules/otp/redaction";
 import * as messages from "@/modules/messaging/repository";
+import { isBeforeWhatsAppReset } from "./workspace-reset-policy";
+import { getPrivacyMode } from "./privacy-mode-service";
+import { modeAllowsCapture } from "./privacy-mode-policy";
+import { listBlockedContactPhones } from "./private-contact-service";
+import { isPrivateContactBlocked } from "./private-contact-policy";
 import { ingestWhatsAppLabelEvent } from "./whatsapp-label-sync-service";
 
 const contactKey = z.string().trim().min(5).max(256);
@@ -64,7 +69,18 @@ export async function ingestWhatsAppSync(input: WhatsappSyncInput): Promise<{
   }
 
   const result = { chats: 0, messages: 0, duplicates: 0, labels: 0, associations: 0 };
+  const privatePhones = await listBlockedContactPhones(channel.businessId);
+  const mode = await getPrivacyMode(channel.businessId);
   for (const event of input.events) {
+    if (channel.whatsappResetAtUtc && (event.kind !== "message" || isBeforeWhatsAppReset(channel.whatsappResetAtUtc, new Date(event.occurredAt), event.historical))) continue;
+    if (event.kind === "label" && (privatePhones.length || mode.mode === "BUSINESS_ONLY")) continue;
+    if ("contactKey" in event) {
+      const phone = canonicalizeWhatsAppContactIdentity({ externalContactKey: event.contactKey }).phoneNormalized;
+      if (isPrivateContactBlocked(privatePhones, phone) || !modeAllowsCapture(mode, phone)) continue;
+    }
+    // Unscoped metadata cannot be distinguished from historical metadata yet.
+    if ((channel.whatsappResetAtUtc || channel.whatsappHistoryImportEnabled === false) &&
+        (event.kind !== "message" || event.historical)) continue;
     // Each event is independently idempotent; crash midway is safe to retry.
     const inserted = await withTransaction(async trx => {
       if (event.kind === "label" || event.kind === "labelAssociation") {
@@ -133,7 +149,7 @@ export async function ingestWhatsAppSync(input: WhatsappSyncInput): Promise<{
            MediaFileName = COALESCE(MediaFileName,@fileName),
            MediaSizeBytes = COALESCE(MediaSizeBytes,@fileSize),
            QuotedProviderMessageID = COALESCE(QuotedProviderMessageID,@quoted)
-         WHERE BusinessID=@businessId AND MessageID=@messageId`,
+         WHERE BusinessID=@businessId AND MessageID=@messageId AND PrivacyPurgedAtUtc IS NULL`,
         [
           { name: "businessId", type: sql.UniqueIdentifier, value: channel.businessId },
           { name: "messageId", type: sql.UniqueIdentifier, value: insertedMessage.message.messageId },

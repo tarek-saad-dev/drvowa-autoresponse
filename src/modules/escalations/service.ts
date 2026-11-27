@@ -288,7 +288,8 @@ export async function countOpenEscalations(businessId: string): Promise<number> 
   const result = await query<{ OpenCount: number }>(
     `SELECT COUNT(1) AS OpenCount
        FROM dbo.TblHumanEscalation e
-      WHERE e.BusinessID = @businessId AND ${OPEN_ESCALATION_SQL}`,
+      WHERE e.BusinessID = @businessId AND ${OPEN_ESCALATION_SQL}
+        AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=e.BusinessID AND pv.ConversationID=e.ConversationID)`,
     businessParam(businessId),
   );
   return Number(result.recordset[0]?.OpenCount ?? 0);
@@ -300,6 +301,7 @@ export async function countFollowUpsNeedingAttention(businessId: string): Promis
     `SELECT COUNT(1) AS AttentionCount
        FROM dbo.TblHumanEscalation e
       WHERE e.BusinessID = @businessId AND ${OPEN_ESCALATION_SQL}
+        AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=e.BusinessID AND pv.ConversationID=e.ConversationID)
         AND e.FollowUpPhase = N'NEEDS_ATTENTION'`,
     businessParam(businessId),
   );
@@ -314,6 +316,7 @@ export async function getEscalation(businessId: string, conversationId: string) 
       FollowUpPhase, LastHumanReplyAtUtc, LastCustomerReplyAtUtc
       FROM dbo.TblHumanEscalation
       WHERE BusinessID = @businessId AND ConversationID = @conversationId AND ResolvedAtUtc IS NULL
+        AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblHumanEscalation.BusinessID AND pv.ConversationID=TblHumanEscalation.ConversationID)
       ORDER BY CreatedAtUtc DESC`, conversationParams(businessId, conversationId),
   );
   const row = result.recordset[0];
@@ -449,6 +452,7 @@ export async function updateEscalationStatus(params: {
        OUTPUT INSERTED.EscalationID
        FROM dbo.TblHumanEscalation e WITH (UPDLOCK)
        WHERE e.BusinessID = @businessId AND e.ConversationID = @conversationId
+         AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=e.BusinessID AND pv.ConversationID=e.ConversationID)
          AND e.ResolvedAtUtc IS NULL
          AND e.Status IN (N'OPEN', N'ACKNOWLEDGED')`,
       [...conversationParams(params.businessId, params.conversationId),

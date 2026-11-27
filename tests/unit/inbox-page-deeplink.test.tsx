@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
  list: vi.fn(), counts: vi.fn(), conversation: vi.fn(), contact: vi.fn(),
- ai: vi.fn(), membership: vi.fn(),
+ ai: vi.fn(), membership: vi.fn(), revision: vi.fn(),
 }));
+vi.mock("@/modules/messaging/workspace-reset-service",()=>({getWorkspaceResetRevision:mocks.revision}));
 vi.mock("next/navigation", () => ({redirect: (url: string) => {throw new Error("redirect:"+url);}}));
 vi.mock("@/components/dashboard/inbox-panel", () => ({InboxPanel: () => null}));
 vi.mock("@/modules/messaging/repository", () => ({
@@ -41,6 +42,7 @@ const base = {
 describe("Inbox server deep-link hydration (tenant scoped)", () => {
  beforeEach(() => {
   vi.clearAllMocks();
+  mocks.revision.mockResolvedValue(null);
   mocks.counts.mockResolvedValue({total:1761,unread:67,followUp:0});
   mocks.list.mockResolvedValue([]);
   mocks.membership.mockResolvedValue({status:"ACTIVE",role:"OWNER"});
@@ -71,6 +73,11 @@ describe("Inbox server deep-link hydration (tenant scoped)", () => {
   const view=await InboxPage({searchParams:Promise.resolve({conversationId:id.toUpperCase()})});
   expect((view.props as {initialSelectedId:string}).initialSelectedId).toBe(id);
   expect(mocks.conversation).not.toHaveBeenCalled();
+ });
+ it("passes current reset revision to prevent stale client hydration",async()=>{
+  mocks.revision.mockResolvedValue({id:"reset-123",at:"2026-11-27T00:00:00Z"});
+  const view=await InboxPage({searchParams:Promise.resolve({})});
+  expect((view.props as {initialResetRevision:string}).initialResetRevision).toBe("reset-123");
  });
  it("clearly identifies a genuinely unavailable conversation instead of a silent blank pane", async () => {
   mocks.conversation.mockResolvedValue(null);

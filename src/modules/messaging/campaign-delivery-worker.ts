@@ -225,6 +225,8 @@ async function stillAllowed(job: Claimed): Promise<boolean> {
        WHERE item.BusinessID=@businessId AND item.RunID=@runId
          AND item.PhoneNormalized=@phone AND item.Status=N'IN_FLIGHT'
          AND item.ClaimToken=@token AND run.Status=N'RUNNING'
+         AND NOT EXISTS (SELECT 1 FROM dbo.VwWhatsAppBlockedContact pb WHERE pb.BusinessID=item.BusinessID AND (pb.PhoneNormalized=item.PhoneNormalized OR item.PhoneNormalized IS NULL))
+         AND (NOT EXISTS (SELECT 1 FROM dbo.TblWhatsAppPrivacyMode pm WHERE pm.BusinessID=item.BusinessID AND pm.Mode='BUSINESS_ONLY') OR EXISTS (SELECT 1 FROM dbo.TblWhatsAppApprovedContact pa WHERE pa.BusinessID=item.BusinessID AND pa.PhoneNormalized=item.PhoneNormalized))
          AND NOT EXISTS (SELECT 1 FROM dbo.TblWhatsAppCampaignOptOut stopped
            WHERE stopped.BusinessID=item.BusinessID
              AND stopped.ChannelConnectionID=run.ChannelConnectionID

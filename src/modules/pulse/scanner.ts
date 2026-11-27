@@ -7,6 +7,7 @@ export async function scanPulseBatch(limit=120):Promise<number> {
     "SELECT TOP (@limit) m.MessageID,m.BusinessID,m.ConversationID,m.TextContent,",
     "COALESCE(m.ProviderTimestampUtc,m.ReceivedAtUtc) AS MessageAtUtc FROM dbo.TblMessage m",
     "WHERE m.Direction=N'INBOUND' AND m.IsHistorical=0 AND m.ContentType=N'TEXT'",
+     "AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=m.BusinessID AND pv.ConversationID=m.ConversationID) AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=m.BusinessID AND cm.MessageID=m.MessageID)",
     "AND m.TextContent IS NOT NULL AND m.ReceivedAtUtc>=DATEADD(day,-60,SYSUTCDATETIME())",
     "AND NOT EXISTS(SELECT 1 FROM dbo.TblPulseMessageScan s WHERE s.MessageID=m.MessageID)",
     "ORDER BY m.ReceivedAtUtc DESC,m.MessageID DESC"
@@ -27,7 +28,8 @@ export async function scanPulseBatch(limit=120):Promise<number> {
       "FROM OPENJSON(@payload) WITH (MessageID uniqueidentifier '$.messageId',",
       "BusinessID uniqueidentifier '$.businessId',ConversationID uniqueidentifier '$.conversationId',",
       "MessageAtUtc datetime2 '$.at',SignalCount int '$.count') j",
-      "WHERE NOT EXISTS(SELECT 1 FROM dbo.TblPulseMessageScan p WITH(UPDLOCK,HOLDLOCK) WHERE p.MessageID=j.MessageID)"
+      "WHERE EXISTS(SELECT 1 FROM dbo.TblMessage m WITH(UPDLOCK,HOLDLOCK) WHERE m.BusinessID=j.BusinessID AND m.MessageID=j.MessageID AND m.PrivacyPurgedAtUtc IS NULL AND EXISTS(SELECT 1 FROM dbo.VwPrivacyCurrentMessage v WHERE v.BusinessID=m.BusinessID AND v.MessageID=m.MessageID))",
+      "AND NOT EXISTS(SELECT 1 FROM dbo.TblPulseMessageScan p WITH(UPDLOCK,HOLDLOCK) WHERE p.MessageID=j.MessageID)"
     ].join(" "),[{name:"payload",type:sql.NVarChar(sql.MAX),value:JSON.stringify(scans)}]);
     if(signals.length)await trx.execute([
       "INSERT INTO dbo.TblPulseSignal(BusinessID,ConversationID,MessageID,MessageAtUtc,Intent,Priority,ActionType,Confidence,Evidence,ActionState,LastHumanReplyAtUtc,ActionSource)",
@@ -49,7 +51,8 @@ export async function scanPulseBatch(limit=120):Promise<number> {
       "AND o.Origin=N'HUMAN_MANUAL'",
       "AND COALESCE(o.OccurredAtUtc,o.CreatedAtUtc)>j.MessageAtUtc",
       ") actions) h",
-      "WHERE NOT EXISTS(SELECT 1 FROM dbo.TblPulseSignal p WITH(UPDLOCK,HOLDLOCK)",
+      "WHERE EXISTS(SELECT 1 FROM dbo.TblMessage m WITH(UPDLOCK,HOLDLOCK) WHERE m.BusinessID=j.BusinessID AND m.MessageID=j.MessageID AND m.PrivacyPurgedAtUtc IS NULL AND EXISTS(SELECT 1 FROM dbo.VwPrivacyCurrentMessage v WHERE v.BusinessID=m.BusinessID AND v.MessageID=m.MessageID))",
+      "AND NOT EXISTS(SELECT 1 FROM dbo.TblPulseSignal p WITH(UPDLOCK,HOLDLOCK)",
       "WHERE p.MessageID=j.MessageID AND p.Intent=j.Intent)"
     ].join(" "),[{name:"payload",type:sql.NVarChar(sql.MAX),value:JSON.stringify(signals)}]);
   });

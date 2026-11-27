@@ -18,6 +18,8 @@ import {
 } from "./content";
 import * as repo from "./repository";
 import { canonicalizeWhatsAppContactIdentity } from "./whatsapp-identity";
+import { isBeforeWhatsAppReset } from "./workspace-reset-policy";
+import { blocksPrivateContact, blocksAiContact } from "./private-contact-service";
 import { classifyBlockedWhatsAppSource } from "./whatsapp-source-guard";
 import { isCampaignOptOutRequest, recordCampaignOptOut } from "./campaign-optout";
 import { isExplicitCampaignOptIn, recordExplicitCampaignOptIn } from "./campaign-permission";
@@ -47,7 +49,9 @@ export type IngestOutcome =
         | "newsletter"
         | "call"
         | "not_live_notify"
-        | "inactive_connection";
+        | "inactive_connection"
+        | "private_contact"
+        | "before_workspace_reset";
     };
 
 const USAGE_EVENT = "WHATSAPP_INBOUND_MESSAGE";
@@ -90,15 +94,17 @@ export async function ingestWhatsAppInbound(
 
   const businessId = connection.businessId;
   const channelConnectionId = connection.channelConnectionId;
-  const normalized = normalizeInboundContent(dto.content);
   const identity = canonicalizeWhatsAppContactIdentity({
     externalContactKey: dto.externalContactKey,
   });
   const phoneNormalized = identity.phoneNormalized;
+  if (await blocksPrivateContact(businessId, phoneNormalized)) return { outcome: "ignored", reason: "private_contact" };
+  const normalized = normalizeInboundContent(dto.content);
   const providerTimestampUtc = parseOptionalUtc(dto.messageTimestamp);
   const receivedAtUtc =
     parseOptionalUtc(dto.receivedAt) ?? new Date();
   const messageAt = providerTimestampUtc ?? receivedAtUtc;
+  if (isBeforeWhatsAppReset(connection.whatsappResetAtUtc, providerTimestampUtc ?? parseOptionalUtc(dto.receivedAt))) return {outcome:"ignored",reason:"before_workspace_reset"};
   const ownerMessage = await isEscalationOwnerPhone(businessId, phoneNormalized);
   const customerStoppedOffers = !ownerMessage && normalized.contentType === "TEXT"
     && isCampaignOptOutRequest(normalized.textContent);
@@ -215,7 +221,7 @@ export async function ingestWhatsAppInbound(
         mode: "HUMAN_PAUSED",
         pauseReason: "ESCALATION",
       }, trx);
-    } else if (!ownerMessage) {
+    } else if (!ownerMessage && !(await blocksAiContact(businessId, phoneNormalized, messageAt))) {
       await maybeScheduleAiReplyAfterInbound(
         {
           businessId,

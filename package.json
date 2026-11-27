@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "db:migrate": "tsx scripts/db-migrate.ts",
     "db:status": "tsx scripts/db-status.ts",
+    "privacy:maintain": "node --env-file-if-exists=.env --env-file-if-exists=.env.production.local --import tsx scripts/privacy-maintenance.ts",
     "ai:worker": "tsx scripts/ai-worker.ts",
     "ai:worker:check": "tsx scripts/ai-worker.ts --check",
     "ai:worker:status": "tsx scripts/ai-worker-status.ts",
