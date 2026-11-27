@@ -2,7 +2,7 @@ import { randomUUID,createHash } from "node:crypto";
 import {mkdtemp,writeFile,readFile,rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {drainResetCleanup,getResetCleanupStatus} from "@/modules/messaging/privacy-purge-service";
+import {drainResetCleanup,getResetCleanupStatus,runNextResetCleanup} from "@/modules/messaging/privacy-purge-service";
 import { afterAll,beforeAll,describe,expect,it } from "vitest";
 import { closePool,query,sql } from "@/lib/db";
 import { changePrivateContact } from "@/modules/messaging/private-contact-service";
@@ -93,6 +93,31 @@ describe.runIf(isolated)("WhatsApp privacy SQL",()=>{
    expect(await listMessagesForConversation({businessId:b.business,conversationId:b.conversation})).toHaveLength(1);
    expect((await listMessagesForConversation({businessId:d.business,conversationId:d.conversation})).map(m=>m.textContent)).toEqual(["new message"]);
   }finally{if(prior===undefined)delete process.env.DRVO_PRIVACY_OFFLINE_MAINTENANCE;else process.env.DRVO_PRIVACY_OFFLINE_MAINTENANCE=prior;await rm(root,{recursive:true,force:true});}
+ },30000);
+
+ it("automatically cleans a reset tenant, not unreset tenants",async()=>{
+  const d=fixture(),unreset=fixture();await seed(d);await seed(unreset);
+  const root=await mkdtemp(join(tmpdir(),"privacy-auto-synthetic-"));
+  const oldFlag=process.env.DRVO_PRIVACY_RESET_CLEANUP_ENABLED,oldRoot=process.env.DRVO_MEDIA_STORAGE_DIR;
+  try{
+   process.env.DRVO_PRIVACY_RESET_CLEANUP_ENABLED="false";
+   expect(await runNextResetCleanup()).toBeNull();
+   await query("UPDATE dbo.TblWhatsAppWorkspaceReset SET CleanupAttemptAtUtc=SYSUTCDATETIME()");
+   const key=createHash("sha256").update(d.message).digest("hex");
+   await writeFile(join(root,key),"synthetic attachment");
+   await query("UPDATE dbo.TblMessage SET MediaStorageKey=@key WHERE BusinessID=@business AND MessageID=@message",[uuid("business",d.business),uuid("message",d.message),{name:"key",type:sql.NVarChar(128),value:key}]);
+   await resetWhatsAppWorkspace(d.business);
+   process.env.DRVO_PRIVACY_RESET_CLEANUP_ENABLED="true";process.env.DRVO_MEDIA_STORAGE_DIR=root;
+   expect(await runNextResetCleanup()).toMatchObject({purged:1,deletedFiles:1});
+   expect(await getResetCleanupStatus(d.business)).toMatchObject({pendingMessages:0,pendingFiles:0,status:"CONTENT_CLEANED"});
+   await expect(readFile(join(root,key))).rejects.toMatchObject({code:"ENOENT"});
+   expect(await listMessagesForConversation({businessId:unreset.business,conversationId:unreset.conversation})).toHaveLength(1);
+   expect(await runNextResetCleanup()).toBeNull();
+  }finally{
+   if(oldFlag===undefined)delete process.env.DRVO_PRIVACY_RESET_CLEANUP_ENABLED;else process.env.DRVO_PRIVACY_RESET_CLEANUP_ENABLED=oldFlag;
+   if(oldRoot===undefined)delete process.env.DRVO_MEDIA_STORAGE_DIR;else process.env.DRVO_MEDIA_STORAGE_DIR=oldRoot;
+   await rm(root,{recursive:true,force:true});
+  }
  },30000);
 
 });
