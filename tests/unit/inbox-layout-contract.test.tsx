@@ -14,7 +14,7 @@ vi.mock("next/image", () => ({
 }));
 
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
-import { InboxPanel, type ConversationRow } from "@/components/dashboard/inbox-panel";
+import { InboxPanel, conversationStatus, type ConversationRow } from "@/components/dashboard/inbox-panel";
 
 describe("inbox viewport and UX layout contract", () => {
   it("pins the inbox to the viewport with a shared desktop top nav instead of a sidebar", () => {
@@ -75,8 +75,8 @@ describe("inbox viewport and UX layout contract", () => {
       initialCursor: null,
     }));
     expect(html).toContain("عميل محتاج متابعة");
-    expect(html).toContain("تحتاج متابعة");
-    expect(html).toContain("تحتاج متابعة");
+    expect(html).toContain("متابعة الفريق");
+    expect(html).toContain("بحاجة لمراجعتك");
     expect(html).toContain("محتاج أكلم المدير");
     expect(html).not.toContain("مفيش محادثات في الفلتر ده");
   });
@@ -116,5 +116,38 @@ describe("inbox viewport and UX layout contract", () => {
     expect(html).not.toContain(">D</a>");
     expect(html).not.toContain("bg-[#f7f9f7]");
     expect(html).not.toContain("bg-[#087f76]");
+  });
+});
+
+
+describe("inbox review and management UX", () => {
+  const row: ConversationRow = {
+    conversationId: "22222222-2222-4222-8222-222222222222",
+    contactExternalKey: "201012345678@s.whatsapp.net", contactDisplayName: "عميل", contactPhoneNormalized: "201012345678",
+    lastMessagePreview: "رسالة", lastMessageDirection: "INBOUND", lastMessageAtUtc: "2026-11-27T02:00:00Z",
+    status: "OPEN", aiMode: "AUTO", aiPauseReason: null, aiReplyHealth: null, unread: false,
+  };
+  it("does not label disabled AI as a reply failure or pretend AI is following", () => {
+    const disabled: ConversationRow = {...row, aiReplyHealth: {state:"DISABLED",reason:"AI_DISABLED",errorCode:null}};
+    expect(conversationStatus(disabled)).toMatchObject({label:"الرد الآلي متوقف",attention:false});
+    const html = renderToStaticMarkup(createElement(InboxPanel, {
+      initialConversations:[disabled],initialSelectedId:row.conversationId,initialCounts:{total:1,unread:0,followUp:0},
+      initialCursor:null,initialHasMore:false,canManagePrivacy:true,canResumeAll:true,
+    }));
+    expect(html).toContain("الرد الآلي متوقف");
+    expect(html).toContain("رد الآن");
+    expect(html).toContain("إعدادات الرد");
+    expect(html).not.toContain("محتاج تدخل");
+    expect(html).not.toContain("AI بيتابع");
+    expect(html).not.toContain("فحص آخر رد");
+    expect(html).toContain("تحديد محادثات");
+    expect(html).toContain("الخصوصية وإدارة البيانات");
+    expect(html).not.toContain("مسح سجل واتساب بالكامل");
+    expect(html).not.toContain("#reset-whatsapp");
+  });
+  it("keeps a genuine failed reply distinct from an open team case and waiting for customer", () => {
+    expect(conversationStatus({...row,aiReplyHealth:{state:"FAILED",reason:"WHATSAPP_SEND_FAILED",errorCode:null}})).toMatchObject({label:"بحاجة لمراجعتك",attention:true});
+    expect(conversationStatus({...row,hasOpenEscalation:true,followUpPhase:"WAITING_CUSTOMER"})).toMatchObject({label:"بانتظار العميل",attention:false});
+    expect(conversationStatus({...row,aiMode:"HUMAN_PAUSED",awaitingHumanReply:true})).toMatchObject({label:"ينتظر ردك",attention:true});
   });
 });

@@ -243,11 +243,11 @@ const FAILURES: Partial<Record<AiReplyHealthReason, string>> = {
   UNKNOWN: "آخر رسالة لم يتم الرد عليها.",
 };
 
-function conversationStatus(c: ConversationRow): {
+export function conversationStatus(c: ConversationRow): {
   label: string; detail: string; color: string; dot: string; attention: boolean;
 } {
   if (c.aiMode==="HUMAN_PAUSED" && c.awaitingHumanReply) return {
-    label:"ينتظر رد الفريق",detail:"وصلت رسالة من العميل بعد آخر رد بشري",
+    label:"ينتظر ردك",detail:"وصلت رسالة جديدة بعد آخر رد من الفريق.",
     color:"text-warning",
     dot:"bg-warning",attention:true,
   };
@@ -258,13 +258,13 @@ function conversationStatus(c: ConversationRow): {
       dot: "bg-info", attention: false,
     }
     : {
-      label: c.followUpPhase === "WAITING_CUSTOMER" ? "بانتظار العميل" : "تحتاج متابعة",
-      detail: "العميل محتاج رد بشري أو إجراء من الفريق",
+      label: c.followUpPhase === "WAITING_CUSTOMER" ? "بانتظار العميل" : "بحاجة لمراجعتك",
+      detail: c.followUpPhase === "WAITING_CUSTOMER" ? "الفريق رد ومستني العميل." : "فيه متابعة مفتوحة مع الفريق.",
       color: "text-warning",
       dot: "bg-warning", attention: c.followUpPhase !== "WAITING_CUSTOMER",
     };
   if (c.aiMode === "SAFETY_PAUSED") return {
-    label: "محتاج مراجعة", detail: "مراجعة أمان قبل تشغيل الرد",
+    label: "بحاجة لمراجعتك", detail: "الرد الآلي متوقف للأمان؛ راجع الرسائل قبل تشغيله.",
     color: "text-destructive",
     dot: "bg-destructive", attention: true,
   };
@@ -274,8 +274,12 @@ function conversationStatus(c: ConversationRow): {
     dot: "bg-info", attention: false,
   };
   const health = c.aiReplyHealth;
-  if (health?.state === "DISABLED" || health?.state === "FAILED") return {
-    label: "محتاج تدخل", detail: FAILURES[health.reason ?? "UNKNOWN"] ?? FAILURES.UNKNOWN!,
+  if (health?.state === "DISABLED" || health?.reason === "AI_DISABLED") return {
+    label: "الرد الآلي متوقف", detail: "الرد التلقائي غير مفعّل لهذا الرقم. تقدر ترد بنفسك أو تراجع الإعدادات.",
+    color: "text-muted-foreground", dot: "bg-muted-foreground", attention: false,
+  };
+  if (health?.state === "FAILED") return {
+    label: "بحاجة لمراجعتك", detail: FAILURES[health.reason ?? "UNKNOWN"] ?? FAILURES.UNKNOWN!,
     color: "text-destructive",
     dot: "bg-destructive", attention: true,
   };
@@ -285,7 +289,7 @@ function conversationStatus(c: ConversationRow): {
     dot: "bg-info", attention: false,
   };
   return {
-    label: "AI شغال", detail: "الموظف الذكي بيتابع المحادثة",
+    label: "الرد الآلي مفعّل", detail: "الموظف الذكي مسموح له بالرد على الرسائل الجديدة.",
     color: "text-success",
     dot: "bg-success", attention: false,
   };
@@ -1161,9 +1165,9 @@ export function InboxPanel({
   const actionFilters: Array<{ id: InboxFilter; label: string; count?: number }> = [
     { id: "ALL", label: "الكل", count: counts.total },
     { id: "UNREAD", label: "غير مقروء", count: counts.unread },
-    { id: "FOLLOW_UP", label: "تحتاج متابعة", count: counts.followUp ?? 0 },
+    { id: "FOLLOW_UP", label: "متابعة الفريق", count: counts.followUp ?? 0 },
     { id: "HUMAN", label: "مع الفريق" },
-    { id: "AUTO", label: "الرد الآلي" },
+    { id: "AUTO", label: "وضع الرد الآلي" },
     { id: "PINNED", label: "المثبتة" },
     { id: "ARCHIVED", label: "المؤرشفة" },
   ];
@@ -1171,6 +1175,11 @@ export function InboxPanel({
   const grouped = useMemo(() => sortRows(conversations), [conversations]);
   const loadedCount = grouped.length;
   const failedCount = grouped.filter(c => conversationStatus(c).attention).length;
+  const selecting = privacySelection !== null;
+  const toggleSelection = (row: ConversationRow) => {
+    if (!row.contactPhoneNormalized || privacyBusy) return;
+    setPrivacySelection(prev => prev === null ? null : prev.includes(row.conversationId) ? prev.filter(id => id !== row.conversationId) : prev.length < 25 ? [...prev, row.conversationId] : prev);
+  };
 
   return (
     <div dir="rtl" className="flex h-full min-h-0 min-w-0 w-full isolate overflow-hidden overscroll-none bg-background font-sans text-foreground">
@@ -1195,18 +1204,27 @@ export function InboxPanel({
               <Link href="/dashboard/agent" className="grid h-10 w-10 place-items-center rounded-xl text-primary transition-colors hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" title="إعدادات الموظف الذكي"><Glyph name="spark" /></Link>
             </div>
           </div>
-          {canResumeAll && (
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <button type="button" onClick={() => void resumeAllAi()} disabled={resumingAll}
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60 motion-reduce:transition-none">
-                <Glyph name="bot" size={17} />
-                {resumingAll ? "جاري إرجاع المحادثات..." : "إرجاع جميع الشاتات للبوت"}
-              </button>
-              <span className="text-[10px] text-muted-foreground">يرجع للبوت بعد 90 دقيقة هدوء، بشرط عدم وجود رد أو متابعة معلّقة</span>
-            </div>
-          )}
-          {canManagePrivacy && <Link href="/dashboard/settings/privacy#reset-whatsapp" className="mb-2 inline-block text-xs font-bold text-muted-foreground hover:text-primary">مسح سجل واتساب بالكامل</Link>}
-          {canManagePrivacy && <div className="mb-2 flex items-center gap-2 text-xs"><button type="button" className="rounded-lg border border-border px-3 py-2 font-bold" onClick={()=>setPrivacySelection(s=>s===null?[]:null)}>{privacySelection===null?"تحديد محادثات":"إلغاء التحديد"}</button>{privacySelection!==null&&<button type="button" className="rounded-lg border border-border px-3 py-2 font-bold text-destructive disabled:opacity-50" disabled={!privacySelection.length||privacyBusy} onClick={()=>void changePrivacy("remove",privacySelection)}>إزالة المحدد ({privacySelection.length}/25)</button>}</div>}
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            {canManagePrivacy && <button type="button" aria-pressed={selecting} disabled={privacyBusy} onClick={() => setPrivacySelection(s => s === null ? [] : null)}
+              className={"inline-flex min-h-10 items-center gap-2 rounded-xl border px-3 text-xs font-bold focus-visible:outline-2 focus-visible:outline-ring " + (selecting ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground hover:bg-surface")}>
+              <Glyph name={selecting ? "close" : "check"} size={16} />{selecting ? "إلغاء التحديد" : "تحديد محادثات"}
+            </button>}
+            <details className="group min-w-0 flex-1">
+              <summary className="flex min-h-10 cursor-pointer list-none items-center justify-end gap-2 rounded-xl px-3 text-xs font-bold text-muted-foreground hover:bg-surface [&::-webkit-details-marker]:hidden"><Glyph name="menu" size={16} />المزيد <Glyph name="chevron" size={13} /></summary>
+              <div className="mt-1 space-y-1 rounded-xl border border-border bg-surface/40 p-2">
+                {canResumeAll && <button type="button" onClick={() => void resumeAllAi()} disabled={resumingAll} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-right text-xs font-bold text-primary hover:bg-primary/10 disabled:opacity-50"><Glyph name="bot" size={16} />{resumingAll ? "جارٍ الإرجاع…" : "إرجاع محادثات الفريق للموظف الذكي"}</button>}
+                {canResumeAll && <p className="px-2 pb-1 text-[10px] leading-5 text-muted-foreground">المحادثات ذات المتابعة المفتوحة أو إيقاف الأمان مستثناة.</p>}
+                <Link href="/dashboard/agent" className="block rounded-lg px-2 py-2 text-xs font-semibold hover:bg-surface">إعدادات الموظف الذكي</Link>
+                {canManagePrivacy && <Link href="/dashboard/settings/privacy" className="block rounded-lg px-2 py-2 text-xs font-semibold hover:bg-surface">الخصوصية وإدارة البيانات</Link>}
+              </div>
+            </details>
+          </div>
+          {selecting && <section aria-label="إجراءات المحادثات المحددة" className="mb-3 rounded-xl border border-border bg-surface/50 p-3 text-xs">
+            <div className="flex items-center justify-between gap-2"><strong>{privacySelection.length} محادثة محددة</strong><span className="text-muted-foreground">الحد 25</span></div>
+            <p className="mt-1 leading-5 text-muted-foreground">اختار المحادثات المراد إخفاؤها ومنع رسائلها المستقبلية من الظهور في DRVO.</p>
+            <button type="button" disabled={!privacySelection.length || privacyBusy} onClick={() => void changePrivacy("remove", privacySelection)} className="mt-2 w-full rounded-lg border border-destructive/30 px-3 py-2 font-bold text-destructive hover:bg-destructive/10 disabled:opacity-40">{privacyBusy ? "جاري الإزالة…" : "إزالة المحدد ومنع إعادة الظهور"}</button>
+            <p className="mt-1 text-[10px] text-muted-foreground">الإزالة لا تحذف الرسائل من واتساب.</p>
+          </section>}
           {bulkFeedback && <p role="status" className="mb-2 rounded-lg bg-success-soft px-3 py-2 text-xs font-semibold text-success">{bulkFeedback}</p>}
           <div className="flex h-11 items-center gap-2 rounded-xl border border-input bg-card px-3 transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/25 motion-reduce:transition-none">
             <Glyph name="search" size={19} className="shrink-0 text-muted-foreground" />
@@ -1219,10 +1237,10 @@ export function InboxPanel({
             />
             {searchText ? <button type="button" title="مسح البحث" aria-label="مسح البحث" onClick={() => setSearchText("")} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-surface hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"><Glyph name="close" size={16} /></button> : <kbd className="hidden text-[10px] text-muted-foreground lg:block">Ctrl K</kbd>}
           </div>
-          <div className="mt-3 flex gap-1.5 overflow-x-auto [scrollbar-width:none]" role="group" aria-label="فلاتر المحادثات">
+          <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="فلاتر المحادثات">
             {actionFilters.map(item => (
               <button
-                key={item.id} type="button" onClick={() => setFilter(item.id)}
+                key={item.id} type="button" onClick={() => { setPrivacySelection(null); setFilter(item.id); }}
                 aria-pressed={filter === item.id}
                 className={
                   "flex min-h-9 shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none " +
@@ -1236,6 +1254,8 @@ export function InboxPanel({
               </button>
             ))}
           </div>
+          {filter === "FOLLOW_UP" && <p className="mt-2 text-[10px] leading-5 text-muted-foreground">حالات المتابعة المفتوحة مع الفريق، مش كل حالات تعطل الرد الآلي.</p>}
+          {filter === "AUTO" && <p className="mt-2 text-[10px] leading-5 text-muted-foreground">محادثات في وضع الرد الآلي؛ حالة تشغيل الرد لكل محادثة موضحة تحت اسم العميل.</p>}
         </header>
 
         {error && !selectedId ? <div role="alert" className="border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">{error}</div> : null}
@@ -1262,10 +1282,12 @@ export function InboxPanel({
                   ["DISABLED", "FAILED", "REPLYING"].includes(c.aiReplyHealth?.state ?? "");
                 return (
                   <li key={c.conversationId} className="flex items-center">
-                    {privacySelection!==null&&<input type="checkbox" aria-label={"تحديد "+contactLabel(c)} className="mx-2 h-4 w-4 shrink-0" checked={privacySelection.includes(c.conversationId)} disabled={!privacySelection.includes(c.conversationId)&&privacySelection.length>=25} onChange={e=>setPrivacySelection(prev=>prev===null?null:e.target.checked?[...prev,c.conversationId]:prev.filter(id=>id!==c.conversationId))}/>}
+                    {privacySelection !== null && <input type="checkbox" aria-label={"تحديد " + contactLabel(c)} className="mx-3 h-4 w-4 shrink-0 accent-primary" checked={privacySelection.includes(c.conversationId)} disabled={privacyBusy || !c.contactPhoneNormalized || (!privacySelection.includes(c.conversationId) && privacySelection.length >= 25)} onChange={() => toggleSelection(c)} />}
                     <button
-                      type="button" onClick={() => selectConversation(c.conversationId)}
-                      aria-current={active ? "true" : undefined}
+                      type="button" onClick={() => selecting ? toggleSelection(c) : selectConversation(c.conversationId)}
+                      aria-current={!selecting && active ? "true" : undefined}
+                      aria-pressed={selecting ? Boolean(privacySelection?.includes(c.conversationId)) : undefined}
+                      disabled={selecting && (privacyBusy || !c.contactPhoneNormalized || (!privacySelection?.includes(c.conversationId) && (privacySelection?.length ?? 0) >= 25))}
                       className={
                         "group flex min-h-[70px] w-full items-center gap-3 border-b border-s-[3px] border-b-border/70 border-s-transparent px-4 py-2.5 text-right transition-colors hover:bg-surface focus-visible:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring motion-reduce:transition-none " +
                         (active ? "border-s-primary bg-primary/10" : "") +
@@ -1301,9 +1323,8 @@ export function InboxPanel({
                             {s.label}
                           </span>
                         )}
-                        {s.attention && !showOwnership && (
-                          <span className="sr-only">{s.label}</span>
-                        )}
+                        {(s.attention || c.aiReplyHealth?.state === "DISABLED" || c.aiReplyHealth?.reason === "AI_DISABLED") && <p className="mt-0.5 truncate text-[10px] leading-4 text-muted-foreground" title={s.detail}>{s.detail}</p>}
+                        {s.attention && !showOwnership && <span className="sr-only">{s.label}</span>}
                       </div>
                     </button>
                   </li>
@@ -1321,7 +1342,7 @@ export function InboxPanel({
         </div>
         <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-t border-border bg-surface/80 px-4 text-[10px] text-muted-foreground">
           <span>{filter === "ALL" && !debouncedSearch ? "معروض " + loadedCount + " من " + counts.total : "معروض " + loadedCount + " نتيجة"}</span>
-          {failedCount > 0 ? <span className="font-bold text-warning">{failedCount} محتاج متابعة من الظاهرين</span> : <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-success" />متابعة مباشرة</span>}
+          {failedCount > 0 ? <span className="font-bold text-warning">{failedCount} تحتاج مراجعة من المعروض</span> : <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-success" />متابعة مباشرة</span>}
         </div>
       </aside>
 
@@ -1345,18 +1366,18 @@ export function InboxPanel({
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
-                {selected.aiMode !== "AUTO" && !escalation ? (
+                {selected.aiMode !== "AUTO" && !selected.hasOpenEscalation && !escalation ? (
                   <button
                     type="button" onClick={() => void resumeAi()} disabled={resuming}
                     className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-primary px-3 text-[11px] font-bold text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50 motion-reduce:transition-none sm:px-4"
                   >
-                    <Glyph name="spark" size={16} /><span className="hidden sm:inline">{resuming ? "جارٍ التشغيل" : "رجّع البوت"}</span><span className="sm:hidden">AI</span>
+                    <Glyph name="spark" size={16} /><span className="hidden sm:inline">{resuming ? "جارٍ التشغيل" : "تشغيل الرد الآلي"}</span><span className="sm:hidden">AI</span>
                   </button>
-                ) : !escalation ? <div className="hidden items-center gap-1.5 rounded-full bg-success-soft px-3 py-2 text-[10px] font-bold text-success sm:flex"><Glyph name="bot" size={15} />AI بيتابع</div> : null}
-                {!escalation ? (
+                ) : !escalation && !selected.hasOpenEscalation && !status.attention && selected.aiReplyHealth?.state !== "DISABLED" && selected.aiReplyHealth?.reason !== "AI_DISABLED" ? <div className="hidden items-center gap-1.5 rounded-full bg-success-soft px-3 py-2 text-[10px] font-bold text-success sm:flex"><Glyph name="bot" size={15} />{status.label}</div> : null}
+                {!escalation && !selected.hasOpenEscalation ? (
                   <button type="button" onClick={() => void escalateConversation()} disabled={escalating}
                     className="min-h-10 rounded-xl border border-warning/40 bg-warning-soft px-2 py-2 text-[11px] font-bold text-warning transition-colors hover:border-warning/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50 motion-reduce:transition-none"
-                    title="فتح حالة تدخل بشري وإخطار المالك">تدخل بشري</button>
+                    title="فتح متابعة للفريق وإخطار المالك">طلب متابعة</button>
                 ) : null}
                 <ActionIcon name="info" title="تفاصيل العميل" active={detailsOpen} onClick={() => setDetailsOpen(v => !v)} />
               </div>
@@ -1371,7 +1392,7 @@ export function InboxPanel({
                   <span className="truncate text-muted-foreground">
                     {escalation.phase === "IN_PROGRESS" ? "جاري التعامل — بدأ رد بشري بالفعل"
                       : escalation.phase === "WAITING_CUSTOMER" ? "بانتظار رد العميل"
-                      : "محتاج متابعة بشرية"}
+                      : "بحاجة لمراجعتك"}
                   </span>
                   <span className="ms-auto shrink-0 text-[10px] font-bold text-primary">التفاصيل</span>
                   <Glyph name="chevron" size={14} className="shrink-0 text-muted-foreground transition-transform group-open:-rotate-90" />
@@ -1406,31 +1427,39 @@ export function InboxPanel({
                     </details>
                   ) : null}
                   <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3">
+                    <button type="button" onClick={() => textArea.current?.focus()} className="rounded-lg bg-primary px-3 py-2 font-bold text-primary-foreground">رد الآن</button>
                     {escalation.status === "OPEN" ? (
                       <button type="button" disabled={escalating} onClick={() => void updateEscalation("ACKNOWLEDGED")}
                         className="font-bold text-primary underline-offset-2 hover:underline disabled:opacity-50">
-                        استلام المتابعة يدويًا
+                        استلام المتابعة
                       </button>
                     ) : null}
                     <button type="button" disabled={escalating} onClick={() => void updateEscalation("RESOLVED")}
                       className="font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50">
-                      إغلاق يدوي بعد التأكد من الحل
+                      تم الحل
                     </button>
                   </div>
                 </div>
               </details>
             )}
-            {(error || notice || status.attention) && (
-              <div className="z-10 shrink-0 border-b border-border bg-card/90 px-4 py-2 text-xs">
-                {error && <p role="alert" className="font-bold text-destructive">{error}</p>}
-                {notice && <p role="status" className="font-bold text-primary">{notice}</p>}
-                {!error && !notice && status.attention && !escalation && <div className="flex items-center gap-2 text-warning"><Glyph name="alert" size={15} />{status.detail}{selected.aiMode === "AUTO" ? " — تقدر ترد بنفسك من تحت." : ""}</div>}
-                {selected.aiMode === "AUTO" && !escalation && (status.attention || Boolean(notice)) && (
-                  <button type="button" onClick={() => void checkLastAiDelivery()} disabled={checkingAi}
-                    className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border border-primary/25 px-2.5 py-1.5 font-bold text-primary hover:bg-primary/10 disabled:opacity-60"
-                  ><Glyph name="refresh" size={14} />{checkingAi ? "جاري فحص الرد..." : "تحقق من آخر محاولة رد"}</button>
-                )}
-              </div>
+            {(error || notice) && <div className="z-10 shrink-0 border-b border-border bg-card px-4 py-2 text-xs">
+              {error && <p role="alert" className="font-bold text-destructive">{error}</p>}
+              {notice && <p role="status" className="font-bold text-primary">{notice}</p>}
+            </div>}
+            {!escalation && (status.attention || selected.aiReplyHealth?.state === "DISABLED" || selected.aiReplyHealth?.reason === "AI_DISABLED") && (
+              <section aria-label="حالة الرد على المحادثة" className="shrink-0 border-b border-border bg-card px-4 py-3 sm:px-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className={"flex items-center gap-2 text-xs font-bold " + (status.attention ? "text-warning" : "text-muted-foreground")}><Glyph name={status.attention ? "alert" : "info"} size={16} />{status.label}</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{status.detail}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => textArea.current?.focus()} className="min-h-9 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground hover:bg-primary-hover">رد الآن</button>
+                    {(selected.aiReplyHealth?.state === "DISABLED" || selected.aiReplyHealth?.reason === "AI_DISABLED") ? <Link href="/dashboard/agent" className="inline-flex min-h-9 items-center rounded-lg border border-border px-3 text-xs font-bold hover:bg-surface">إعدادات الرد</Link> :
+                      selected.aiMode === "AUTO" && !selected.hasOpenEscalation && <button type="button" onClick={() => void checkLastAiDelivery()} disabled={checkingAi} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-bold hover:bg-surface disabled:opacity-50"><Glyph name="refresh" size={14} />{checkingAi ? "جاري الفحص…" : "فحص آخر رد"}</button>}
+                  </div>
+                </div>
+              </section>
             )}
 
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
