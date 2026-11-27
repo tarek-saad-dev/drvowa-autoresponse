@@ -17,10 +17,10 @@ function params(row: AccountRow, reference: string, code: string) {
 }
 export async function scanWhatsAppIncidentAlerts() {
   const result = await query<AccountRow>(
-    `SELECT TOP (20) BusinessID, ChannelConnectionID, ExternalAccountKey
+    `SELECT TOP (8) BusinessID, ChannelConnectionID, ExternalAccountKey
       FROM dbo.TblChannelConnection
       WHERE Channel=N'WHATSAPP' AND Provider=N'BAILEYS' AND RuntimeEngine=N'BAILEYS_V7'
-        AND ExternalAccountKey IS NOT NULL AND IsActive=1
+        AND ExternalAccountKey IS NOT NULL AND (IsActive=1 OR Status=N'ERROR')
         AND (@cursor IS NULL OR ChannelConnectionID>@cursor)
       ORDER BY ChannelConnectionID`,
     [{ name: "cursor", type: sql.UniqueIdentifier, value: cursor }],
@@ -54,7 +54,7 @@ export async function scanWhatsAppIncidentAlerts() {
       }
     } catch { unavailable++; }
   }
-  if (result.recordset.length < 20) cursor = null;
+  if (result.recordset.length < 8) cursor = null;
   return { checked: result.recordset.length, unavailable };
 }
 
@@ -67,4 +67,16 @@ export async function getWhatsAppAdminAlertCount() {
     [{ name: "kind", type: sql.NVarChar(48), value: ALERT_KIND }],
   );
   return { total: Number(r.recordset[0]?.total ?? 0), stale: Number(r.recordset[0]?.stale ?? 0) };
+}
+
+export async function listOpenWhatsAppAdminAlerts() {
+  const r = await query<{ IncidentID: string; BusinessName: string | null; DetailCode: string | null; DetectedAtUtc: Date; LastSeenAtUtc: Date; Stale: boolean }>(
+    `SELECT TOP (100) i.IncidentID,b.Name AS BusinessName,i.DetailCode,i.DetectedAtUtc,i.LastSeenAtUtc,
+       CAST(CASE WHEN i.LastSeenAtUtc<DATEADD(minute,-5,SYSUTCDATETIME()) THEN 1 ELSE 0 END AS bit) AS Stale
+       FROM dbo.TblReliabilityIncident i LEFT JOIN dbo.TblBusiness b ON b.BusinessID=i.BusinessID
+       WHERE i.IncidentKind=@kind AND i.Status=N'OPEN'
+       ORDER BY i.DetectedAtUtc DESC`,
+    [{ name: "kind", type: sql.NVarChar(48), value: ALERT_KIND }],
+  );
+  return r.recordset;
 }
