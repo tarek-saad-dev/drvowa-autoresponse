@@ -11,6 +11,10 @@ export async function listPrivateContactPhones(businessId: string): Promise<stri
   );
   return result.recordset.map(row => row.PhoneNormalized);
 }
+export async function listRemovedContactPhones(businessId:string):Promise<string[]>{
+ const result=await query<{PhoneNormalized:string}>("SELECT PhoneNormalized FROM dbo.TblWhatsAppRemovedContact WHERE BusinessID=@businessId ORDER BY PhoneNormalized",[{name:"businessId",type:sql.UniqueIdentifier,value:businessId}]);
+ return result.recordset.map(row=>row.PhoneNormalized);
+}
 export async function listBlockedContactPhones(businessId: string): Promise<string[]> {
   const result = await query<{ PhoneNormalized: string }>(
     "SELECT PhoneNormalized FROM dbo.VwWhatsAppBlockedContact WHERE BusinessID=@businessId ORDER BY PhoneNormalized",
