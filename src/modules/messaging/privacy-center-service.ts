@@ -12,7 +12,7 @@ export async function getPrivacyInventory(businessId:string,days:number){
  FROM dbo.TblMessage m
  JOIN dbo.TblChannelConnection ch ON ch.BusinessID=m.BusinessID AND ch.ChannelConnectionID=m.ChannelConnectionID AND ch.Channel=N'WHATSAPP'
  LEFT JOIN dbo.VwPrivacyVisibleConversation pv ON pv.BusinessID=m.BusinessID AND pv.ConversationID=m.ConversationID
- WHERE m.BusinessID=@businessId`,[...scope,{name:"days",type:sql.Int,value:days}]),
+ WHERE m.BusinessID=@businessId AND m.PrivacyPurgedAtUtc IS NULL`,[...scope,{name:"days",type:sql.Int,value:days}]),
  query<{PhoneNormalized:string;RemovedAtUtc:Date}>("SELECT PhoneNormalized,RemovedAtUtc FROM dbo.TblWhatsAppRemovedContact WHERE BusinessID=@businessId ORDER BY RemovedAtUtc DESC",scope)
  ]);
  const s=summary.recordset[0];
