@@ -656,6 +656,13 @@ export function InboxPanel({
         { credentials: "same-origin", cache: "no-store" },
       );
       const data = await response.json() as { messages?: MessageRow[]; error?: string };
+      if (response.status === 404 && selectedIdRef.current === id) {
+        setConversations(prev => prev.filter(c => c.conversationId !== id));
+        selectedIdRef.current = null;
+        setSelectedId(null); setSelectedSnapshot(null); setMessages([]);
+        setDetailsOpen(false); setMobileThread(false); setLoadingThread(false);
+        return;
+      }
       if (!response.ok) throw new Error(mapUserFacingError(data, "تعذر تحميل الرسائل"));
       if (selectedIdRef.current !== id) return;
       const next = data.messages ?? [];

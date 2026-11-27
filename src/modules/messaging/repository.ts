@@ -596,7 +596,7 @@ export async function upsertOpenConversation(
       await trx.execute(
         `UPDATE TblConversation
          SET Status = N'OPEN', UpdatedAtUtc = SYSUTCDATETIME()
-         WHERE BusinessID = @businessId AND ConversationID = @conversationId AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblConversation.BusinessID AND pv.ConversationID=TblConversation.ConversationID)`,
+         WHERE BusinessID = @businessId AND ConversationID = @conversationId`,
         [
           {
             name: "businessId",
@@ -1354,7 +1354,7 @@ export async function getConversationForBusiness(params: {
             LastMessageAtUtc, LastInboundAtUtc, LastOutboundAtUtc,
             CreatedAtUtc, UpdatedAtUtc
      FROM TblConversation
-     WHERE BusinessID = @businessId AND ConversationID = @conversationId`,
+     WHERE BusinessID = @businessId AND ConversationID = @conversationId AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblConversation.BusinessID AND pv.ConversationID=TblConversation.ConversationID)`,
     [
       {
         name: "businessId",
