@@ -181,7 +181,9 @@ export async function createChannelConnectionShell(
   const isActive = params.isActive ?? false;
   const externalAccountKey = params.externalAccountKey ?? null;
 
-  const runtimeEngine: WhatsAppRuntimeEngine = "BAILEYS_V6";
+  // New WhatsApp accounts use V7. Existing persisted engine ownership is unchanged.
+  const runtimeEngine: WhatsAppRuntimeEngine =
+    channel === "WHATSAPP" && provider === "BAILEYS" ? "BAILEYS_V7" : "BAILEYS_V6";
 
   await db(trx).query(
     `INSERT INTO TblChannelConnection (
