@@ -97,7 +97,7 @@ export function DashboardTopbar({
       <div className="flex h-16 min-w-0 items-center gap-3 px-3 sm:px-5 xl:gap-6 xl:px-7">
         <Link href="/dashboard" aria-label={APP_NAME} onClick={() => setOpenGroup(null)}
           className="flex shrink-0 items-center rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
-          <BrandLogo navigation priority className="h-6 w-auto max-w-[110px] xl:max-w-[130px]" />
+          <BrandLogo navigation priority className="h-auto w-[150px] max-h-10 object-contain xl:w-[175px] 2xl:w-[190px]" />
         </Link>
 
         <nav aria-label="التنقل العلوي" className="hidden min-w-0 flex-1 items-center lg:flex">
