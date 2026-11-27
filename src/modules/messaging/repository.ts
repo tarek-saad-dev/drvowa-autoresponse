@@ -969,7 +969,7 @@ export async function getMessageForBusiness(params: {
             Origin, ActorUserID, ActorName,
             ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
      FROM TblMessage
-     WHERE BusinessID = @businessId AND MessageID = @messageId AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)`,
+     WHERE BusinessID = @businessId AND MessageID = @messageId AND PrivacyPurgedAtUtc IS NULL AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)`,
     [
       {
         name: "businessId",
@@ -1245,7 +1245,7 @@ export async function listConversationsForBusiness(params: {
           FROM TblMessage mo
           WHERE mo.BusinessID = c.BusinessID
             AND mo.ConversationID = c.ConversationID
-            AND mo.Direction = N'OUTBOUND' AND mo.IsHistorical=0
+            AND mo.Direction = N'OUTBOUND' AND mo.IsHistorical=0 AND mo.PrivacyPurgedAtUtc IS NULL
             AND mo.CreatedAtUtc >= li.CreatedAtUtc
         ) THEN 1 ELSE 0 END AS AnsweredAfterLastInbound,
         lj.Status AS LastInboundJobStatus,
@@ -1264,7 +1264,7 @@ export async function listConversationsForBusiness(params: {
        FROM TblMessage m
        WHERE m.BusinessID = c.BusinessID
          AND m.ConversationID = c.ConversationID
-         AND m.Direction = N'INBOUND' AND m.IsHistorical=0
+         AND m.Direction = N'INBOUND' AND m.IsHistorical=0 AND m.PrivacyPurgedAtUtc IS NULL
        ORDER BY m.CreatedAtUtc DESC
      ) li
      OUTER APPLY (

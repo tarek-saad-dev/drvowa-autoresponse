@@ -17,14 +17,14 @@ export async function runPulseShadowBatch():Promise<number>{
   "FROM dbo.TblPulseMessageScan s",
   "JOIN dbo.TblMessage m ON m.MessageID=s.MessageID AND m.BusinessID=s.BusinessID",
   "WHERE m.TextContent IS NOT NULL AND LEN(m.TextContent) BETWEEN 16 AND 800",
-  "AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=m.BusinessID AND pv.ConversationID=m.ConversationID)",
+  "AND EXISTS (SELECT 1 FROM dbo.VwPrivacyAiEligibleMessage pv WHERE pv.BusinessID=m.BusinessID AND pv.MessageID=m.MessageID)",
   "AND s.ScannedAtUtc>=DATEADD(day,-7,SYSUTCDATETIME())",
   "AND NOT EXISTS(SELECT 1 FROM dbo.TblPulseAiAssessment a WHERE a.MessageID=m.MessageID)",
   "ORDER BY s.ScannedAtUtc DESC,s.MessageID DESC"
  ].join(" "),[{name:"limit",type:sql.Int,value:remaining}]);
  let processed=0;
  for(const msg of result.recordset){
-  const allowed=await query<{Allowed:number}>("SELECT TOP 1 1 AS Allowed FROM dbo.VwPrivacyVisibleConversation WHERE BusinessID=@businessId AND ConversationID=@conversationId",[{name:"businessId",type:sql.UniqueIdentifier,value:msg.BusinessID},{name:"conversationId",type:sql.UniqueIdentifier,value:msg.ConversationID}]);
+  const allowed=await query<{Allowed:number}>("SELECT TOP 1 1 AS Allowed FROM dbo.VwPrivacyAiEligibleMessage WHERE BusinessID=@businessId AND MessageID=@messageId",[{name:"businessId",type:sql.UniqueIdentifier,value:msg.BusinessID},{name:"messageId",type:sql.UniqueIdentifier,value:msg.MessageID}]);
   if(!allowed.recordset.length)continue;
   const verdict=await assessPulseText(msg.TextContent,{businessId:msg.BusinessID});
   const baseline=classifyCustomerText(msg.TextContent)[0]?.intent??null;

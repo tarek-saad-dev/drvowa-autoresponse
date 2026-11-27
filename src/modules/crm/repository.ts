@@ -1020,7 +1020,7 @@ export async function listCustomerConversations(params: {
     `SELECT c.ConversationID, c.ContactID, c.Status, c.LastMessageAtUtc,
             (
               SELECT TOP 1 m.TextContent FROM dbo.TblMessage m
-              WHERE m.BusinessID = c.BusinessID AND m.ConversationID = c.ConversationID
+              WHERE m.BusinessID = c.BusinessID AND m.ConversationID = c.ConversationID AND m.PrivacyPurgedAtUtc IS NULL
               ORDER BY ISNULL(m.ProviderTimestampUtc, m.CreatedAtUtc) DESC, m.CreatedAtUtc DESC
             ) AS LastMessagePreview,
             ct.DisplayName AS ContactDisplayName,
