@@ -66,8 +66,31 @@ try{
  const hash=createHash("sha256").update(JSON.stringify(plan.map(x=>[x.table,x.reason]))).digest("hex");
  if(hash!=="c423874f8ded8743e398d93d05352ddafb2be4996ccf5e99078afd3a05db5700")throw Error("SCHEMA_PLAN_CHANGED");
  if(unclassified.length)throw Error("UNCLASSIFIED_NONEMPTY_TABLES");
- const activeTriggers=await q("SELECT OBJECT_NAME(parent_id) TableName,name TriggerName FROM sys.triggers WHERE parent_class=1 AND is_disabled=0");
- if(activeTriggers.some(x=>rules.has(x.TableName))){emit("BLOCKING_TRIGGERS",activeTriggers.filter(x=>rules.has(x.TableName)));throw Error("ENABLED_DML_TRIGGER_REVIEW_REQUIRED");}
+ const knownDeleteGuards=new Map([
+ ["TR_TblSaasFinancialOutbox_NoDelete","TblSaasFinancialOutbox"],
+ ["TR_SaasFinancialReconciliationRun_NoDelete","TblSaasFinancialReconciliationRun"],
+ ["TR_SaasFinancialReconciliationEvent_NoDelete","TblSaasFinancialReconciliationEvent"],
+ ["TR_SaasFinancialReconciliationObservation_NoDelete","TblSaasFinancialReconciliationObservation"],
+ ["TR_SaasFinancialReconciliationCase_NoDelete","TblSaasFinancialReconciliationCase"],
+ ["TR_SaasFinancialReconciliationFinding_NoDelete","TblSaasFinancialReconciliationFinding"]
+ ]);
+ const knownUpdateGuards=new Map([
+ ["TR_TblSaasFinancialOutbox_ImmutableFacts","TblSaasFinancialOutbox"],
+ ["TR_SaasFinancialReconciliationEvent_ImmutableFacts","TblSaasFinancialReconciliationEvent"]
+ ]);
+ const triggers=await q("SELECT OBJECT_NAME(t.parent_id) TableName,t.name TriggerName,t.is_disabled Disabled,e.type_desc EventType FROM sys.triggers t JOIN sys.trigger_events e ON e.object_id=t.object_id WHERE t.parent_class=1");
+ const relevant=triggers.filter(x=>rules.has(x.TableName));
+ const unexpected=relevant.filter(x=>x.Disabled||!(knownDeleteGuards.get(x.TriggerName)===x.TableName&&x.EventType==="DELETE"||knownUpdateGuards.get(x.TriggerName)===x.TableName&&x.EventType==="UPDATE"));
+ if(unexpected.length||relevant.length!==knownDeleteGuards.size+knownUpdateGuards.size){emit("BLOCKING_TRIGGERS",relevant);throw Error("UNEXPECTED_TRIGGER_LAYOUT");}
+ if(process.env.DRVO_RESET_REHEARSAL_MAINTENANCE!=="true")throw Error("MAINTENANCE_WINDOW_REQUIRED");
+ const perms=await q("SELECT IS_SRVROLEMEMBER('sysadmin') AS IsSysadmin");
+ if(Number(perms[0]?.IsSysadmin)!==1)throw Error("RUN_REHEARSAL_WITH_TEMPORARY_SQL_ADMIN_CREDENTIAL");
+ // Only reviewed DELETE guards, inside this rollback-only transaction.
+ // UPDATE immutability guards remain enabled throughout.
+ for(const [trigger,table] of knownDeleteGuards){
+  await q("DISABLE TRIGGER dbo."+id(trigger)+" ON dbo."+id(table)+";");
+ }
+ emit("TEMPORARY_REHEARSAL_GUARDS", [...knownDeleteGuards.keys()]);
  const unsafeFk=await q("SELECT name FROM sys.foreign_keys WHERE is_disabled=1 OR is_not_trusted=1 OR delete_referential_action<>0 OR update_referential_action<>0");
  if(unsafeFk.length){emit("BLOCKING_FKS",unsafeFk);throw Error("FK_TRUST_OR_CASCADE_REVIEW_REQUIRED");}
  const external=await q("SELECT DeliveryState,EventType,COUNT(*) AS [Rows] FROM dbo.TblSaasFinancialOutbox GROUP BY DeliveryState,EventType");
@@ -98,6 +121,13 @@ try{
  const channel=await q("SELECT RuntimeEngine,Status FROM dbo.TblChannelConnection WHERE BusinessID=@keep");
  if(channel.length!==1||channel[0].RuntimeEngine!=="BAILEYS_V7"||channel[0].Status!=="ACTIVE")throw Error("PROTECTED_CHANNEL_INVALID");
  emit("PROTECTED_AFTER_REHEARSAL",await q("SELECT (SELECT COUNT(*) FROM dbo.TblBusiness) Businesses,(SELECT COUNT(*) FROM dbo.TblSubscription) Subscriptions,(SELECT COUNT(*) FROM dbo.TblMessage WHERE BusinessID=@keep) Messages,(SELECT COUNT(*) FROM dbo.TblContact WHERE BusinessID=@keep) Contacts,(SELECT COUNT(*) FROM dbo.TblKnowledgeItem WHERE BusinessID=@keep) KnowledgeItems,(SELECT COUNT(*) FROM dbo.TblErpInvoiceMirror WHERE BusinessID=@keep) ERPInvoices"));
+ for(const [trigger,table] of knownDeleteGuards){
+  await q("ENABLE TRIGGER dbo."+id(trigger)+" ON dbo."+id(table)+";");
+ }
+ const disabled=await q("SELECT name FROM sys.triggers WHERE is_disabled=1 AND parent_class=1");
+ if(disabled.some(x=>knownDeleteGuards.has(x.name)))throw Error("GUARD_RESTORE_FAILED");
  await trx.rollback();begun=false;
+ const restored=(await pool.request().query("SELECT name,is_disabled FROM sys.triggers WHERE parent_class=1")).recordset;
+ for(const [trigger] of knownDeleteGuards)if(!restored.some(x=>x.name===trigger&&!x.is_disabled))throw Error("POST_ROLLBACK_GUARD_VERIFICATION_FAILED");
  console.log("REHEARSAL_PASSED_ROLLED_BACK_NO_PERSISTENT_DELETE");
 }finally{if(begun){try{await trx.rollback();}catch{}}await pool.close();}
