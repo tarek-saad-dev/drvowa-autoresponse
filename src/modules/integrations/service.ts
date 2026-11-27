@@ -275,7 +275,7 @@ export async function invokeDrvoErpTool(params: {
     businessId: params.businessId,
     type: INTEGRATION_TYPE_DRVO_ERP,
   });
-  if (!integration || integration.status !== "ACTIVE" || !allowsExternalIntegration(integration.type, scope)) {
+  if (!integration || integration.status !== "ACTIVE") {
     throw new NotFoundError("DRVO ERP integration is not active");
   }
 
@@ -322,7 +322,7 @@ export async function authenticateExternalIntegration(
   const integration = await repo.getIntegrationByInboundApiKeyHash({
     apiKeyHash: hashIntegrationApiKey(token),
   });
-  if (!integration || integration.status !== "ACTIVE") {
+  if (!integration || integration.status !== "ACTIVE" || !allowsExternalIntegration(integration.type, scope)) {
     throw new ForbiddenError("Invalid integration authorization");
   }
   return integration;

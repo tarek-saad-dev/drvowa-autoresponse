@@ -25,7 +25,10 @@ describe("dedicated signup OTP key",()=>{
     expect(service).not.toContain("SecretCiphertext");
     const auth=readFileSync("src/modules/integrations/service.ts","utf8");
     expect(auth).toContain('scope: ExternalIntegrationScope = "erp"');
-    expect(auth).toContain("allowsExternalIntegration(integration.type, scope)");
+    const authentication = auth.slice(auth.indexOf("export async function authenticateExternalIntegration"), auth.indexOf("export async function deliverExternalEventMessage"));
+    expect(authentication).toContain("allowsExternalIntegration(integration.type, scope)");
+    const toolInvocation = auth.slice(auth.indexOf("export async function invokeDrvoErpTool"), auth.indexOf("export async function authenticateExternalIntegration"));
+    expect(toolInvocation).not.toContain("allowsExternalIntegration(integration.type, scope)");
     for(const action of ["send","verify"]){
       const endpoint=readFileSync("src/app/api/external/v1/otp/"+action+"/route.ts","utf8");
       expect(endpoint).toContain('request.headers.get("authorization"), "otp"');
