@@ -1,3 +1,4 @@
+import { OTP_INBOX_MARKER } from "@/modules/otp/redaction";
 import { OPEN_ESCALATION_SQL } from "@/modules/escalations/open-escalation-sql";
 import { randomUUID } from "node:crypto";
 
@@ -1392,20 +1393,55 @@ export async function listMessagesForConversation(params: {
   const limit = Math.min(Math.max(params.limit ?? 100, 1), 200);
   const before = params.before ?? null;
 
+  // A read-only security activity projection: no raw OTP, no synthetic stored message,
+  // and no change to conversation answered/unread/AI state. Legacy evidence is bounded.
+  const timeline = `WITH InboxTimeline AS (
+  SELECT m.MessageID,m.BusinessID,m.ConversationID,m.ChannelConnectionID,m.ContactID,
+         m.Direction,m.Provider,m.ProviderMessageID,m.ContentType,m.TextContent,
+         m.Origin,m.ActorUserID,m.ActorName,m.MediaMimeType,m.MediaFileName,
+         m.MediaSizeBytes,m.MediaStorageKey,m.QuotedProviderMessageID,m.IsHistorical,
+         m.ProviderTimestampUtc,m.ReceivedAtUtc,m.CreatedAtUtc
+  FROM dbo.TblMessage m
+  WHERE m.BusinessID=@businessId AND m.ConversationID=@conversationId
+    AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=m.BusinessID AND cm.MessageID=m.MessageID)
+    AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=m.BusinessID AND pv.ConversationID=m.ConversationID)
+  UNION ALL
+  SELECT o.ChallengeID,c.BusinessID,c.ConversationID,c.ChannelConnectionID,c.ContactID,
+         N'OUTBOUND',N'baileys',o.ProviderMessageID,N'TEXT',@otpMarker,
+         N'SYSTEM',NULL,N'OTP',NULL,NULL,NULL,NULL,NULL,CAST(0 AS bit),
+         o.CreatedAtUtc,o.CreatedAtUtc,o.CreatedAtUtc
+  FROM dbo.TblOtpChallenge o
+  JOIN dbo.TblConversation c ON c.BusinessID=o.BusinessID
+  JOIN dbo.TblContact ct ON ct.BusinessID=c.BusinessID AND ct.ContactID=c.ContactID AND ct.PhoneNormalized=o.PhoneNormalized
+  JOIN dbo.TblChannelConnection ch ON ch.BusinessID=c.BusinessID AND ch.ChannelConnectionID=c.ChannelConnectionID
+  WHERE c.BusinessID=@businessId AND c.ConversationID=@conversationId
+    AND ch.Channel=N'WHATSAPP' AND ch.Provider=N'BAILEYS'
+    AND o.ProviderMessageID IS NOT NULL AND LEN(o.ProviderMessageID)>0
+    AND o.CreatedAtUtc>=ch.CreatedAtUtc
+    AND o.CreatedAtUtc>=DATEADD(hour,-24,SYSUTCDATETIME())
+    AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=c.BusinessID AND pv.ConversationID=c.ConversationID)
+    AND NOT EXISTS (SELECT 1 FROM dbo.TblWhatsAppWorkspaceReset rr WHERE rr.BusinessID=c.BusinessID AND o.CreatedAtUtc<rr.ResetAtUtc)
+    AND NOT EXISTS (SELECT 1 FROM dbo.TblWhatsAppPrivacyMode p WHERE p.BusinessID=c.BusinessID AND p.Mode=N'BUSINESS_ONLY'
+      AND NOT EXISTS (SELECT 1 FROM dbo.TblWhatsAppApprovedContact a WHERE a.BusinessID=c.BusinessID AND a.PhoneNormalized=ct.PhoneNormalized AND a.ApprovedAtUtc<=o.CreatedAtUtc))
+    -- Legacy OTP records lack a channel ID. Fail closed on ambiguity, including old channels.
+    AND NOT EXISTS (SELECT 1 FROM dbo.TblChannelConnection other WHERE other.BusinessID=c.BusinessID AND other.Channel=N'WHATSAPP' AND other.Provider=N'BAILEYS' AND other.ChannelConnectionID<>c.ChannelConnectionID)
+    AND NOT EXISTS (SELECT 1 FROM dbo.TblConversation other JOIN dbo.TblContact otherCt ON otherCt.BusinessID=other.BusinessID AND otherCt.ContactID=other.ContactID
+      WHERE other.BusinessID=c.BusinessID AND other.ChannelConnectionID=c.ChannelConnectionID AND other.ConversationID<>c.ConversationID AND otherCt.PhoneNormalized=ct.PhoneNormalized)
+    -- Include tombstones in deduplication so purged messages never reappear as OTP markers.
+    AND NOT EXISTS (SELECT 1 FROM dbo.TblMessage existing WHERE existing.BusinessID=c.BusinessID AND existing.ChannelConnectionID=c.ChannelConnectionID
+      AND (existing.ProviderMessageID=o.ProviderMessageID OR RIGHT(existing.ProviderMessageID,LEN(o.ProviderMessageID)+1)=N'_'+o.ProviderMessageID))
+)`;
   const result = await query<MessageRow>(
     before
-      ? `SELECT * FROM (
+      ? `${timeline} SELECT * FROM (
            SELECT TOP (@limit)
               MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
               Direction, Provider, ProviderMessageID, ContentType, TextContent,
               Origin, ActorUserID, ActorName, MediaMimeType, MediaFileName,
               MediaSizeBytes, MediaStorageKey, QuotedProviderMessageID, IsHistorical,
               ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
-           FROM TblMessage
-           WHERE BusinessID = @businessId
-             AND ConversationID = @conversationId
-             AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=TblMessage.BusinessID AND cm.MessageID=TblMessage.MessageID)
-             AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)
+           FROM InboxTimeline
+           WHERE BusinessID = @businessId AND ConversationID = @conversationId
              AND (
                ISNULL(ProviderTimestampUtc, CreatedAtUtc) < @beforeAt
                OR (
@@ -1426,18 +1462,15 @@ export async function listMessagesForConversation(params: {
          ORDER BY ISNULL(ProviderTimestampUtc, CreatedAtUtc) ASC,
                   CreatedAtUtc ASC,
                   MessageID ASC`
-      : `SELECT * FROM (
+      : `${timeline} SELECT * FROM (
            SELECT TOP (@limit)
               MessageID, BusinessID, ConversationID, ChannelConnectionID, ContactID,
               Direction, Provider, ProviderMessageID, ContentType, TextContent,
               Origin, ActorUserID, ActorName, MediaMimeType, MediaFileName,
               MediaSizeBytes, MediaStorageKey, QuotedProviderMessageID, IsHistorical,
               ProviderTimestampUtc, ReceivedAtUtc, CreatedAtUtc
-           FROM TblMessage
-           WHERE BusinessID = @businessId
-             AND ConversationID = @conversationId
-             AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=TblMessage.BusinessID AND cm.MessageID=TblMessage.MessageID)
-             AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblMessage.BusinessID AND pv.ConversationID=TblMessage.ConversationID)
+           FROM InboxTimeline
+           WHERE BusinessID = @businessId AND ConversationID = @conversationId
            ORDER BY ISNULL(ProviderTimestampUtc, CreatedAtUtc) DESC,
                     CreatedAtUtc DESC,
                     MessageID DESC
@@ -1457,6 +1490,7 @@ export async function listMessagesForConversation(params: {
         value: params.conversationId,
       },
       { name: "limit", type: sql.Int, value: limit },
+      { name: "otpMarker", type: sql.NVarChar(200), value: OTP_INBOX_MARKER },
       ...(before
         ? [
             { name: "beforeAt", type: sql.DateTime2, value: before.at },

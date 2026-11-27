@@ -16,6 +16,7 @@ vi.mock("@/lib/db", () => ({
 import {
   countConversationsForBusiness,
   listConversationsForBusiness,
+  listMessagesForConversation,
 } from "@/modules/messaging/repository";
 
 const businessId = "11111111-1111-1111-1111-111111111111";
@@ -92,5 +93,33 @@ describe("inbox server-side pagination", () => {
     const [sql, inputs] = mocks.query.mock.calls[0];
     expect(sql).toContain("COUNT(1) AS TotalCount");
     expect(inputs).toEqual([expect.objectContaining({ name: "businessId", value: businessId })]);
+  });
+});
+
+
+describe("OTP activity in inbox timeline", () => {
+  it("projects recent confirmed OTP metadata without raw codes or write side effects, and preserves privacy", async () => {
+    mocks.query.mockReset(); mocks.query.mockResolvedValue({ recordset: [] });
+    await listMessagesForConversation({ businessId, conversationId: "22222222-2222-4222-8222-222222222222", limit: 100 });
+    const [statement, inputs] = mocks.query.mock.calls[0];
+    expect(statement).toContain("FROM dbo.TblOtpChallenge o");
+    expect(statement).toContain("o.ProviderMessageID IS NOT NULL");
+    expect(statement).toContain("ct.PhoneNormalized=o.PhoneNormalized");
+    expect(statement).toContain("c.BusinessID=@businessId AND c.ConversationID=@conversationId");
+    expect(statement).toContain("VwPrivacyVisibleConversation");
+    expect(statement).toContain("TblWhatsAppWorkspaceReset");
+    expect(statement).toContain("DATEADD(hour,-24,SYSUTCDATETIME())");
+    expect(statement).toContain("existing.ProviderMessageID=o.ProviderMessageID");
+    expect(statement).not.toContain("CodeHash");
+    expect(statement).not.toMatch(/INSERT INTO|UPDATE dbo/i);
+    expect(inputs).toContainEqual(expect.objectContaining({ name: "otpMarker", value: "🔐 تم إرسال رمز تحقق (OTP). تم إخفاء الرمز لحماية العميل." }));
+  });
+  it("includes the same source and stable cursor on older pages", async () => {
+    mocks.query.mockReset(); mocks.query.mockResolvedValue({ recordset: [] });
+    const at = new Date("2026-11-27T12:00:00Z");
+    await listMessagesForConversation({ businessId, conversationId: "22222222-2222-4222-8222-222222222222", before: { at, createdAtUtc: at, messageId: "33333333-3333-4333-8333-333333333333" } });
+    const [statement] = mocks.query.mock.calls[0];
+    expect(statement).toContain("FROM InboxTimeline");
+    expect(statement).toContain("MessageID < @beforeMessageId");
   });
 });
