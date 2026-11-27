@@ -1,3 +1,4 @@
+import { getWorkspaceResetRevision } from "@/modules/messaging/workspace-reset-service";
 import { redirect } from "next/navigation";
 
 import { getConversationForBusiness, getContactForBusiness } from "@/modules/messaging/repository";
@@ -56,6 +57,7 @@ export default async function InboxPage({ searchParams }: {
   const membership = await getMembership({ userId: user.userId, businessId });
   const canResumeAll = membership?.status === "ACTIVE" && ["OWNER", "ADMIN"].includes(membership.role);
 
+  const revision=await getWorkspaceResetRevision(businessId);
   const [batch, counts] = await Promise.all([
     listInboxConversations({
       businessId,
@@ -105,6 +107,7 @@ export default async function InboxPage({ searchParams }: {
   return (
     <InboxPanel
       key={initialFilter + ":" + (deepLinkId ?? "list")}
+      initialResetRevision={revision?.id ?? null}
       canResumeAll={canResumeAll}
       canManagePrivacy={membership?.status === "ACTIVE" && membership.role === "OWNER"}
       initialSelectedId={deepLinkId}

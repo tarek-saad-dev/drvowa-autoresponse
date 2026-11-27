@@ -55,24 +55,24 @@ export async function getPulseSnapshot(input:{
    "SELECT COUNT(DISTINCT m.ConversationID) AS Conversations,COUNT(1) AS Messages,",
    "COALESCE(SUM(CASE WHEN m.ContentType=N'TEXT' AND m.TextContent IS NOT NULL THEN 1 ELSE 0 END),0) AS Eligible",
    "FROM dbo.TblMessage m WHERE m.BusinessID=@businessId AND m.Direction=N'INBOUND' AND m.IsHistorical=0",
-   "AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=m.BusinessID AND pv.ConversationID=m.ConversationID)",
+   "AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=m.BusinessID AND pv.ConversationID=m.ConversationID) AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=m.BusinessID AND cm.MessageID=m.MessageID)",
    "AND COALESCE(m.ProviderTimestampUtc,m.ReceivedAtUtc)>=@start",
    "AND COALESCE(m.ProviderTimestampUtc,m.ReceivedAtUtc)<@end"
   ].join(" "),a),
   query<{Total:number}>([
    "SELECT COUNT(DISTINCT m.ConversationID) AS Total FROM dbo.TblMessage m",
    "WHERE m.BusinessID=@businessId AND m.Direction=N'OUTBOUND' AND m.Origin=N'AI'",
-   "AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=m.BusinessID AND pv.ConversationID=m.ConversationID)",
+   "AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=m.BusinessID AND pv.ConversationID=m.ConversationID) AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=m.BusinessID AND cm.MessageID=m.MessageID)",
    "AND m.IsHistorical=0 AND COALESCE(m.ProviderTimestampUtc,m.ReceivedAtUtc)>=@start",
    "AND COALESCE(m.ProviderTimestampUtc,m.ReceivedAtUtc)<@end"
   ].join(" "),a),
   query<{Total:number}>([
    "SELECT COUNT(1) AS Total FROM dbo.TblPulseMessageScan p",
-   "WHERE p.BusinessID=@businessId AND p.MessageAtUtc>=@start AND p.MessageAtUtc<@end AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=p.BusinessID AND pv.ConversationID=p.ConversationID)"
+   "WHERE p.BusinessID=@businessId AND p.MessageAtUtc>=@start AND p.MessageAtUtc<@end AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=p.BusinessID AND pv.ConversationID=p.ConversationID) AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=p.BusinessID AND cm.MessageID=p.MessageID)"
   ].join(" "),a),
   query<{Intent:PulseIntent;Total:number}>([
    "SELECT Intent,COUNT(DISTINCT ConversationID) AS Total FROM dbo.TblPulseSignal",
-   "WHERE BusinessID=@businessId AND MessageAtUtc>=@start AND MessageAtUtc<@end AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblPulseSignal.BusinessID AND pv.ConversationID=TblPulseSignal.ConversationID)",
+   "WHERE BusinessID=@businessId AND MessageAtUtc>=@start AND MessageAtUtc<@end AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=TblPulseSignal.BusinessID AND pv.ConversationID=TblPulseSignal.ConversationID) AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=TblPulseSignal.BusinessID AND cm.MessageID=TblPulseSignal.MessageID)",
    "GROUP BY Intent ORDER BY Total DESC"
   ].join(" "),a),
   query<{ConversationID:string;Name:string|null;Reason:string|null;ReasonCode:string|null;LastCustomerText:string|null;At:Date}>([
@@ -84,7 +84,7 @@ export async function getPulseSnapshot(input:{
    "JOIN dbo.TblContact ct ON ct.BusinessID=c.BusinessID AND ct.ContactID=c.ContactID",
    "OUTER APPLY (SELECT TOP (1) LEFT(m.TextContent,240) AS LastCustomerText",
    "FROM dbo.TblMessage m WHERE m.BusinessID=e.BusinessID AND m.ConversationID=e.ConversationID",
-   "AND m.Direction=N'INBOUND' AND m.IsHistorical=0 AND m.TextContent IS NOT NULL",
+   "AND m.Direction=N'INBOUND' AND m.IsHistorical=0 AND m.TextContent IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=m.BusinessID AND cm.MessageID=m.MessageID)",
    "ORDER BY COALESCE(m.ProviderTimestampUtc,m.ReceivedAtUtc,m.CreatedAtUtc) DESC,m.CreatedAtUtc DESC) lastInbound",
    "WHERE e.BusinessID=@businessId AND e.ResolvedAtUtc IS NULL AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=e.BusinessID AND pv.ConversationID=e.ConversationID)",
    "AND e.Status IN(N'OPEN',N'ACKNOWLEDGED') AND e.FollowUpPhase=N'NEEDS_ATTENTION'",
@@ -96,7 +96,7 @@ export async function getPulseSnapshot(input:{
    "p.Evidence,p.ActionAt AS At FROM",
    `(SELECT p.*,${signalAttentionAt} AS ActionAt,ROW_NUMBER() OVER(PARTITION BY p.ConversationID,p.Intent`,
    `ORDER BY ${signalAttentionAt} DESC,p.SignalID DESC) AS rn FROM dbo.TblPulseSignal p`,
-   "WHERE p.BusinessID=@businessId AND p.ActionType IS NOT NULL AND p.ReviewStatus=N'OPEN' AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=p.BusinessID AND pv.ConversationID=p.ConversationID)",
+   "WHERE p.BusinessID=@businessId AND p.ActionType IS NOT NULL AND p.ReviewStatus=N'OPEN' AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=p.BusinessID AND pv.ConversationID=p.ConversationID) AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=p.BusinessID AND cm.MessageID=p.MessageID)",
    "AND p.ActionState=N'NEEDS_REPLY'",
    `AND ${signalAttentionAt}>=@start AND ${signalAttentionAt}<@end) p`,
    "JOIN dbo.TblConversation c ON c.ConversationID=p.ConversationID AND c.BusinessID=p.BusinessID",
@@ -117,7 +117,7 @@ export async function getPulseSnapshot(input:{
   ].join(" "),a),
   query<{Total:number}>([
    "SELECT COUNT(1) AS Total FROM (SELECT p.ConversationID,p.Intent FROM dbo.TblPulseSignal p",
-   "WHERE p.BusinessID=@businessId AND p.ReviewStatus=N'OPEN' AND p.ActionType IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=p.BusinessID AND pv.ConversationID=p.ConversationID)",
+   "WHERE p.BusinessID=@businessId AND p.ReviewStatus=N'OPEN' AND p.ActionType IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=p.BusinessID AND pv.ConversationID=p.ConversationID) AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=p.BusinessID AND cm.MessageID=p.MessageID)",
    "AND p.ActionState=N'NEEDS_REPLY'",
    `AND ${signalAttentionAt}>=@start AND ${signalAttentionAt}<@end`,
    withoutOpenEscalation,
@@ -125,7 +125,7 @@ export async function getPulseSnapshot(input:{
   ].join(" "),a),
   query<{Total:number}>([
    "SELECT COUNT(1) AS Total FROM (SELECT p.ConversationID,p.Intent FROM dbo.TblPulseSignal p",
-   "WHERE p.BusinessID=@businessId AND p.ReviewStatus=N'OPEN' AND p.ActionType IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=p.BusinessID AND pv.ConversationID=p.ConversationID)",
+   "WHERE p.BusinessID=@businessId AND p.ReviewStatus=N'OPEN' AND p.ActionType IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.VwPrivacyVisibleConversation pv WHERE pv.BusinessID=p.BusinessID AND pv.ConversationID=p.ConversationID) AND EXISTS (SELECT 1 FROM dbo.VwPrivacyCurrentMessage cm WHERE cm.BusinessID=p.BusinessID AND cm.MessageID=p.MessageID)",
    "AND p.ActionState=N'IN_PROGRESS'",
    `AND ${signalHandlingAt}>=@start AND ${signalHandlingAt}<@end`,
    withoutOpenEscalation,

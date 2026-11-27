@@ -3,6 +3,7 @@ import { afterAll,beforeAll,describe,expect,it } from "vitest";
 import { closePool,query,sql } from "@/lib/db";
 import { changePrivateContact } from "@/modules/messaging/private-contact-service";
 import { changeApprovedContact,setPrivacyMode } from "@/modules/messaging/privacy-mode-service";
+import { resetWhatsAppWorkspace,previewWorkspaceReset } from "@/modules/messaging/workspace-reset-service";
 import { removeInboxContacts } from "@/modules/messaging/conversation-privacy-service";
 import { getConversationForBusiness,listMessagesForConversation } from "@/modules/messaging/repository";
 const isolated=process.env.DRVO_TEST_ISOLATED_DB==="1"&&/test|isolated/i.test(process.env.DB_NAME??"");
@@ -54,5 +55,17 @@ describe.runIf(isolated)("WhatsApp privacy SQL",()=>{
   expect(await visible(a)).toBe(false);expect(await visible(b)).toBe(true);
   expect(await listMessagesForConversation({businessId:a.business,conversationId:a.conversation})).toEqual([]);
   expect(await listMessagesForConversation({businessId:b.business,conversationId:b.conversation})).toHaveLength(1);
+ });
+ it("reset all hides old messages and contacts without blocking the same phone forever",async()=>{
+  const c=fixture();await seed(c);
+  expect(await previewWorkspaceReset(c.business)).toMatchObject({conversations:1,contacts:1,messages:1});
+  await resetWhatsAppWorkspace(c.business);
+  expect(await previewWorkspaceReset(c.business)).toMatchObject({conversations:0,contacts:0,messages:0});
+  expect(await visible(c)).toBe(false);expect(await visible(b)).toBe(true);
+  await query("INSERT INTO dbo.TblMessage(MessageID,BusinessID,ConversationID,ChannelConnectionID,ContactID,Direction,Provider,ProviderMessageID,ContentType,TextContent,ReceivedAtUtc,ProviderTimestampUtc) VALUES(@new,@business,@conversation,@channel,@contact,N'INBOUND',N'baileys',@provider,N'TEXT',N'new synthetic',SYSUTCDATETIME(),DATEADD(second,1,SYSUTCDATETIME()))",[...Object.entries(c).map(([name,value])=>uuid(name,value)),uuid("new",randomUUID()),{name:"provider",type:sql.NVarChar(256),value:"new-"+c.message}]);
+  expect(await visible(c)).toBe(true);
+  const rows=await listMessagesForConversation({businessId:c.business,conversationId:c.conversation});
+  expect(rows.map(m=>m.textContent)).toEqual(["new synthetic"]);
+  expect(await aiEligible(c)).toBe(false);
  });
 });

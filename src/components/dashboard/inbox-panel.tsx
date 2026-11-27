@@ -378,10 +378,12 @@ export function InboxPanel({
   initialFilter = "ALL",
   canResumeAll = false,
   canManagePrivacy = false,
+  initialResetRevision = null,
 }: {
   initialConversations: ConversationRow[];
   canResumeAll?: boolean;
   canManagePrivacy?: boolean;
+  initialResetRevision?: string|null;
   initialCounts: Counts;
   initialHasMore: boolean;
   initialCursor: ConversationCursor | null;
@@ -472,7 +474,7 @@ export function InboxPanel({
   const mobileThreadRef = useRef(false);
   const readWatermarksRef = useRef<Map<string, string>>(new Map());
   const listRequestRef = useRef(0);
-  const resetRevisionRef = useRef<string|null|undefined>(undefined);
+  const resetRevisionRef = useRef<string|null|undefined>(initialResetRevision);
   const listBusyRef = useRef(false);
   const listScroller = useRef<HTMLDivElement | null>(null);
   const listSentinel = useRef<HTMLDivElement | null>(null);

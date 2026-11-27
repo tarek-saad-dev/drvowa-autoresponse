@@ -24,9 +24,13 @@ describe("runtime WhatsApp privacy", () => {
   it("returns only the DB-owned policy for a known account", async () => {
     const res = await POST(request({ accountKey: "account-one" }));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ historyImportEnabled: false, privateContactPhones: [], mode: "ALL", approvedContactPhones: [] });
+    expect(await res.json()).toEqual({ historyImportEnabled: false, resetAtUtc: null, privateContactPhones: [], mode: "ALL", approvedContactPhones: [] });
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     expect(mock.resolve).toHaveBeenCalledWith("account-one");
+  });
+  it("reset overrides history consent",async()=>{
+    mock.resolve.mockResolvedValue({whatsappHistoryImportEnabled:true,whatsappResetAtUtc:new Date("2026-11-27T00:00:00Z")});
+    expect(await(await POST(request({accountKey:"account-one"}))).json()).toMatchObject({historyImportEnabled:false,resetAtUtc:"2026-11-27T00:00:00.000Z"});
   });
   it("does not expose policy to an unauthenticated caller", async () => {
     expect((await POST(request({ accountKey: "account-one" }, "bad"))).status).toBe(401);
@@ -40,7 +44,7 @@ describe("runtime WhatsApp privacy", () => {
   it("keeps legacy opt-in behavior and supports explicit import", async () => {
     for (const value of [null, true]) {
       mock.resolve.mockResolvedValue({ whatsappHistoryImportEnabled: value });
-      expect(await (await POST(request({ accountKey: "account-one" }))).json()).toEqual({ historyImportEnabled: true, privateContactPhones: [], mode: "ALL", approvedContactPhones: [] });
+      expect(await (await POST(request({ accountKey: "account-one" }))).json()).toEqual({ historyImportEnabled: true, resetAtUtc: null, privateContactPhones: [], mode: "ALL", approvedContactPhones: [] });
     }
   });
 });

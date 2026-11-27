@@ -5,12 +5,13 @@ export async function getPrivacyInventory(businessId:string,days:number){
  const [summary,removed]=await Promise.all([
  query<{Messages:number;HiddenMessages:number;OlderMessages:number;OlderMedia:number;HiddenMedia:number}>(
  `SELECT COUNT(1) Messages,
- COALESCE(SUM(CASE WHEN pv.ConversationID IS NULL THEN 1 ELSE 0 END),0) HiddenMessages,
+ COALESCE(SUM(CASE WHEN pv.ConversationID IS NULL OR cm.MessageID IS NULL THEN 1 ELSE 0 END),0) HiddenMessages,
  COALESCE(SUM(CASE WHEN m.CreatedAtUtc<DATEADD(day,-@days,SYSUTCDATETIME()) THEN 1 ELSE 0 END),0) OlderMessages,
  COALESCE(SUM(CASE WHEN m.CreatedAtUtc<DATEADD(day,-@days,SYSUTCDATETIME()) AND m.MediaStorageKey IS NOT NULL THEN 1 ELSE 0 END),0) OlderMedia,
- COALESCE(SUM(CASE WHEN pv.ConversationID IS NULL AND m.MediaStorageKey IS NOT NULL THEN 1 ELSE 0 END),0) HiddenMedia
+ COALESCE(SUM(CASE WHEN (pv.ConversationID IS NULL OR cm.MessageID IS NULL) AND m.MediaStorageKey IS NOT NULL THEN 1 ELSE 0 END),0) HiddenMedia
  FROM dbo.TblMessage m
  JOIN dbo.TblChannelConnection ch ON ch.BusinessID=m.BusinessID AND ch.ChannelConnectionID=m.ChannelConnectionID AND ch.Channel=N'WHATSAPP'
+ LEFT JOIN dbo.VwPrivacyCurrentMessage cm ON cm.BusinessID=m.BusinessID AND cm.MessageID=m.MessageID
  LEFT JOIN dbo.VwPrivacyVisibleConversation pv ON pv.BusinessID=m.BusinessID AND pv.ConversationID=m.ConversationID
  WHERE m.BusinessID=@businessId AND m.PrivacyPurgedAtUtc IS NULL`,[...scope,{name:"days",type:sql.Int,value:days}]),
  query<{PhoneNormalized:string;RemovedAtUtc:Date}>("SELECT PhoneNormalized,RemovedAtUtc FROM dbo.TblWhatsAppRemovedContact WHERE BusinessID=@businessId ORDER BY RemovedAtUtc DESC",scope)
