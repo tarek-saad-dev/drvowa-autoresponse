@@ -91,7 +91,10 @@ try{
   await q("DISABLE TRIGGER dbo."+id(trigger)+" ON dbo."+id(table)+";");
  }
  emit("TEMPORARY_REHEARSAL_GUARDS", [...knownDeleteGuards.keys()]);
- const unsafeFk=await q("SELECT name FROM sys.foreign_keys WHERE is_disabled=1 OR is_not_trusted=1 OR delete_referential_action<>0 OR update_referential_action<>0");
+ // Migration 022 explicitly declares this one trusted ON DELETE CASCADE.
+ const unsafeFk=await q("SELECT name,is_disabled,is_not_trusted,delete_referential_action_desc,update_referential_action_desc FROM sys.foreign_keys WHERE is_disabled=1 OR is_not_trusted=1 OR update_referential_action<>0 OR (delete_referential_action<>0 AND NOT (name='FK_TblIntegrationPairing_Business' AND parent_object_id=OBJECT_ID('dbo.TblIntegrationPairing') AND referenced_object_id=OBJECT_ID('dbo.TblBusiness') AND delete_referential_action=1))");
+ const pairing=await q("SELECT COUNT(*) AS Matches FROM sys.foreign_key_columns f JOIN sys.foreign_keys k ON k.object_id=f.constraint_object_id JOIN sys.columns pc ON pc.object_id=f.parent_object_id AND pc.column_id=f.parent_column_id JOIN sys.columns rc ON rc.object_id=f.referenced_object_id AND rc.column_id=f.referenced_column_id WHERE k.name='FK_TblIntegrationPairing_Business' AND pc.name='BusinessID' AND rc.name='BusinessID'");
+ if(Number(pairing[0]?.Matches)!==1||!rules.has("TblIntegrationPairing"))throw Error("PAIRING_FK_SCOPE_CHANGED");
  if(unsafeFk.length){emit("BLOCKING_FKS",unsafeFk);throw Error("FK_TRUST_OR_CASCADE_REVIEW_REQUIRED");}
  const external=await q("SELECT DeliveryState,EventType,COUNT(*) AS [Rows] FROM dbo.TblSaasFinancialOutbox GROUP BY DeliveryState,EventType");
  if(external.some(x=>x.DeliveryState!=="ACCEPTED"))throw Error("UNSETTLED_FINANCIAL_OUTBOX");
@@ -107,6 +110,7 @@ try{
  // Counts captured under serializable transaction. No FK disabling or TRUNCATE.
  for(const name of ordered){
   const rule=rules.get(name),row=expected.get(name);
+  if(name==="TblBusiness"){const childrenLeft=await q("SELECT COUNT(*) AS Remaining FROM dbo.TblIntegrationPairing WHERE BusinessID<>@keep");if(Number(childrenLeft[0]?.Remaining)!==0)throw Error("PAIRING_CHILDREN_REMAIN");}
   if(!row.target)continue;
   const result=await q("DELETE t FROM dbo."+id(name)+" t WHERE "+rule.where+"; SELECT @@ROWCOUNT AS Deleted;");
   if(Number(result[0]?.Deleted)!==row.target)throw Error("DELETE_COUNT_MISMATCH:"+name);
