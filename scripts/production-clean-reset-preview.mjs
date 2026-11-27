@@ -42,7 +42,7 @@ try{
  const plan=[];const unclassified=[];
  for(const name of [...tables.keys()].sort()){
   const rule=rules.get(name);
-  const result=(await q("SELECT COUNT_BIG(*) Total"+(rule?",COALESCE(SUM(CONVERT(bigint,CASE WHEN "+rule.where+" THEN 1 ELSE 0 END)),0) Target":"")+" FROM dbo."+id(name)+" t"))[0];
+  const result=(await q("SELECT (SELECT COUNT_BIG(*) FROM dbo."+id(name)+" t) Total"+(rule?",(SELECT COUNT_BIG(*) FROM dbo."+id(name)+" t WHERE "+rule.where+") Target":"")))[0];
   const total=Number(result.Total),target=Number(result.Target??0);
   if(rule)plan.push({table:name,total,target,retained:total-target,reason:rule.reason});
   else if(!preserve.has(name)&&total)unclassified.push({table:name,total});
@@ -50,11 +50,11 @@ try{
  emit("DELETE_PREVIEW",plan.filter(x=>x.target));
  emit("UNCHANGED_OR_EMPTY",plan.filter(x=>!x.target).map(x=>x.table));
  emit("UNCLASSIFIED_NONEMPTY",unclassified);
- emit("EXTERNAL_OUTBOX",await q("SELECT DeliveryState,EventType,COUNT(*) Rows FROM dbo.TblSaasFinancialOutbox GROUP BY DeliveryState,EventType"));
- emit("EXTERNAL_RECONCILIATION",await q("SELECT SourceKey,COUNT(*) Rows FROM dbo.TblSaasFinancialReconciliationEvent GROUP BY SourceKey"));
+ emit("EXTERNAL_OUTBOX",await q("SELECT DeliveryState,EventType,COUNT(*) AS [Rows] FROM dbo.TblSaasFinancialOutbox GROUP BY DeliveryState,EventType"));
+ emit("EXTERNAL_RECONCILIATION",await q("SELECT SourceKey,COUNT(*) AS [Rows] FROM dbo.TblSaasFinancialReconciliationEvent GROUP BY SourceKey"));
  emit("CUT_PROTECTED_COUNTS",await q("SELECT (SELECT COUNT(*) FROM dbo.TblMessage WHERE BusinessID=@keep) Messages,(SELECT COUNT(*) FROM dbo.TblContact WHERE BusinessID=@keep) Contacts,(SELECT COUNT(*) FROM dbo.TblIntegration WHERE BusinessID=@keep) Integrations,(SELECT COUNT(*) FROM dbo.TblKnowledgeItem WHERE BusinessID=@keep) KnowledgeItems,(SELECT COUNT(*) FROM dbo.TblErpInvoiceMirror WHERE BusinessID=@keep) ERPInvoices"));
- emit("CUT_CHANNEL",await q("SELECT RuntimeEngine,Status,COUNT(*) Rows FROM dbo.TblChannelConnection WHERE BusinessID=@keep GROUP BY RuntimeEngine,Status"));
- emit("MEDIA_KEYS",await q("SELECT CASE WHEN BusinessID=@keep THEN 'KEEP' ELSE 'OTHER' END Scope,COUNT(DISTINCT MediaStorageKey) Files FROM dbo.TblMessage WHERE MediaStorageKey IS NOT NULL GROUP BY CASE WHEN BusinessID=@keep THEN 'KEEP' ELSE 'OTHER' END"));
+ emit("CUT_CHANNEL",await q("SELECT RuntimeEngine,Status,COUNT(*) AS [Rows] FROM dbo.TblChannelConnection WHERE BusinessID=@keep GROUP BY RuntimeEngine,Status"));
+ emit("MEDIA_KEYS",await q("SELECT CASE WHEN BusinessID=@keep THEN 'KEEP' ELSE 'OTHER' END Scope,COUNT(DISTINCT MediaStorageKey) AS Files FROM dbo.TblMessage WHERE MediaStorageKey IS NOT NULL GROUP BY CASE WHEN BusinessID=@keep THEN 'KEEP' ELSE 'OTHER' END"));
  emit("FK_COLUMNS",fks);
  try{emit("BACKUP_METADATA",await q("SELECT TOP(1) backup_finish_date Finished,is_damaged Damaged,backup_size Bytes FROM msdb.dbo.backupset WHERE database_name=DB_NAME() AND type='D' ORDER BY backup_finish_date DESC"));}catch{emit("BACKUP_METADATA","permission unavailable; operator must verify new backup");}
  emit("PLAN_HASH",createHash("sha256").update(JSON.stringify(plan.map(x=>[x.table,x.reason]))).digest("hex"));
