@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { AdminLogoutButton } from "@/components/admin/admin-logout-button";
+import { AdminWhatsAppAlertBanner } from "@/components/admin/admin-whatsapp-alert-banner";
 import { AdminNavigation } from "@/components/admin/admin-navigation";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -52,6 +53,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
         </div>
       </header>
       <main id="main-content" className="mx-auto min-w-0 max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+        <AdminWhatsAppAlertBanner />
         {children}
       </main>
     </div>

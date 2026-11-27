@@ -16,6 +16,7 @@ import { deliverNextCustomerHoldMessage } from "../src/modules/escalations/custo
 import { createAiWorkerRunner } from "../src/modules/ai/worker-runner";
 import { resumeDueHumanConversations } from "../src/modules/ai/bulk-resume-service";
 import { runReliabilityAudit } from "../src/modules/reliability/service";
+import { scanWhatsAppIncidentAlerts } from "../src/modules/reliability/whatsapp-alert-service";
 import { scanPulseBatch } from "../src/modules/pulse/scanner";
 import { runPulseShadowBatch } from "../src/modules/pulse/shadow-worker";
 import { processNextCampaignDelivery } from "../src/modules/messaging/campaign-delivery-worker";
@@ -148,7 +149,16 @@ async function main(): Promise<void> {
       if (result.receiptIncidents || result.aiIncidents) console.info("[reliability] incidents_detected", result);
     } catch (error) {
       console.error("[reliability] audit_failed", { code: error instanceof Error ? error.name : "UNKNOWN" });
-    } finally { auditBusy = false; }
+    } finally {
+      try {
+        if (!stoppingAudit && process.env.WHATSAPP_INCIDENT_ALERTS_ENABLED !== "false") {
+          const result = await scanWhatsAppIncidentAlerts();
+          if (result.unavailable) console.warn("[reliability] whatsapp_alert_scan_partial", result);
+        }
+      } catch (error) {
+        console.warn("[reliability] whatsapp_alert_scan_failed", { code: error instanceof Error ? error.name : "UNKNOWN" });
+      } finally { auditBusy = false; }
+    }
   };
   const auditTimer = setInterval(() => void auditTick(), 60_000);
   void auditTick();
