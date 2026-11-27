@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { parseBoundedRuntimeJsonBody, requireRuntimeBearer } from "@/lib/api/runtime-auth";
 import { handleApiError, jsonError, jsonOk } from "@/lib/api/http";
+import { listPrivateContactPhones } from "@/modules/messaging/private-contact-service";
 import { resolveChannelByExternalAccountKey } from "@/modules/messaging/repository";
 
 const schema = z.object({ accountKey: z.string().trim().min(1).max(64) }).strict();
@@ -14,7 +15,8 @@ export async function POST(request: Request) {
     if (!channel) return jsonError("Unknown WhatsApp account", 404);
     // Pairing can request policy before the channel is ACTIVE. Legacy NULL keeps
     // existing behavior; the migration defaults new channels to false.
-    const res = jsonOk({ historyImportEnabled: channel.whatsappHistoryImportEnabled !== false });
+    const res = jsonOk({ historyImportEnabled: channel.whatsappHistoryImportEnabled !== false,
+      privateContactPhones: await listPrivateContactPhones(channel.businessId) });
     res.headers.set("Cache-Control", "no-store");
     return res;
   } catch (error) {

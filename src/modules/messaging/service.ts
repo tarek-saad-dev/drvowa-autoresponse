@@ -18,6 +18,7 @@ import {
 } from "./content";
 import * as repo from "./repository";
 import { canonicalizeWhatsAppContactIdentity } from "./whatsapp-identity";
+import { blocksPrivateContact } from "./private-contact-service";
 import { classifyBlockedWhatsAppSource } from "./whatsapp-source-guard";
 import { isCampaignOptOutRequest, recordCampaignOptOut } from "./campaign-optout";
 import { isExplicitCampaignOptIn, recordExplicitCampaignOptIn } from "./campaign-permission";
@@ -47,7 +48,8 @@ export type IngestOutcome =
         | "newsletter"
         | "call"
         | "not_live_notify"
-        | "inactive_connection";
+        | "inactive_connection"
+        | "private_contact";
     };
 
 const USAGE_EVENT = "WHATSAPP_INBOUND_MESSAGE";
@@ -90,11 +92,12 @@ export async function ingestWhatsAppInbound(
 
   const businessId = connection.businessId;
   const channelConnectionId = connection.channelConnectionId;
-  const normalized = normalizeInboundContent(dto.content);
   const identity = canonicalizeWhatsAppContactIdentity({
     externalContactKey: dto.externalContactKey,
   });
   const phoneNormalized = identity.phoneNormalized;
+  if (await blocksPrivateContact(businessId, phoneNormalized)) return { outcome: "ignored", reason: "private_contact" };
+  const normalized = normalizeInboundContent(dto.content);
   const providerTimestampUtc = parseOptionalUtc(dto.messageTimestamp);
   const receivedAtUtc =
     parseOptionalUtc(dto.receivedAt) ?? new Date();

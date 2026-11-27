@@ -5,6 +5,8 @@ import { parseOptionalUtc } from "@/modules/messaging/content";
 import { canonicalizeWhatsAppContactIdentity } from "@/modules/messaging/whatsapp-identity";
 import { redactMirroredOtp } from "@/modules/otp/redaction";
 import * as messages from "@/modules/messaging/repository";
+import { listPrivateContactPhones } from "./private-contact-service";
+import { isPrivateContactBlocked } from "./private-contact-policy";
 import { ingestWhatsAppLabelEvent } from "./whatsapp-label-sync-service";
 
 const contactKey = z.string().trim().min(5).max(256);
@@ -64,7 +66,10 @@ export async function ingestWhatsAppSync(input: WhatsappSyncInput): Promise<{
   }
 
   const result = { chats: 0, messages: 0, duplicates: 0, labels: 0, associations: 0 };
+  const privatePhones = await listPrivateContactPhones(channel.businessId);
   for (const event of input.events) {
+    if ("contactKey" in event && isPrivateContactBlocked(privatePhones,
+      canonicalizeWhatsAppContactIdentity({ externalContactKey: event.contactKey }).phoneNormalized)) continue;
     // Unscoped metadata cannot be distinguished from historical metadata yet.
     if (channel.whatsappHistoryImportEnabled === false &&
         (event.kind !== "message" || event.historical)) continue;

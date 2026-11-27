@@ -6,6 +6,7 @@ import { parseOptionalUtc } from "@/modules/messaging/content";
 import { recordHumanFollowUpReply } from "@/modules/escalations/followup-service";
 import { recordHumanPulseReply } from "@/modules/pulse/action-tracking";
 import * as messagingRepo from "@/modules/messaging/repository";
+import { blocksPrivateContact } from "@/modules/messaging/private-contact-service";
 import { canonicalizeWhatsAppContactIdentity } from "@/modules/messaging/whatsapp-identity";
 
 import {
@@ -48,7 +49,7 @@ export type OutboundObservedOutcome =
     }
   | {
       outcome: "ignored";
-      reason: "inactive_connection";
+      reason: "inactive_connection" | "private_contact";
     };
 
 function logObservation(
@@ -95,6 +96,7 @@ export async function ingestWhatsAppOutboundObserved(
   }
   const phoneNormalized = identity?.phoneNormalized ?? null;
   const externalContactKey = identity?.canonicalExternalContactKey ?? null;
+  if (await blocksPrivateContact(businessId, phoneNormalized)) return { outcome: "ignored", reason: "private_contact" };
 
   const existing = await findOutboundObservation({
     channelConnectionId,
