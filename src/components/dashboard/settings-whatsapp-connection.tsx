@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { mapUserFacingError } from "@/lib/ui/user-errors";
+import { reliabilityCopy, type ReliabilityView } from "@/modules/channels/reliability-view";
 
 type RuntimeState = "NOT_CONNECTED" | "STARTING" | "QR_REQUIRED" | "CONNECTING"
   | "READY" | "DISCONNECTED" | "LOGGED_OUT" | "ERROR" | "RUNTIME_DISABLED";
@@ -13,6 +14,7 @@ type ConnectionView = {
   connection?: { maskedPhone?: string | null } | null;
   runtime?: {
     inboundDelivery?: { health?: "healthy" | "degraded" | "unknown" } | null;
+    reliability?: ReliabilityView | null;
   } | null;
   code?: string;
   error?: string;
@@ -150,6 +152,9 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
 
   const ready = view?.uiState === "READY";
   const degraded = ready && view?.runtime?.inboundDelivery?.health === "degraded";
+  const reliability = view?.runtime?.reliability;
+  const reliabilityMessage = reliabilityCopy(reliability);
+  const reliabilityWarning = Boolean(reliability?.issue) || (ready && Boolean(reliability) && reliability?.evidence !== "both");
   const connecting = pairingActive || view?.uiState === "CONNECTING" || view?.uiState === "STARTING";
   const pairing = view?.uiState === "QR_REQUIRED";
   const hasError = Boolean(error);
@@ -163,13 +168,14 @@ export function SettingsWhatsAppConnection({ openInitially = false }: { openInit
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <span aria-hidden className={"h-2.5 w-2.5 shrink-0 rounded-full " +
-            (ready && !degraded && !hasError ? "bg-success" : "bg-warning")} />
+            (ready && !degraded && !hasError && !reliabilityWarning ? "bg-success" : "bg-warning")} />
           <div>
             <h2 className="text-sm font-black">{heading}</h2>
             {view?.connection?.maskedPhone && ready ? (
               <p dir="ltr" className="mt-1 text-xs text-muted-foreground">{view.connection.maskedPhone}</p>
             ) : null}
             {degraded ? <p className="mt-1 text-xs text-warning">في مشكلة في استقبال الرسائل؛ الاتصال وحده مش ضمان وصولها.</p> : null}
+            {reliabilityMessage && !hasError ? <p className={`mt-1 text-xs ${reliabilityWarning ? "text-warning" : "text-muted-foreground"}`} aria-live="polite">{reliabilityMessage}</p> : null}
           </div>
         </div>
         {!loading && !hasError && ready ? (

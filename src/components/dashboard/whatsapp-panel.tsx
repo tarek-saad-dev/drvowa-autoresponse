@@ -15,6 +15,7 @@ import {
 import { mapUserFacingError } from "@/lib/ui/user-errors";
 import { inboundIssueCopy } from "@/lib/dashboard/inbound-issue-copy";
 import type { InboundDeliveryIssue } from "@/modules/channels/whatsapp-service";
+import { reliabilityCopy, type ReliabilityView } from "@/modules/channels/reliability-view";
 
 type UiState =
   | "NOT_CONNECTED"
@@ -53,6 +54,7 @@ type ConnectionPayload = {
     qrAvailable: boolean;
     lastErrorCode: string | null;
     inboundDelivery?: InboundDeliveryPayload | null;
+    reliability?: ReliabilityView | null;
   } | null;
   /** Customer-safe only — never includes Baileys technical counters. */
   compatibility?: {
@@ -359,6 +361,10 @@ export function WhatsAppConnectionPanel({
   const inbound = view.runtime?.inboundDelivery ?? null;
   const socketConnected = state === "READY";
   const inboundDegraded = socketConnected && inbound?.health === "degraded";
+  const reliability = view.runtime?.reliability;
+  const reliabilityMessage = reliabilityCopy(reliability);
+  const reliabilityWarning = Boolean(reliability?.issue);
+  const unverified = socketConnected && reliability?.evidence !== "both" && Boolean(reliability);
   const inboundUnknown = socketConnected && (!inbound || inbound.health === "unknown");
   const inboundProblem = inboundIssueCopy(inbound?.issue);
   const inboundLabel = inboundDegraded
@@ -375,7 +381,7 @@ export function WhatsAppConnectionPanel({
     <div className="space-y-5">
       <section
         className={`rounded-[28px] border p-5 shadow-sm sm:p-6 ${
-          state === "READY" && !inboundDegraded
+          state === "READY" && !inboundDegraded && !reliabilityWarning && !unverified
             ? "border-success/20 bg-success-soft/35"
             : state === "READY"
               ? "border-warning/20 bg-warning-soft/35"
@@ -385,7 +391,7 @@ export function WhatsAppConnectionPanel({
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={badgeVariant(state, inboundDegraded)}>
+              <Badge variant={badgeVariant(state, inboundDegraded || reliabilityWarning || unverified)}>
                 {stateLabel(state)}
               </Badge>
               {view.connection?.maskedPhone ? (
@@ -398,7 +404,7 @@ export function WhatsAppConnectionPanel({
               {state === "READY"
                 ? inboundDegraded
                   ? inboundProblem.title
-                  : "واتساب شغال وجاهز"
+                  : "واتساب متصل"
                 : state === "QR_REQUIRED"
                   ? "امسح QR من موبايلك"
                   : state === "CONNECTING" || state === "STARTING"
@@ -410,6 +416,9 @@ export function WhatsAppConnectionPanel({
                 ? "واتساب متصل، لكن لسه ما قدرناش نتأكد من فحص استقبال الرسائل."
                 : explanation}
             </p>
+            {reliabilityMessage ? (
+              <p className={`mt-2 text-sm leading-6 ${reliabilityWarning ? "text-warning" : "text-muted-foreground"}`} aria-live="polite">{reliabilityMessage}</p>
+            ) : null}
           </div>
 
           <div aria-hidden="true" className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl border border-border bg-card text-2xl text-primary shadow-sm sm:h-20 sm:w-20">
@@ -579,9 +588,9 @@ export function WhatsAppConnectionPanel({
                     {busy ? "بنراجع الحالة..." : "إعادة فحص الاستقبال"}
                   </Button>
                 </div>
-              ) : inboundUnknown ? (
+              ) : inboundUnknown || reliabilityWarning || unverified ? (
                 <Alert variant="info">
-                  الاتصال شغّال، لكن ما عندناش نتيجة مؤكدة لفحص الرسائل حاليًا. جرّب إرسال رسالة من رقم تاني وتأكد إنها ظهرت في المحادثات.
+                  {reliabilityMessage ?? "الاتصال شغّال، لكن ما عندناش نتيجة مؤكدة لفحص الرسائل حاليًا. جرّب إرسال رسالة من رقم تاني وتأكد إنها ظهرت في المحادثات."}
                 </Alert>
               ) : (
                 <Alert variant="success">

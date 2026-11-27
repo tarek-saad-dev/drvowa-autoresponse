@@ -17,6 +17,7 @@ import {
   recommendRuntimeEngine,
 } from "./compatibility";
 import { mapDbStatusFromRuntime } from "./connection-lifecycle";
+import { buildReliabilityView, type ReliabilityView } from "./reliability-view";
 import {
   assertMaskedPhoneIsSafe,
   maskWhatsAppPhoneForDisplay,
@@ -90,6 +91,7 @@ export type WhatsAppConnectionView = {
     lastErrorCode: string | null;
     reconnectAttempts: number;
     inboundDelivery: InboundDeliveryView | null;
+    reliability?: ReliabilityView | null;
   } | null;
   /**
    * Customer-safe compatibility signal only (no Baileys jargon / counters).
@@ -442,6 +444,7 @@ function sanitizeRuntimeView(
     lastDisconnectCode: runtime.lastDisconnectCode,
     lastErrorCode: runtime.lastErrorCode,
     reconnectAttempts: runtime.reconnectAttempts,
+    reliability: buildReliabilityView(runtime),
     inboundDelivery: sanitizeInboundDeliveryView(
       runtime.inboundDelivery,
       runtime.inboundCapture,
