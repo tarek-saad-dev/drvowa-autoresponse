@@ -167,6 +167,16 @@ describe("Phase 2B WhatsApp control plane", () => {
     expect(runtimeMocks.startAccount).toHaveBeenCalledTimes(2);
   });
 
+  it("reconnect preserves an existing V7 runtime and its account key", async () => {
+    const existing = connection({ runtimeEngine: "BAILEYS_V7" });
+    repoMocks.findWhatsAppConnection.mockResolvedValue(existing);
+    runtimeMocks.startAccount.mockResolvedValue({ state: "QR_REQUIRED", ready: false, qrAvailable: true });
+    repoMocks.updateChannelConnection.mockResolvedValue(existing);
+    await startWhatsAppPairing({ businessId: existing.businessId });
+    expect(runtimeMocks.startAccount).toHaveBeenCalledWith(existing.externalAccountKey, { runtimeEngine: "BAILEYS_V7", rePair: true });
+    expect(repoMocks.createChannelConnectionShell).not.toHaveBeenCalled();
+  });
+
   it("start uses DB-owned accountKey only", async () => {
     const existing = connection({
       externalAccountKey: "wa_dbowneddbowneddbowneddb01",
